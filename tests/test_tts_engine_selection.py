@@ -4,6 +4,7 @@
 语音引擎选择(GALAXY_TTS_ENGINE)+ Piper 离线引擎优雅降级。
 A 档无卡/断网时可选 piper;缺包/缺模型一律降级不抛。
 """
+
 from __future__ import annotations
 
 import asyncio

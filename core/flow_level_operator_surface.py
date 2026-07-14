@@ -430,9 +430,7 @@ class FlowOperatorProjection:
             "android_flow_id": self.android_flow_id,
             "current_execution_phase": self.current_execution_phase,
             "last_android_execution_event": (
-                self.last_android_execution_event.to_dict()
-                if self.last_android_execution_event is not None
-                else None
+                self.last_android_execution_event.to_dict() if self.last_android_execution_event is not None else None
             ),
             "blocking_reason": self.blocking_reason,
             "recovery_status": self.recovery_status,
@@ -521,14 +519,10 @@ class FlowLevelOperatorSurface:
         proj.current_execution_phase = phase_summary
         proj.last_android_execution_event = last_event
         if last_event is not None and last_event.is_blocking:
-            proj.blocking_reason = last_event.blocking_reason or (
-                f"Blocked at phase={last_event.phase.value}"
-            )
+            proj.blocking_reason = last_event.blocking_reason or (f"Blocked at phase={last_event.phase.value}")
 
         # ── Recovery status ───────────────────────────────────────────────
-        proj.recovery_status = self._derive_recovery_status(
-            entity.object_mapping.canonical_task_id
-        )
+        proj.recovery_status = self._derive_recovery_status(entity.object_mapping.canonical_task_id)
 
         # ── Truth alignment status ────────────────────────────────────────
         proj.truth_alignment_status = self._derive_truth_alignment_status(flow_id)
@@ -548,14 +542,10 @@ class FlowLevelOperatorSurface:
                 "this flow — current_execution_phase is unknown."
             )
         if proj.truth_alignment_status == "":
-            notes.append(
-                "No truth alignment decisions recorded for this flow — "
-                "truth_alignment_status is empty."
-            )
+            notes.append("No truth alignment decisions recorded for this flow — " "truth_alignment_status is empty.")
         if proj.canonical_result_status == "":
             notes.append(
-                "No result convergence decisions recorded for this flow — "
-                "canonical_result_status is empty."
+                "No result convergence decisions recorded for this flow — " "canonical_result_status is empty."
             )
         proj.review_notes = notes
         return proj
@@ -567,6 +557,7 @@ class FlowLevelOperatorSurface:
         """Load a DelegatedFlowEntity by id, returning None on any failure."""
         try:
             from core.delegated_flow_entity import get_delegated_flow
+
             return get_delegated_flow(flow_id)
         except Exception as exc:
             logger.warning("_load_flow_entity(%s) failed: %s", flow_id, exc)
@@ -601,15 +592,14 @@ class FlowLevelOperatorSurface:
         # ── 1. Entity metadata (primary) ─────────────────────────────────
         try:
             from core.delegated_flow_entity import get_delegated_flow_entity_runtime
+
             runtime = get_delegated_flow_entity_runtime()
             entity = runtime.get(flow_id)
             if entity is not None:
                 meta = getattr(entity, "metadata", None) or {}
                 ace_dict = meta.get("_last_android_execution_event")
                 if isinstance(ace_dict, dict):
-                    ev_phase = AndroidExecutionPhase.from_string(
-                        ace_dict.get("phase", "unknown")
-                    )
+                    ev_phase = AndroidExecutionPhase.from_string(ace_dict.get("phase", "unknown"))
                     last_event = AndroidCanonicalExecutionEvent(
                         event_id=ace_dict.get("event_id", ""),
                         flow_id=flow_id,
@@ -628,7 +618,8 @@ class FlowLevelOperatorSurface:
         except Exception as exc:
             logger.debug(
                 "_derive_android_execution_phase(%s) entity-metadata path failed: %s",
-                flow_id, exc,
+                flow_id,
+                exc,
             )
 
         # ── 2. FlowTruthAlignmentRuntime (fallback) ───────────────────────
@@ -636,6 +627,7 @@ class FlowLevelOperatorSurface:
             from core.flow_level_truth_ownership import (
                 get_flow_truth_alignment_runtime,
             )
+
             ftar = get_flow_truth_alignment_runtime()
             # get_by_flow_id returns list newest-first
             flow_records = ftar.get_by_flow_id(flow_id)
@@ -644,9 +636,7 @@ class FlowLevelOperatorSurface:
 
             # Most recent record (index 0) for execution-phase derivation
             latest = flow_records[0]
-            ev_phase = AndroidExecutionPhase.from_string(
-                latest.evidence.get("android_execution_phase", "unknown")
-            )
+            ev_phase = AndroidExecutionPhase.from_string(latest.evidence.get("android_execution_phase", "unknown"))
             # Promote the truth_kind to a recognisable execution phase when
             # no explicit android_execution_phase evidence is present.
             if ev_phase is AndroidExecutionPhase.unknown:
@@ -671,7 +661,8 @@ class FlowLevelOperatorSurface:
         except Exception as exc:
             logger.debug(
                 "_derive_android_execution_phase(%s) truth-alignment path failed: %s",
-                flow_id, exc,
+                flow_id,
+                exc,
             )
 
         return last_event, phase_str
@@ -687,15 +678,14 @@ class FlowLevelOperatorSurface:
             return ""
         try:
             from core.operator_surface import get_operator_surface
+
             surface = get_operator_surface()
             rec = surface.inspect_recovery(canonical_task_id)
             if rec is None:
                 return "not_recovered"
             return rec.recovery_disposition or "not_recovered"
         except Exception as exc:
-            logger.debug(
-                "_derive_recovery_status(%s) failed: %s", canonical_task_id, exc
-            )
+            logger.debug("_derive_recovery_status(%s) failed: %s", canonical_task_id, exc)
             return ""
 
     @staticmethod
@@ -710,6 +700,7 @@ class FlowLevelOperatorSurface:
             from core.flow_level_truth_ownership import (
                 get_flow_truth_alignment_runtime,
             )
+
             runtime = get_flow_truth_alignment_runtime()
             flow_records = runtime.get_by_flow_id(flow_id)
             if not flow_records:
@@ -720,9 +711,7 @@ class FlowLevelOperatorSurface:
                 return decision_val.value
             return str(decision_val)
         except Exception as exc:
-            logger.debug(
-                "_derive_truth_alignment_status(%s) failed: %s", flow_id, exc
-            )
+            logger.debug("_derive_truth_alignment_status(%s) failed: %s", flow_id, exc)
             return ""
 
     @staticmethod
@@ -737,6 +726,7 @@ class FlowLevelOperatorSurface:
             from core.flow_aware_result_convergence import (
                 get_flow_aware_convergence_coordinator,
             )
+
             coordinator = get_flow_aware_convergence_coordinator()
             artifacts = coordinator.list_recent_artifacts(max_count=256)
             # list_recent_artifacts returns oldest-first; iterate newest-first
@@ -747,9 +737,7 @@ class FlowLevelOperatorSurface:
                     return str(art.decision)
             return ""
         except Exception as exc:
-            logger.debug(
-                "_derive_result_convergence_status(%s) failed: %s", flow_id, exc
-            )
+            logger.debug("_derive_result_convergence_status(%s) failed: %s", flow_id, exc)
             return ""
 
 

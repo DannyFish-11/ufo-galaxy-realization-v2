@@ -20,7 +20,6 @@ import time
 from typing import Any, Dict
 from unittest.mock import MagicMock, patch
 
-
 # =============================================================================
 # Part A — Truth-source mapping and explainability
 # =============================================================================
@@ -41,6 +40,7 @@ class TestATruthSourceRegistry:
 
     def test_registry_has_canonical_allocation_entry(self):
         from core.outward_truth_source_registry import get_entry
+
         entry = get_entry("allocation.records")
         assert entry is not None
         assert entry.is_canonical_truth is True
@@ -50,6 +50,7 @@ class TestATruthSourceRegistry:
 
     def test_registry_has_autonomy_entry(self):
         from core.outward_truth_source_registry import get_entry
+
         entry = get_entry("autonomy.device_class")
         assert entry is not None
         assert entry.is_canonical_truth is True
@@ -60,6 +61,7 @@ class TestATruthSourceRegistry:
 
     def test_registry_has_device_support_entries(self):
         from core.outward_truth_source_registry import get_entry
+
         tier_entry = get_entry("device_support.operational_tier")
         readiness_entry = get_entry("device_support.dispatch_readiness")
         assert tier_entry is not None
@@ -69,6 +71,7 @@ class TestATruthSourceRegistry:
 
     def test_registry_has_topology_entry(self):
         from core.outward_truth_source_registry import get_entry
+
         entry = get_entry("topology.node_relations")
         assert entry is not None
         assert entry.is_projection is True  # topology is a projection
@@ -76,6 +79,7 @@ class TestATruthSourceRegistry:
 
     def test_registry_has_android_entries(self):
         from core.outward_truth_source_registry import get_entry
+
         participation_entry = get_entry("android.participation_tier")
         snapshot_entry = get_entry("android.device_snapshot")
         execution_entry = get_entry("android.execution_phase")
@@ -87,6 +91,7 @@ class TestATruthSourceRegistry:
 
     def test_registry_has_recovery_entries(self):
         from core.outward_truth_source_registry import get_entry
+
         flow_entry = get_entry("recovery.delegated_flow_state")
         android_entry = get_entry("recovery.android_continuity")
         assert flow_entry is not None
@@ -96,6 +101,7 @@ class TestATruthSourceRegistry:
 
     def test_registry_has_operator_entries(self):
         from core.outward_truth_source_registry import get_entry
+
         snapshot = get_entry("operator.snapshot")
         panel = get_entry("operator.panel_unified")
         assert snapshot is not None
@@ -106,6 +112,7 @@ class TestATruthSourceRegistry:
 
     def test_build_registry_snapshot_is_serialisable(self):
         from core.outward_truth_source_registry import build_registry_snapshot
+
         snap = build_registry_snapshot()
         assert isinstance(snap, dict)
         assert "authority" in snap
@@ -132,37 +139,42 @@ class TestATruthSourceRegistry:
 
     def test_assert_source_for_field_correct_source(self):
         from core.outward_truth_source_registry import assert_source_for_field
+
         # Should not raise for a correct source
         assert_source_for_field("allocation.records", "CanonicalTaskRuntime")
 
     def test_assert_source_for_field_wrong_source_raises(self):
         import pytest
+
         from core.outward_truth_source_registry import assert_source_for_field
+
         with pytest.raises((AssertionError, KeyError)):
             assert_source_for_field("allocation.records", "SomeWrongModule")
 
     def test_all_entries_have_explanation(self):
         from core.outward_truth_source_registry import get_registry
+
         registry = get_registry()
         for key, entry in registry.items():
             assert entry.explanation, f"Entry '{key}' has empty explanation"
 
     def test_all_entries_have_evidence_chain(self):
         from core.outward_truth_source_registry import get_registry
+
         registry = get_registry()
         for key, entry in registry.items():
-            assert isinstance(entry.evidence_chain, tuple), \
-                f"Entry '{key}' evidence_chain must be a tuple"
+            assert isinstance(entry.evidence_chain, tuple), f"Entry '{key}' evidence_chain must be a tuple"
 
     def test_durable_entries_require_revalidation(self):
         """Durable entries that persist across restart should require revalidation."""
         from core.outward_truth_source_registry import get_registry
+
         registry = get_registry()
         for key, entry in registry.items():
             if entry.is_durable:
-                assert entry.requires_revalidation_after_restart, (
-                    f"Durable entry '{key}' must require revalidation after restart"
-                )
+                assert (
+                    entry.requires_revalidation_after_restart
+                ), f"Durable entry '{key}' must require revalidation after restart"
 
 
 # =============================================================================
@@ -184,14 +196,15 @@ class TestBSystemStateNarrative:
     def test_all_dimension_names_are_defined(self):
         from core.unified_system_state_narrative import (
             ALL_NARRATIVE_DIMENSIONS,
-            DIM_OVERALL_RUNTIME_STATE,
-            DIM_OPERATING_STRUCTURE,
-            DIM_TASK_EXECUTION_STATE,
-            DIM_DEVICE_DISPATCH_SUPPORT_STATE,
             DIM_AUTONOMY_PARTICIPATION_STATE,
-            DIM_TOPOLOGY_ALLOCATION_RELATIONS,
+            DIM_DEVICE_DISPATCH_SUPPORT_STATE,
+            DIM_OPERATING_STRUCTURE,
+            DIM_OVERALL_RUNTIME_STATE,
             DIM_RECOVERY_DEGRADATION_BLOCKAGE,
+            DIM_TASK_EXECUTION_STATE,
+            DIM_TOPOLOGY_ALLOCATION_RELATIONS,
         )
+
         assert DIM_OVERALL_RUNTIME_STATE in ALL_NARRATIVE_DIMENSIONS
         assert DIM_OPERATING_STRUCTURE in ALL_NARRATIVE_DIMENSIONS
         assert DIM_TASK_EXECUTION_STATE in ALL_NARRATIVE_DIMENSIONS
@@ -206,6 +219,7 @@ class TestBSystemStateNarrative:
             SystemStateNarrative,
             build_system_state_narrative,
         )
+
         narrative = build_system_state_narrative()
         assert isinstance(narrative, SystemStateNarrative)
 
@@ -214,27 +228,26 @@ class TestBSystemStateNarrative:
             ALL_NARRATIVE_DIMENSIONS,
             build_system_state_narrative,
         )
+
         narrative = build_system_state_narrative()
         for dim_name in ALL_NARRATIVE_DIMENSIONS:
-            assert dim_name in narrative.dimensions, \
-                f"Narrative missing dimension: {dim_name}"
+            assert dim_name in narrative.dimensions, f"Narrative missing dimension: {dim_name}"
 
     def test_each_dimension_has_required_fields(self):
         from core.unified_system_state_narrative import build_system_state_narrative
+
         narrative = build_system_state_narrative()
         for dim_name, dim in narrative.dimensions.items():
             assert dim.state, f"Dimension '{dim_name}' has empty state"
             assert dim.source, f"Dimension '{dim_name}' has empty source"
             assert dim.explanation, f"Dimension '{dim_name}' has empty explanation"
-            assert isinstance(dim.evidence_basis, dict), \
-                f"Dimension '{dim_name}' evidence_basis must be a dict"
-            assert isinstance(dim.traceability, list), \
-                f"Dimension '{dim_name}' traceability must be a list"
-            assert isinstance(dim.is_canonical_truth, bool), \
-                f"Dimension '{dim_name}' is_canonical_truth must be bool"
+            assert isinstance(dim.evidence_basis, dict), f"Dimension '{dim_name}' evidence_basis must be a dict"
+            assert isinstance(dim.traceability, list), f"Dimension '{dim_name}' traceability must be a list"
+            assert isinstance(dim.is_canonical_truth, bool), f"Dimension '{dim_name}' is_canonical_truth must be bool"
 
     def test_narrative_to_dict_is_serialisable(self):
         from core.unified_system_state_narrative import build_system_state_narrative
+
         narrative = build_system_state_narrative()
         d = narrative.to_dict()
         assert isinstance(d, dict)
@@ -261,6 +274,7 @@ class TestBSystemStateNarrative:
 
     def test_narrative_dimensions_serialise_correctly(self):
         from core.unified_system_state_narrative import build_system_state_narrative
+
         narrative = build_system_state_narrative()
         d = narrative.to_dict()
         for dim_name, dim_dict in d["dimensions"].items():
@@ -277,31 +291,31 @@ class TestBSystemStateNarrative:
             ALL_KNOWN_OPERABILITY_STATES,
             build_system_state_narrative,
         )
+
         narrative = build_system_state_narrative()
         # Allow any known operability state OR a composite state string
-        assert (
-            narrative.overall_operability in ALL_KNOWN_OPERABILITY_STATES
-            or len(narrative.overall_operability) > 0
-        )
+        assert narrative.overall_operability in ALL_KNOWN_OPERABILITY_STATES or len(narrative.overall_operability) > 0
 
     def test_narrative_unsourced_dimensions_is_list(self):
         from core.unified_system_state_narrative import build_system_state_narrative
+
         narrative = build_system_state_narrative()
         assert isinstance(narrative.unsourced_dimensions, list)
 
     def test_dimension_traceability_is_non_empty_after_build(self):
         """Each dimension should have at least one traceability step (the query attempt)."""
         from core.unified_system_state_narrative import build_system_state_narrative
+
         narrative = build_system_state_narrative()
         for dim_name, dim in narrative.dimensions.items():
-            assert len(dim.traceability) > 0, \
-                f"Dimension '{dim_name}' has empty traceability"
+            assert len(dim.traceability) > 0, f"Dimension '{dim_name}' has empty traceability"
 
     def test_get_dimension_returns_correct_dim(self):
         from core.unified_system_state_narrative import (
             DIM_OVERALL_RUNTIME_STATE,
             build_system_state_narrative,
         )
+
         narrative = build_system_state_narrative()
         dim = narrative.get_dimension(DIM_OVERALL_RUNTIME_STATE)
         assert dim is not None
@@ -309,6 +323,7 @@ class TestBSystemStateNarrative:
 
     def test_get_dimension_unknown_returns_none(self):
         from core.unified_system_state_narrative import build_system_state_narrative
+
         narrative = build_system_state_narrative()
         dim = narrative.get_dimension("no_such_dimension")
         assert dim is None
@@ -324,18 +339,21 @@ class TestCPanelNarrativeAlignment:
 
     def test_panel_payload_has_system_state_narrative_field(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         payload = UnifiedPanelPayload()
         assert hasattr(payload, "system_state_narrative")
         assert isinstance(payload.system_state_narrative, dict)
 
     def test_panel_payload_has_truth_source_registry_field(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         payload = UnifiedPanelPayload()
         assert hasattr(payload, "truth_source_registry")
         assert isinstance(payload.truth_source_registry, dict)
 
     def test_panel_to_dict_includes_narrative(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         payload = UnifiedPanelPayload()
         payload.system_state_narrative = {"overall_operability": "operable", "dimensions": {}}
         d = payload.to_dict()
@@ -344,6 +362,7 @@ class TestCPanelNarrativeAlignment:
 
     def test_panel_to_dict_includes_truth_registry(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         payload = UnifiedPanelPayload()
         payload.truth_source_registry = {"authority": "test", "entry_count": 5}
         d = payload.to_dict()
@@ -355,6 +374,7 @@ class TestCPanelNarrativeAlignment:
             UnifiedPanelAggregationService,
             UnifiedPanelPayload,
         )
+
         svc = UnifiedPanelAggregationService()
         payload = UnifiedPanelPayload()
         svc._fill_system_state_narrative(payload)
@@ -378,7 +398,10 @@ class TestCPanelNarrativeAlignment:
             }
         }
 
-        with patch("core.unified_system_state_narrative.build_system_state_narrative", side_effect=RuntimeError("should_not_call")):
+        with patch(
+            "core.unified_system_state_narrative.build_system_state_narrative",
+            side_effect=RuntimeError("should_not_call"),
+        ):
             svc._fill_system_state_narrative(payload)
 
         assert payload.system_state_narrative.get("authority") == "from_outward_truth"
@@ -388,6 +411,7 @@ class TestCPanelNarrativeAlignment:
             UnifiedPanelAggregationService,
             UnifiedPanelPayload,
         )
+
         svc = UnifiedPanelAggregationService()
         payload = UnifiedPanelPayload()
         svc._fill_truth_source_registry(payload)
@@ -402,6 +426,7 @@ class TestCPanelNarrativeAlignment:
             UnifiedPanelAggregationService,
             UnifiedPanelPayload,
         )
+
         svc = UnifiedPanelAggregationService()
         payload = UnifiedPanelPayload()
         svc._fill_system_state_narrative(payload)
@@ -409,6 +434,7 @@ class TestCPanelNarrativeAlignment:
         narrative_dict = payload.system_state_narrative
         # The narrative must carry the UNIFIED_SYSTEM_STATE_NARRATIVE_AUTHORITY
         from core.unified_system_state_narrative import UNIFIED_SYSTEM_STATE_NARRATIVE_AUTHORITY
+
         assert narrative_dict.get("authority") == UNIFIED_SYSTEM_STATE_NARRATIVE_AUTHORITY
 
 
@@ -425,6 +451,7 @@ class TestDTraceability:
             DIM_OVERALL_RUNTIME_STATE,
             build_system_state_narrative,
         )
+
         narrative = build_system_state_narrative()
         dim = narrative.get_dimension(DIM_OVERALL_RUNTIME_STATE)
         assert dim is not None
@@ -436,6 +463,7 @@ class TestDTraceability:
             DIM_DEVICE_DISPATCH_SUPPORT_STATE,
             build_system_state_narrative,
         )
+
         narrative = build_system_state_narrative()
         dim = narrative.get_dimension(DIM_DEVICE_DISPATCH_SUPPORT_STATE)
         assert dim is not None
@@ -451,6 +479,7 @@ class TestDTraceability:
             DIM_AUTONOMY_PARTICIPATION_STATE,
             build_system_state_narrative,
         )
+
         narrative = build_system_state_narrative()
         dim = narrative.get_dimension(DIM_AUTONOMY_PARTICIPATION_STATE)
         assert dim is not None
@@ -466,6 +495,7 @@ class TestDTraceability:
             DIM_RECOVERY_DEGRADATION_BLOCKAGE,
             build_system_state_narrative,
         )
+
         narrative = build_system_state_narrative()
         dim = narrative.get_dimension(DIM_RECOVERY_DEGRADATION_BLOCKAGE)
         assert dim is not None
@@ -477,6 +507,7 @@ class TestDTraceability:
             DIM_TOPOLOGY_ALLOCATION_RELATIONS,
             build_system_state_narrative,
         )
+
         narrative = build_system_state_narrative()
         dim = narrative.get_dimension(DIM_TOPOLOGY_ALLOCATION_RELATIONS)
         assert dim is not None
@@ -495,6 +526,7 @@ class TestDTraceability:
 
     def test_registry_allocation_entry_marks_revalidation_requirement(self):
         from core.outward_truth_source_registry import get_entry
+
         entry = get_entry("allocation.records")
         assert entry is not None
         assert entry.requires_revalidation_after_restart is True
@@ -502,12 +534,14 @@ class TestDTraceability:
 
     def test_registry_android_snapshot_marks_revalidation_requirement(self):
         from core.outward_truth_source_registry import get_entry
+
         entry = get_entry("android.device_snapshot")
         assert entry is not None
         assert entry.requires_revalidation_after_restart is True
 
     def test_registry_operator_snapshot_is_annotated_as_projection(self):
         from core.outward_truth_source_registry import get_entry
+
         entry = get_entry("operator.snapshot")
         assert entry is not None
         assert entry.is_projection is True
@@ -518,11 +552,11 @@ class TestDTraceability:
     def test_all_traceability_lists_contain_strings(self):
         """Every traceability entry in every dimension must be a non-empty string."""
         from core.unified_system_state_narrative import build_system_state_narrative
+
         narrative = build_system_state_narrative()
         for dim_name, dim in narrative.dimensions.items():
             for step in dim.traceability:
-                assert isinstance(step, str) and step, \
-                    f"Dimension '{dim_name}' has empty/non-string traceability step"
+                assert isinstance(step, str) and step, f"Dimension '{dim_name}' has empty/non-string traceability step"
 
 
 # =============================================================================
@@ -534,8 +568,10 @@ class TestEUnifiedOutwardSurface:
     """E) The outward runtime truth snapshot includes the system-state narrative."""
 
     def test_outward_truth_snapshot_has_narrative_field(self):
-        from core.outward_runtime_truth import OutwardRuntimeTruthSnapshot
         import uuid
+
+        from core.outward_runtime_truth import OutwardRuntimeTruthSnapshot
+
         snap = OutwardRuntimeTruthSnapshot(
             snapshot_id=str(uuid.uuid4()),
             compiled_at=time.time(),
@@ -544,8 +580,10 @@ class TestEUnifiedOutwardSurface:
         assert hasattr(snap, "main_view_operating_surface")
 
     def test_outward_truth_to_dict_includes_narrative_key(self):
-        from core.outward_runtime_truth import OutwardRuntimeTruthSnapshot
         import uuid
+
+        from core.outward_runtime_truth import OutwardRuntimeTruthSnapshot
+
         snap = OutwardRuntimeTruthSnapshot(
             snapshot_id=str(uuid.uuid4()),
             compiled_at=time.time(),
@@ -559,8 +597,10 @@ class TestEUnifiedOutwardSurface:
         assert d["main_view_operating_surface"]["can_do_useful_work"] is True
 
     def test_outward_truth_snapshot_narrative_none_by_default(self):
-        from core.outward_runtime_truth import OutwardRuntimeTruthSnapshot
         import uuid
+
+        from core.outward_runtime_truth import OutwardRuntimeTruthSnapshot
+
         snap = OutwardRuntimeTruthSnapshot(
             snapshot_id=str(uuid.uuid4()),
             compiled_at=time.time(),
@@ -570,6 +610,7 @@ class TestEUnifiedOutwardSurface:
     def test_compile_outward_truth_populates_narrative(self):
         """compile_outward_truth() should attempt to populate the narrative facet."""
         from core.outward_runtime_truth import compile_outward_truth, reset_outward_runtime_truth_runtime
+
         reset_outward_runtime_truth_runtime()
         snapshot = compile_outward_truth()
         # The narrative may be None if the module fails, but the field must exist
@@ -578,17 +619,20 @@ class TestEUnifiedOutwardSurface:
     def test_outward_truth_has_unified_system_narrative_authority(self):
         """The authority string must reference the narrative module."""
         from core.unified_system_state_narrative import UNIFIED_SYSTEM_STATE_NARRATIVE_AUTHORITY
+
         assert "UNIFIED_SYSTEM_STATE_NARRATIVE_V1" in UNIFIED_SYSTEM_STATE_NARRATIVE_AUTHORITY
 
     def test_narrative_dimension_state_is_never_empty_string(self):
         """No dimension state should be an empty string after build."""
         from core.unified_system_state_narrative import build_system_state_narrative
+
         narrative = build_system_state_narrative()
         for dim_name, dim in narrative.dimensions.items():
             assert dim.state != "", f"Dimension '{dim_name}' has empty state string"
 
     def test_overall_explanation_is_populated(self):
         from core.unified_system_state_narrative import build_system_state_narrative
+
         narrative = build_system_state_narrative()
         assert isinstance(narrative.overall_explanation, str)
         assert len(narrative.overall_explanation) > 0
@@ -598,16 +642,19 @@ class TestEUnifiedOutwardSurface:
             UNIFIED_SYSTEM_STATE_NARRATIVE_VERSION,
             SystemStateNarrative,
         )
+
         snap = SystemStateNarrative()
         assert snap.version == UNIFIED_SYSTEM_STATE_NARRATIVE_VERSION
 
     def test_registry_authority_is_stable(self):
         from core.outward_truth_source_registry import OUTWARD_TRUTH_SOURCE_REGISTRY_AUTHORITY
+
         assert "OUTWARD_TRUTH_SOURCE_REGISTRY_V1" in OUTWARD_TRUTH_SOURCE_REGISTRY_AUTHORITY
 
     def test_narrative_dimension_builder_gracefully_degrades(self):
         """Narrative must not raise even when all sources fail."""
         from core.unified_system_state_narrative import build_system_state_narrative
+
         # Patch all source imports to raise
         with patch("core.unified_system_state_narrative.logger"):
             # Should still return a narrative object (not raise)
@@ -618,6 +665,7 @@ class TestEUnifiedOutwardSurface:
         """Registry and narrative must be independently importable and usable."""
         from core.outward_truth_source_registry import build_registry_snapshot
         from core.unified_system_state_narrative import build_system_state_narrative
+
         registry = build_registry_snapshot()
         narrative = build_system_state_narrative()
         # Both must succeed independently
@@ -627,6 +675,7 @@ class TestEUnifiedOutwardSurface:
     def test_panel_build_payload_includes_both_fields(self):
         """build_payload() must populate system_state_narrative and truth_source_registry."""
         from core.unified_panel_aggregation import build_unified_panel_payload
+
         payload = build_unified_panel_payload()
         d = payload.to_dict()
         assert "system_state_narrative" in d

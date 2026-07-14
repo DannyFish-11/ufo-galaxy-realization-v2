@@ -5,6 +5,7 @@
 (core.schemas.ui_element)一致。改了后端字段却没重跑 scripts/gen_ts_types.py →
 本测试失败,逼你 `python3 scripts/gen_ts_types.py` 再生成。
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -23,8 +24,7 @@ def test_generated_ts_matches_schema():
     with open(_TS, encoding="utf-8") as f:
         committed = f.read()
     assert committed == gen.build(), (
-        "ui_element.gen.ts 与 Pydantic 契约漂移了 —— 请重跑 "
-        "`python3 scripts/gen_ts_types.py` 并提交。"
+        "ui_element.gen.ts 与 Pydantic 契约漂移了 —— 请重跑 " "`python3 scripts/gen_ts_types.py` 并提交。"
     )
 
 

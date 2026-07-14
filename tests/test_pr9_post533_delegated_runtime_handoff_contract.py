@@ -141,10 +141,10 @@ from core.delegated_runtime_handoff_contract import (
     seal_handoff_contract,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _fresh_runtime() -> DelegatedHandoffContractRuntime:
     return DelegatedHandoffContractRuntime()
@@ -179,6 +179,7 @@ def _make_accepted(
 # ---------------------------------------------------------------------------
 # Group A — Authority / policy sentinels
 # ---------------------------------------------------------------------------
+
 
 class TestGroupA:
     def test_A1_authority_non_empty(self):
@@ -243,6 +244,7 @@ class TestGroupA:
 # Group B — HandoffContractVersion enum
 # ---------------------------------------------------------------------------
 
+
 class TestGroupB:
     def test_B1_all_values_present(self):
         values = {m.value for m in HandoffContractVersion}
@@ -273,6 +275,7 @@ class TestGroupB:
 # ---------------------------------------------------------------------------
 # Group C — HandoffContractStatus enum
 # ---------------------------------------------------------------------------
+
 
 class TestGroupC:
     def test_C1_all_values_present(self):
@@ -344,6 +347,7 @@ class TestGroupC:
 # Group D — DelegatedHandoffContractIdentity
 # ---------------------------------------------------------------------------
 
+
 class TestGroupD:
     def test_D1_defaults(self):
         ident = DelegatedHandoffContractIdentity()
@@ -398,6 +402,7 @@ class TestGroupD:
 # Group E — DelegatedHandoffContractMeta
 # ---------------------------------------------------------------------------
 
+
 class TestGroupE:
     def test_E1_defaults(self):
         meta = DelegatedHandoffContractMeta()
@@ -429,9 +434,14 @@ class TestGroupE:
         meta = DelegatedHandoffContractMeta()
         d = meta.to_dict()
         expected = {
-            "source_runtime_posture", "coordination_role", "android_host_role",
-            "capability_tier", "delegation_intent", "continuation_hint",
-            "contract_version", "metadata",
+            "source_runtime_posture",
+            "coordination_role",
+            "android_host_role",
+            "capability_tier",
+            "delegation_intent",
+            "continuation_hint",
+            "contract_version",
+            "metadata",
         }
         assert set(d.keys()) == expected
 
@@ -453,6 +463,7 @@ class TestGroupE:
 # ---------------------------------------------------------------------------
 # Group F — DelegatedHandoffContractPayload
 # ---------------------------------------------------------------------------
+
 
 class TestGroupF:
     def test_F1_defaults(self):
@@ -481,9 +492,7 @@ class TestGroupF:
     def test_F3_to_dict_keys(self):
         p = DelegatedHandoffContractPayload()
         d = p.to_dict()
-        assert set(d.keys()) == {
-            "task_body", "task_id", "capability", "exec_mode", "raw_payload", "metadata"
-        }
+        assert set(d.keys()) == {"task_body", "task_id", "capability", "exec_mode", "raw_payload", "metadata"}
 
     def test_F4_to_json_valid(self):
         p = DelegatedHandoffContractPayload(task_body={"x": 1})
@@ -504,6 +513,7 @@ class TestGroupF:
 # Group G — DelegatedHandoffContractRecord
 # ---------------------------------------------------------------------------
 
+
 class TestGroupG:
     def test_G1_defaults(self):
         r = DelegatedHandoffContractRecord()
@@ -516,9 +526,7 @@ class TestGroupG:
 
     def test_G2_is_accepted_no_reject_reason(self):
         r = DelegatedHandoffContractRecord(
-            identity=DelegatedHandoffContractIdentity(
-                session_id="s1", dispatch_record_id="dr1"
-            ),
+            identity=DelegatedHandoffContractIdentity(session_id="s1", dispatch_record_id="dr1"),
         )
         assert r.is_accepted() is True
 
@@ -554,9 +562,7 @@ class TestGroupG:
     def test_G4_to_dict_keys(self):
         r = DelegatedHandoffContractRecord()
         d = r.to_dict()
-        assert set(d.keys()) == {
-            "identity", "meta", "payload", "status", "created_at", "sealed_at", "reject_reason"
-        }
+        assert set(d.keys()) == {"identity", "meta", "payload", "status", "created_at", "sealed_at", "reject_reason"}
 
     def test_G5_to_json_valid(self):
         r = DelegatedHandoffContractRecord()
@@ -586,6 +592,7 @@ class TestGroupG:
 # Group H — DelegatedHandoffContractSnapshot
 # ---------------------------------------------------------------------------
 
+
 class TestGroupH:
     def test_H1_defaults(self):
         snap = DelegatedHandoffContractSnapshot()
@@ -600,8 +607,12 @@ class TestGroupH:
         snap = DelegatedHandoffContractSnapshot()
         d = snap.to_dict()
         assert set(d.keys()) == {
-            "snapshot_id", "records", "pending_count", "total_count",
-            "snapshotted_at", "policy_sentinels",
+            "snapshot_id",
+            "records",
+            "pending_count",
+            "total_count",
+            "snapshotted_at",
+            "policy_sentinels",
         }
 
     def test_CE_to_json_valid(self):
@@ -619,6 +630,7 @@ class TestGroupH:
 # ---------------------------------------------------------------------------
 # Group I — DelegatedHandoffContractRuntime
 # ---------------------------------------------------------------------------
+
 
 class TestGroupI:
     def test_AR_capacity_128(self):
@@ -674,6 +686,7 @@ class TestGroupI:
 # ---------------------------------------------------------------------------
 # Group J — build_delegated_handoff_contract: accepted paths
 # ---------------------------------------------------------------------------
+
 
 class TestGroupJ:
     def test_J1_valid_inputs_accepted(self):
@@ -847,6 +860,7 @@ class TestGroupJ:
 # Group K — build_delegated_handoff_contract: rejection paths
 # ---------------------------------------------------------------------------
 
+
 class TestGroupK:
     def test_K1_empty_session_id_rejected(self):
         rt = _fresh_runtime()
@@ -913,6 +927,7 @@ class TestGroupK:
 # Group AC — seal_handoff_contract
 # ---------------------------------------------------------------------------
 
+
 class TestGroupAC:
     def test_AC1_draft_advances_to_sealed(self):
         rt = _fresh_runtime()
@@ -930,9 +945,7 @@ class TestGroupAC:
 
     def test_AE_already_terminal_returned_unchanged(self):
         rt = _fresh_runtime()
-        cancelled = DelegatedHandoffContractRecord(
-            status=HandoffContractStatus.cancelled
-        )
+        cancelled = DelegatedHandoffContractRecord(status=HandoffContractStatus.cancelled)
         result = seal_handoff_contract(cancelled, runtime=rt)
         assert result is cancelled
 
@@ -951,9 +964,7 @@ class TestGroupAC:
 
     def test_CD_already_expired_returned_unchanged(self):
         rt = _fresh_runtime()
-        expired = DelegatedHandoffContractRecord(
-            status=HandoffContractStatus.expired
-        )
+        expired = DelegatedHandoffContractRecord(status=HandoffContractStatus.expired)
         result = seal_handoff_contract(expired, runtime=rt)
         assert result is expired
 
@@ -974,6 +985,7 @@ class TestGroupAC:
 # ---------------------------------------------------------------------------
 # Group AH–AI — record_handoff_contract / get_handoff_contract
 # ---------------------------------------------------------------------------
+
 
 class TestGroupAHAI:
     def test_AH_record_persists(self):
@@ -999,6 +1011,7 @@ class TestGroupAHAI:
 # ---------------------------------------------------------------------------
 # Group AK–AL — list_pending_handoff_contracts
 # ---------------------------------------------------------------------------
+
 
 class TestGroupAKAL:
     def test_AK_returns_draft_and_sealed(self):
@@ -1049,6 +1062,7 @@ class TestGroupAKAL:
 # Group AM–AO — build_handoff_contract_snapshot
 # ---------------------------------------------------------------------------
 
+
 class TestGroupAMAO:
     def test_AM_pending_and_total_counts(self):
         rt = _fresh_runtime()
@@ -1096,6 +1110,7 @@ class TestGroupAMAO:
 # Group AP — core.runtime re-exports
 # ---------------------------------------------------------------------------
 
+
 class TestGroupAP:
     def test_AP_all_pr9_symbols_accessible_from_core_runtime(self):
         pytest.importorskip("pydantic")
@@ -1134,10 +1149,12 @@ class TestGroupAP:
 # Group AQ — projection.py sentinel
 # ---------------------------------------------------------------------------
 
+
 class TestGroupAQ:
     def test_AQ_projection_sentinel_present_and_not_unavailable(self):
         pytest.importorskip("fastapi")
         from core.routes.projection import DELEGATED_RUNTIME_HANDOFF_CONTRACT_ALIGNED_PR9
+
         assert "UNAVAILABLE" not in DELEGATED_RUNTIME_HANDOFF_CONTRACT_ALIGNED_PR9
         assert "PR9" in DELEGATED_RUNTIME_HANDOFF_CONTRACT_ALIGNED_PR9
 
@@ -1145,6 +1162,7 @@ class TestGroupAQ:
 # ---------------------------------------------------------------------------
 # Group BR–BS — singleton management
 # ---------------------------------------------------------------------------
+
 
 class TestGroupBRBS:
     def test_BR_get_runtime_returns_same_singleton(self):
@@ -1165,6 +1183,7 @@ class TestGroupBRBS:
 # ---------------------------------------------------------------------------
 # Group AU–AV — serialisation
 # ---------------------------------------------------------------------------
+
 
 class TestGroupAUAV:
     def test_AU_to_json_valid(self):
@@ -1188,6 +1207,7 @@ class TestGroupAUAV:
 # ---------------------------------------------------------------------------
 # Group AW — multiple sessions
 # ---------------------------------------------------------------------------
+
 
 class TestGroupAW:
     def test_AW_multiple_sessions_independent(self):
@@ -1214,6 +1234,7 @@ class TestGroupAW:
 # ---------------------------------------------------------------------------
 # Group BV–BW — end-to-end and PR9 sentinel
 # ---------------------------------------------------------------------------
+
 
 class TestGroupBVBW:
     def test_BV_end_to_end_build_seal_snapshot(self):

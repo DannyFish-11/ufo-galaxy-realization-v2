@@ -405,7 +405,7 @@ def _evaluate_impl(
         return DispatchReadinessResult(
             device_id=device_id,
             dispatch_ready=False,
-            registered=True,   # registered at transport level but gaps present
+            registered=True,  # registered at transport level but gaps present
             status=DispatchReadinessStatus.BLOCKED_REGISTRATION_GAP.value,
             reason=(
                 f"Device has {len(gaps)} downstream registration gap(s): {gaps!r}. "
@@ -425,7 +425,8 @@ def _evaluate_impl(
 
     if not udm_registered:
         logger.debug(
-            "UnifiedDispatchReadinessGate: NOT_REGISTERED device_id=%r", device_id,
+            "UnifiedDispatchReadinessGate: NOT_REGISTERED device_id=%r",
+            device_id,
         )
         return DispatchReadinessResult(
             device_id=device_id,
@@ -461,7 +462,8 @@ def _evaluate_impl(
     if not transport_alive:
         notes.append(f"udm_online={udm_online}")
         logger.info(
-            "UnifiedDispatchReadinessGate: BLOCKED_TRANSPORT device_id=%r", device_id,
+            "UnifiedDispatchReadinessGate: BLOCKED_TRANSPORT device_id=%r",
+            device_id,
         )
         return DispatchReadinessResult(
             device_id=device_id,
@@ -513,12 +515,9 @@ def _evaluate_impl(
     if required_capabilities:
         capability_result = _check_capabilities(device_id, required_capabilities)
         if not capability_result["satisfied"]:
-            notes.append(
-                f"missing_capabilities={capability_result['missing']!r}"
-            )
+            notes.append(f"missing_capabilities={capability_result['missing']!r}")
             logger.info(
-                "UnifiedDispatchReadinessGate: BLOCKED_CAPABILITY device_id=%r "
-                "missing=%r",
+                "UnifiedDispatchReadinessGate: BLOCKED_CAPABILITY device_id=%r " "missing=%r",
                 device_id,
                 capability_result["missing"],
             )
@@ -528,15 +527,10 @@ def _evaluate_impl(
                 registered=True,
                 transport_alive=True,
                 status=DispatchReadinessStatus.BLOCKED_CAPABILITY.value,
-                reason=(
-                    f"Device missing required capabilities: "
-                    f"{capability_result['missing']!r}."
-                ),
+                reason=(f"Device missing required capabilities: " f"{capability_result['missing']!r}."),
                 attachment_state=attachment_result["state"],
                 runtime_session_id=attachment_result.get("runtime_session_id"),
-                runtime_attachment_session_id=attachment_result.get(
-                    "runtime_attachment_session_id"
-                ),
+                runtime_attachment_session_id=attachment_result.get("runtime_attachment_session_id"),
                 blocking_notes=notes,
                 device_type=support_result["device_type"],
                 operational_support_status=support_result["support_tier"],
@@ -551,8 +545,7 @@ def _evaluate_impl(
         if not cd_eligible:
             notes.append("cross_device_eligible=False")
             logger.info(
-                "UnifiedDispatchReadinessGate: BLOCKED_CROSS_DEVICE_ELIGIBILITY "
-                "device_id=%r",
+                "UnifiedDispatchReadinessGate: BLOCKED_CROSS_DEVICE_ELIGIBILITY " "device_id=%r",
                 device_id,
             )
             return DispatchReadinessResult(
@@ -564,9 +557,7 @@ def _evaluate_impl(
                 reason="Device is not eligible for cross-device dispatch.",
                 attachment_state=attachment_result["state"],
                 runtime_session_id=attachment_result.get("runtime_session_id"),
-                runtime_attachment_session_id=attachment_result.get(
-                    "runtime_attachment_session_id"
-                ),
+                runtime_attachment_session_id=attachment_result.get("runtime_attachment_session_id"),
                 blocking_notes=notes,
                 device_type=support_result["device_type"],
                 operational_support_status=support_result["support_tier"],
@@ -577,8 +568,7 @@ def _evaluate_impl(
     # All gates passed — DISPATCH_READY
     # ----------------------------------------------------------------
     logger.debug(
-        "UnifiedDispatchReadinessGate: DISPATCH_READY device_id=%r "
-        "attachment_state=%r mode=%r",
+        "UnifiedDispatchReadinessGate: DISPATCH_READY device_id=%r " "attachment_state=%r mode=%r",
         device_id,
         attachment_result["state"],
         execution_mode,
@@ -592,9 +582,7 @@ def _evaluate_impl(
         reason="All dispatch readiness gates passed.",
         attachment_state=attachment_result["state"],
         runtime_session_id=attachment_result.get("runtime_session_id"),
-        runtime_attachment_session_id=attachment_result.get(
-            "runtime_attachment_session_id"
-        ),
+        runtime_attachment_session_id=attachment_result.get("runtime_attachment_session_id"),
         blocking_notes=notes,
         device_type=support_result["device_type"],
         operational_support_status=support_result["support_tier"],
@@ -613,11 +601,11 @@ def _check_registration_gaps(device_id: str) -> List[str]:
         from galaxy_gateway.android.handlers.registration import (
             get_registration_gaps,
         )
+
         return get_registration_gaps(device_id)
     except Exception as exc:
         logger.debug(
-            "UnifiedDispatchReadinessGate: registration gap check unavailable for "
-            "device_id=%r: %s",
+            "UnifiedDispatchReadinessGate: registration gap check unavailable for " "device_id=%r: %s",
             device_id,
             exc,
         )
@@ -629,6 +617,7 @@ def _check_udm_registration(device_id: str) -> Dict[str, Any]:
     result = {"registered": False, "online": False, "device_type": None}
     try:
         from core.unified.device_manager import get_unified_device_manager
+
         udm = get_unified_device_manager()
         device = udm.get_device(device_id)
         if device is not None:
@@ -644,6 +633,7 @@ def _check_udm_registration(device_id: str) -> Dict[str, Any]:
     # Fallback: try device_readiness (composes UDM internally)
     try:
         from core.device_readiness import get_device_readiness
+
         summary = get_device_readiness(device_id)
         result["registered"] = summary.registered
         result["online"] = summary.online
@@ -662,12 +652,12 @@ def _check_transport_alive(device_id: str) -> bool:
     """Return True iff the transport (WebSocket or UCM) is alive."""
     try:
         from core.device_readiness import get_connection_summary
+
         conn = get_connection_summary(device_id)
         return conn.websocket_connected or conn.ucm_connected
     except Exception as exc:
         logger.debug(
-            "UnifiedDispatchReadinessGate: transport check unavailable for "
-            "device_id=%r: %s",
+            "UnifiedDispatchReadinessGate: transport check unavailable for " "device_id=%r: %s",
             device_id,
             exc,
         )
@@ -706,6 +696,7 @@ def _check_attachment_validity(
         from core.attached_runtime_session_registry import (
             lookup_session_by_device,
         )
+
         entry = lookup_session_by_device(device_id)
         if entry is None:
             # No registry entry — registry cannot assert non-active; pass through
@@ -713,12 +704,15 @@ def _check_attachment_validity(
             result["state"] = "no_registry_entry"
             return result
 
-        result["state"] = entry.attachment_state.value if hasattr(entry.attachment_state, "value") else str(entry.attachment_state)
+        result["state"] = (
+            entry.attachment_state.value if hasattr(entry.attachment_state, "value") else str(entry.attachment_state)
+        )
         result["runtime_session_id"] = entry.runtime_session_id
         result["runtime_attachment_session_id"] = entry.runtime_attachment_session_id
 
         # Check for terminal / non-active state
         from core.attached_runtime_session_registry import RegistryEntryState
+
         state_val = entry.attachment_state
         if hasattr(state_val, "is_terminal") and state_val.is_terminal():
             result["valid"] = False
@@ -750,8 +744,7 @@ def _check_attachment_validity(
                     f"for device_id={device_id!r}."
                 )
                 result["notes"].append(
-                    f"session_id_mismatch: expected={expected_session_id!r} "
-                    f"actual={entry.runtime_session_id!r}"
+                    f"session_id_mismatch: expected={expected_session_id!r} " f"actual={entry.runtime_session_id!r}"
                 )
                 return result
 
@@ -772,8 +765,7 @@ def _check_attachment_validity(
 
     except Exception as exc:
         logger.debug(
-            "UnifiedDispatchReadinessGate: attachment check unavailable for "
-            "device_id=%r: %s",
+            "UnifiedDispatchReadinessGate: attachment check unavailable for " "device_id=%r: %s",
             device_id,
             exc,
         )
@@ -785,21 +777,21 @@ def _check_attachment_validity(
     return result
 
 
-def _check_capabilities(
-    device_id: str, required: List[str]
-) -> Dict[str, Any]:
+def _check_capabilities(device_id: str, required: List[str]) -> Dict[str, Any]:
     """Check that device satisfies all *required* capabilities."""
     result = {"satisfied": True, "missing": [], "present": []}
     if not required:
         return result
     try:
         from core.device_readiness import get_device_readiness
-        summary = get_device_readiness(device_id)
+
+        get_device_readiness(device_id)
         # DeviceReadinessSummary has capability_ready; for per-capability we
         # fall back to UCM device record
         device_caps: List[str] = []
         try:
             from core.unified.connection_manager import get_unified_connection_manager
+
             ucm = get_unified_connection_manager()
             dev_record = ucm.get_device(device_id) or {}
             caps_raw = dev_record.get("capabilities", []) or dev_record.get("supported_capabilities", [])
@@ -830,11 +822,11 @@ def _check_cross_device_eligibility(device_id: str) -> bool:
     """Return True iff device passes the cross-device eligibility check."""
     try:
         from core.device_readiness import is_device_cross_device_ready
+
         return is_device_cross_device_ready(device_id)
     except Exception as exc:
         logger.debug(
-            "UnifiedDispatchReadinessGate: cross-device eligibility check "
-            "unavailable for device_id=%r: %s",
+            "UnifiedDispatchReadinessGate: cross-device eligibility check " "unavailable for device_id=%r: %s",
             device_id,
             exc,
         )

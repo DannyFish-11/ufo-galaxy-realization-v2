@@ -43,7 +43,7 @@ class TestA_ParallelRestIngress(unittest.TestCase):
         import core.routes.devices as devices_mod
 
         src = inspect.getsource(devices_mod)
-        section = src[src.find("parallel_device_commands"):src.find("trigger_device_discovery")]
+        section = src[src.find("parallel_device_commands") : src.find("trigger_device_discovery")]
         self.assertIn("TaskEnvelope", section)
         self.assertIn("route_envelope", section)
         self.assertNotIn("connection_manager.send_to_device", section)
@@ -56,14 +56,16 @@ class TestA_ParallelRestIngress(unittest.TestCase):
         client = TestClient(app)
 
         fake_router = MagicMock()
-        fake_router.route_envelope = AsyncMock(return_value={
-            "success": True,
-            "task_id": "task-root",
-            "trace_id": "trace-root",
-            "request_id": "req-root",
-            "command_id": "cmd-root",
-            "result": {"success": True, "total": 2, "results": []},
-        })
+        fake_router.route_envelope = AsyncMock(
+            return_value={
+                "success": True,
+                "task_id": "task-root",
+                "trace_id": "trace-root",
+                "request_id": "req-root",
+                "command_id": "cmd-root",
+                "result": {"success": True, "total": 2, "results": []},
+            }
+        )
 
         with patch("core.routes.devices.get_command_router", return_value=fake_router):
             response = client.post(

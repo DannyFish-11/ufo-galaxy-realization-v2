@@ -16,10 +16,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Fixture: mock ReplayFoundation that captures emitted events
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def mock_replay():
@@ -27,13 +27,15 @@ def mock_replay():
     events = []
 
     def _emit(kind, task_id, trace_id, payload=None):
-        events.append({
-            "kind": kind,
-            "task_id": task_id,
-            "trace_id": trace_id,
-            "payload": payload or {},
-            "timestamp": time.time(),
-        })
+        events.append(
+            {
+                "kind": kind,
+                "task_id": task_id,
+                "trace_id": trace_id,
+                "payload": payload or {},
+                "timestamp": time.time(),
+            }
+        )
 
     def _get_lineage(task_id):
         return [ev for ev in events if ev["task_id"] == task_id]
@@ -48,6 +50,7 @@ def mock_replay():
 # ---------------------------------------------------------------------------
 # Test 1: kernel path emits CONTINUUM_TICK
 # ---------------------------------------------------------------------------
+
 
 def test_kernel_path_emits_continuum_tick(mock_replay):
     """When OpenClawd.process runs the kernel path, a CONTINUUM_TICK event
@@ -77,6 +80,7 @@ def test_kernel_path_emits_continuum_tick(mock_replay):
 # Test 2: direct path emits CONTINUUM_TICK
 # ---------------------------------------------------------------------------
 
+
 def test_direct_path_emits_continuum_tick(mock_replay):
     """When OpenClawd.process runs the direct path, a CONTINUUM_TICK event
     must be written to ReplayFoundation."""
@@ -101,6 +105,7 @@ def test_direct_path_emits_continuum_tick(mock_replay):
 # ---------------------------------------------------------------------------
 # Test 3: inspect_lineage reads CONTINUUM_TICK from ReplayFoundation
 # ---------------------------------------------------------------------------
+
 
 def test_inspect_lineage_reads_replay_continuum(mock_replay):
     """inspect_lineage must merge CONTINUUM_TICK events from ReplayFoundation
@@ -146,6 +151,7 @@ def test_inspect_lineage_reads_replay_continuum(mock_replay):
 # ---------------------------------------------------------------------------
 # Test 4: relative_subjects includes android_device as bounded_participant
 # ---------------------------------------------------------------------------
+
 
 def test_canonical_perception_includes_relative_subjects():
     """_build_canonical_perception_state must include relative_subjects

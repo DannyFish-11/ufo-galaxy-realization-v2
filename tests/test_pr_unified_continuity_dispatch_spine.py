@@ -57,17 +57,18 @@ import pytest
 
 try:
     from core.unified_dispatch_readiness_gate import (
-        DispatchReadinessResult,
-        DispatchReadinessStatus,
         DISPATCH_MUST_CONSULT_UNIFIED_GATE_POLICY,
         ONLINE_NOT_EQUAL_DISPATCH_READY_POLICY,
         REGISTERED_VS_DISPATCH_READY_DISTINCTION_POLICY,
         REGISTRATION_GAP_BLOCKS_DISPATCH_POLICY,
         STALE_ATTACHMENT_BLOCKS_DISPATCH_POLICY,
         UNIFIED_DISPATCH_READINESS_GATE_AUTHORITY,
+        DispatchReadinessResult,
+        DispatchReadinessStatus,
         evaluate_dispatch_readiness,
         reset_dispatch_readiness_gate,
     )
+
     _GATE_AVAILABLE = True
 except ImportError:
     _GATE_AVAILABLE = False
@@ -75,17 +76,18 @@ except ImportError:
 try:
     from core.unified_orchestration_spine import (
         ALL_EXECUTION_MODES_MUST_USE_SPINE_POLICY,
+        PARALLEL_FANOUT_MUST_USE_SPINE_POLICY,
+        SPINE_COMPLETION_CONTRACT_IS_UNIFIED_POLICY,
+        UNIFIED_ORCHESTRATION_SPINE_AUTHORITY,
+        WAKE_HANDOFF_DELEGATED_MUST_USE_SPINE_POLICY,
         CompletionContract,
         DeviceOrchestrationSlot,
         ExecutionMode,
         OrchestrationDecision,
         OrchestrationRequest,
-        PARALLEL_FANOUT_MUST_USE_SPINE_POLICY,
-        SPINE_COMPLETION_CONTRACT_IS_UNIFIED_POLICY,
-        UNIFIED_ORCHESTRATION_SPINE_AUTHORITY,
-        WAKE_HANDOFF_DELEGATED_MUST_USE_SPINE_POLICY,
         evaluate_orchestration_request,
     )
+
     _SPINE_AVAILABLE = True
 except ImportError:
     _SPINE_AVAILABLE = False
@@ -97,10 +99,11 @@ try:
         classify_reconnect_outcome,
         get_session_registry,
         invalidate_session,
-        register_session,
         reconnect_session,
+        register_session,
         reset_session_registry,
     )
+
     _REGISTRY_AVAILABLE = True
 except ImportError:
     _REGISTRY_AVAILABLE = False
@@ -113,6 +116,7 @@ try:
         is_registration_fully_attached,
         record_registration_gap,
     )
+
     _REG_HANDLER_AVAILABLE = True
 except ImportError:
     _REG_HANDLER_AVAILABLE = False
@@ -265,6 +269,7 @@ class TestContinuityAuthorityClassification:
             InvalidationReason,
             invalidate_session,
         )
+
         invalidate_session(entry, reason=InvalidationReason.invalidated)
 
         outcome, existing = classify_reconnect_outcome(
@@ -335,12 +340,14 @@ class TestStaleAttachmentBlocksDispatch:
 
         # Register a session, then replace it by registering another
         register_session(
-            did, posture="join_runtime",
+            did,
+            posture="join_runtime",
             runtime_attachment_session_id=attach_id,
         )
         # Register a NEW session for the same device → old entry becomes 'replaced'
         register_session(
-            did, posture="join_runtime",
+            did,
+            posture="join_runtime",
             runtime_attachment_session_id=_attachment_id(),
         )
 
@@ -366,13 +373,15 @@ class TestStaleAttachmentBlocksDispatch:
         did = _device_id()
         attach_id = _attachment_id()
         entry = register_session(
-            did, posture="join_runtime",
+            did,
+            posture="join_runtime",
             runtime_attachment_session_id=attach_id,
         )
         from core.attached_runtime_session_registry import (
             InvalidationReason,
             invalidate_session,
         )
+
         invalidate_session(entry, reason=InvalidationReason.invalidated)
 
         result = evaluate_dispatch_readiness(
@@ -414,6 +423,7 @@ class TestStaleAttachmentBlocksDispatch:
         assert "status" in d
         assert "authority" in d
         import json
+
         j = result.to_json()
         assert isinstance(j, str)
         parsed = json.loads(j)
@@ -519,6 +529,7 @@ class TestOrchestrationSpineDataModel:
 
     def test_orchestration_decision_to_dict_includes_authority(self) -> None:
         import json
+
         decision = OrchestrationDecision(
             execution_mode=ExecutionMode.LOCAL.value,
             can_proceed=True,
@@ -773,7 +784,8 @@ class TestStaleReplayBlocking:
         did = _device_id()
         correct_attach_id = _attachment_id()
         entry = register_session(
-            did, posture="join_runtime",
+            did,
+            posture="join_runtime",
             runtime_attachment_session_id=correct_attach_id,
         )
         correct_session_id = entry.runtime_session_id
@@ -795,7 +807,8 @@ class TestStaleReplayBlocking:
         did = _device_id()
         correct_attach_id = _attachment_id()
         register_session(
-            did, posture="join_runtime",
+            did,
+            posture="join_runtime",
             runtime_attachment_session_id=correct_attach_id,
         )
 
@@ -812,13 +825,15 @@ class TestStaleReplayBlocking:
         did = _device_id()
         old_attach_id = _attachment_id()
         register_session(
-            did, posture="join_runtime",
+            did,
+            posture="join_runtime",
             runtime_attachment_session_id=old_attach_id,
         )
         # Replace with new session
         new_attach_id = _attachment_id()
         register_session(
-            did, posture="join_runtime",
+            did,
+            posture="join_runtime",
             runtime_attachment_session_id=new_attach_id,
         )
 
@@ -836,13 +851,15 @@ class TestStaleReplayBlocking:
         did = _device_id()
         attach_id = _attachment_id()
         entry = register_session(
-            did, posture="join_runtime",
+            did,
+            posture="join_runtime",
             runtime_attachment_session_id=attach_id,
         )
         from core.attached_runtime_session_registry import (
             InvalidationReason,
             invalidate_session,
         )
+
         invalidate_session(entry, reason=InvalidationReason.invalidated)
 
         outcome, _ = classify_reconnect_outcome(
@@ -968,10 +985,7 @@ class TestEndToEndGateAndSpine:
         assert not decision.can_proceed
         assert len(decision.blocked_slots) == 1
         assert decision.blocked_slots[0].device_id == dev
-        assert (
-            decision.blocked_slots[0].readiness_status
-            == DispatchReadinessStatus.BLOCKED_REGISTRATION_GAP.value
-        )
+        assert decision.blocked_slots[0].readiness_status == DispatchReadinessStatus.BLOCKED_REGISTRATION_GAP.value
 
     def test_gap_cleared_device_passes_attachment_check(self) -> None:
         """After clearing gap, device is no longer blocked by gap check."""

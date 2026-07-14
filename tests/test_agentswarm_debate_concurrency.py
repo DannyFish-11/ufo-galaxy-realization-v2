@@ -13,6 +13,7 @@ These tests prove the rounds now run agents via asyncio.gather(): timing a
 round over 5 agents (each an artificial 0.3s delay) must stay close to 0.3s,
 not scale to 5 * 0.3s.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -44,22 +45,30 @@ class _FakeAgent:
     async def propose(self, problem, context) -> AgentProposal:
         await asyncio.sleep(DELAY_S)
         return AgentProposal(
-            agent_id=self.agent_id, strategy=self.strategy,
-            solution="x", reasoning=[], confidence=0.5,
+            agent_id=self.agent_id,
+            strategy=self.strategy,
+            solution="x",
+            reasoning=[],
+            confidence=0.5,
         )
 
     async def critique(self, target: AgentProposal) -> Critique:
         await asyncio.sleep(DELAY_S)
         return Critique(
-            critic_id=self.agent_id, target_id=target.agent_id,
-            points=["p"], severity="minor",
+            critic_id=self.agent_id,
+            target_id=target.agent_id,
+            points=["p"],
+            severity="minor",
         )
 
     async def defend(self, critiques) -> AgentProposal:
         await asyncio.sleep(DELAY_S)
         return AgentProposal(
-            agent_id=self.agent_id, strategy=self.strategy,
-            solution="y", reasoning=[], confidence=0.6,
+            agent_id=self.agent_id,
+            strategy=self.strategy,
+            solution="y",
+            reasoning=[],
+            confidence=0.6,
         )
 
 
@@ -80,8 +89,7 @@ class TestDebateRoundConcurrency:
         result, elapsed = asyncio.run(run())
         assert len(result.proposals) == AGENT_COUNT
         assert elapsed < CONCURRENT_CEILING_S, (
-            f"proposal round took {elapsed:.2f}s for {AGENT_COUNT} agents - "
-            f"looks sequential, not concurrent"
+            f"proposal round took {elapsed:.2f}s for {AGENT_COUNT} agents - " f"looks sequential, not concurrent"
         )
 
     def test_critique_round_runs_agents_concurrently(self):
@@ -98,8 +106,7 @@ class TestDebateRoundConcurrency:
         # 5 agents x 2 targets each = 10 independent critique calls.
         assert len(result.critiques) == AGENT_COUNT * 2
         assert elapsed < CONCURRENT_CEILING_S, (
-            f"critique round took {elapsed:.2f}s for {AGENT_COUNT * 2} calls - "
-            f"looks sequential, not concurrent"
+            f"critique round took {elapsed:.2f}s for {AGENT_COUNT * 2} calls - " f"looks sequential, not concurrent"
         )
 
     def test_defense_round_runs_agents_concurrently(self):
@@ -116,6 +123,5 @@ class TestDebateRoundConcurrency:
         result, elapsed = asyncio.run(run())
         assert len(result.proposals) == AGENT_COUNT
         assert elapsed < CONCURRENT_CEILING_S, (
-            f"defense round took {elapsed:.2f}s for {AGENT_COUNT} agents - "
-            f"looks sequential, not concurrent"
+            f"defense round took {elapsed:.2f}s for {AGENT_COUNT} agents - " f"looks sequential, not concurrent"
         )

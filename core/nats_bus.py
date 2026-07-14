@@ -46,9 +46,7 @@ NATS_FABRIC_CARRIER_AUTHORITY: str = "NATS::CARRIER_FABRIC_LAYER_V1"
 # PR-8: Network Topology Runtime integration sentinel.
 # Affirms that this module's connectivity state is absorbed into the canonical
 # NetworkTopologyRuntime via assimilate_nats_state() / absorb_nats_state().
-NETWORK_TOPOLOGY_RUNTIME_INTEGRATED: str = (
-    "NATS_BUS::NETWORK_TOPOLOGY_RUNTIME_INTEGRATED_V1"
-)
+NETWORK_TOPOLOGY_RUNTIME_INTEGRATED: str = "NATS_BUS::NETWORK_TOPOLOGY_RUNTIME_INTEGRATED_V1"
 
 # PR-509: Capability + Network Runtime Assimilation integration sentinel.
 # Affirms that NATSBus.connect() and .disconnect() now call
@@ -69,20 +67,10 @@ from typing import Any, Callable, Dict, Optional
 
 logger = logging.getLogger("nats_bus")
 
-from core.schemas.contracts import (
-    AgentEventModel,
-    MCPCallRequestModel,
-    TaskDispatchModel,
-    TaskResultModel,
-    WorkerHeartbeatModel,
-    WorkerRegistrationModel,
-    WorkerShutdownModel,
-)
-
 # PR-AIPV3-NATS: Unified AIP v3 models — NATS transports canonical AIP v3 messages
 from core.schemas.aip_v3 import (
-    AIPMessage,
     AckMsg,
+    AIPMessage,
     CapabilityReportMsg,
     CoordSyncMsg,
     DelegatedExecutionSignalMsg,
@@ -106,8 +94,17 @@ from core.schemas.aip_v3 import (
     TaskCancelMsg,
     TaskResultMsg,
     WebRTCBindMsg,
-    WebRTCUnbindMsg,
     WebRTCTransportStateMsg,
+    WebRTCUnbindMsg,
+)
+from core.schemas.contracts import (
+    AgentEventModel,
+    MCPCallRequestModel,
+    TaskDispatchModel,
+    TaskResultModel,
+    WorkerHeartbeatModel,
+    WorkerRegistrationModel,
+    WorkerShutdownModel,
 )
 
 # NATS import — may not be installed
@@ -134,14 +131,14 @@ def _get_lan_ip() -> str:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("8.8.8.8", 80))
             return s.getsockname()[0]
-    except Exception as exc:
+    except Exception:
         return ""
 
 
 def _try_emit_event(event_type_name: str, data: dict) -> None:
     """Best-effort emit to EventBus.  Never raises."""
     try:
-        from integration.event_bus import event_bus, EventType
+        from integration.event_bus import EventType, event_bus
 
         et = getattr(EventType, event_type_name, None)
         if et is not None:
@@ -176,6 +173,7 @@ _STREAMS = {
 # ═══════════════════════════════════════════════════════════════════════════════
 # PR-2: Standardized topic namespace
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class NATSTopics:
     """Canonical NATS subject prefixes for PR-2 unified bus.
@@ -281,10 +279,7 @@ class NATSBus:
                 self._url = "nats://localhost:4222"
                 self._auto_local = True
             else:
-                logger.warning(
-                    "NATSBus: nats-py not installed. "
-                    "Install: pip install nats-py[nats]"
-                )
+                logger.warning("NATSBus: nats-py not installed. " "Install: pip install nats-py[nats]")
 
     # PR-28: Tailscale auto-detection for cross-device NATS
     @staticmethod
@@ -303,10 +298,15 @@ class NATSBus:
         try:
             result = subprocess.run(
                 ["tailscale", "status", "--json"],
-                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=5,
             )
             if result.returncode == 0:
                 import json
+
                 status = json.loads(result.stdout)
                 ts_ips = status.get("Self", {}).get("TailscaleIPs", [])
                 if ts_ips:
@@ -337,6 +337,7 @@ class NATSBus:
         # PR-NATS-CORE: If no URL configured, try to start embedded server
         if not target and not self._embedded:
             from core.nats_server import EmbeddedNATSServer
+
             self._embedded = EmbeddedNATSServer()
             if await self._embedded.start():
                 target = os.environ.get("GALAXY_NATS_URL", "nats://localhost:4222")
@@ -363,7 +364,7 @@ class NATSBus:
             for name, cfg in _STREAMS.items():
                 try:
                     await self._js.find_stream_name_by_subject(cfg["subjects"][0].replace(">", "*"))
-                except Exception as exc:
+                except Exception:
                     from nats.js.api import StreamConfig
 
                     await self._js.add_stream(
@@ -394,6 +395,7 @@ class NATSBus:
                 # Auto-local default failed — try embedded server as fallback
                 if not self._embedded:
                     from core.nats_server import EmbeddedNATSServer
+
                     self._embedded = EmbeddedNATSServer()
                 if await self._embedded.start():
                     target = os.environ.get("GALAXY_NATS_URL", "nats://localhost:4222")
@@ -806,6 +808,7 @@ class NATSBus:
         shapes.
         """
         import uuid as _uuid_lib
+
         out = dict(data)
         if not out.get("trace_id"):
             out["trace_id"] = trace_id or f"trace_{_uuid_lib.uuid4().hex[:12]}"
@@ -844,9 +847,7 @@ class NATSBus:
                 observe execution lifecycle state without inspecting payload
                 shapes.
         """
-        payload = self._ensure_trace_fields(
-            data, trace_id, runtime_session_id, remote_execution_mode
-        )
+        payload = self._ensure_trace_fields(data, trace_id, runtime_session_id, remote_execution_mode)
         payload["_nats_schema"] = "UnifiedTaskEvent"
         # PR-12: propagate lifecycle_state through transport layer (additive).
         if lifecycle_state and not payload.get("lifecycle_state"):
@@ -907,9 +908,7 @@ class NATSBus:
 
     # ── Subscribe methods ───────────────────────────────────────────────────
 
-    async def subscribe_task_dispatches(
-        self, worker_id: str, callback: Callable
-    ) -> dict:
+    async def subscribe_task_dispatches(self, worker_id: str, callback: Callable) -> dict:
         """Subscribe to task dispatches for a specific worker.
 
         PR-AIPV3-NATS: Received AIP v3 messages are automatically converted to
@@ -1006,7 +1005,7 @@ class NATSBus:
         """
         try:
             from core.aip_v3_nats_adapter import from_aip_to_legacy  # noqa: PLC0415
-        except Exception as exc:
+        except Exception:
             # Adapter unavailable — return callback as-is
             return callback
 
@@ -1110,6 +1109,7 @@ class NATSBus:
                 return {"success": False, "error": "NATS not available (embedded server failed)"}
 
         try:
+
             async def _handler(msg):
                 try:
                     data = json.loads(msg.data.decode("utf-8"))
@@ -1231,6 +1231,7 @@ def _absorb_nats_state(is_connected: bool, url: str = "") -> None:
             # Use urllib.parse to handle all NATS-supported URL schemes
             # (nats://, tls://, ws://, wss://) robustly.
             from urllib.parse import urlparse
+
             parsed = urlparse(url)
             if parsed.hostname:
                 host = parsed.hostname
@@ -1238,6 +1239,7 @@ def _absorb_nats_state(is_connected: bool, url: str = "") -> None:
                 port = parsed.port
 
         from core.capability_network_runtime_policy import absorb_nats_connectivity_event
+
         absorb_nats_connectivity_event(is_connected=is_connected, host=host, port=port)
     except Exception as exc:
         logger.warning("Exception suppressed: %s", exc)

@@ -194,25 +194,26 @@ if str(PROJECT_ROOT) not in sys.path:
 
 try:
     from core.release_governance_taxonomy import (
-        TAXONOMY_AUTHORITY,
-        TAXONOMY_PR8_SENTINEL,
-        BLOCKING_VS_ADVISORY_BOUNDARY_POLICY,
-        SKELETON_VS_FINAL_ACCEPTANCE_BOUNDARY_POLICY,
-        EVIDENCE_GAP_VS_DEFERRED_VS_UNRESOLVED_BOUNDARY_POLICY,
         ACCEPTED_LIMITATION_MUST_NOT_SUPPRESS_BLOCKING_POLICY,
         AUTOMATED_VERIFIED_REQUIRES_EXPLICIT_EVIDENCE_POLICY,
+        BLOCKING_VS_ADVISORY_BOUNDARY_POLICY,
+        EVIDENCE_GAP_VS_DEFERRED_VS_UNRESOLVED_BOUNDARY_POLICY,
         FAIL_CONSERVATIVE_UNKNOWN_IS_UNRESOLVED_POLICY,
+        SKELETON_VS_FINAL_ACCEPTANCE_BOUNDARY_POLICY,
+        TAXONOMY_AUTHORITY,
+        TAXONOMY_PR8_SENTINEL,
         IssueClassification,
         OperationalStatus,
         TaxonomyEntry,
         TerminologyRegistry,
         classify_issue,
-        verdict_to_classification,
-        operational_from_verdict,
-        is_blocking_classification,
         get_terminology_registry,
+        is_blocking_classification,
+        operational_from_verdict,
         reset_terminology_registry,
+        verdict_to_classification,
     )
+
     _MODULE_AVAILABLE = True
 except ImportError as _e:
     _MODULE_AVAILABLE = False
@@ -229,32 +230,35 @@ _skip_if_unavailable = pytest.mark.skipif(
 
 try:
     from core.release_blocking_gate import (
+        CriterionStatus,
         GateCriterionResult,
         ReleaseGateDecision,
-        CriterionStatus,
     )
+
     _RBG_AVAILABLE = True
 except ImportError:
     _RBG_AVAILABLE = False
 
 try:
     from core.governance_validation_gate import (
-        ValidationResult,
-        ValidationOutcome,
         ValidationFailReason,
+        ValidationOutcome,
+        ValidationResult,
     )
+
     _GVG_AVAILABLE = True
 except ImportError:
     _GVG_AVAILABLE = False
 
 try:
     from core.system_final_acceptance_verdict import (
+        AcceptanceChecklistItem,
+        AcceptanceDimensionId,
+        DimensionStatus,
         SystemAcceptanceReport,
         SystemAcceptanceVerdict,
-        AcceptanceDimensionId,
-        AcceptanceChecklistItem,
-        DimensionStatus,
     )
+
     _SFAV_AVAILABLE = True
 except ImportError:
     _SFAV_AVAILABLE = False
@@ -293,6 +297,7 @@ class TestModuleLevel:
     @_skip_if_unavailable
     def test_A05_all_contains_required_public_names(self):
         import core.release_governance_taxonomy as mod
+
         required = [
             "TAXONOMY_AUTHORITY",
             "IssueClassification",
@@ -323,9 +328,15 @@ class TestIssueClassification:
     @_skip_if_unavailable
     def test_B02_all_required_members_present(self):
         for name in [
-            "blocking", "advisory", "skeleton_foundational", "unresolved",
-            "evidence_gap", "deferred", "accepted_limitation",
-            "automated_verified", "pass_no_issue",
+            "blocking",
+            "advisory",
+            "skeleton_foundational",
+            "unresolved",
+            "evidence_gap",
+            "deferred",
+            "accepted_limitation",
+            "automated_verified",
+            "pass_no_issue",
         ]:
             assert hasattr(IssueClassification, name), f"missing: {name}"
 
@@ -437,8 +448,7 @@ class TestTaxonomyEntry:
             is_blocking=False,
         )
         d = entry.to_dict()
-        for key in ["term", "short_definition", "is_blocking", "surface_examples",
-                    "must_not_confuse_with"]:
+        for key in ["term", "short_definition", "is_blocking", "surface_examples", "must_not_confuse_with"]:
             assert key in d, f"missing key: {key}"
 
     @_skip_if_unavailable
@@ -830,24 +840,15 @@ class TestBlockingPreventsRelease:
 class TestThreeWayDistinction:
     @_skip_if_unavailable
     def test_L01_unresolved_ne_deferred(self):
-        assert (
-            verdict_to_classification("unresolved")
-            != verdict_to_classification("deferred")
-        )
+        assert verdict_to_classification("unresolved") != verdict_to_classification("deferred")
 
     @_skip_if_unavailable
     def test_L02_pending_ne_unresolved(self):
-        assert (
-            verdict_to_classification("pending")
-            != verdict_to_classification("unresolved")
-        )
+        assert verdict_to_classification("pending") != verdict_to_classification("unresolved")
 
     @_skip_if_unavailable
     def test_L03_deferred_ne_pending(self):
-        assert (
-            verdict_to_classification("deferred")
-            != verdict_to_classification("pending")
-        )
+        assert verdict_to_classification("deferred") != verdict_to_classification("pending")
 
     @_skip_if_unavailable
     def test_L04_unresolved_ne_evidence_gap(self):
@@ -991,9 +992,7 @@ class TestSystemFinalAcceptanceVerdictIntegration:
         assert d.get("taxonomy_classification") == "pass_no_issue"
 
     def test_O04_critical_risk_taxonomy_is_blocking(self):
-        report = self._make_report(
-            SystemAcceptanceVerdict.not_fully_operational_critical_risk
-        )
+        report = self._make_report(SystemAcceptanceVerdict.not_fully_operational_critical_risk)
         d = report.to_dict()
         assert d.get("taxonomy_classification") == "blocking"
 
@@ -1003,9 +1002,7 @@ class TestSystemFinalAcceptanceVerdictIntegration:
         assert d.get("taxonomy_operational_status") == "fully_operational"
 
     def test_O06_critical_risk_operational_status_not_ready(self):
-        report = self._make_report(
-            SystemAcceptanceVerdict.not_fully_operational_critical_risk
-        )
+        report = self._make_report(SystemAcceptanceVerdict.not_fully_operational_critical_risk)
         d = report.to_dict()
         assert d.get("taxonomy_operational_status") == "not_ready"
 
@@ -1037,9 +1034,7 @@ class TestSummaryConsistency:
     def test_P02_every_entry_must_not_confuse_with_non_empty(self):
         registry = TerminologyRegistry()
         for entry in registry.all_entries():
-            assert len(entry.must_not_confuse_with) > 0, (
-                f"Entry {entry.term.value} has empty must_not_confuse_with"
-            )
+            assert len(entry.must_not_confuse_with) > 0, f"Entry {entry.term.value} has empty must_not_confuse_with"
 
     @_skip_if_unavailable
     def test_P03_must_not_confuse_with_contains_only_valid_terms(self):
@@ -1047,14 +1042,12 @@ class TestSummaryConsistency:
         registry = TerminologyRegistry()
         for entry in registry.all_entries():
             for term in entry.must_not_confuse_with:
-                assert term in valid_terms, (
-                    f"{entry.term.value}: invalid must_not_confuse_with term {term}"
-                )
+                assert term in valid_terms, f"{entry.term.value}: invalid must_not_confuse_with term {term}"
 
     @_skip_if_unavailable
     def test_P04_no_entry_confuses_itself(self):
         registry = TerminologyRegistry()
         for entry in registry.all_entries():
-            assert entry.term not in entry.must_not_confuse_with, (
-                f"{entry.term.value}: lists itself in must_not_confuse_with"
-            )
+            assert (
+                entry.term not in entry.must_not_confuse_with
+            ), f"{entry.term.value}: lists itself in must_not_confuse_with"

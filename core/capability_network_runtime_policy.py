@@ -136,8 +136,7 @@ __all__ = [
 #: Module authority marker — identifies the PR-509 capability + network
 #: runtime assimilation policy integration layer.
 CAPABILITY_NETWORK_RUNTIME_ASSIMILATION_AUTHORITY: str = (
-    "core.capability_network_runtime_policy"
-    " — PR-509 capability+network runtime assimilation policy layer"
+    "core.capability_network_runtime_policy" " — PR-509 capability+network runtime assimilation policy layer"
 )
 
 #: Layer position: sits above CapabilityAssimilation (7) and
@@ -368,6 +367,7 @@ def absorb_nats_connectivity_event(
     """
     try:
         from core.network_topology_runtime import get_network_topology_runtime
+
         runtime = get_network_topology_runtime()
         runtime.absorb_nats_state(
             is_connected=is_connected,
@@ -380,9 +380,7 @@ def absorb_nats_connectivity_event(
             is_connected,
         )
     except Exception as exc:
-        logger.debug(
-            "absorb_nats_connectivity_event: absorption failed (non-fatal): %s", exc
-        )
+        logger.debug("absorb_nats_connectivity_event: absorption failed (non-fatal): %s", exc)
 
 
 def absorb_gateway_connectivity_event(
@@ -406,6 +404,7 @@ def absorb_gateway_connectivity_event(
     """
     try:
         from core.network_topology_runtime import get_network_topology_runtime
+
         runtime = get_network_topology_runtime()
         runtime.absorb_gateway_state(
             gateway_id=gateway_id,
@@ -419,9 +418,7 @@ def absorb_gateway_connectivity_event(
             is_connected,
         )
     except Exception as exc:
-        logger.debug(
-            "absorb_gateway_connectivity_event: absorption failed (non-fatal): %s", exc
-        )
+        logger.debug("absorb_gateway_connectivity_event: absorption failed (non-fatal): %s", exc)
 
 
 def absorb_device_presence_event(
@@ -464,6 +461,7 @@ def absorb_device_presence_event(
     # 1. Absorb into network topology runtime
     try:
         from core.network_topology_runtime import get_network_topology_runtime
+
         runtime = get_network_topology_runtime()
         runtime.absorb_device_connectivity(
             device_id=device_id,
@@ -483,9 +481,10 @@ def absorb_device_presence_event(
     # 2. Absorb into capability assimilation layer
     try:
         from core.capability_assimilation import (
-            get_capability_assimilation_layer,
             NodeParticipantKind,
+            get_capability_assimilation_layer,
         )
+
         layer = get_capability_assimilation_layer()
         existing = layer.get_record(device_id)
         if existing is not None:
@@ -531,6 +530,7 @@ def absorb_heartbeat_event(
     """
     try:
         from core.capability_assimilation import get_capability_assimilation_layer
+
         layer = get_capability_assimilation_layer()
         result = layer.heartbeat(node_id, health_score=health_score, details=details)
         if not result:
@@ -539,9 +539,7 @@ def absorb_heartbeat_event(
                 node_id,
             )
     except Exception as exc:
-        logger.debug(
-            "absorb_heartbeat_event: absorption failed (non-fatal): %s", exc
-        )
+        logger.debug("absorb_heartbeat_event: absorption failed (non-fatal): %s", exc)
 
 
 def absorb_capability_change_event(
@@ -573,9 +571,10 @@ def absorb_capability_change_event(
     """
     try:
         from core.capability_assimilation import (
-            get_capability_assimilation_layer,
             NodeParticipantKind,
+            get_capability_assimilation_layer,
         )
+
         kind_str = participant_kind or "worker"
         try:
             kind = NodeParticipantKind(kind_str)
@@ -598,9 +597,7 @@ def absorb_capability_change_event(
             capabilities,
         )
     except Exception as exc:
-        logger.debug(
-            "absorb_capability_change_event: absorption failed (non-fatal): %s", exc
-        )
+        logger.debug("absorb_capability_change_event: absorption failed (non-fatal): %s", exc)
 
 
 def absorb_path_change_event(
@@ -629,11 +626,12 @@ def absorb_path_change_event(
         return
     try:
         from core.network_topology_runtime import (
-            get_network_topology_runtime,
+            TopologyConnectionState,
             TopologyEdge,
             TopologyEdgeKind,
-            TopologyConnectionState,
+            get_network_topology_runtime,
         )
+
         runtime = get_network_topology_runtime()
 
         _STRATEGY_TO_KIND = {
@@ -644,11 +642,7 @@ def absorb_path_change_event(
             "gateway": TopologyEdgeKind.GATEWAY,
         }
         edge_kind = _STRATEGY_TO_KIND.get(transport_strategy, TopologyEdgeKind.DIRECT)
-        state = (
-            TopologyConnectionState.FALLBACK
-            if fallback_used
-            else TopologyConnectionState.PREFERRED
-        )
+        state = TopologyConnectionState.FALLBACK if fallback_used else TopologyConnectionState.PREFERRED
         edge = TopologyEdge(
             edge_id=f"{source_id}::{target_id}::{transport_strategy}",
             source_node_id=source_id,
@@ -670,9 +664,7 @@ def absorb_path_change_event(
             fallback_used,
         )
     except Exception as exc:
-        logger.debug(
-            "absorb_path_change_event: absorption failed (non-fatal): %s", exc
-        )
+        logger.debug("absorb_path_change_event: absorption failed (non-fatal): %s", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -709,9 +701,10 @@ def query_routable_executors(
 
     try:
         from core.capability_assimilation import (
-            get_capability_assimilation_layer,
             AssimilationPresenceState,
+            get_capability_assimilation_layer,
         )
+
         layer = get_capability_assimilation_layer()
         online_records = layer.list_online_records()
     except Exception as exc:
@@ -722,6 +715,7 @@ def query_routable_executors(
     topology_states: Dict[str, str] = {}
     try:
         from core.network_topology_runtime import get_network_topology_runtime
+
         topology_runtime = get_network_topology_runtime()
         topo_snap = topology_runtime.snapshot()
         for node in topo_snap.nodes:
@@ -749,9 +743,11 @@ def query_routable_executors(
         results.append(
             RoutableExecutor(
                 node_id=record.node_id,
-                participant_kind=exec_profile.participant_kind.value
-                if hasattr(exec_profile.participant_kind, "value")
-                else str(exec_profile.participant_kind),
+                participant_kind=(
+                    exec_profile.participant_kind.value
+                    if hasattr(exec_profile.participant_kind, "value")
+                    else str(exec_profile.participant_kind)
+                ),
                 capabilities=list(caps),
                 presence_state=pstate.value if hasattr(pstate, "value") else str(pstate),
                 network_state=net_state,
@@ -797,10 +793,11 @@ def query_capable_device_executors(
 
     try:
         from core.capability_assimilation import (
-            get_capability_assimilation_layer,
-            NodeParticipantKind,
             AssimilationPresenceState,
+            NodeParticipantKind,
+            get_capability_assimilation_layer,
         )
+
         layer = get_capability_assimilation_layer()
         online_records = layer.list_online_records()
     except Exception as exc:
@@ -811,12 +808,11 @@ def query_capable_device_executors(
     topology_states: Dict[str, str] = {}
     try:
         from core.network_topology_runtime import get_network_topology_runtime
+
         topology_runtime = get_network_topology_runtime()
         topo_snap = topology_runtime.snapshot()
         for node in topo_snap.nodes:
-            topology_states[node.node_id] = (
-                node.state.value if hasattr(node.state, "value") else str(node.state)
-            )
+            topology_states[node.node_id] = node.state.value if hasattr(node.state, "value") else str(node.state)
     except Exception as exc:
         logger.debug("query_capable_device_executors: topology runtime unavailable: %s", exc)
 
@@ -884,13 +880,13 @@ def query_network_path(
 
     try:
         from core.network_topology_runtime import get_network_topology_runtime
+
         runtime = get_network_topology_runtime()
 
         # Look for an existing edge between source and target
         with runtime._rw_lock:
             matching_edges = [
-                e for e in runtime._edges.values()
-                if e.source_node_id == source_id and e.target_node_id == target_id
+                e for e in runtime._edges.values() if e.source_node_id == source_id and e.target_node_id == target_id
             ]
 
         if matching_edges:
@@ -937,6 +933,7 @@ def snapshot_canonical_runtime() -> CanonicalRuntimeSnapshot:
         from core.capability_assimilation import (
             get_capability_assimilation_layer,
         )
+
         layer = get_capability_assimilation_layer()
         layer_snap = layer.snapshot()
         snap.total_executors = layer_snap.get("total_nodes", 0)
@@ -950,6 +947,7 @@ def snapshot_canonical_runtime() -> CanonicalRuntimeSnapshot:
     # Network topology runtime counts
     try:
         from core.network_topology_runtime import get_network_topology_runtime
+
         topology_runtime = get_network_topology_runtime()
         topo_snap = topology_runtime.snapshot()
         snap.total_topology_nodes = topo_snap.total_nodes

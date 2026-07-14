@@ -140,33 +140,27 @@ JOINT_COGNITIVE_VERDICTS: Dict[str, str] = {
     # → OpenClawd.process() → execution branch (local/cross_device/hybrid/none)
     # 这条链路在 default desktop-local 模式下完全真实，无需任何外部服务。
     JointCognitiveAreaId.v2_real_main_path.value: JointCognitiveVerdict.fully_real.value,
-
     # Q2a: NATS 分布式激活
     # MasterBrain + NATSBus 是真实 SDK 代码，但仅在 GALAXY_MASTER_BRAIN_ENABLED=true
     # 且 NATS 服务器可达时激活。桌面本地模式下 NATS 以 noop 模式运行（graceful degradation）。
     JointCognitiveAreaId.nats_distributed_activation.value: JointCognitiveVerdict.conditionally_real.value,
-
     # Q2b: Temporal 条件性真实
     # temporalio SDK 集成是真实代码（非骨架）。requires GALAXY_TEMPORAL_URL + running server。
     # is_temporal_runtime_available() 准确反映运行时状态（默认 False）。
     JointCognitiveAreaId.temporal_conditional_real.value: JointCognitiveVerdict.conditionally_real.value,
-
     # Q3: Android 在双仓系统中的真实角色
     # Android 是分布式运行时参与节点，有真实执行能力（AutonomousExecutionPipeline、
     # LocalGoalExecutor、EdgeExecutor、AccessibilityActionExecutor）。
     # V2 侧有完整的 ingress 模块，但跨仓信号流需要真实 Android 设备，V2 无法自证。
     JointCognitiveAreaId.android_real_role.value: JointCognitiveVerdict.partially_wired.value,
-
     # Q4: 双仓耦合真实边界
     # 协议层（AIP v3）、注册层、信号接收层是真实 V2 代码。
     # Mesh/hybrid 协同、跨仓 completion 闭环、断线恢复跨仓证明仍是 partially_wired。
     JointCognitiveAreaId.dual_repo_coupling_boundary.value: JointCognitiveVerdict.partially_wired.value,
-
     # Q5: Stage 6-9 硬化真实落地
     # Stage 6/7/8: MasterBrain worker lifecycle、dispatch/result 相关、state persistence 是真实代码。
     # Stage 9: Temporal 是真实 SDK 集成（非骨架），conditionally_real。
     JointCognitiveAreaId.stage6_to_9_hardening.value: JointCognitiveVerdict.conditionally_real.value,
-
     # Q6: Stage 10 调度收敛
     # SchedulingTruthHarness 存在且可 import，关闭了 GAP-512-002 和 GAP-512-004
     # 对 harness-mediated dispatch 路径有效。但并非所有调度调用点都已通过 harness 路由
@@ -234,9 +228,7 @@ class JointCognitiveReport:
     methodology: str = REVIEW_METHODOLOGY
     android_head_at_review: str = ANDROID_HEAD_AT_REVIEW
     areas: List[JointCognitiveAreaResult] = field(default_factory=list)
-    pre_computed_verdicts: Dict[str, str] = field(
-        default_factory=lambda: dict(JOINT_COGNITIVE_VERDICTS)
-    )
+    pre_computed_verdicts: Dict[str, str] = field(default_factory=lambda: dict(JOINT_COGNITIVE_VERDICTS))
     probe_passed_count: int = 0
     probe_failed_count: int = 0
     overall_summary_zh: str = ""
@@ -339,8 +331,7 @@ def _probe_v2_real_main_path() -> JointCognitiveAreaResult:
         ),
         coupling_boundary_zh="本地主路径不依赖 Android；cross_device 分支通过 CommandRouter → galaxy_gateway → Android",
         honest_gap_zh=(
-            "主路径本身完全真实（fully_real）。"
-            "cross_device 分支需要 Android 设备在线，V2 单仓无法自证跨设备全链路。"
+            "主路径本身完全真实（fully_real）。" "cross_device 分支需要 Android 设备在线，V2 单仓无法自证跨设备全链路。"
         ),
         probe_passed=all_passed,
         probe_detail="\n".join(probes),
@@ -429,13 +420,9 @@ def _probe_temporal_conditional_real() -> JointCognitiveAreaResult:
             for cls in ["CodeExecutionWorkflow", "MultiDeviceTaskWorkflow", "ToolDiscoveryWorkflow"]
         )
         if has_activities and has_workflows:
-            probes.append(
-                f"core.temporal_workflows: activities ✓, workflows ✓, _HAS_TEMPORAL={has_temporal}"
-            )
+            probes.append(f"core.temporal_workflows: activities ✓, workflows ✓, _HAS_TEMPORAL={has_temporal}")
         else:
-            probes.append(
-                f"core.temporal_workflows: activities={has_activities}, workflows={has_workflows}"
-            )
+            probes.append(f"core.temporal_workflows: activities={has_activities}, workflows={has_workflows}")
             all_passed = False
     else:
         probes.append("core.temporal_workflows: ✗")
@@ -849,9 +836,7 @@ def build_joint_cognitive_review() -> JointCognitiveReport:
     passed = sum(1 for a in areas if a.probe_passed)
     failed = sum(1 for a in areas if not a.probe_passed)
 
-    verdict_summary = ", ".join(
-        f"{a.area_id}={a.verdict.value}" for a in areas
-    )
+    verdict_summary = ", ".join(f"{a.area_id}={a.verdict.value}" for a in areas)
     overall_summary_zh = (
         f"双仓联合认知审查 2026 完成。"
         f"探测通过 {passed}/{len(areas)}。\n"
@@ -967,9 +952,7 @@ def build_strict_dual_repo_total_review() -> Dict[str, Any]:
         },
         {
             "id": "J2",
-            "judgment": (
-                "系统当前仍不是“统一主体双存在面”；更接近“V2 中心主体 + Android participant runtime”。"
-            ),
+            "judgment": ("系统当前仍不是“统一主体双存在面”；更接近“V2 中心主体 + Android participant runtime”。"),
             "evidence": [
                 "core/android_originated_main_chain_ingress.py",
                 "core/attached_runtime_session_registry.py",
@@ -978,9 +961,7 @@ def build_strict_dual_repo_total_review() -> Dict[str, Any]:
         },
         {
             "id": "J3",
-            "judgment": (
-                "当前最大问题不是模块不存在，而是统一主链/统一会话权威/统一前台存在面的默认主路径尚未收口。"
-            ),
+            "judgment": ("当前最大问题不是模块不存在，而是统一主链/统一会话权威/统一前台存在面的默认主路径尚未收口。"),
             "evidence": [
                 "config.json",
                 "core/multimodal_runtime_profile.py",
@@ -990,9 +971,7 @@ def build_strict_dual_repo_total_review() -> Dict[str, Any]:
         },
         {
             "id": "J4",
-            "judgment": (
-                "`/api/v1/chat` 已实质降格为 compat adapter surface，主体权威在 DesktopPresenceRuntime。"
-            ),
+            "judgment": ("`/api/v1/chat` 已实质降格为 compat adapter surface，主体权威在 DesktopPresenceRuntime。"),
             "evidence": ["galaxy_gateway/routes/chat.py"],
             "probe_passed": chat_is_adapter_surface,
         },

@@ -11,13 +11,13 @@ Validates:
 8. Registry snapshot serialisation (JSON-safe)
 9. Shell ownership boundary — registry lives on DesktopPresenceRuntime, not OpenClawd
 """
+
 from __future__ import annotations
 
 import json
 from typing import Any
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -26,11 +26,13 @@ import pytest
 
 def _make_registry():
     from core.multimodal.perception_source_registry import PerceptionSourceRegistry
+
     return PerceptionSourceRegistry()
 
 
 def _mic_kwargs(**overrides) -> dict:
     from core.multimodal.perception_source_registry import PerceptionSourceType, SourceModality
+
     base = dict(
         source_type=PerceptionSourceType.MICROPHONE,
         modality=SourceModality.AUDIO,
@@ -45,6 +47,7 @@ def _mic_kwargs(**overrides) -> dict:
 
 def _webcam_kwargs(**overrides) -> dict:
     from core.multimodal.perception_source_registry import PerceptionSourceType, SourceModality
+
     base = dict(
         source_type=PerceptionSourceType.WEBCAM,
         modality=SourceModality.VIDEO,
@@ -59,6 +62,7 @@ def _webcam_kwargs(**overrides) -> dict:
 
 def _webrtc_kwargs(**overrides) -> dict:
     from core.multimodal.perception_source_registry import PerceptionSourceType, SourceModality
+
     base = dict(
         source_type=PerceptionSourceType.WEBRTC,
         modality=SourceModality.VIDEO,
@@ -73,9 +77,10 @@ def _webrtc_kwargs(**overrides) -> dict:
 def _external_stream_kwargs(**overrides) -> dict:
     from core.multimodal.perception_source_registry import (
         PerceptionSourceType,
-        SourceModality,
         SourceHealthStatus,
+        SourceModality,
     )
+
     base = dict(
         source_type=PerceptionSourceType.EXTERNAL_STREAM,
         modality=SourceModality.VIDEO,
@@ -102,6 +107,7 @@ class TestMicrophoneRegistration:
 
     def test_registered_record_has_correct_type(self):
         from core.multimodal.perception_source_registry import PerceptionSourceType
+
         registry = _make_registry()
         sid = registry.register(**_mic_kwargs())
         record = registry.get(sid)
@@ -110,6 +116,7 @@ class TestMicrophoneRegistration:
 
     def test_registered_record_has_audio_modality(self):
         from core.multimodal.perception_source_registry import SourceModality
+
         registry = _make_registry()
         sid = registry.register(**_mic_kwargs())
         record = registry.get(sid)
@@ -149,6 +156,7 @@ class TestMicrophoneRegistration:
 
     def test_idempotent_register_with_same_source_id(self):
         from core.multimodal.perception_source_registry import PerceptionSourceType
+
         registry = _make_registry()
         sid1 = registry.register(**_mic_kwargs(source_id="mic-fixed"))
         sid2 = registry.register(**_mic_kwargs(source_id="mic-fixed"))
@@ -157,6 +165,7 @@ class TestMicrophoneRegistration:
 
     def test_sources_by_type_returns_microphone(self):
         from core.multimodal.perception_source_registry import PerceptionSourceType
+
         registry = _make_registry()
         registry.register(**_mic_kwargs())
         registry.register(**_webcam_kwargs())
@@ -178,6 +187,7 @@ class TestWebcamRegistration:
 
     def test_webcam_type_is_webcam(self):
         from core.multimodal.perception_source_registry import PerceptionSourceType
+
         registry = _make_registry()
         sid = registry.register(**_webcam_kwargs())
         record = registry.get(sid)
@@ -185,6 +195,7 @@ class TestWebcamRegistration:
 
     def test_webcam_modality_is_video(self):
         from core.multimodal.perception_source_registry import SourceModality
+
         registry = _make_registry()
         sid = registry.register(**_webcam_kwargs())
         record = registry.get(sid)
@@ -198,12 +209,14 @@ class TestWebcamRegistration:
 
     def test_webcam_sources_by_modality(self):
         from core.multimodal.perception_source_registry import SourceModality
+
         registry = _make_registry()
         registry.register(**_mic_kwargs())
         registry.register(**_webcam_kwargs())
         video_sources = registry.sources_by_modality(SourceModality.VIDEO)
         assert len(video_sources) == 1
         from core.multimodal.perception_source_registry import PerceptionSourceType
+
         assert video_sources[0].source_type == PerceptionSourceType.WEBCAM
 
 
@@ -215,6 +228,7 @@ class TestWebcamRegistration:
 class TestWebRTCSourceLifecycle:
     def test_register_webrtc_source(self):
         from core.multimodal.perception_source_registry import PerceptionSourceType
+
         registry = _make_registry()
         sid = registry.register(**_webrtc_kwargs())
         record = registry.get(sid)
@@ -287,6 +301,7 @@ class TestWebRTCSourceLifecycle:
 class TestExternalStreamSource:
     def test_register_external_stream(self):
         from core.multimodal.perception_source_registry import PerceptionSourceType
+
         registry = _make_registry()
         sid = registry.register(**_external_stream_kwargs())
         record = registry.get(sid)
@@ -300,6 +315,7 @@ class TestExternalStreamSource:
 
     def test_external_stream_can_be_marked_unavailable(self):
         from core.multimodal.perception_source_registry import SourceHealthStatus
+
         registry = _make_registry()
         sid = registry.register(**_external_stream_kwargs())
         registry.mark_unavailable(sid, reason="stream endpoint unreachable")
@@ -321,6 +337,7 @@ class TestExternalStreamSource:
             PerceptionSourceType,
             SourceModality,
         )
+
         registry = _make_registry()
         sid = registry.register(
             source_type=PerceptionSourceType.REMOTE_CAMERA,
@@ -406,6 +423,7 @@ class TestPrimaryAudioSelection:
             PerceptionSourceType,
             SourceModality,
         )
+
         registry = _make_registry()
         sid = registry.register(
             source_type=PerceptionSourceType.WEBRTC,
@@ -450,6 +468,7 @@ class TestPrimaryVideoSelection:
 
     def test_switching_primary_video_clears_previous(self):
         from core.multimodal.perception_source_registry import PerceptionSourceType, SourceModality
+
         registry = _make_registry()
         sid1 = registry.register(**_webcam_kwargs(source_id="cam-1"))
         sid2 = registry.register(**_webrtc_kwargs(source_id="cam-webrtc"))
@@ -495,6 +514,7 @@ class TestPrimaryVideoSelection:
 class TestDegradedUnavailableReporting:
     def test_mark_unavailable_sets_health_unavailable(self):
         from core.multimodal.perception_source_registry import SourceHealthStatus
+
         registry = _make_registry()
         sid = registry.register(**_mic_kwargs())
         registry.mark_unavailable(sid, reason="hardware missing")
@@ -508,6 +528,7 @@ class TestDegradedUnavailableReporting:
 
     def test_mark_degraded_sets_health_degraded(self):
         from core.multimodal.perception_source_registry import SourceHealthStatus
+
         registry = _make_registry()
         sid = registry.register(**_webrtc_kwargs())
         registry.mark_degraded(sid, reason="high packet loss")
@@ -531,6 +552,7 @@ class TestDegradedUnavailableReporting:
 
     def test_degraded_sources_query(self):
         from core.multimodal.perception_source_registry import SourceHealthStatus
+
         registry = _make_registry()
         sid_mic = registry.register(**_mic_kwargs(source_id="mic-ok"))
         sid_cam = registry.register(**_webcam_kwargs(source_id="cam-deg"))
@@ -597,6 +619,7 @@ class TestRegistrySnapshot:
 
     def test_snapshot_counts_are_accurate(self):
         from core.multimodal.perception_source_registry import SourceHealthStatus
+
         registry = _make_registry()
         sid_mic = registry.register(**_mic_kwargs(source_id="mic"))
         sid_cam = registry.register(**_webcam_kwargs(source_id="cam"))
@@ -683,6 +706,7 @@ class TestShellOwnershipBoundary:
     def test_runtime_has_source_registry_attribute(self):
         """DesktopPresenceRuntime must own the registry (not OpenClawd)."""
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         runtime = DesktopPresenceRuntime()
         assert hasattr(runtime, "source_registry")
         assert hasattr(runtime, "snapshot_source_registry")
@@ -690,11 +714,13 @@ class TestShellOwnershipBoundary:
     def test_source_registry_is_perception_source_registry_instance(self):
         from core.desktop_presence_runtime import DesktopPresenceRuntime
         from core.multimodal.perception_source_registry import PerceptionSourceRegistry
+
         runtime = DesktopPresenceRuntime()
         assert isinstance(runtime.source_registry, PerceptionSourceRegistry)
 
     def test_snapshot_source_registry_returns_dict(self):
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         runtime = DesktopPresenceRuntime()
         snap = runtime.snapshot_source_registry()
         assert isinstance(snap, dict)
@@ -702,6 +728,7 @@ class TestShellOwnershipBoundary:
 
     def test_snapshot_source_registry_is_json_serialisable(self):
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         runtime = DesktopPresenceRuntime()
         snap = runtime.snapshot_source_registry()
         # Must not raise
@@ -710,10 +737,10 @@ class TestShellOwnershipBoundary:
     def test_openclawd_does_not_own_source_registry(self):
         """OpenClawd must not have a source_registry attribute."""
         from core.openclawd import OpenClawd
+
         clawd = OpenClawd()
         assert not hasattr(clawd, "source_registry"), (
-            "OpenClawd must not own the perception source registry — "
-            "source governance belongs to the runtime shell."
+            "OpenClawd must not own the perception source registry — " "source governance belongs to the runtime shell."
         )
 
     def test_registry_mutated_on_shell_not_on_core(self):
@@ -723,6 +750,7 @@ class TestShellOwnershipBoundary:
             PerceptionSourceType,
             SourceModality,
         )
+
         runtime = DesktopPresenceRuntime()
         registry = runtime.source_registry
         sid = registry.register(
@@ -735,6 +763,7 @@ class TestShellOwnershipBoundary:
         assert registry.get(sid) is not None
         # OpenClawd has no corresponding state — this just checks no exception
         from core.openclawd import get_openclawd
+
         clawd = get_openclawd()
         assert not hasattr(clawd, "source_registry")
 
@@ -748,6 +777,7 @@ class TestShellOwnershipBoundary:
             PerceptionSourceType,
             SourceModality,
         )
+
         r1 = DesktopPresenceRuntime()
         r2 = DesktopPresenceRuntime()
         r1.source_registry.register(
@@ -760,9 +790,11 @@ class TestShellOwnershipBoundary:
 
     def test_registry_not_exposed_on_openclawd_module(self):
         """The perception_source_registry module must not be imported by openclawd."""
-        import core.openclawd as _oc_module
         import sys
+
+        import core.openclawd as _oc_module
+
         # perception_source_registry should not be an attribute of the module
-        assert not hasattr(_oc_module, "PerceptionSourceRegistry"), (
-            "PerceptionSourceRegistry must not be imported at the OpenClawd module level."
-        )
+        assert not hasattr(
+            _oc_module, "PerceptionSourceRegistry"
+        ), "PerceptionSourceRegistry must not be imported at the OpenClawd module level."

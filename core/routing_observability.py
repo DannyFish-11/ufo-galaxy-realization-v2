@@ -81,7 +81,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-
 # ---------------------------------------------------------------------------
 # Route / Fallback Kind Enums
 # ---------------------------------------------------------------------------
@@ -501,13 +500,9 @@ class ControlLoopMetrics:
 
             # Provider/model frequency
             if event.provider and event.provider != "none":
-                self.provider_counts[event.provider] = (
-                    self.provider_counts.get(event.provider, 0) + 1
-                )
+                self.provider_counts[event.provider] = self.provider_counts.get(event.provider, 0) + 1
             if event.model and event.model != "none":
-                self.model_counts[event.model] = (
-                    self.model_counts.get(event.model, 0) + 1
-                )
+                self.model_counts[event.model] = self.model_counts.get(event.model, 0) + 1
 
     def record_projection_mismatch(self) -> None:
         """Increment the projection/control mismatch counter."""

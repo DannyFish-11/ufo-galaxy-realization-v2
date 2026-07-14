@@ -36,6 +36,7 @@ for quick downstream checks.
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
+
 logger = logging.getLogger(__name__)
 
 
@@ -161,9 +162,7 @@ class MergeSummary:
             "errors": list(self.errors),
             "warnings": list(self.warnings),
             "recovery_recommendation": (
-                self.recovery_recommendation.to_dict()
-                if self.recovery_recommendation is not None
-                else None
+                self.recovery_recommendation.to_dict() if self.recovery_recommendation is not None else None
             ),
             "task_id": self.task_id,
             "trace_id": self.trace_id,
@@ -187,9 +186,7 @@ class MergeSummary:
                 logger.warning("Exception suppressed: %s", exc)
 
         return cls(
-            merge_status=MergeStatus(
-                data.get("merge_status", MergeStatus.FAILED.value)
-            ),
+            merge_status=MergeStatus(data.get("merge_status", MergeStatus.FAILED.value)),
             total_count=int(data.get("total_count", 0)),
             successful_count=int(data.get("successful_count", 0)),
             failed_count=int(data.get("failed_count", 0)),

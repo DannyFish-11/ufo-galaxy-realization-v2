@@ -25,12 +25,8 @@ import dataclasses
 import enum
 from typing import Any, Dict, List, Optional
 
-PERCEPTION_FACT_BOUNDARY_IS_AUTHORITY = (
-    "PERCEPTION_FACT_BOUNDARY::CANONICAL_PERCEPTION_STATE_IS_SOLE_FACT_SOURCE_V1"
-)
-PERCEPTION_FACT_BOUNDARY_PR25_SENTINEL = (
-    "PERCEPTION_FACT_BOUNDARY::PR25_BOUNDARY_SUMMARY_AND_SURFACE_CATALOG_V1"
-)
+PERCEPTION_FACT_BOUNDARY_IS_AUTHORITY = "PERCEPTION_FACT_BOUNDARY::CANONICAL_PERCEPTION_STATE_IS_SOLE_FACT_SOURCE_V1"
+PERCEPTION_FACT_BOUNDARY_PR25_SENTINEL = "PERCEPTION_FACT_BOUNDARY::PR25_BOUNDARY_SUMMARY_AND_SURFACE_CATALOG_V1"
 
 
 class PerceptionSurfaceKind(str, enum.Enum):
@@ -90,8 +86,7 @@ PERCEPTION_SURFACE_CATALOG: List[PerceptionSurfaceRecord] = [
         kind=PerceptionSurfaceKind.CANONICAL_FACT,
         authority_owner="openclawd",
         description=(
-            "Single authoritative perception fact source for routing, diagnostics, "
-            "and control-plan assembly."
+            "Single authoritative perception fact source for routing, diagnostics, " "and control-plan assembly."
         ),
     ),
     PerceptionSurfaceRecord(
@@ -154,21 +149,18 @@ def build_perception_fact_boundary_summary(
     if metadata.get("canonical_perception_state") is not None:
         present_surfaces.append("response.metadata.canonical_perception_state")
     if isinstance(ucp, dict) and ucp.get("canonical_perception_summary") is not None:
-        present_surfaces.append(
-            "response.metadata.unified_control_plan.canonical_perception_summary"
-        )
+        present_surfaces.append("response.metadata.unified_control_plan.canonical_perception_summary")
     if metadata.get("desktop_status_projection") is not None:
         present_surfaces.append("response.metadata.desktop_status_projection")
     if metadata.get("multimodal_context") is not None:
         present_surfaces.append("response.metadata.multimodal_context")
 
-    compat_surfaces_present = [
-        path for path in present_surfaces if path == "response.metadata.multimodal_context"
-    ]
+    compat_surfaces_present = [path for path in present_surfaces if path == "response.metadata.multimodal_context"]
     derived_surfaces_present = [
         path
         for path in present_surfaces
-        if path in {
+        if path
+        in {
             "response.metadata.unified_control_plan.canonical_perception_summary",
             "response.metadata.desktop_status_projection",
         }

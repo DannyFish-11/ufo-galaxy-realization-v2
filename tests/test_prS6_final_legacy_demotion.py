@@ -35,8 +35,8 @@ All tests are self-contained (no live servers, no real devices).
 from __future__ import annotations
 
 import logging
-import sys
 import os
+import sys
 
 import pytest
 
@@ -49,34 +49,30 @@ if _PROJECT_ROOT not in sys.path:
 # 1. PR-S6 registry entries present
 # ===========================================================================
 
+
 class TestPRS6RegistryEntries:
     """All three PR-S6 paths appear in LEGACY_PATH_REGISTRY."""
 
     def test_task_scheduler_registered(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
-        assert (
-            "galaxy_gateway.task_router.TaskScheduler"
-            in LEGACY_PATH_REGISTRY
-        )
+
+        assert "galaxy_gateway.task_router.TaskScheduler" in LEGACY_PATH_REGISTRY
 
     def test_task_router_registered(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
-        assert (
-            "galaxy_gateway.task_router.TaskRouter"
-            in LEGACY_PATH_REGISTRY
-        )
+
+        assert "galaxy_gateway.task_router.TaskRouter" in LEGACY_PATH_REGISTRY
 
     def test_message_handler_registered(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
-        assert (
-            "galaxy_gateway.handlers.message_handler.MessageHandler"
-            in LEGACY_PATH_REGISTRY
-        )
+
+        assert "galaxy_gateway.handlers.message_handler.MessageHandler" in LEGACY_PATH_REGISTRY
 
 
 # ===========================================================================
 # 2. All three are LEGACY_COMPATIBILITY
 # ===========================================================================
+
 
 class TestPRS6Status:
     """All PR-S6 entries carry LEGACY_COMPATIBILITY status."""
@@ -86,6 +82,7 @@ class TestPRS6Status:
             LEGACY_PATH_REGISTRY,
             LegacyPathStatus,
         )
+
         entry = LEGACY_PATH_REGISTRY["galaxy_gateway.task_router.TaskScheduler"]
         assert entry.status is LegacyPathStatus.LEGACY_COMPATIBILITY
 
@@ -94,6 +91,7 @@ class TestPRS6Status:
             LEGACY_PATH_REGISTRY,
             LegacyPathStatus,
         )
+
         entry = LEGACY_PATH_REGISTRY["galaxy_gateway.task_router.TaskRouter"]
         assert entry.status is LegacyPathStatus.LEGACY_COMPATIBILITY
 
@@ -102,9 +100,8 @@ class TestPRS6Status:
             LEGACY_PATH_REGISTRY,
             LegacyPathStatus,
         )
-        entry = LEGACY_PATH_REGISTRY[
-            "galaxy_gateway.handlers.message_handler.MessageHandler"
-        ]
+
+        entry = LEGACY_PATH_REGISTRY["galaxy_gateway.handlers.message_handler.MessageHandler"]
         assert entry.status is LegacyPathStatus.LEGACY_COMPATIBILITY
 
 
@@ -112,24 +109,26 @@ class TestPRS6Status:
 # 3. All three have pr_guardrail_added == "PR-S6"
 # ===========================================================================
 
+
 class TestPRS6GuardrailTag:
     """All PR-S6 entries have pr_guardrail_added == 'PR-S6'."""
 
     def test_task_scheduler_guardrail_tag(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
+
         entry = LEGACY_PATH_REGISTRY["galaxy_gateway.task_router.TaskScheduler"]
         assert entry.pr_guardrail_added == "PR-S6"
 
     def test_task_router_guardrail_tag(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
+
         entry = LEGACY_PATH_REGISTRY["galaxy_gateway.task_router.TaskRouter"]
         assert entry.pr_guardrail_added == "PR-S6"
 
     def test_message_handler_guardrail_tag(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
-        entry = LEGACY_PATH_REGISTRY[
-            "galaxy_gateway.handlers.message_handler.MessageHandler"
-        ]
+
+        entry = LEGACY_PATH_REGISTRY["galaxy_gateway.handlers.message_handler.MessageHandler"]
         assert entry.pr_guardrail_added == "PR-S6"
 
 
@@ -137,27 +136,29 @@ class TestPRS6GuardrailTag:
 # 4. LEGACY_ORCHESTRATOR_PATHS shim includes all PR-S6 keys
 # ===========================================================================
 
+
 class TestLegacyOrchestratorPathsShimPRS6:
     """LEGACY_ORCHESTRATOR_PATHS frozenset includes all PR-S6 paths."""
 
     def test_shim_includes_task_scheduler(self):
         from core.orchestration_authority.legacy_paths import LEGACY_ORCHESTRATOR_PATHS
+
         assert "galaxy_gateway.task_router.TaskScheduler" in LEGACY_ORCHESTRATOR_PATHS
 
     def test_shim_includes_task_router(self):
         from core.orchestration_authority.legacy_paths import LEGACY_ORCHESTRATOR_PATHS
+
         assert "galaxy_gateway.task_router.TaskRouter" in LEGACY_ORCHESTRATOR_PATHS
 
     def test_shim_includes_message_handler(self):
         from core.orchestration_authority.legacy_paths import LEGACY_ORCHESTRATOR_PATHS
-        assert (
-            "galaxy_gateway.handlers.message_handler.MessageHandler"
-            in LEGACY_ORCHESTRATOR_PATHS
-        )
+
+        assert "galaxy_gateway.handlers.message_handler.MessageHandler" in LEGACY_ORCHESTRATOR_PATHS
 
     def test_shim_is_superset_of_prs5_paths(self):
         """Regression guard: PR-S5 paths must still be present in the shim."""
         from core.orchestration_authority.legacy_paths import LEGACY_ORCHESTRATOR_PATHS
+
         prs5_paths = {
             "galaxy_gateway.orchestrator.task_orchestrator.MultiDeviceOrchestrator",
             "galaxy_gateway.orchestrator.parallel_tracker.ParallelGroupTracker",
@@ -170,13 +171,15 @@ class TestLegacyOrchestratorPathsShimPRS6:
 # 5. task_router module docstring carries the deprecation note
 # ===========================================================================
 
+
 class TestTaskRouterModuleDocstring:
     """Read source file directly to avoid aiohttp import chain."""
 
     def _read_task_router_src(self) -> str:
         path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "galaxy_gateway", "task_router.py",
+            "galaxy_gateway",
+            "task_router.py",
         )
         with open(path, encoding="utf-8") as fh:
             return fh.read()
@@ -202,11 +205,13 @@ class TestTaskRouterModuleDocstring:
 # 6. TaskScheduler class docstring marks it as legacy compat
 # ===========================================================================
 
+
 class TestTaskSchedulerDocstring:
     def _read_task_router_src(self) -> str:
         path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "galaxy_gateway", "task_router.py",
+            "galaxy_gateway",
+            "task_router.py",
         )
         with open(path, encoding="utf-8") as fh:
             return fh.read()
@@ -230,13 +235,15 @@ class TestTaskSchedulerDocstring:
 #    (verified via source inspection — import requires aiohttp not in sandbox)
 # ===========================================================================
 
+
 class TestTaskSchedulerGuardrailLog:
     """Verify guardrail wiring via source inspection."""
 
     def _read_task_router_src(self) -> str:
         path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "galaxy_gateway", "task_router.py",
+            "galaxy_gateway",
+            "task_router.py",
         )
         with open(path, encoding="utf-8") as fh:
             return fh.read()
@@ -254,11 +261,13 @@ class TestTaskSchedulerGuardrailLog:
 # 8. TaskRouter class docstring marks it as legacy compat
 # ===========================================================================
 
+
 class TestTaskRouterDocstring:
     def _read_task_router_src(self) -> str:
         path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "galaxy_gateway", "task_router.py",
+            "galaxy_gateway",
+            "task_router.py",
         )
         with open(path, encoding="utf-8") as fh:
             return fh.read()
@@ -282,13 +291,15 @@ class TestTaskRouterDocstring:
 #    (verified via source inspection — import requires aiohttp not in sandbox)
 # ===========================================================================
 
+
 class TestTaskRouterGuardrailLog:
     """Verify guardrail wiring via source inspection."""
 
     def _read_task_router_src(self) -> str:
         path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "galaxy_gateway", "task_router.py",
+            "galaxy_gateway",
+            "task_router.py",
         )
         with open(path, encoding="utf-8") as fh:
             return fh.read()
@@ -306,13 +317,16 @@ class TestTaskRouterGuardrailLog:
 # 10. message_handler module docstring carries the deprecation note
 # ===========================================================================
 
+
 class TestMessageHandlerModuleDocstring:
     """Read source file directly to avoid pydantic import chain."""
 
     def _read_message_handler_src(self) -> str:
         path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "galaxy_gateway", "handlers", "message_handler.py",
+            "galaxy_gateway",
+            "handlers",
+            "message_handler.py",
         )
         with open(path, encoding="utf-8") as fh:
             return fh.read()
@@ -338,11 +352,14 @@ class TestMessageHandlerModuleDocstring:
 # 11. MessageHandler class docstring marks it as legacy chain B
 # ===========================================================================
 
+
 class TestMessageHandlerClassDocstring:
     def _read_message_handler_src(self) -> str:
         path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "galaxy_gateway", "handlers", "message_handler.py",
+            "galaxy_gateway",
+            "handlers",
+            "message_handler.py",
         )
         with open(path, encoding="utf-8") as fh:
             return fh.read()
@@ -366,13 +383,16 @@ class TestMessageHandlerClassDocstring:
 #    (verified via source inspection — import requires pydantic not in sandbox)
 # ===========================================================================
 
+
 class TestMessageHandlerGuardrailLog:
     """Verify guardrail wiring via source inspection."""
 
     def _read_message_handler_src(self) -> str:
         path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "galaxy_gateway", "handlers", "message_handler.py",
+            "galaxy_gateway",
+            "handlers",
+            "message_handler.py",
         )
         with open(path, encoding="utf-8") as fh:
             return fh.read()
@@ -390,20 +410,22 @@ class TestMessageHandlerGuardrailLog:
 # 13. is_legacy_path returns True for all three PR-S6 paths
 # ===========================================================================
 
+
 class TestIsLegacyPathPRS6:
     def test_task_scheduler_is_legacy(self):
         from core.orchestration_authority.legacy_paths import is_legacy_path
+
         assert is_legacy_path("galaxy_gateway.task_router.TaskScheduler")
 
     def test_task_router_is_legacy(self):
         from core.orchestration_authority.legacy_paths import is_legacy_path
+
         assert is_legacy_path("galaxy_gateway.task_router.TaskRouter")
 
     def test_message_handler_is_legacy(self):
         from core.orchestration_authority.legacy_paths import is_legacy_path
-        assert is_legacy_path(
-            "galaxy_gateway.handlers.message_handler.MessageHandler"
-        )
+
+        assert is_legacy_path("galaxy_gateway.handlers.message_handler.MessageHandler")
 
     def test_canonical_websocket_handler_is_not_legacy_compat(self):
         """websocket_handler (chain A, canonical) must not appear as legacy."""
@@ -411,10 +433,9 @@ class TestIsLegacyPathPRS6:
             LEGACY_PATH_REGISTRY,
             LegacyPathStatus,
         )
+
         # The canonical chain A ingress must not be LEGACY_COMPATIBILITY.
-        entry = LEGACY_PATH_REGISTRY.get(
-            "galaxy_gateway.websocket_handler"
-        )
+        entry = LEGACY_PATH_REGISTRY.get("galaxy_gateway.websocket_handler")
         if entry is not None:
             assert entry.status is not LegacyPathStatus.LEGACY_COMPATIBILITY, (
                 "websocket_handler is the canonical chain A ingress and must not "
@@ -427,9 +448,8 @@ class TestIsLegacyPathPRS6:
             LEGACY_PATH_REGISTRY,
             LegacyPathStatus,
         )
-        entry = LEGACY_PATH_REGISTRY.get(
-            "galaxy_gateway.device_router.DeviceRouter.route_task"
-        )
+
+        entry = LEGACY_PATH_REGISTRY.get("galaxy_gateway.device_router.DeviceRouter.route_task")
         if entry is not None:
             assert entry.status is not LegacyPathStatus.LEGACY_COMPATIBILITY
 
@@ -438,47 +458,49 @@ class TestIsLegacyPathPRS6:
 # 14. PURGE_REGISTRY contains PR-S6 entries
 # ===========================================================================
 
+
 class TestPurgeRegistryPRS6:
     """PR-S6 decisions appear in PURGE_REGISTRY with WRAPPER_HARDENED status."""
 
     def test_purge_registry_has_task_scheduler_entry(self):
         from core.legacy_purge_registry import PURGE_REGISTRY
+
         paths = {e.asset_path for e in PURGE_REGISTRY}
-        assert any("TaskScheduler" in p for p in paths), (
-            "PURGE_REGISTRY should have a TaskScheduler entry from PR-S6"
-        )
+        assert any("TaskScheduler" in p for p in paths), "PURGE_REGISTRY should have a TaskScheduler entry from PR-S6"
 
     def test_purge_registry_has_task_router_entry(self):
         from core.legacy_purge_registry import PURGE_REGISTRY
+
         paths = {e.asset_path for e in PURGE_REGISTRY}
-        assert any("TaskRouter" in p and "TaskScheduler" not in p for p in paths), (
-            "PURGE_REGISTRY should have a TaskRouter entry from PR-S6"
-        )
+        assert any(
+            "TaskRouter" in p and "TaskScheduler" not in p for p in paths
+        ), "PURGE_REGISTRY should have a TaskRouter entry from PR-S6"
 
     def test_purge_registry_has_message_handler_entry(self):
         from core.legacy_purge_registry import PURGE_REGISTRY
+
         paths = {e.asset_path for e in PURGE_REGISTRY}
-        assert any("MessageHandler" in p for p in paths), (
-            "PURGE_REGISTRY should have a MessageHandler entry from PR-S6"
-        )
+        assert any("MessageHandler" in p for p in paths), "PURGE_REGISTRY should have a MessageHandler entry from PR-S6"
 
     def test_prs6_entries_are_wrapper_hardened(self):
         from core.legacy_purge_registry import PURGE_REGISTRY, PurgeStatus
+
         prs6 = [e for e in PURGE_REGISTRY if e.pr == "PR-S6"]
         assert len(prs6) >= 3, f"Expected >= 3 PR-S6 entries, got {len(prs6)}"
         for entry in prs6:
             assert entry.status is PurgeStatus.WRAPPER_HARDENED, (
-                f"PR-S6 entry {entry.asset_path!r} should be WRAPPER_HARDENED, "
-                f"got {entry.status!r}"
+                f"PR-S6 entry {entry.asset_path!r} should be WRAPPER_HARDENED, " f"got {entry.status!r}"
             )
 
     def test_get_entries_by_pr_returns_prs6(self):
         from core.legacy_purge_registry import get_entries_by_pr
+
         prs6 = get_entries_by_pr("PR-S6")
         assert len(prs6) >= 3
 
     def test_purge_registry_summary_includes_prs6(self):
         from core.legacy_purge_registry import purge_registry_summary
+
         summary = purge_registry_summary()
         assert "PR-S6" in summary["by_pr"]
         assert len(summary["by_pr"]["PR-S6"]) >= 3

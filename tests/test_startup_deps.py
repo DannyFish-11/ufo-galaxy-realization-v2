@@ -27,8 +27,7 @@ class TestDependencyGraph:
         for subsystem, deps in _SUBSYSTEM_DEPS.items():
             for dep in deps:
                 assert dep in all_subsystems, (
-                    f"Subsystem '{subsystem}' depends on '{dep}' "
-                    f"which is not declared in _SUBSYSTEM_DEPS"
+                    f"Subsystem '{subsystem}' depends on '{dep}' " f"which is not declared in _SUBSYSTEM_DEPS"
                 )
 
     def test_command_router_declared(self):

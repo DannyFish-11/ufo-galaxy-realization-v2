@@ -144,8 +144,8 @@ from __future__ import annotations
 
 import importlib
 import json
-import sys
 import os
+import sys
 from typing import Any, Dict, List
 
 import pytest
@@ -160,24 +160,23 @@ if _PROJECT_ROOT not in sys.path:
 
 import core.dual_repo_system_reality_audit as _mod
 from core.dual_repo_system_reality_audit import (
+    ADDITIVE_ONLY_NO_MUTATION_POLICY,
+    CODE_GROUNDED_EVIDENCE_ONLY_POLICY,
     DUAL_REPO_SYSTEM_REALITY_AUDIT_AUTHORITY,
     DUAL_REPO_SYSTEM_REALITY_AUDIT_PR537_SENTINEL,
-    CODE_GROUNDED_EVIDENCE_ONLY_POLICY,
     FAIL_CONSERVATIVE_ON_MISSING_MODULE_POLICY,
-    SILENCE_IS_NOT_ACCEPTANCE_POLICY,
     HONEST_GAP_REPORTING_POLICY,
-    ADDITIVE_ONLY_NO_MUTATION_POLICY,
-    MaturityLabel,
+    SILENCE_IS_NOT_ACCEPTANCE_POLICY,
     AuditDimension,
-    SystemRealityVerdict,
     DimensionAuditEntry,
     DualRepoRealityAuditReport,
     DualRepoSystemRealityAuditor,
+    MaturityLabel,
+    SystemRealityVerdict,
     build_dual_repo_reality_audit,
     get_dual_repo_reality_audit,
     reset_dual_repo_reality_audit,
 )
-
 
 # ===========================================================================
 # Group A — Module-level: sentinels, enums, __all__
@@ -231,22 +230,13 @@ class TestModuleLevel:
 
     def test_A10_maturity_from_string_valid(self):
         assert MaturityLabel.from_string("implemented") == MaturityLabel.implemented
-        assert (
-            MaturityLabel.from_string("automated_verified")
-            == MaturityLabel.automated_verified
-        )
+        assert MaturityLabel.from_string("automated_verified") == MaturityLabel.automated_verified
 
     def test_A11_maturity_from_string_invalid_returns_lowest(self):
-        assert (
-            MaturityLabel.from_string("nonsense")
-            == MaturityLabel.nominally_present_not_closed
-        )
+        assert MaturityLabel.from_string("nonsense") == MaturityLabel.nominally_present_not_closed
 
     def test_A12_maturity_from_string_non_string_returns_lowest(self):
-        assert (
-            MaturityLabel.from_string(42)  # type: ignore[arg-type]
-            == MaturityLabel.nominally_present_not_closed
-        )
+        assert MaturityLabel.from_string(42) == MaturityLabel.nominally_present_not_closed  # type: ignore[arg-type]
 
     def test_A13_audit_dimension_has_five_values(self):
         assert len(list(AuditDimension)) == 5
@@ -257,51 +247,32 @@ class TestModuleLevel:
         assert all(isinstance(d, AuditDimension) for d in dims)
 
     def test_A15_audit_dimension_from_string_valid(self):
+        assert AuditDimension.from_string("main_chain_authenticity") == AuditDimension.main_chain_authenticity
         assert (
-            AuditDimension.from_string("main_chain_authenticity")
-            == AuditDimension.main_chain_authenticity
-        )
-        assert (
-            AuditDimension.from_string("recovery_redispatch_reconnect")
-            == AuditDimension.recovery_redispatch_reconnect
+            AuditDimension.from_string("recovery_redispatch_reconnect") == AuditDimension.recovery_redispatch_reconnect
         )
 
     def test_A16_audit_dimension_from_string_invalid_returns_default(self):
-        assert (
-            AuditDimension.from_string("bogus_dimension")
-            == AuditDimension.main_chain_authenticity
-        )
-        assert (
-            AuditDimension.from_string(None)  # type: ignore[arg-type]
-            == AuditDimension.main_chain_authenticity
-        )
+        assert AuditDimension.from_string("bogus_dimension") == AuditDimension.main_chain_authenticity
+        assert AuditDimension.from_string(None) == AuditDimension.main_chain_authenticity  # type: ignore[arg-type]
 
     def test_A17_system_reality_verdict_has_four_values(self):
         assert len(list(SystemRealityVerdict)) == 4
 
     def test_A18_is_baseline_established_true_only_for_platform_baseline(self):
-        assert (
-            SystemRealityVerdict.platform_baseline_established.is_baseline_established
-            is True
-        )
+        assert SystemRealityVerdict.platform_baseline_established.is_baseline_established is True
         for v in SystemRealityVerdict:
             if v != SystemRealityVerdict.platform_baseline_established:
                 assert v.is_baseline_established is False
 
     def test_A19_has_critical_gaps_true_only_for_critical_gaps(self):
-        assert (
-            SystemRealityVerdict.critical_gaps_blocking_baseline.has_critical_gaps
-            is True
-        )
+        assert SystemRealityVerdict.critical_gaps_blocking_baseline.has_critical_gaps is True
         for v in SystemRealityVerdict:
             if v != SystemRealityVerdict.critical_gaps_blocking_baseline:
                 assert v.has_critical_gaps is False
 
     def test_A20_is_inconclusive_true_only_for_insufficient_evidence(self):
-        assert (
-            SystemRealityVerdict.insufficient_evidence_to_conclude.is_inconclusive
-            is True
-        )
+        assert SystemRealityVerdict.insufficient_evidence_to_conclude.is_inconclusive is True
         for v in SystemRealityVerdict:
             if v != SystemRealityVerdict.insufficient_evidence_to_conclude:
                 assert v.is_inconclusive is False
@@ -313,10 +284,7 @@ class TestModuleLevel:
         )
 
     def test_A22_verdict_from_string_invalid_returns_default(self):
-        assert (
-            SystemRealityVerdict.from_string("not_real")
-            == SystemRealityVerdict.insufficient_evidence_to_conclude
-        )
+        assert SystemRealityVerdict.from_string("not_real") == SystemRealityVerdict.insufficient_evidence_to_conclude
 
     def test_A23_all_contains_required_public_names(self):
         required = [
@@ -453,9 +421,7 @@ class TestDualRepoRealityAuditReport:
         assert isinstance(report.report_id, str)
         assert len(report.report_id) > 0
         assert isinstance(report.dimensions, list)
-        assert isinstance(
-            report.system_verdict, SystemRealityVerdict
-        )
+        assert isinstance(report.system_verdict, SystemRealityVerdict)
         assert isinstance(report.unresolved_blocking_gaps, list)
         assert isinstance(report.summary, str)
         assert report.generated_at > 0
@@ -493,10 +459,7 @@ class TestDualRepoRealityAuditReport:
         assert restored.report_id == report.report_id
         assert restored.system_verdict == report.system_verdict
         assert len(restored.dimensions) == len(report.dimensions)
-        assert (
-            restored.main_chain_authenticity_conclusion
-            == report.main_chain_authenticity_conclusion
-        )
+        assert restored.main_chain_authenticity_conclusion == report.main_chain_authenticity_conclusion
 
     def test_C05_get_dimension_entry_returns_correct_entry(self):
         report = self._make_report()
@@ -506,10 +469,7 @@ class TestDualRepoRealityAuditReport:
 
     def test_C06_get_dimension_entry_returns_none_for_missing(self):
         report = DualRepoRealityAuditReport()
-        assert (
-            report.get_dimension_entry(AuditDimension.main_chain_authenticity)
-            is None
-        )
+        assert report.get_dimension_entry(AuditDimension.main_chain_authenticity) is None
 
     def test_C07_dimensions_embedded_in_to_dict(self):
         report = self._make_report()
@@ -555,15 +515,11 @@ class TestLiveAudit:
 
     def test_D06_each_entry_has_non_empty_evidence_summary(self, report):
         for entry in report.dimensions:
-            assert entry.evidence_summary, (
-                f"Empty evidence_summary for {entry.dimension.value}"
-            )
+            assert entry.evidence_summary, f"Empty evidence_summary for {entry.dimension.value}"
 
     def test_D07_each_entry_has_non_empty_verdict_rationale(self, report):
         for entry in report.dimensions:
-            assert entry.verdict_rationale, (
-                f"Empty verdict_rationale for {entry.dimension.value}"
-            )
+            assert entry.verdict_rationale, f"Empty verdict_rationale for {entry.dimension.value}"
 
     def test_D08_system_verdict_is_valid(self, report):
         assert isinstance(report.system_verdict, SystemRealityVerdict)
@@ -599,9 +555,9 @@ class TestLiveAudit:
     def test_D16_all_maturity_values_are_valid_members(self, report):
         valid_values = {m.value for m in MaturityLabel}
         for entry in report.dimensions:
-            assert entry.maturity.value in valid_values, (
-                f"Invalid maturity {entry.maturity!r} for {entry.dimension.value}"
-            )
+            assert (
+                entry.maturity.value in valid_values
+            ), f"Invalid maturity {entry.maturity!r} for {entry.dimension.value}"
 
 
 # ===========================================================================
@@ -636,9 +592,7 @@ class TestEvidenceAggregation:
     def test_E02_test_references_are_non_empty_strings(self, report):
         for entry in report.dimensions:
             for ref in entry.test_references:
-                assert isinstance(ref, str) and len(ref) > 0, (
-                    f"Empty test_reference in {entry.dimension.value}"
-                )
+                assert isinstance(ref, str) and len(ref) > 0, f"Empty test_reference in {entry.dimension.value}"
 
     def test_E03_blocking_gaps_consistent_with_dimension_gaps(self, report):
         """Every gap in every dimension entry must appear in
@@ -646,10 +600,7 @@ class TestEvidenceAggregation:
         for entry in report.dimensions:
             for gap in entry.gaps:
                 # The gap should appear (dimension-prefixed) in the report
-                found = any(
-                    gap in bg or entry.dimension.value in bg
-                    for bg in report.unresolved_blocking_gaps
-                )
+                found = any(gap in bg or entry.dimension.value in bg for bg in report.unresolved_blocking_gaps)
                 assert found, (
                     f"Gap not represented in unresolved_blocking_gaps:\n"
                     f"  dimension={entry.dimension.value}\n"
@@ -657,15 +608,11 @@ class TestEvidenceAggregation:
                 )
 
     def test_E04_dimension_with_gaps_contributes_to_blocking_gaps(self, report):
-        dims_with_gaps = {
-            e.dimension
-            for e in report.dimensions
-            if e.gaps
-        }
+        dims_with_gaps = {e.dimension for e in report.dimensions if e.gaps}
         if dims_with_gaps:
-            assert len(report.unresolved_blocking_gaps) > 0, (
-                "Dimensions have gaps but unresolved_blocking_gaps is empty."
-            )
+            assert (
+                len(report.unresolved_blocking_gaps) > 0
+            ), "Dimensions have gaps but unresolved_blocking_gaps is empty."
 
     def test_E05_nominally_present_dimension_has_gap(self):
         """A nominally_present_not_closed dimension must have at least one gap."""
@@ -684,25 +631,17 @@ class TestEvidenceAggregation:
             if e.maturity == MaturityLabel.nominally_present_not_closed
         ]
         for e in live_nominal:
-            assert e.gaps, (
-                f"nominally_present_not_closed dimension "
-                f"'{e.dimension.value}' has no gaps recorded"
-            )
+            assert e.gaps, f"nominally_present_not_closed dimension " f"'{e.dimension.value}' has no gaps recorded"
         # Clean up singleton
         reset_dual_repo_reality_audit()
 
     def test_E06_partially_implemented_dimension_has_gap(self):
         """A partially_implemented dimension must have at least one gap."""
         live_partial = [
-            e
-            for e in build_dual_repo_reality_audit().dimensions
-            if e.maturity == MaturityLabel.partially_implemented
+            e for e in build_dual_repo_reality_audit().dimensions if e.maturity == MaturityLabel.partially_implemented
         ]
         for e in live_partial:
-            assert e.gaps, (
-                f"partially_implemented dimension "
-                f"'{e.dimension.value}' has no gaps recorded"
-            )
+            assert e.gaps, f"partially_implemented dimension " f"'{e.dimension.value}' has no gaps recorded"
         reset_dual_repo_reality_audit()
 
 
@@ -733,11 +672,7 @@ class TestMissingPartialEvidence:
         entries = [
             DimensionAuditEntry(
                 dimension=dim,
-                maturity=(
-                    MaturityLabel.partially_implemented
-                    if i < 2
-                    else MaturityLabel.implemented
-                ),
+                maturity=(MaturityLabel.partially_implemented if i < 2 else MaturityLabel.implemented),
             )
             for i, dim in enumerate(AuditDimension.all_dimensions())
         ]
@@ -802,18 +737,13 @@ class TestFailConservativePolicy:
         entries = [
             DimensionAuditEntry(
                 dimension=dim,
-                maturity=(
-                    MaturityLabel.nominally_present_not_closed
-                    if i == 0
-                    else MaturityLabel.automated_verified
-                ),
+                maturity=(MaturityLabel.nominally_present_not_closed if i == 0 else MaturityLabel.automated_verified),
             )
             for i, dim in enumerate(AuditDimension.all_dimensions())
         ]
         verdict = auditor._compute_verdict(entries)
         assert verdict == SystemRealityVerdict.critical_gaps_blocking_baseline, (
-            "Even a single nominally_present dimension must produce "
-            "critical_gaps_blocking_baseline."
+            "Even a single nominally_present dimension must produce " "critical_gaps_blocking_baseline."
         )
 
     def test_G02_partially_implemented_without_nominal_forces_partial(self):
@@ -821,11 +751,7 @@ class TestFailConservativePolicy:
         entries = [
             DimensionAuditEntry(
                 dimension=dim,
-                maturity=(
-                    MaturityLabel.partially_implemented
-                    if i == 0
-                    else MaturityLabel.mainchained
-                ),
+                maturity=(MaturityLabel.partially_implemented if i == 0 else MaturityLabel.mainchained),
             )
             for i, dim in enumerate(AuditDimension.all_dimensions())
         ]
@@ -840,13 +766,11 @@ class TestFailConservativePolicy:
             MaturityLabel.automated_verified,
         ):
             entries = [
-                DimensionAuditEntry(dimension=dim, maturity=target_label)
-                for dim in AuditDimension.all_dimensions()
+                DimensionAuditEntry(dimension=dim, maturity=target_label) for dim in AuditDimension.all_dimensions()
             ]
             verdict = auditor._compute_verdict(entries)
             assert verdict == SystemRealityVerdict.platform_baseline_established, (
-                f"All dimensions at {target_label.value} should produce "
-                "platform_baseline_established."
+                f"All dimensions at {target_label.value} should produce " "platform_baseline_established."
             )
 
     def test_G04_entry_with_no_code_references_cannot_exceed_partially_implemented(
@@ -893,8 +817,7 @@ class TestFailConservativePolicy:
         dims_with_gaps = [e for e in report.dimensions if e.gaps]
         if dims_with_gaps:
             assert len(report.unresolved_blocking_gaps) > 0, (
-                "Dimensions have gaps but unresolved_blocking_gaps is empty.  "
-                "HONEST_GAP_REPORTING_POLICY violation."
+                "Dimensions have gaps but unresolved_blocking_gaps is empty.  " "HONEST_GAP_REPORTING_POLICY violation."
             )
         reset_dual_repo_reality_audit()
 
@@ -950,10 +873,7 @@ class TestPolicySentinels:
         assert "excluded" in CODE_GROUNDED_EVIDENCE_ONLY_POLICY.lower()
 
     def test_H02_fail_conservative_mentions_nominally_present(self):
-        assert (
-            "nominally_present_not_closed"
-            in FAIL_CONSERVATIVE_ON_MISSING_MODULE_POLICY
-        )
+        assert "nominally_present_not_closed" in FAIL_CONSERVATIVE_ON_MISSING_MODULE_POLICY
 
     def test_H03_silence_not_acceptance_mentions_absence(self):
         assert "absence" in SILENCE_IS_NOT_ACCEPTANCE_POLICY.lower()

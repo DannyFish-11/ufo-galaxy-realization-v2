@@ -33,6 +33,7 @@ Design principles
   isolated failure test so that a regression in one layer causes exactly that
   group of tests to fail — not a silent pass across all layers.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -58,6 +59,7 @@ def _make_launcher():
     """Return a NodeSystemLauncher instance backed by the real node_dependencies.json."""
     import json
     from unittest.mock import MagicMock as _MM
+
     from launcher.node_startup import NodeSystemLauncher
 
     with open(_NDJ_PATH, "r", encoding="utf-8") as fh:
@@ -79,6 +81,7 @@ def _make_launcher():
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _run(coro):
     """Run a coroutine in a fresh event loop."""
     loop = asyncio.new_event_loop()
@@ -92,6 +95,7 @@ def _reset_capability_state() -> None:
     """Reset singleton registries between tests to avoid state leakage."""
     try:
         from core.agent.capability_registry import CapabilityRegistry
+
         reg = CapabilityRegistry.get_instance()
         reg._items.clear()
         try:
@@ -107,24 +111,28 @@ def _reset_capability_state() -> None:
 
     try:
         from core.unified.capability_resolver import reset_capability_resolver
+
         reset_capability_resolver()
     except Exception:
         pass
 
     try:
         from core.capability_bus import reset_capability_bus
+
         reset_capability_bus()
     except Exception:
         pass
 
     try:
         from core.skill_loader import SkillLoader
+
         SkillLoader._instance = None
     except Exception:
         pass
 
     try:
         from core.nodes.node_fabric_registry import reset_node_fabric_registry
+
         reset_node_fabric_registry()
     except Exception:
         pass
@@ -175,8 +183,7 @@ def _load_validate_runtime():
     )
     if spec is None or spec.loader is None:
         raise ImportError(
-            f"Cannot load validate_runtime module from {script_path} — "
-            "spec_from_file_location returned None"
+            f"Cannot load validate_runtime module from {script_path} — " "spec_from_file_location returned None"
         )
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -195,6 +202,7 @@ class TestSentinels:
         from core.capabilities.canonical_dispatcher import (
             CANONICAL_DISPATCHER_SPINE_HARDENED,
         )
+
         assert CANONICAL_DISPATCHER_SPINE_HARDENED
         assert "CANONICAL_DISPATCHER_SPINE_HARDENED" in CANONICAL_DISPATCHER_SPINE_HARDENED
 
@@ -202,30 +210,36 @@ class TestSentinels:
         from core.capabilities.canonical_dispatcher import (
             CANONICAL_DISPATCHER_SPINE_HARDENED,
         )
+
         assert "trace_id" in CANONICAL_DISPATCHER_SPINE_HARDENED
 
     def test_canonical_dispatcher_spine_hardened_mentions_request_id(self):
         from core.capabilities.canonical_dispatcher import (
             CANONICAL_DISPATCHER_SPINE_HARDENED,
         )
+
         assert "request_id" in CANONICAL_DISPATCHER_SPINE_HARDENED
 
     def test_openclawd_spine_observability_hardened_sentinel(self):
         from core.openclawd import OPENCLAWD_SPINE_OBSERVABILITY_HARDENED
+
         assert OPENCLAWD_SPINE_OBSERVABILITY_HARDENED
         assert "SPINE_OBSERVABILITY_HARDENED" in OPENCLAWD_SPINE_OBSERVABILITY_HARDENED
 
     def test_openclawd_spine_observability_hardened_mentions_trace_id(self):
         from core.openclawd import OPENCLAWD_SPINE_OBSERVABILITY_HARDENED
+
         assert "trace_id" in OPENCLAWD_SPINE_OBSERVABILITY_HARDENED
 
     def test_command_router_correlation_hardened_sentinel(self):
         from core.command_router import COMMAND_ROUTER_CORRELATION_HARDENED
+
         assert COMMAND_ROUTER_CORRELATION_HARDENED
         assert "CORRELATION_HARDENED" in COMMAND_ROUTER_CORRELATION_HARDENED
 
     def test_command_router_correlation_hardened_mentions_trace_id(self):
         from core.command_router import COMMAND_ROUTER_CORRELATION_HARDENED
+
         assert "trace_id" in COMMAND_ROUTER_CORRELATION_HARDENED
 
 
@@ -239,37 +253,38 @@ class TestTieredStartupSmoke:
 
     def test_startup_tier_model_importable(self):
         import core.startup_tier_model as m
+
         assert m.STARTUP_TIER_MODEL_AUTHORITY
 
     def test_launcher_tier_constants_present(self):
         from launcher.node_startup import NodeSystemLauncher
+
         assert NodeSystemLauncher.STARTUP_TIER_CORE == "Core"
         assert NodeSystemLauncher.STARTUP_TIER_STANDARD == "Standard"
         assert NodeSystemLauncher.STARTUP_TIER_FULL == "Full"
 
     def test_core_tier_nodes_non_empty(self):
         from launcher.node_startup import NodeSystemLauncher
+
         launcher = _make_launcher()
         core_nodes = launcher.get_tier_nodes(NodeSystemLauncher.STARTUP_TIER_CORE)
         assert len(core_nodes) > 0, "Core tier must include at least one node"
 
     def test_standard_tier_is_superset_of_core(self):
         from launcher.node_startup import NodeSystemLauncher
+
         launcher = _make_launcher()
         core = set(launcher.get_tier_nodes(NodeSystemLauncher.STARTUP_TIER_CORE))
         standard = set(launcher.get_tier_nodes(NodeSystemLauncher.STARTUP_TIER_STANDARD))
-        assert core.issubset(standard), (
-            "Standard tier must include all Core tier nodes"
-        )
+        assert core.issubset(standard), "Standard tier must include all Core tier nodes"
 
     def test_full_tier_is_superset_of_standard(self):
         from launcher.node_startup import NodeSystemLauncher
+
         launcher = _make_launcher()
         standard = set(launcher.get_tier_nodes(NodeSystemLauncher.STARTUP_TIER_STANDARD))
         full = set(launcher.get_tier_nodes(NodeSystemLauncher.STARTUP_TIER_FULL))
-        assert standard.issubset(full), (
-            "Full tier must include all Standard tier nodes"
-        )
+        assert standard.issubset(full), "Full tier must include all Standard tier nodes"
 
     def test_readiness_baseline_returns_expected_keys(self):
         launcher = _make_launcher()
@@ -280,12 +295,11 @@ class TestTieredStartupSmoke:
             assert key in baseline, f"readiness baseline missing key: {key!r}"
         # At least one of the full-tier representations must be present.
         has_full_repr = "full_tier" in baseline or "active_baseline" in baseline
-        assert has_full_repr, (
-            "readiness baseline must contain either 'full_tier' or 'active_baseline'"
-        )
+        assert has_full_repr, "readiness baseline must contain either 'full_tier' or 'active_baseline'"
 
     def test_invalid_tier_raises(self):
         from launcher.node_startup import NodeSystemLauncher
+
         launcher = _make_launcher()
         with pytest.raises(ValueError):
             launcher.get_tier_nodes("InvalidTier")
@@ -294,6 +308,7 @@ class TestTieredStartupSmoke:
         """Full tier may include optional nodes that can be missing; the
         tier query must not raise even when optional nodes are absent."""
         from launcher.node_startup import NodeSystemLauncher as _NSL
+
         launcher = _make_launcher()
         # This must complete without raising regardless of optional node state.
         full = launcher.get_tier_nodes(_NSL.STARTUP_TIER_FULL)
@@ -302,24 +317,25 @@ class TestTieredStartupSmoke:
     def test_core_startup_path_importable(self):
         """Core startup modules must be importable — structural smoke check."""
         import importlib
+
         for mod_path, cls_name in [
             ("core.desktop_presence_runtime", "DesktopPresenceRuntime"),
             ("core.openclawd", "OpenClawd"),
             ("core.command_router", "CommandRouter"),
         ]:
             mod = importlib.import_module(mod_path)
-            assert hasattr(mod, cls_name), (
-                f"{cls_name} not found in {mod_path}"
-            )
+            assert hasattr(mod, cls_name), f"{cls_name} not found in {mod_path}"
 
     def test_openclawd_collect_tools_is_callable(self):
         """OpenClawd._collect_tools() must be present without live backend."""
         from core.openclawd import OpenClawd
+
         assert callable(getattr(OpenClawd, "_collect_tools", None))
 
     def test_openclawd_dispatch_tool_call_is_callable(self):
         """OpenClawd._dispatch_tool_call() must be present without live backend."""
         from core.openclawd import OpenClawd
+
         assert callable(getattr(OpenClawd, "_dispatch_tool_call", None))
 
 
@@ -443,9 +459,9 @@ class TestOpenClawdRequestPath:
 
         assert captured, "dispatch() must have been called"
         dr = captured[0]
-        assert dr.trace_id == "trace-acceptance-001", (
-            f"trace_id must propagate into DispatchResult; got {dr.trace_id!r}"
-        )
+        assert (
+            dr.trace_id == "trace-acceptance-001"
+        ), f"trace_id must propagate into DispatchResult; got {dr.trace_id!r}"
 
     @pytest.mark.asyncio
     async def test_structured_failure_on_unknown_prefix(self):
@@ -481,8 +497,8 @@ class TestNodeLayerRegression:
         # 节点执行已收口 core.node_invocation.invoke_node(canonical),
         # core.routes._helpers 直载路径退役——桩改打 canonical 入口。
         from types import SimpleNamespace as _SN
-        _mock_invoke = AsyncMock(return_value=_SN(
-            success=True, result=sentinel, error=None))
+
+        _mock_invoke = AsyncMock(return_value=_SN(success=True, result=sentinel, error=None))
         with patch("core.node_invocation.invoke_node", _mock_invoke):
             result = await oc._dispatch_tool_call("node__node_reg_ok__run", {})
 
@@ -500,8 +516,8 @@ class TestNodeLayerRegression:
         # 节点执行已收口 core.node_invocation.invoke_node(canonical),
         # core.routes._helpers 直载路径退役——桩改打 canonical 入口。
         from types import SimpleNamespace as _SN
-        _mock_invoke = AsyncMock(return_value=_SN(
-            success=True, result=sentinel, error=None))
+
+        _mock_invoke = AsyncMock(return_value=_SN(success=True, result=sentinel, error=None))
         with patch("core.node_invocation.invoke_node", _mock_invoke):
             result = await oc._dispatch_tool_call("node__node_inline_ok__run", {})
 
@@ -618,8 +634,10 @@ class TestSkillLayerRegression:
         mock_reg2 = MagicMock()
         mock_reg2._emit_log = MagicMock()
 
-        with patch("core.mcp_loader.mcp_loader", mock_loader), \
-             patch("core.skill_registry.get_skill_registry", return_value=mock_reg2):
+        with (
+            patch("core.mcp_loader.mcp_loader", mock_loader),
+            patch("core.skill_registry.get_skill_registry", return_value=mock_reg2),
+        ):
             mcp_result = await oc._dispatch_tool_call("mcp__good_srv__query", {})
 
         assert mcp_result.get("success") is True
@@ -668,8 +686,10 @@ class TestMCPLayerRegression:
         mock_reg = MagicMock()
         mock_reg._emit_log = MagicMock()
 
-        with patch("core.mcp_loader.mcp_loader", mock_loader), \
-             patch("core.skill_registry.get_skill_registry", return_value=mock_reg):
+        with (
+            patch("core.mcp_loader.mcp_loader", mock_loader),
+            patch("core.skill_registry.get_skill_registry", return_value=mock_reg),
+        ):
             result = await oc._dispatch_tool_call("mcp__good_srv__echo", {})
 
         assert result.get("success") is True
@@ -682,14 +702,14 @@ class TestMCPLayerRegression:
         oc = _make_openclawd_with_dispatcher()
 
         mock_loader = MagicMock()
-        mock_loader.call_tool = AsyncMock(
-            side_effect=ConnectionError("MCP server unreachable")
-        )
+        mock_loader.call_tool = AsyncMock(side_effect=ConnectionError("MCP server unreachable"))
         mock_reg = MagicMock()
         mock_reg._emit_log = MagicMock()
 
-        with patch("core.mcp_loader.mcp_loader", mock_loader), \
-             patch("core.skill_registry.get_skill_registry", return_value=mock_reg):
+        with (
+            patch("core.mcp_loader.mcp_loader", mock_loader),
+            patch("core.skill_registry.get_skill_registry", return_value=mock_reg),
+        ):
             result = await oc._dispatch_tool_call("mcp__unreachable_srv__op", {})
 
         assert result.get("success") is False
@@ -710,14 +730,14 @@ class TestMCPLayerRegression:
 
         # First: MCP failure
         mock_loader_fail = MagicMock()
-        mock_loader_fail.call_tool = AsyncMock(
-            side_effect=RuntimeError("mcp down")
-        )
+        mock_loader_fail.call_tool = AsyncMock(side_effect=RuntimeError("mcp down"))
         mock_reg_fail = MagicMock()
         mock_reg_fail._emit_log = MagicMock()
 
-        with patch("core.mcp_loader.mcp_loader", mock_loader_fail), \
-             patch("core.skill_registry.get_skill_registry", return_value=mock_reg_fail):
+        with (
+            patch("core.mcp_loader.mcp_loader", mock_loader_fail),
+            patch("core.skill_registry.get_skill_registry", return_value=mock_reg_fail),
+        ):
             mcp_result = await oc._dispatch_tool_call("mcp__down_srv__op", {})
         assert mcp_result.get("success") is False
 
@@ -729,8 +749,8 @@ class TestMCPLayerRegression:
         # 节点执行已收口 core.node_invocation.invoke_node(canonical),
         # core.routes._helpers 直载路径退役——桩改打 canonical 入口。
         from types import SimpleNamespace as _SN
-        _mock_invoke = AsyncMock(return_value=_SN(
-            success=True, result=sentinel, error=None))
+
+        _mock_invoke = AsyncMock(return_value=_SN(success=True, result=sentinel, error=None))
         with patch("core.node_invocation.invoke_node", _mock_invoke):
             node_result = await oc._dispatch_tool_call("node__after_mcp_node__run", {})
 
@@ -759,12 +779,9 @@ class TestMCPLayerRegression:
             new_callable=AsyncMock,
         ) as mock_dispatch_mcp:
             from core.capabilities.canonical_dispatcher import DispatchResult
-            mock_dispatch_mcp.return_value = DispatchResult(
-                success=True, result=gateway_result
-            )
-            result = await oc._dispatch_tool_call(
-                "mcp__gateway__list_capabilities", {}
-            )
+
+            mock_dispatch_mcp.return_value = DispatchResult(success=True, result=gateway_result)
+            result = await oc._dispatch_tool_call("mcp__gateway__list_capabilities", {})
 
         assert result.get("success") is True
         assert result.get("result") == gateway_result
@@ -780,16 +797,19 @@ class TestDispatchResultSpineFields:
 
     def test_dispatch_result_has_trace_id_field(self):
         from core.capabilities.canonical_dispatcher import DispatchResult
+
         dr = DispatchResult(success=True, trace_id="t-123")
         assert dr.trace_id == "t-123"
 
     def test_dispatch_result_has_request_id_field(self):
         from core.capabilities.canonical_dispatcher import DispatchResult
+
         dr = DispatchResult(success=True, request_id="req-456")
         assert dr.request_id == "req-456"
 
     def test_dispatch_result_to_dict_includes_trace_id(self):
         from core.capabilities.canonical_dispatcher import DispatchResult
+
         dr = DispatchResult(success=True, trace_id="t-abc")
         d = dr.to_dict()
         assert "trace_id" in d
@@ -797,6 +817,7 @@ class TestDispatchResultSpineFields:
 
     def test_dispatch_result_to_dict_includes_request_id(self):
         from core.capabilities.canonical_dispatcher import DispatchResult
+
         dr = DispatchResult(success=True, request_id="req-def")
         d = dr.to_dict()
         assert "request_id" in d
@@ -806,13 +827,15 @@ class TestDispatchResultSpineFields:
         """When request_id is not provided, to_dict() must fall back to
         dispatch_id so there is always a non-empty correlation field."""
         from core.capabilities.canonical_dispatcher import DispatchResult
+
         dr = DispatchResult(success=True)
         d = dr.to_dict()
         assert d["request_id"]  # non-empty
         assert d["request_id"] == dr.dispatch_id
 
     def test_dispatch_result_failure_also_carries_trace_id(self):
-        from core.capabilities.canonical_dispatcher import DispatchResult, CapabilityLayer
+        from core.capabilities.canonical_dispatcher import CapabilityLayer, DispatchResult
+
         dr = DispatchResult(
             success=False,
             error="something went wrong",
@@ -828,6 +851,7 @@ class TestDispatchResultSpineFields:
         omitting the field entirely — callers can always count on the key
         being present for downstream log correlation."""
         from core.capabilities.canonical_dispatcher import DispatchResult
+
         dr = DispatchResult(success=True)
         d = dr.to_dict()
         assert "trace_id" in d
@@ -856,9 +880,7 @@ class TestCanonicalDispatcherTracePropagation:
         with patch("core.skill_registry.get_skill_registry", return_value=mock_reg):
             dr = await dispatcher.dispatch("skill__traced_skill", {})
 
-        assert dr.trace_id == "spine-trace-001", (
-            f"Expected trace_id='spine-trace-001', got {dr.trace_id!r}"
-        )
+        assert dr.trace_id == "spine-trace-001", f"Expected trace_id='spine-trace-001', got {dr.trace_id!r}"
 
     @pytest.mark.asyncio
     async def test_dispatcher_stamps_trace_id_on_failure(self):
@@ -883,14 +905,9 @@ class TestCanonicalDispatcherTracePropagation:
         mock_reg.invoke = AsyncMock(return_value=mock_resp)
 
         with patch("core.skill_registry.get_skill_registry", return_value=mock_reg):
-            dr = await dispatcher.dispatch(
-                "skill__override_trace", {},
-                trace_id="per-call-trace"
-            )
+            dr = await dispatcher.dispatch("skill__override_trace", {}, trace_id="per-call-trace")
 
-        assert dr.trace_id == "per-call-trace", (
-            f"Per-call trace_id must override instance; got {dr.trace_id!r}"
-        )
+        assert dr.trace_id == "per-call-trace", f"Per-call trace_id must override instance; got {dr.trace_id!r}"
 
     @pytest.mark.asyncio
     async def test_capability_layer_stamped_on_result(self):
@@ -908,19 +925,17 @@ class TestCanonicalDispatcherTracePropagation:
         from core.capabilities.canonical_dispatcher import CapabilityLayer
 
         cases: list[tuple[str, CapabilityLayer]] = [
-            ("mcp__srv__tool",     CapabilityLayer.MCP),
+            ("mcp__srv__tool", CapabilityLayer.MCP),
             ("mcp__gateway__tool", CapabilityLayer.MCP_GW),
-            ("skill__my_skill",    CapabilityLayer.SKILL),
-            ("node__n1__act",      CapabilityLayer.NODE),
-            ("device__d1__cmd",    CapabilityLayer.DEVICE),
-            ("github__install",    CapabilityLayer.GITHUB),
-            ("unknown_prefix",     CapabilityLayer.UNKNOWN),
+            ("skill__my_skill", CapabilityLayer.SKILL),
+            ("node__n1__act", CapabilityLayer.NODE),
+            ("device__d1__cmd", CapabilityLayer.DEVICE),
+            ("github__install", CapabilityLayer.GITHUB),
+            ("unknown_prefix", CapabilityLayer.UNKNOWN),
         ]
         for name, expected in cases:
             got = CapabilityLayer.classify(name)
-            assert got == expected, (
-                f"classify({name!r}): expected {expected.value!r}, got {got.value!r}"
-            )
+            assert got == expected, f"classify({name!r}): expected {expected.value!r}, got {got.value!r}"
 
 
 class TestSpineObservabilityValidateRuntime:
@@ -931,21 +946,20 @@ class TestSpineObservabilityValidateRuntime:
 
     def test_check_spine_observability_present(self):
         mod = self._load()
-        assert callable(getattr(mod, "check_spine_observability", None)), (
-            "validate_runtime.py must expose check_spine_observability()"
-        )
+        assert callable(
+            getattr(mod, "check_spine_observability", None)
+        ), "validate_runtime.py must expose check_spine_observability()"
 
     def test_main_calls_check_spine_observability(self):
         import inspect
+
         mod = self._load()
         main_src = inspect.getsource(mod.main)
-        assert "check_spine_observability()" in main_src, (
-            "main() must call check_spine_observability()"
-        )
+        assert "check_spine_observability()" in main_src, "main() must call check_spine_observability()"
         uncommented = [
-            line for line in main_src.splitlines()
-            if "check_spine_observability()" in line
-            and not line.lstrip().startswith("#")
+            line
+            for line in main_src.splitlines()
+            if "check_spine_observability()" in line and not line.lstrip().startswith("#")
         ]
         assert uncommented, "check_spine_observability() must be an active call in main()"
 
@@ -965,13 +979,9 @@ class TestSpineObservabilityValidateRuntime:
         mod._results = []
         mod._section_label = ""
         mod.check_spine_observability()
-        failures = [
-            r for r in mod._results
-            if "spine:" in r.name and r.status == "FAIL"
-        ]
-        assert not failures, (
-            "Spine observability checks must all PASS; failures: "
-            + ", ".join(r.name for r in failures)
+        failures = [r for r in mod._results if "spine:" in r.name and r.status == "FAIL"]
+        assert not failures, "Spine observability checks must all PASS; failures: " + ", ".join(
+            r.name for r in failures
         )
 
 
@@ -1001,9 +1011,7 @@ class TestFailurePaths:
         for bad_name in ["node__only_id", "node__"]:
             oc = _make_openclawd_with_dispatcher()
             result = await oc._dispatch_tool_call(bad_name, {})
-            assert result.get("success") is False, (
-                f"Expected failure for malformed tool name: {bad_name!r}"
-            )
+            assert result.get("success") is False, f"Expected failure for malformed tool name: {bad_name!r}"
 
     @pytest.mark.asyncio
     async def test_malformed_mcp_tool_name_structured_failure(self):
@@ -1011,9 +1019,7 @@ class TestFailurePaths:
         for bad_name in ["mcp__only_server", "mcp__"]:
             oc = _make_openclawd_with_dispatcher()
             result = await oc._dispatch_tool_call(bad_name, {})
-            assert result.get("success") is False, (
-                f"Expected failure for malformed tool name: {bad_name!r}"
-            )
+            assert result.get("success") is False, f"Expected failure for malformed tool name: {bad_name!r}"
 
     @pytest.mark.asyncio
     async def test_missing_node_returns_descriptive_error(self):
@@ -1034,8 +1040,10 @@ class TestFailurePaths:
         mock_reg = MagicMock()
         mock_reg._emit_log = MagicMock()
 
-        with patch("core.mcp_loader.mcp_loader", mock_loader), \
-             patch("core.skill_registry.get_skill_registry", return_value=mock_reg):
+        with (
+            patch("core.mcp_loader.mcp_loader", mock_loader),
+            patch("core.skill_registry.get_skill_registry", return_value=mock_reg),
+        ):
             result = await oc._dispatch_tool_call("mcp__slow_srv__op", {})
 
         assert result.get("success") is False
@@ -1046,9 +1054,7 @@ class TestFailurePaths:
         """If CanonicalDispatcher.dispatch raises unexpectedly, the inline
         fallback path must be used and return a coherent dict."""
         oc = _make_openclawd_with_dispatcher()
-        oc._capability_dispatcher.dispatch = AsyncMock(
-            side_effect=RuntimeError("dispatcher internal error")
-        )
+        oc._capability_dispatcher.dispatch = AsyncMock(side_effect=RuntimeError("dispatcher internal error"))
 
         # The inline fallback should handle unknown prefix gracefully.
         result = await oc._dispatch_tool_call("bogus__tool__name", {})
@@ -1086,8 +1092,10 @@ class TestFailurePaths:
         mock_reg_fail = MagicMock()
         mock_reg_fail._emit_log = MagicMock()
 
-        with patch("core.mcp_loader.mcp_loader", mock_loader), \
-             patch("core.skill_registry.get_skill_registry", return_value=mock_reg_fail):
+        with (
+            patch("core.mcp_loader.mcp_loader", mock_loader),
+            patch("core.skill_registry.get_skill_registry", return_value=mock_reg_fail),
+        ):
             r1 = await oc._dispatch_tool_call("mcp__down_srv__op", {})
         assert r1.get("success") is False
 
@@ -1112,8 +1120,8 @@ class TestFailurePaths:
         # 节点执行已收口 core.node_invocation.invoke_node(canonical),
         # core.routes._helpers 直载路径退役——桩改打 canonical 入口。
         from types import SimpleNamespace as _SN
-        _mock_invoke = AsyncMock(return_value=_SN(
-            success=True, result=sentinel, error=None))
+
+        _mock_invoke = AsyncMock(return_value=_SN(success=True, result=sentinel, error=None))
         with patch("core.node_invocation.invoke_node", _mock_invoke):
             r3 = await oc._dispatch_tool_call("node__degrade_node__run", {})
         assert r3.get("success") is True

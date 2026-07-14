@@ -291,9 +291,7 @@ def audit_explicit_device_capabilities(
 
     # Attempt to resolve device capabilities from the runtime layer when not
     # supplied by the caller.
-    resolved_caps: Optional[List[str]] = (
-        list(device_capabilities) if device_capabilities is not None else None
-    )
+    resolved_caps: Optional[List[str]] = list(device_capabilities) if device_capabilities is not None else None
     if resolved_caps is None:
         try:
             # Lazy import: core.routes._shared uses FastAPI app state and may
@@ -307,9 +305,7 @@ def audit_explicit_device_capabilities(
             if info is not None:
                 raw_caps = info.get("capabilities", [])
                 if isinstance(raw_caps, list):
-                    resolved_caps = [
-                        _normalize_capability_value(c) for c in raw_caps
-                    ]
+                    resolved_caps = [_normalize_capability_value(c) for c in raw_caps]
                 else:
                     resolved_caps = []
         except Exception as _lookup_exc:
@@ -333,7 +329,7 @@ def audit_explicit_device_capabilities(
 
     # Delegate hard evaluation to the canonical capability routing gate.
     try:
-        from core.capability_routing_gate import device_meets_capabilities, CapabilityGateVerdict
+        from core.capability_routing_gate import CapabilityGateVerdict, device_meets_capabilities
 
         gate_result = device_meets_capabilities(
             device_id=device_id,
@@ -368,10 +364,7 @@ def audit_explicit_device_capabilities(
                 verdict=ExplicitRouteVerdict.MISMATCH,
                 confirmed_capabilities=confirmed,
                 missing_capabilities=missing,
-                reason=(
-                    f"Capability gate verdict={gate_result.verdict.value}: "
-                    f"missing={missing}"
-                ),
+                reason=(f"Capability gate verdict={gate_result.verdict.value}: " f"missing={missing}"),
             )
     except ImportError as _imp_exc:
         logger.debug(
@@ -504,7 +497,4 @@ class CapabilityMismatchError(Exception):
 
     def __init__(self, audit: ExplicitRouteCapabilityAudit) -> None:
         self.audit = audit
-        super().__init__(
-            f"CapabilityMismatch: device={audit.device_id!r} "
-            f"missing={audit.missing_capabilities!r}"
-        )
+        super().__init__(f"CapabilityMismatch: device={audit.device_id!r} " f"missing={audit.missing_capabilities!r}")

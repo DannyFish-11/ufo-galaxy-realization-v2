@@ -41,27 +41,30 @@ from .trace_schema import TraceCorrelation
 
 # Keys that carry trace/routing semantics and should not be forwarded into the
 # generic metadata dict of an ExecutionEvent.
-_TRACE_RESERVED_KEYS = frozenset({
-    "trace_id",
-    "runtime_session_id",
-    "task_id",
-    "action_id",
-    "command_id",
-    "tri_state_phase",
-    "runtime_domain",
-    "phase",
-    "domain",
-    "message",
-    "action",
-    "executor_level",
-    "level",
-    "fallback_reason",
-})
+_TRACE_RESERVED_KEYS = frozenset(
+    {
+        "trace_id",
+        "runtime_session_id",
+        "task_id",
+        "action_id",
+        "command_id",
+        "tri_state_phase",
+        "runtime_domain",
+        "phase",
+        "domain",
+        "message",
+        "action",
+        "executor_level",
+        "level",
+        "fallback_reason",
+    }
+)
 
 
 # ---------------------------------------------------------------------------
 # e2e_orchestrator normaliser
 # ---------------------------------------------------------------------------
+
 
 def normalize_e2e_context(
     ctx: Dict[str, Any],
@@ -104,6 +107,7 @@ def normalize_e2e_context(
 # task_orchestrator / TaskEnvelope normaliser
 # ---------------------------------------------------------------------------
 
+
 def normalize_task_envelope(
     envelope: Any,
     *,
@@ -139,6 +143,7 @@ def normalize_task_envelope(
 # task_graph normaliser
 # ---------------------------------------------------------------------------
 
+
 def normalize_task_graph_result(
     result: Dict[str, Any],
     *,
@@ -171,12 +176,9 @@ def normalize_task_graph_result(
     # Build trace — prefer data on the result dict, fall back to graph object
     trace_data: Dict[str, Any] = {
         "trace_id": result.get("trace_id") or "",
-        "runtime_session_id": result.get("runtime_session_id") or (
-            getattr(graph, "runtime_session_id", "") if graph else ""
-        ),
-        "task_id": result.get("graph_id") or (
-            getattr(graph, "graph_id", None) if graph else None
-        ),
+        "runtime_session_id": result.get("runtime_session_id")
+        or (getattr(graph, "runtime_session_id", "") if graph else ""),
+        "task_id": result.get("graph_id") or (getattr(graph, "graph_id", None) if graph else None),
     }
     trace = TraceCorrelation.from_dict(trace_data)
 
@@ -195,7 +197,8 @@ def normalize_task_graph_result(
         trace=trace,
         executor_level=ExecutorLevel.ORCHESTRATOR,
         fallback=fallback,
-        message=message or (
+        message=message
+        or (
             "TaskGraph completed successfully"
             if result.get("success")
             else f"TaskGraph finished with {len(failed_nodes)} failure(s)"
@@ -212,6 +215,7 @@ def normalize_task_graph_result(
 # ---------------------------------------------------------------------------
 # Windows arbiter normaliser
 # ---------------------------------------------------------------------------
+
 
 def normalize_arbiter_attempt(
     attempt: Any,
@@ -276,6 +280,7 @@ def normalize_arbiter_attempt(
 # ---------------------------------------------------------------------------
 # Generic/observability-route normaliser
 # ---------------------------------------------------------------------------
+
 
 def normalize_observability_payload(
     payload: Dict[str, Any],

@@ -82,7 +82,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Module availability guards
 # ---------------------------------------------------------------------------
@@ -95,6 +94,7 @@ try:
         get_execution_tracking_runtime,
         reset_execution_tracking_runtime,
     )
+
     _TRACKER_AVAILABLE = True
 except ImportError:
     _TRACKER_AVAILABLE = False
@@ -106,6 +106,7 @@ try:
         AndroidSignalReconcileOutcome,
         reconcile_android_execution_signal,
     )
+
     _RECONCILER_AVAILABLE = True
 except ImportError:
     _RECONCILER_AVAILABLE = False
@@ -116,6 +117,7 @@ try:
         ResultKind,
         ingest_delegated_execution_signal,
     )
+
     _INGRESS_AVAILABLE = True
 except ImportError:
     _INGRESS_AVAILABLE = False
@@ -126,6 +128,7 @@ try:
         get_lifecycle_coordinator,
         reset_lifecycle_coordinator,
     )
+
     _COORDINATOR_AVAILABLE = True
 except ImportError:
     _COORDINATOR_AVAILABLE = False
@@ -136,6 +139,7 @@ try:
         get_replay_foundation,
         reset_replay_foundation,
     )
+
     _REPLAY_AVAILABLE = True
 except ImportError:
     _REPLAY_AVAILABLE = False
@@ -150,12 +154,14 @@ try:
         record_delegated_flow_event,
         reset_decision_history,
     )
+
     _HISTORY_AVAILABLE = True
 except ImportError:
     _HISTORY_AVAILABLE = False
 
 try:
     from galaxy_gateway.android_bridge import AndroidBridge
+
     _BRIDGE_AVAILABLE = True
 except ImportError:
     _BRIDGE_AVAILABLE = False
@@ -164,6 +170,7 @@ try:
     from core.android_device_state_store import (
         list_recent_execution_events,
     )
+
     _DEVICE_STORE_AVAILABLE = True
 except ImportError:
     _DEVICE_STORE_AVAILABLE = False
@@ -173,35 +180,24 @@ except ImportError:
 # Skip markers
 # ---------------------------------------------------------------------------
 
-_skip_tracker = pytest.mark.skipif(
-    not _TRACKER_AVAILABLE, reason="DelegatedExecutionTrackingRuntime unavailable"
-)
+_skip_tracker = pytest.mark.skipif(not _TRACKER_AVAILABLE, reason="DelegatedExecutionTrackingRuntime unavailable")
 _skip_reconciler = pytest.mark.skipif(
     not _RECONCILER_AVAILABLE, reason="android_execution_signal_reconciler unavailable"
 )
-_skip_ingress = pytest.mark.skipif(
-    not _INGRESS_AVAILABLE, reason="android_delegated_signal_ingress unavailable"
-)
+_skip_ingress = pytest.mark.skipif(not _INGRESS_AVAILABLE, reason="android_delegated_signal_ingress unavailable")
 _skip_coordinator = pytest.mark.skipif(
     not _COORDINATOR_AVAILABLE, reason="AndroidDelegatedRuntimeLifecycleCoordinator unavailable"
 )
-_skip_replay = pytest.mark.skipif(
-    not _REPLAY_AVAILABLE, reason="replay_foundation unavailable"
-)
-_skip_history = pytest.mark.skipif(
-    not _HISTORY_AVAILABLE, reason="delegated_flow_decision_history unavailable"
-)
-_skip_bridge = pytest.mark.skipif(
-    not _BRIDGE_AVAILABLE, reason="AndroidBridge unavailable"
-)
-_skip_device_store = pytest.mark.skipif(
-    not _DEVICE_STORE_AVAILABLE, reason="android_device_state_store unavailable"
-)
+_skip_replay = pytest.mark.skipif(not _REPLAY_AVAILABLE, reason="replay_foundation unavailable")
+_skip_history = pytest.mark.skipif(not _HISTORY_AVAILABLE, reason="delegated_flow_decision_history unavailable")
+_skip_bridge = pytest.mark.skipif(not _BRIDGE_AVAILABLE, reason="AndroidBridge unavailable")
+_skip_device_store = pytest.mark.skipif(not _DEVICE_STORE_AVAILABLE, reason="android_device_state_store unavailable")
 
 
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_ws() -> MagicMock:
     """Minimal mock WebSocket."""
@@ -327,12 +323,8 @@ class TestGroupA_FullRoundtrip:
         ws = _make_ws()
 
         # Register device
-        reg_ack = await bridge.handle_message(
-            ws, _v3("device_register", device_id, model="ClosurePhone")
-        )
-        assert reg_ack.get("success") is True, (
-            "FAILED A01: device_register must succeed before dispatch can proceed"
-        )
+        reg_ack = await bridge.handle_message(ws, _v3("device_register", device_id, model="ClosurePhone"))
+        assert reg_ack.get("success") is True, "FAILED A01: device_register must succeed before dispatch can proceed"
 
         # Dispatch a task_assign — the bridge should be able to send it
         task_id = str(uuid.uuid4())
@@ -354,8 +346,7 @@ class TestGroupA_FullRoundtrip:
         assert device is not None, "FAILED A01: device must remain registered after dispatch"
 
     @pytest.mark.asyncio
-    @pytest.mark.skipif(not _TRACKER_AVAILABLE or not _INGRESS_AVAILABLE,
-                        reason="tracker or ingress unavailable")
+    @pytest.mark.skipif(not _TRACKER_AVAILABLE or not _INGRESS_AVAILABLE, reason="tracker or ingress unavailable")
     async def test_A02_ack_signal_advances_to_acknowledged(self, bridge):
         """A02: ack signal → tracking record advances to acknowledged.
 
@@ -372,28 +363,25 @@ class TestGroupA_FullRoundtrip:
         # Pre-seed tracking record so the reconciler can find it
         tracker = _fresh_tracker()
         record = _seed_tracker(tracker, session_id, contract_id, device_id)
-        assert record.phase == DelegatedExecutionPhase.pending_ack, (
-            "FAILED A02 setup: fresh record must start in pending_ack"
-        )
+        assert (
+            record.phase == DelegatedExecutionPhase.pending_ack
+        ), "FAILED A02 setup: fresh record must start in pending_ack"
 
         # Send ack signal through ingest (isolating to our fresh tracker)
         msg = _delegated_signal_msg(device_id, session_id, contract_id, "ack")
         outcome = ingest_delegated_execution_signal(msg, runtime=tracker)
 
         assert outcome.was_updated, (
-            "FAILED A02: ack signal must be accepted (was_updated=True); "
-            f"reject_reason={outcome.reject_reason!r}"
+            "FAILED A02: ack signal must be accepted (was_updated=True); " f"reject_reason={outcome.reject_reason!r}"
         )
         updated_record = tracker.get_latest_for_contract(contract_id)
         assert updated_record is not None, "FAILED A02: tracking record must still exist"
         assert updated_record.phase == DelegatedExecutionPhase.acknowledged, (
-            f"FAILED A02: ack signal must advance phase to 'acknowledged', "
-            f"got {updated_record.phase.value!r}"
+            f"FAILED A02: ack signal must advance phase to 'acknowledged', " f"got {updated_record.phase.value!r}"
         )
 
     @pytest.mark.asyncio
-    @pytest.mark.skipif(not _TRACKER_AVAILABLE or not _INGRESS_AVAILABLE,
-                        reason="tracker or ingress unavailable")
+    @pytest.mark.skipif(not _TRACKER_AVAILABLE or not _INGRESS_AVAILABLE, reason="tracker or ingress unavailable")
     async def test_A03_progress_signal_advances_to_in_progress(self, bridge):
         """A03: progress signal → tracking record advances to in_progress.
 
@@ -413,28 +401,23 @@ class TestGroupA_FullRoundtrip:
             _delegated_signal_msg(device_id, session_id, contract_id, "ack"),
             runtime=tracker,
         )
-        assert outcome_ack.was_updated, (
-            f"FAILED A03 setup: ack must be accepted; reject={outcome_ack.reject_reason!r}"
-        )
+        assert outcome_ack.was_updated, f"FAILED A03 setup: ack must be accepted; reject={outcome_ack.reject_reason!r}"
 
         # Send progress signal
         outcome_prog = ingest_delegated_execution_signal(
-            _delegated_signal_msg(device_id, session_id, contract_id, "progress",
-                                   emission_seq=1),
+            _delegated_signal_msg(device_id, session_id, contract_id, "progress", emission_seq=1),
             runtime=tracker,
         )
         assert outcome_prog.was_updated, (
-            f"FAILED A03: progress signal must be accepted; "
-            f"reject_reason={outcome_prog.reject_reason!r}"
+            f"FAILED A03: progress signal must be accepted; " f"reject_reason={outcome_prog.reject_reason!r}"
         )
         rec = tracker.get_latest_for_contract(contract_id)
-        assert rec.phase == DelegatedExecutionPhase.in_progress, (
-            f"FAILED A03: progress must advance to in_progress, got {rec.phase.value!r}"
-        )
+        assert (
+            rec.phase == DelegatedExecutionPhase.in_progress
+        ), f"FAILED A03: progress must advance to in_progress, got {rec.phase.value!r}"
 
     @pytest.mark.asyncio
-    @pytest.mark.skipif(not _TRACKER_AVAILABLE or not _INGRESS_AVAILABLE,
-                        reason="tracker or ingress unavailable")
+    @pytest.mark.skipif(not _TRACKER_AVAILABLE or not _INGRESS_AVAILABLE, reason="tracker or ingress unavailable")
     async def test_A04_result_success_advances_to_completed(self, bridge):
         """A04: result/success signal → tracking record advances to completed.
 
@@ -453,31 +436,31 @@ class TestGroupA_FullRoundtrip:
         # ack → progress → result sequence (canonical execution path)
         for kind, seq in [("ack", 0), ("progress", 1)]:
             ingest_delegated_execution_signal(
-                _delegated_signal_msg(device_id, session_id, contract_id, kind,
-                                       task_id=task_id, emission_seq=seq),
+                _delegated_signal_msg(device_id, session_id, contract_id, kind, task_id=task_id, emission_seq=seq),
                 runtime=tracker,
             )
 
         outcome = ingest_delegated_execution_signal(
             _delegated_signal_msg(
-                device_id, session_id, contract_id,
-                signal_kind="result", result_kind="success",
-                task_id=task_id, emission_seq=2,
+                device_id,
+                session_id,
+                contract_id,
+                signal_kind="result",
+                result_kind="success",
+                task_id=task_id,
+                emission_seq=2,
             ),
             runtime=tracker,
         )
         assert outcome.was_updated, (
-            f"FAILED A04: result signal must be accepted; "
-            f"reject_reason={outcome.reject_reason!r}"
+            f"FAILED A04: result signal must be accepted; " f"reject_reason={outcome.reject_reason!r}"
         )
         rec = tracker.get_latest_for_contract(contract_id)
         assert rec.phase.is_terminal(), (
-            f"FAILED A04: result signal must advance record to a terminal phase, "
-            f"got {rec.phase.value!r}"
+            f"FAILED A04: result signal must advance record to a terminal phase, " f"got {rec.phase.value!r}"
         )
         assert rec.phase == DelegatedExecutionPhase.completed, (
-            f"FAILED A04: result/success must advance to completed, "
-            f"got {rec.phase.value!r}"
+            f"FAILED A04: result/success must advance to completed, " f"got {rec.phase.value!r}"
         )
 
     @pytest.mark.asyncio
@@ -496,12 +479,11 @@ class TestGroupA_FullRoundtrip:
 
         assert response is not None, "FAILED A05: response must not be None"
         assert response.get("type") == "delegated_execution_signal_ack", (
-            f"FAILED A05: response type must be delegated_execution_signal_ack, "
-            f"got {response.get('type')!r}"
+            f"FAILED A05: response type must be delegated_execution_signal_ack, " f"got {response.get('type')!r}"
         )
-        assert "correlation_id" in response, (
-            "FAILED A05: ACK must contain correlation_id for Android to match the signal"
-        )
+        assert (
+            "correlation_id" in response
+        ), "FAILED A05: ACK must contain correlation_id for Android to match the signal"
 
 
 # ===========================================================================
@@ -528,14 +510,13 @@ class TestGroupB_TrackingTerminalState:
 
         for kind, seq in [("ack", 0), ("progress", 1)]:
             ingest_delegated_execution_signal(
-                _delegated_signal_msg(device_id, session_id, contract_id, kind,
-                                       emission_seq=seq),
+                _delegated_signal_msg(device_id, session_id, contract_id, kind, emission_seq=seq),
                 runtime=tracker,
             )
         ingest_delegated_execution_signal(
-            _delegated_signal_msg(device_id, session_id, contract_id,
-                                   signal_kind=signal_kind, result_kind=result_kind,
-                                   emission_seq=2),
+            _delegated_signal_msg(
+                device_id, session_id, contract_id, signal_kind=signal_kind, result_kind=result_kind, emission_seq=2
+            ),
             runtime=tracker,
         )
         return tracker, contract_id
@@ -556,18 +537,18 @@ class TestGroupB_TrackingTerminalState:
         """B02: result/success → phase is completed."""
         tracker, contract_id = self._run_full_lifecycle("result", "success")
         rec = tracker.get_latest_for_contract(contract_id)
-        assert rec.phase == DelegatedExecutionPhase.completed, (
-            f"FAILED B02: result/success must set phase=completed, got {rec.phase.value!r}"
-        )
+        assert (
+            rec.phase == DelegatedExecutionPhase.completed
+        ), f"FAILED B02: result/success must set phase=completed, got {rec.phase.value!r}"
 
     def test_B03_failed_phase_for_failure_result(self):
         """B03: result/failure → phase is failed."""
         tracker, contract_id = self._run_full_lifecycle("result", "failure")
         rec = tracker.get_latest_for_contract(contract_id)
         assert rec is not None
-        assert rec.phase == DelegatedExecutionPhase.failed, (
-            f"FAILED B03: result/failure must set phase=failed, got {rec.phase.value!r}"
-        )
+        assert (
+            rec.phase == DelegatedExecutionPhase.failed
+        ), f"FAILED B03: result/failure must set phase=failed, got {rec.phase.value!r}"
 
     def test_B04_terminal_phase_blocks_further_progress(self):
         """B04: Further progress signals after terminal phase do not mutate record.
@@ -582,10 +563,7 @@ class TestGroupB_TrackingTerminalState:
         # Send an extra progress signal — must be rejected (record already terminal)
         device_id = "rt-term-extra"
         outcome = ingest_delegated_execution_signal(
-            _delegated_signal_msg(
-                device_id, rec_before.identity.session_id,
-                contract_id, "progress", emission_seq=99
-            ),
+            _delegated_signal_msg(device_id, rec_before.identity.session_id, contract_id, "progress", emission_seq=99),
             runtime=tracker,
         )
         assert not outcome.was_updated, (
@@ -625,15 +603,13 @@ class TestGroupC_PR5AResultConsumer:
         # Prime with ack and progress
         for kind, seq in [("ack", 0), ("progress", 1)]:
             ingest_delegated_execution_signal(
-                _delegated_signal_msg(device_id, session_id, contract_id, kind,
-                                       emission_seq=seq),
+                _delegated_signal_msg(device_id, session_id, contract_id, kind, emission_seq=seq),
                 runtime=tracker,
             )
 
         coordinator = AndroidDelegatedRuntimeLifecycleCoordinator()
         result_msg = _delegated_signal_msg(
-            device_id, session_id, contract_id,
-            signal_kind="result", result_kind="success", emission_seq=2
+            device_id, session_id, contract_id, signal_kind="result", result_kind="success", emission_seq=2
         )
 
         consumer_called = []
@@ -642,30 +618,28 @@ class TestGroupC_PR5AResultConsumer:
             consumer_called.append(True)
             return {"consumed": True}
 
-        with patch(
-            "core.android_delegated_runtime_lifecycle_coordinator."
-            "_android_result_consumer",
-            new=MagicMock(consume_android_behavioral_result=_fake_consume),
-        ), patch(
-            "core.android_delegated_runtime_lifecycle_coordinator."
-            "_RESULT_CONSUMER_AVAILABLE",
-            True,
-        ), patch(
-            "core.android_delegated_runtime_lifecycle_coordinator."
-            "_ingest_execution_signal",
-            lambda msg: ingest_delegated_execution_signal(msg, runtime=tracker),
-        ), patch(
-            "core.android_delegated_runtime_lifecycle_coordinator."
-            "_EXECUTION_SIGNAL_AVAILABLE",
-            True,
+        with (
+            patch(
+                "core.android_delegated_runtime_lifecycle_coordinator." "_android_result_consumer",
+                new=MagicMock(consume_android_behavioral_result=_fake_consume),
+            ),
+            patch(
+                "core.android_delegated_runtime_lifecycle_coordinator." "_RESULT_CONSUMER_AVAILABLE",
+                True,
+            ),
+            patch(
+                "core.android_delegated_runtime_lifecycle_coordinator." "_ingest_execution_signal",
+                lambda msg: ingest_delegated_execution_signal(msg, runtime=tracker),
+            ),
+            patch(
+                "core.android_delegated_runtime_lifecycle_coordinator." "_EXECUTION_SIGNAL_AVAILABLE",
+                True,
+            ),
         ):
-            outcome = coordinator.on_execution_signal(
-                message=result_msg, device_id=device_id
-            )
+            outcome = coordinator.on_execution_signal(message=result_msg, device_id=device_id)
 
         assert outcome.was_handled, (
-            f"FAILED C01: coordinator must handle result signal; "
-            f"description={outcome.description!r}"
+            f"FAILED C01: coordinator must handle result signal; " f"description={outcome.description!r}"
         )
         assert len(consumer_called) == 1, (
             "FAILED C01: consume_android_behavioral_result must be called exactly once "
@@ -673,9 +647,9 @@ class TestGroupC_PR5AResultConsumer:
             "result→no-consumer gap: the PR-5A bridge from Android result to "
             "SourceDispatchOrchestrator is broken."
         )
-        assert outcome.extra.get("result_consumer_called") is True, (
-            "FAILED C01: outcome.extra must report result_consumer_called=True"
-        )
+        assert (
+            outcome.extra.get("result_consumer_called") is True
+        ), "FAILED C01: outcome.extra must report result_consumer_called=True"
 
     def test_C02_result_consumer_receives_updated_outcome(self):
         """C02: consume_android_behavioral_result receives was_updated=True outcome."""
@@ -687,15 +661,13 @@ class TestGroupC_PR5AResultConsumer:
 
         for kind, seq in [("ack", 0), ("progress", 1)]:
             ingest_delegated_execution_signal(
-                _delegated_signal_msg(device_id, session_id, contract_id, kind,
-                                       emission_seq=seq),
+                _delegated_signal_msg(device_id, session_id, contract_id, kind, emission_seq=seq),
                 runtime=tracker,
             )
 
         coordinator = AndroidDelegatedRuntimeLifecycleCoordinator()
         result_msg = _delegated_signal_msg(
-            device_id, session_id, contract_id,
-            signal_kind="result", result_kind="success", emission_seq=2
+            device_id, session_id, contract_id, signal_kind="result", result_kind="success", emission_seq=2
         )
 
         received_outcomes = []
@@ -704,22 +676,23 @@ class TestGroupC_PR5AResultConsumer:
             received_outcomes.append(reconcile_outcome)
             return {"consumed": True}
 
-        with patch(
-            "core.android_delegated_runtime_lifecycle_coordinator."
-            "_android_result_consumer",
-            new=MagicMock(consume_android_behavioral_result=_fake_consume),
-        ), patch(
-            "core.android_delegated_runtime_lifecycle_coordinator."
-            "_RESULT_CONSUMER_AVAILABLE",
-            True,
-        ), patch(
-            "core.android_delegated_runtime_lifecycle_coordinator."
-            "_ingest_execution_signal",
-            lambda msg: ingest_delegated_execution_signal(msg, runtime=tracker),
-        ), patch(
-            "core.android_delegated_runtime_lifecycle_coordinator."
-            "_EXECUTION_SIGNAL_AVAILABLE",
-            True,
+        with (
+            patch(
+                "core.android_delegated_runtime_lifecycle_coordinator." "_android_result_consumer",
+                new=MagicMock(consume_android_behavioral_result=_fake_consume),
+            ),
+            patch(
+                "core.android_delegated_runtime_lifecycle_coordinator." "_RESULT_CONSUMER_AVAILABLE",
+                True,
+            ),
+            patch(
+                "core.android_delegated_runtime_lifecycle_coordinator." "_ingest_execution_signal",
+                lambda msg: ingest_delegated_execution_signal(msg, runtime=tracker),
+            ),
+            patch(
+                "core.android_delegated_runtime_lifecycle_coordinator." "_EXECUTION_SIGNAL_AVAILABLE",
+                True,
+            ),
         ):
             coordinator.on_execution_signal(message=result_msg, device_id=device_id)
 
@@ -755,24 +728,24 @@ class TestGroupC_PR5AResultConsumer:
             return {"consumed": True}
 
         for kind, seq in [("ack", 0), ("progress", 1)]:
-            msg = _delegated_signal_msg(device_id, session_id, contract_id, kind,
-                                         emission_seq=seq)
-            with patch(
-                "core.android_delegated_runtime_lifecycle_coordinator."
-                "_android_result_consumer",
-                new=MagicMock(consume_android_behavioral_result=_fake_consume),
-            ), patch(
-                "core.android_delegated_runtime_lifecycle_coordinator."
-                "_RESULT_CONSUMER_AVAILABLE",
-                True,
-            ), patch(
-                "core.android_delegated_runtime_lifecycle_coordinator."
-                "_ingest_execution_signal",
-                lambda m: ingest_delegated_execution_signal(m, runtime=tracker),
-            ), patch(
-                "core.android_delegated_runtime_lifecycle_coordinator."
-                "_EXECUTION_SIGNAL_AVAILABLE",
-                True,
+            msg = _delegated_signal_msg(device_id, session_id, contract_id, kind, emission_seq=seq)
+            with (
+                patch(
+                    "core.android_delegated_runtime_lifecycle_coordinator." "_android_result_consumer",
+                    new=MagicMock(consume_android_behavioral_result=_fake_consume),
+                ),
+                patch(
+                    "core.android_delegated_runtime_lifecycle_coordinator." "_RESULT_CONSUMER_AVAILABLE",
+                    True,
+                ),
+                patch(
+                    "core.android_delegated_runtime_lifecycle_coordinator." "_ingest_execution_signal",
+                    lambda m: ingest_delegated_execution_signal(m, runtime=tracker),
+                ),
+                patch(
+                    "core.android_delegated_runtime_lifecycle_coordinator." "_EXECUTION_SIGNAL_AVAILABLE",
+                    True,
+                ),
             ):
                 coordinator.on_execution_signal(message=msg, device_id=device_id)
 
@@ -818,31 +791,31 @@ class TestGroupD_ReplayFoundation:
         # ack → progress → result
         for kind, seq in [("ack", 0), ("progress", 1)]:
             ingest_delegated_execution_signal(
-                _delegated_signal_msg(device_id, session_id, contract_id, kind,
-                                       task_id=task_id, emission_seq=seq),
+                _delegated_signal_msg(device_id, session_id, contract_id, kind, task_id=task_id, emission_seq=seq),
                 runtime=tracker,
             )
 
         # Before result signal: no terminal events for this task
         events_before = foundation.get_events_for_task(task_id)
-        terminal_before = [
-            e for e in events_before if e.kind == "android_terminal_signal"
-        ]
+        terminal_before = [e for e in events_before if e.kind == "android_terminal_signal"]
 
         # Build a realistic reconcile outcome and pass it through the stable consumer
         try:
             from core.runtime.source_dispatch_orchestrator import SourceDispatchOrchestrator
+
             orchestrator = SourceDispatchOrchestrator()
 
             # Process the result signal through the ingress path
             result_msg = _delegated_signal_msg(
-                device_id, session_id, contract_id,
-                signal_kind="result", result_kind="success",
-                task_id=task_id, emission_seq=2,
+                device_id,
+                session_id,
+                contract_id,
+                signal_kind="result",
+                result_kind="success",
+                task_id=task_id,
+                emission_seq=2,
             )
-            reconcile_outcome = ingest_delegated_execution_signal(
-                result_msg, runtime=tracker
-            )
+            reconcile_outcome = ingest_delegated_execution_signal(result_msg, runtime=tracker)
 
             # The stable consumer (PR-5A) is what emits to ReplayFoundation
             consumer_result = orchestrator.consume_android_behavioral_result(
@@ -854,9 +827,7 @@ class TestGroupD_ReplayFoundation:
             pytest.skip(f"SourceDispatchOrchestrator unavailable for D01: {exc}")
 
         events_after = foundation.get_events_for_task(task_id)
-        terminal_after = [
-            e for e in events_after if e.kind == "android_terminal_signal"
-        ]
+        terminal_after = [e for e in events_after if e.kind == "android_terminal_signal"]
 
         assert len(terminal_after) > len(terminal_before), (
             "FAILED D01: ReplayFoundation must record an android_terminal_signal event "
@@ -884,15 +855,18 @@ class TestGroupD_ReplayFoundation:
 
         for kind, seq in [("ack", 0), ("progress", 1)]:
             ingest_delegated_execution_signal(
-                _delegated_signal_msg(device_id, session_id, contract_id, kind,
-                                       task_id=task_id, emission_seq=seq),
+                _delegated_signal_msg(device_id, session_id, contract_id, kind, task_id=task_id, emission_seq=seq),
                 runtime=tracker,
             )
 
         result_msg = _delegated_signal_msg(
-            device_id, session_id, contract_id,
-            signal_kind="result", result_kind="success",
-            task_id=task_id, emission_seq=2,
+            device_id,
+            session_id,
+            contract_id,
+            signal_kind="result",
+            result_kind="success",
+            task_id=task_id,
+            emission_seq=2,
         )
         reconcile_outcome = ingest_delegated_execution_signal(result_msg, runtime=tracker)
 
@@ -905,13 +879,11 @@ class TestGroupD_ReplayFoundation:
 
         events = foundation.get_events_for_task(task_id)
         terminal_events = [e for e in events if e.kind == "android_terminal_signal"]
-        assert len(terminal_events) >= 1, (
-            "FAILED D02: at least one android_terminal_signal must be indexed under task_id"
-        )
+        assert (
+            len(terminal_events) >= 1
+        ), "FAILED D02: at least one android_terminal_signal must be indexed under task_id"
         for ev in terminal_events:
-            assert ev.task_id == task_id, (
-                f"FAILED D02: event task_id {ev.task_id!r} must match expected {task_id!r}"
-            )
+            assert ev.task_id == task_id, f"FAILED D02: event task_id {ev.task_id!r} must match expected {task_id!r}"
 
     def test_D03_non_terminal_signals_do_not_emit_replay_events(self):
         """D03: ack and progress signals do not emit terminal replay foundation events.
@@ -936,8 +908,7 @@ class TestGroupD_ReplayFoundation:
         orchestrator = SourceDispatchOrchestrator()
 
         for kind, seq in [("ack", 0), ("progress", 1)]:
-            msg = _delegated_signal_msg(device_id, session_id, contract_id, kind,
-                                         task_id=task_id, emission_seq=seq)
+            msg = _delegated_signal_msg(device_id, session_id, contract_id, kind, task_id=task_id, emission_seq=seq)
             outcome = ingest_delegated_execution_signal(msg, runtime=tracker)
             orchestrator.consume_android_behavioral_result(
                 outcome,
@@ -977,14 +948,21 @@ class TestGroupE_RuntimeClosureEvidence:
         flow_id = f"flow-e01-{uuid.uuid4().hex[:8]}"
         history = get_decision_history()
 
-        history.record(DelegatedFlowEventKind.triggered, flow_id=flow_id,
-                       decision_result="", context={"source": "test"})
-        history.record(DelegatedFlowEventKind.acceptance_decision, flow_id=flow_id,
-                       decision_result="accepted",
-                       context={"gate": "acceptance_gate"})
-        history.record(DelegatedFlowEventKind.completed, flow_id=flow_id,
-                       decision_result="success",
-                       context={"contract_id": str(uuid.uuid4())})
+        history.record(
+            DelegatedFlowEventKind.triggered, flow_id=flow_id, decision_result="", context={"source": "test"}
+        )
+        history.record(
+            DelegatedFlowEventKind.acceptance_decision,
+            flow_id=flow_id,
+            decision_result="accepted",
+            context={"gate": "acceptance_gate"},
+        )
+        history.record(
+            DelegatedFlowEventKind.completed,
+            flow_id=flow_id,
+            decision_result="success",
+            context={"contract_id": str(uuid.uuid4())},
+        )
 
         report = history.evaluate()
         assert report.runtime_closure_established is True, (
@@ -996,8 +974,7 @@ class TestGroupE_RuntimeClosureEvidence:
             "closure has been witnessed at least once in this process."
         )
         assert report.evidence_status == HistoryEvidenceStatus.observed_and_closed, (
-            f"FAILED E01: evidence_status must be observed_and_closed, "
-            f"got {report.evidence_status.value!r}"
+            f"FAILED E01: evidence_status must be observed_and_closed, " f"got {report.evidence_status.value!r}"
         )
 
     def test_E02_triggered_only_no_closure(self):
@@ -1006,8 +983,7 @@ class TestGroupE_RuntimeClosureEvidence:
         REGRESSION: dispatch-only evidence must not claim execution closure.
         """
         history = get_decision_history()
-        history.record(DelegatedFlowEventKind.triggered, flow_id="flow-e02",
-                       context={"source": "test"})
+        history.record(DelegatedFlowEventKind.triggered, flow_id="flow-e02", context={"source": "test"})
 
         report = history.evaluate()
         assert report.runtime_closure_established is False, (
@@ -1022,8 +998,7 @@ class TestGroupE_RuntimeClosureEvidence:
         """
         history = get_decision_history()
         history.record(DelegatedFlowEventKind.triggered, flow_id="flow-e03")
-        history.record(DelegatedFlowEventKind.acceptance_decision, flow_id="flow-e03",
-                       decision_result="accepted")
+        history.record(DelegatedFlowEventKind.acceptance_decision, flow_id="flow-e03", decision_result="accepted")
 
         report = history.evaluate()
         assert report.runtime_closure_established is False, (
@@ -1038,8 +1013,7 @@ class TestGroupE_RuntimeClosureEvidence:
         """
         history = get_decision_history()
         history.record(DelegatedFlowEventKind.triggered, flow_id="flow-e04")
-        history.record(DelegatedFlowEventKind.completed, flow_id="flow-e04",
-                       decision_result="success")
+        history.record(DelegatedFlowEventKind.completed, flow_id="flow-e04", decision_result="success")
 
         report = history.evaluate()
         assert report.runtime_closure_established is False, (
@@ -1056,8 +1030,7 @@ class TestGroupE_RuntimeClosureEvidence:
 class TestGroupF_RegressionFailureModes:
     """F01–F04: Each test fails if the specified gap exists in the codebase."""
 
-    @pytest.mark.skipif(not _TRACKER_AVAILABLE or not _INGRESS_AVAILABLE,
-                        reason="tracker or ingress unavailable")
+    @pytest.mark.skipif(not _TRACKER_AVAILABLE or not _INGRESS_AVAILABLE, reason="tracker or ingress unavailable")
     def test_F01_dispatch_no_result_gap_is_observable(self):
         """F01: If dispatch occurs but result never arrives, record stays non-terminal.
 
@@ -1074,9 +1047,7 @@ class TestGroupF_RegressionFailureModes:
         # Dispatch happened (record created) but NO signals arrive
         # The record must remain in a non-terminal state
         rec = tracker.get_latest_for_contract(contract_id)
-        assert rec is not None, (
-            "FAILED F01: tracking record must be findable after dispatch"
-        )
+        assert rec is not None, "FAILED F01: tracking record must be findable after dispatch"
         assert not rec.phase.is_terminal(), (
             "FAILED F01: a freshly dispatched (unsignalled) record must be non-terminal. "
             "This confirms that pending_ack (dispatch→no-result) is detectable."
@@ -1086,8 +1057,7 @@ class TestGroupF_RegressionFailureModes:
             "The dispatch→no-result gap is machine-observable as pending_ack state."
         )
 
-    @pytest.mark.skipif(not _TRACKER_AVAILABLE or not _INGRESS_AVAILABLE,
-                        reason="tracker or ingress unavailable")
+    @pytest.mark.skipif(not _TRACKER_AVAILABLE or not _INGRESS_AVAILABLE, reason="tracker or ingress unavailable")
     def test_F02_result_without_tracking_record_is_observable(self):
         """F02: result signal without a matching tracking record → was_updated=False.
 
@@ -1103,8 +1073,11 @@ class TestGroupF_RegressionFailureModes:
         # Deliberately do NOT seed a tracking record for this contract_id
 
         result_msg = _delegated_signal_msg(
-            device_id, session_id, contract_id,
-            signal_kind="result", result_kind="success",
+            device_id,
+            session_id,
+            contract_id,
+            signal_kind="result",
+            result_kind="success",
         )
         outcome = ingest_delegated_execution_signal(result_msg, runtime=tracker)
 
@@ -1119,8 +1092,9 @@ class TestGroupF_RegressionFailureModes:
             "The gap must be observable, not silently swallowed."
         )
 
-    @pytest.mark.skipif(not _BRIDGE_AVAILABLE or not _DEVICE_STORE_AVAILABLE,
-                        reason="AndroidBridge or device_state_store unavailable")
+    @pytest.mark.skipif(
+        not _BRIDGE_AVAILABLE or not _DEVICE_STORE_AVAILABLE, reason="AndroidBridge or device_state_store unavailable"
+    )
     @pytest.mark.asyncio
     async def test_F03_execution_events_not_dropped_silently(self):
         """F03: device_execution_event is stored, not dropped silently.
@@ -1141,9 +1115,7 @@ class TestGroupF_RegressionFailureModes:
         )
         response = await bridge.handle_message(ws, exec_event_msg)
 
-        assert response is not None, (
-            "FAILED F03: device_execution_event handler must return a response, not None"
-        )
+        assert response is not None, "FAILED F03: device_execution_event handler must return a response, not None"
         assert "error" not in str(response.get("type", "")).lower(), (
             f"FAILED F03: device_execution_event must not return an error response; "
             f"got {response.get('type')!r}. "
@@ -1159,9 +1131,7 @@ class TestGroupF_RegressionFailureModes:
             # the path does not crash and the response is not an error.
             # If events were stored, they must match the flow_id and device_id.
             for ev in events:
-                assert getattr(ev, "flow_id", flow_id) == flow_id or True, (
-                    f"FAILED F03: stored event flow_id mismatch"
-                )
+                assert getattr(ev, "flow_id", flow_id) == flow_id or True, f"FAILED F03: stored event flow_id mismatch"
         except Exception:
             # list_recent_execution_events may not be fully initialized in the
             # test environment; the primary assertion (no error response) is sufficient.
@@ -1277,9 +1247,7 @@ class TestGroupG_BridgeHandlerRouting:
         )
         response = await bridge.handle_message(ws, msg)
 
-        assert response is not None, (
-            "FAILED G03: orphan delegated_execution_signal must return ACK, not None"
-        )
+        assert response is not None, "FAILED G03: orphan delegated_execution_signal must return ACK, not None"
         assert response.get("type") == "delegated_execution_signal_ack", (
             f"FAILED G03: orphan signal must still return delegated_execution_signal_ack; "
             f"got {response.get('type')!r}"
@@ -1300,6 +1268,7 @@ class TestCanonicalPolicyImports:
             from core.runtime.source_dispatch_orchestrator import (
                 ANDROID_BRIDGE_DISPATCH_CHAIN_IS_CANONICAL_POLICY,
             )
+
             assert "ANDROID_BRIDGE_DISPATCH_CHAIN_IS_CANONICAL" in ANDROID_BRIDGE_DISPATCH_CHAIN_IS_CANONICAL_POLICY
         except ImportError:
             pytest.skip("source_dispatch_orchestrator sentinel unavailable")
@@ -1310,6 +1279,7 @@ class TestCanonicalPolicyImports:
             from core.task_result_canonical_truth_chain import (
                 TASK_RESULT_TRUTH_CHAIN_MUST_RUN_POLICY,
             )
+
             assert "TASK_RESULT_TRUTH_CHAIN_MUST_RUN" in TASK_RESULT_TRUTH_CHAIN_MUST_RUN_POLICY
         except ImportError:
             pytest.skip("task_result_canonical_truth_chain sentinel unavailable")
@@ -1321,6 +1291,7 @@ class TestCanonicalPolicyImports:
                 ANDROID_TERMINAL_SIGNAL_RECORDED_TO_CANONICAL_TRUTH_SENTINEL,
                 ANDROID_TERMINAL_SIGNAL_RECORDS_TO_REPLAY_FOUNDATION_POLICY,
             )
+
             assert "ANDROID_TERMINAL_SIGNAL_RECORDED_TO_CANONICAL_TRUTH" in (
                 ANDROID_TERMINAL_SIGNAL_RECORDED_TO_CANONICAL_TRUTH_SENTINEL
             )
@@ -1333,6 +1304,7 @@ class TestCanonicalPolicyImports:
             from core.android_delegated_signal_ingress import (
                 ANDROID_DELEGATED_SIGNAL_INGRESS_PR16_SENTINEL,
             )
+
             assert "android_delegated_signal_ingress" in ANDROID_DELEGATED_SIGNAL_INGRESS_PR16_SENTINEL
         except ImportError:
             pytest.skip("android_delegated_signal_ingress PR16 sentinel unavailable")
@@ -1344,5 +1316,6 @@ class TestCanonicalPolicyImports:
             HISTORY_FAIL_CONSERVATIVE_POLICY,
             HISTORY_SILENCE_IS_NOT_EVIDENCE_POLICY,
         )
+
         assert "runtime_closure_established" in HISTORY_FAIL_CONSERVATIVE_POLICY
         assert "runtime_closure_established" in HISTORY_SILENCE_IS_NOT_EVIDENCE_POLICY

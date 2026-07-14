@@ -33,6 +33,7 @@ asyncio.CancelledError,预演立即终止且零真实副作用;每步经 StateEv
 auto(默认:复杂度 ≥ GALAXY_REHEARSAL_COMPLEXITY_FLOOR 且有工具才预演)。
 预演的模拟器/裁判走路由级联便宜档,不占本地 CPU 主脑。
 """
+
 from __future__ import annotations
 
 import copy
@@ -73,7 +74,9 @@ def _emit_rehearsal_event(step: str, payload: Dict[str, Any]) -> None:
     含 "skill." 族)。payload 恒带 kind="rehearsal" + simulated=True,消费方
     可与真实工具调用区分——语义即"(模拟)工具调用活动"。"""
     try:
-        from core.state_event_bus import emit as _emit, StateEventType
+        from core.state_event_bus import StateEventType
+        from core.state_event_bus import emit as _emit
+
         _emit(
             StateEventType.SKILL_INVOKED,
             source="liminal_rehearsal",
@@ -86,6 +89,7 @@ def _emit_rehearsal_event(step: str, payload: Dict[str, Any]) -> None:
 @dataclass
 class ShadowState:
     """影子任务状态:纯内存、可快照重置——失败尝试不污染后续,不碰真实世界。"""
+
     facts: Dict[str, Any] = field(default_factory=dict)
 
     def snapshot(self) -> Dict[str, Any]:
@@ -109,8 +113,9 @@ class ShadowToolSimulator:
     """模拟派发器(hybrid):只读直通真实派发,写状态由 LLM 按 schema+影子状态
     生成模拟响应并给出状态增量。"""
 
-    def __init__(self, real_dispatch, router: Any, state: ShadowState,
-                 tools: Optional[List[Dict[str, Any]]] = None) -> None:
+    def __init__(
+        self, real_dispatch, router: Any, state: ShadowState, tools: Optional[List[Dict[str, Any]]] = None
+    ) -> None:
         self._real_dispatch = real_dispatch  # async (name, args) -> dict
         self._router = router
         self.state = state
@@ -123,8 +128,7 @@ class ShadowToolSimulator:
                 return fn
         return {"name": tool_name}
 
-    async def simulate_call(self, tool_name: str, args: Dict[str, Any],
-                            task: str) -> Dict[str, Any]:
+    async def simulate_call(self, tool_name: str, args: Dict[str, Any], task: str) -> Dict[str, Any]:
         from core.tool_call_validator import is_read_only_tool
 
         if is_read_only_tool(tool_name) and self._real_dispatch is not None:
@@ -133,15 +137,14 @@ class ShadowToolSimulator:
                 result = await self._real_dispatch(tool_name, args)
                 return {"simulated": False, "result": result}
             except Exception as exc:  # noqa: BLE001 — 真实只读失败按失败回喂
-                return {"simulated": False,
-                        "result": {"success": False, "error": str(exc)[:300]}}
+                return {"simulated": False, "result": {"success": False, "error": str(exc)[:300]}}
 
         # 写状态工具:LLM 生成 schema 一致、且与影子状态连贯的模拟响应。
         prompt = (
             "你是工具执行模拟器。根据工具定义、调用参数、任务与当前任务状态,"
             "生成这次调用【最可能的】返回结果,并给出它对任务状态的增量。\n"
-            "只回 JSON: {\"response\": <模拟返回,尽量贴合工具真实返回形状>, "
-            "\"state_delta\": {<状态键值增量,没有就 {}>}}\n"
+            '只回 JSON: {"response": <模拟返回,尽量贴合工具真实返回形状>, '
+            '"state_delta": {<状态键值增量,没有就 {}>}}\n'
             f"任务: {task[:400]}\n"
             f"工具定义: {json.dumps(self._schema_of(tool_name), ensure_ascii=False)[:800]}\n"
             f"调用参数: {json.dumps(args, ensure_ascii=False)[:600]}\n"
@@ -150,11 +153,12 @@ class ShadowToolSimulator:
         try:
             resp = await self._router.chat(
                 [{"role": "user", "content": prompt}],
-                temperature=0.2, max_tokens=500,
+                temperature=0.2,
+                max_tokens=500,
             )
             text = (getattr(resp, "content", "") or "").strip()
             start, end = text.find("{"), text.rfind("}")
-            data = json.loads(text[start:end + 1]) if start >= 0 <= end else {}
+            data = json.loads(text[start : end + 1]) if start >= 0 <= end else {}
         except Exception as exc:  # noqa: BLE001 — 模拟失败给出通用成功壳
             logger.debug("模拟响应生成失败(用通用壳): %s", exc)
             data = {}
@@ -191,22 +195,26 @@ class RehearsalOutcome:
 class LiminalRehearsal:
     """预演循环:影子 ReAct → 校验/模拟/状态更新 → 任务级裁判 → 反馈重试。"""
 
-    def __init__(self, router: Any, real_dispatch=None,
-                 tools: Optional[List[Dict[str, Any]]] = None,
-                 max_attempts: int = 2, max_steps: int = 6) -> None:
+    def __init__(
+        self,
+        router: Any,
+        real_dispatch=None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        max_attempts: int = 2,
+        max_steps: int = 6,
+    ) -> None:
         self._router = router
         self._real_dispatch = real_dispatch
         self._tools = tools or []
         self._max_attempts = max(1, max_attempts)
         self._max_steps = max(1, max_steps)
 
-    async def _judge(self, task: str, trajectory: List[Dict[str, Any]],
-                     state: ShadowState) -> Dict[str, Any]:
+    async def _judge(self, task: str, trajectory: List[Dict[str, Any]], state: ShadowState) -> Dict[str, Any]:
         """任务级反馈(不是单次调用报错,而是"目标完成了吗、差什么")。"""
         prompt = (
             "你是任务完成度裁判。根据任务目标、已执行的(模拟)工具调用轨迹和"
             "当前任务状态,判断任务是否已经完成。只回 JSON: "
-            "{\"complete\": true} 或 {\"complete\": false, \"feedback\": \"还差什么/哪里不对\"}\n"
+            '{"complete": true} 或 {"complete": false, "feedback": "还差什么/哪里不对"}\n'
             f"任务: {task[:400]}\n"
             f"轨迹: {json.dumps(trajectory, ensure_ascii=False)[:1500]}\n"
             f"任务状态: {state.render()}"
@@ -214,11 +222,16 @@ class LiminalRehearsal:
         try:
             resp = await self._router.chat(
                 [{"role": "user", "content": prompt}],
-                temperature=0.0, max_tokens=200,
+                temperature=0.0,
+                max_tokens=200,
             )
             text = (getattr(resp, "content", "") or "").strip()
             start, end = text.find("{"), text.rfind("}")
-            return json.loads(text[start:end + 1]) if start >= 0 <= end else {"complete": False, "feedback": "裁判输出不可解析"}
+            return (
+                json.loads(text[start : end + 1])
+                if start >= 0 <= end
+                else {"complete": False, "feedback": "裁判输出不可解析"}
+            )
         except Exception as exc:  # noqa: BLE001 — 裁判失败视为未完成(保守)
             return {"complete": False, "feedback": f"裁判不可用: {exc}"[:200]}
 
@@ -241,27 +254,33 @@ class LiminalRehearsal:
             _emit_rehearsal_event("attempt_start", {"attempt": attempt, "task": task[:120]})
 
             messages: List[Dict[str, Any]] = [
-                {"role": "system", "content": (
-                    "你正在【模拟环境】中预演工具调用计划(不会产生真实副作用)。"
-                    "逐步调用工具完成任务;完成后不再调用工具,直接说明结果。"
-                )},
+                {
+                    "role": "system",
+                    "content": (
+                        "你正在【模拟环境】中预演工具调用计划(不会产生真实副作用)。"
+                        "逐步调用工具完成任务;完成后不再调用工具,直接说明结果。"
+                    ),
+                },
                 {"role": "user", "content": task},
             ]
             for fb in outcome.feedback_history[-2:]:
-                messages.append({"role": "system",
-                                 "content": f"[上一轮预演反馈] {fb[:400]}"})
+                messages.append({"role": "system", "content": f"[上一轮预演反馈] {fb[:400]}"})
 
             for _step in range(self._max_steps):
                 resp = await self._router.chat_with_tools(
-                    messages=messages, tools=self._tools, max_tokens=1024,
+                    messages=messages,
+                    tools=self._tools,
+                    max_tokens=1024,
                 )
                 if not getattr(resp, "tool_calls", None):
                     break  # 模型认为完成 → 交给裁判
-                messages.append({
-                    "role": "assistant",
-                    "content": resp.content or "",
-                    "tool_calls": resp.tool_calls,
-                })
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": resp.content or "",
+                        "tool_calls": resp.tool_calls,
+                    }
+                )
                 for tc in resp.tool_calls:
                     fn = tc.get("function", {})
                     name = fn.get("name", "")
@@ -275,40 +294,47 @@ class LiminalRehearsal:
                     if check.valid and is_high_risk_tool(name):
                         check = await semantic_check(name, args, task, router=self._router)
                     if not check.valid:
-                        messages.append({"role": "tool", "tool_call_id": tc_id,
-                                         "content": check.feedback_text()[:1500]})
-                        _emit_rehearsal_event("validation_reject",
-                                              {"attempt": attempt, "tool": name})
+                        messages.append(
+                            {"role": "tool", "tool_call_id": tc_id, "content": check.feedback_text()[:1500]}
+                        )
+                        _emit_rehearsal_event("validation_reject", {"attempt": attempt, "tool": name})
                         continue
 
                     sim_out = await sim.simulate_call(name, args, task)
-                    trajectory.append({
-                        "tool": name, "args": args,
-                        "result": sim_out.get("result"),
-                        "simulated": sim_out.get("simulated", True),
-                    })
-                    _emit_rehearsal_event("tool_simulated", {
-                        "attempt": attempt, "tool": name,
-                        "simulated": sim_out.get("simulated", True),
-                    })
-                    messages.append({
-                        "role": "tool", "tool_call_id": tc_id,
-                        "content": json.dumps(sim_out.get("result"),
-                                              ensure_ascii=False)[:2000],
-                    })
+                    trajectory.append(
+                        {
+                            "tool": name,
+                            "args": args,
+                            "result": sim_out.get("result"),
+                            "simulated": sim_out.get("simulated", True),
+                        }
+                    )
+                    _emit_rehearsal_event(
+                        "tool_simulated",
+                        {
+                            "attempt": attempt,
+                            "tool": name,
+                            "simulated": sim_out.get("simulated", True),
+                        },
+                    )
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tc_id,
+                            "content": json.dumps(sim_out.get("result"), ensure_ascii=False)[:2000],
+                        }
+                    )
 
             verdict = await self._judge(task, trajectory, state)
             if verdict.get("complete"):
                 outcome.success = True
                 outcome.trajectory = trajectory
                 outcome.final_state = state.snapshot()
-                _emit_rehearsal_event("attempt_success",
-                                      {"attempt": attempt, "steps": len(trajectory)})
+                _emit_rehearsal_event("attempt_success", {"attempt": attempt, "steps": len(trajectory)})
                 return outcome
             fb = str(verdict.get("feedback", ""))[:400]
             outcome.feedback_history.append(fb)
-            _emit_rehearsal_event("attempt_failed",
-                                  {"attempt": attempt, "feedback": fb[:200]})
+            _emit_rehearsal_event("attempt_failed", {"attempt": attempt, "feedback": fb[:200]})
             logger.info("预演第 %d 轮未完成: %s", attempt, fb[:160])
 
         return outcome

@@ -24,14 +24,13 @@ from __future__ import annotations
 
 import pytest
 
-from core.continuum.config import ContinuumConfig, DEFAULT_CONTINUUM_CONFIG
+from core.continuum.config import DEFAULT_CONTINUUM_CONFIG, ContinuumConfig
 from core.continuum.human_field import HumanFieldInferrer, InteractionRhythm
 from core.continuum.types import HumanFieldState
 from core.multimodal.audio_features import AudioState
 from core.multimodal.perception_frame import PerceptionFrame, SystemSignals
 from core.multimodal.signal_quality import SignalQuality
 from core.multimodal.video_features import VideoState
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -178,8 +177,15 @@ class TestInferNoModalities:
 
     def test_all_values_in_bounds(self):
         hf = self.inferrer.infer(self.frame)
-        for name in ["attention", "focus_level", "fatigue", "intent_probability",
-                     "interruption_sensitivity", "input_rhythm", "motion_level"]:
+        for name in [
+            "attention",
+            "focus_level",
+            "fatigue",
+            "intent_probability",
+            "interruption_sensitivity",
+            "input_rhythm",
+            "motion_level",
+        ]:
             v = getattr(hf, name)
             assert 0.0 <= v <= 1.0, f"{name}={v} out of [0, 1]"
 
@@ -339,8 +345,15 @@ class TestInferAllModalities:
             system=_system(screen_activity=0.7),
         )
         hf = self.inferrer.infer(frame)
-        for name in ["attention", "focus_level", "fatigue", "intent_probability",
-                     "interruption_sensitivity", "input_rhythm", "motion_level"]:
+        for name in [
+            "attention",
+            "focus_level",
+            "fatigue",
+            "intent_probability",
+            "interruption_sensitivity",
+            "input_rhythm",
+            "motion_level",
+        ]:
             v = getattr(hf, name)
             assert 0.0 <= v <= 1.0, f"{name}={v} out of [0, 1]"
 
@@ -442,32 +455,47 @@ class TestOutputBounds:
     def setup_method(self):
         self.inferrer = HumanFieldInferrer()
 
-    @pytest.mark.parametrize("energy,speaking_ratio,pause_density,is_speaking", [
-        (0.0, 0.0, 0.0, False),
-        (1.0, 1.0, 1.0, True),
-        (0.5, 0.5, 0.5, True),
-        (0.99, 0.01, 0.99, False),
-    ])
+    @pytest.mark.parametrize(
+        "energy,speaking_ratio,pause_density,is_speaking",
+        [
+            (0.0, 0.0, 0.0, False),
+            (1.0, 1.0, 1.0, True),
+            (0.5, 0.5, 0.5, True),
+            (0.99, 0.01, 0.99, False),
+        ],
+    )
     def test_audio_bounds(self, energy, speaking_ratio, pause_density, is_speaking):
-        frame = _frame(audio=_audio(
-            energy=energy,
-            speaking_ratio=speaking_ratio,
-            pause_density=pause_density,
-            is_speaking=is_speaking,
-        ))
+        frame = _frame(
+            audio=_audio(
+                energy=energy,
+                speaking_ratio=speaking_ratio,
+                pause_density=pause_density,
+                is_speaking=is_speaking,
+            )
+        )
         hf = self.inferrer.infer(frame)
-        for name in ["attention", "focus_level", "fatigue", "intent_probability",
-                     "interruption_sensitivity", "input_rhythm", "motion_level"]:
+        for name in [
+            "attention",
+            "focus_level",
+            "fatigue",
+            "intent_probability",
+            "interruption_sensitivity",
+            "input_rhythm",
+            "motion_level",
+        ]:
             v = getattr(hf, name)
             assert 0.0 <= v <= 1.0, f"audio test: {name}={v}"
 
-    @pytest.mark.parametrize("motion,face", [
-        (0.0, None),
-        (1.0, None),
-        (0.5, 0.5),
-        (0.0, 1.0),
-        (1.0, 0.0),
-    ])
+    @pytest.mark.parametrize(
+        "motion,face",
+        [
+            (0.0, None),
+            (1.0, None),
+            (0.5, 0.5),
+            (0.0, 1.0),
+            (1.0, 0.0),
+        ],
+    )
     def test_video_bounds(self, motion, face):
         frame = _frame(video=_video(motion_level=motion, face_presence=face))
         hf = self.inferrer.infer(frame)

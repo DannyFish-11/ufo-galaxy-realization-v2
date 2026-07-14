@@ -28,15 +28,16 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-
 # ============================================================================
 # 1. HTTP Device API Compatibility Shim
 # ============================================================================
+
 
 @pytest.fixture(scope="module")
 def compat_client():
     """TestClient backed by the full core API router (includes compat shim)."""
     from core.api_routes import create_api_routes
+
     app = FastAPI()
     router = create_api_routes()
     app.include_router(router)
@@ -142,12 +143,8 @@ class TestLegacyDeviceHttpAPI:
         legacy_id = f"leg-{uuid.uuid4().hex[:8]}"
         v1_id = f"v1-{uuid.uuid4().hex[:8]}"
 
-        r_legacy = compat_client.post(
-            "/api/devices/register", json={"device_id": legacy_id}
-        )
-        r_v1 = compat_client.post(
-            "/api/v1/devices/register", json={"device_id": v1_id}
-        )
+        r_legacy = compat_client.post("/api/devices/register", json={"device_id": legacy_id})
+        r_v1 = compat_client.post("/api/v1/devices/register", json={"device_id": v1_id})
 
         assert r_legacy.status_code == 200
         assert r_v1.status_code == 200
@@ -163,6 +160,7 @@ class TestLegacyDeviceHttpAPI:
 # 2. WebSocket legacy paths  (galaxy_gateway/app.py)
 # ============================================================================
 
+
 @pytest.fixture(scope="module")
 def gw_client():
     """
@@ -174,6 +172,7 @@ def gw_client():
     """
     pytest.importorskip("websockets", reason="websockets required for gateway WS tests")
     from galaxy_gateway.app import app as gateway_app
+
     with TestClient(gateway_app) as c:
         yield c
 
@@ -186,11 +185,15 @@ class TestLegacyWebSocketPaths:
         device_id = f"ws-{uuid.uuid4().hex[:8]}"
         url = path.format(device_id=device_id)
         with client.websocket_connect(url) as ws:
-            ws.send_text(json.dumps({
-                "version": "3.0",
-                "type": "heartbeat",
-                "device_id": device_id,
-            }))
+            ws.send_text(
+                json.dumps(
+                    {
+                        "version": "3.0",
+                        "type": "heartbeat",
+                        "device_id": device_id,
+                    }
+                )
+            )
             msg = ws.receive_json()
             assert msg.get("type") == "heartbeat_ack"
 
@@ -206,11 +209,15 @@ class TestLegacyWebSocketPaths:
         """/ws/android?device_id=... accepts connections."""
         device_id = f"android-{uuid.uuid4().hex[:8]}"
         with gw_client.websocket_connect(f"/ws/android?device_id={device_id}") as ws:
-            ws.send_text(json.dumps({
-                "version": "3.0",
-                "type": "heartbeat",
-                "device_id": device_id,
-            }))
+            ws.send_text(
+                json.dumps(
+                    {
+                        "version": "3.0",
+                        "type": "heartbeat",
+                        "device_id": device_id,
+                    }
+                )
+            )
             msg = ws.receive_json()
             assert msg.get("type") == "heartbeat_ack"
 
@@ -218,11 +225,15 @@ class TestLegacyWebSocketPaths:
         """/ws/android without device_id auto-assigns one."""
         # If no device_id is provided we still expect a heartbeat_ack
         with gw_client.websocket_connect("/ws/android") as ws:
-            ws.send_text(json.dumps({
-                "version": "3.0",
-                "type": "heartbeat",
-                "device_id": "ignored-by-server",
-            }))
+            ws.send_text(
+                json.dumps(
+                    {
+                        "version": "3.0",
+                        "type": "heartbeat",
+                        "device_id": "ignored-by-server",
+                    }
+                )
+            )
             msg = ws.receive_json()
             assert msg.get("type") == "heartbeat_ack"
 
@@ -231,13 +242,15 @@ class TestLegacyWebSocketPaths:
 # 3. Protocol compatibility parser
 # ============================================================================
 
+
 class TestProtocolCompat:
     """Unit-tests for galaxy_gateway.protocol.compat.parse_message_compat."""
 
     @pytest.fixture(autouse=True)
     def _import(self):
-        from galaxy_gateway.protocol.compat import parse_message_compat
         from galaxy_gateway.protocol.aip_v3 import MessageType
+        from galaxy_gateway.protocol.compat import parse_message_compat
+
         self.parse = parse_message_compat
         self.MessageType = MessageType
 
@@ -245,10 +258,14 @@ class TestProtocolCompat:
 
     def test_v1_register_alias(self):
         """AIP/1.0 'register' maps to MessageType.DEVICE_REGISTER."""
-        msg = self.parse(json.dumps({
-            "type": "register",
-            "device_id": "dev-001",
-        }))
+        msg = self.parse(
+            json.dumps(
+                {
+                    "type": "register",
+                    "device_id": "dev-001",
+                }
+            )
+        )
         assert msg.type == self.MessageType.DEVICE_REGISTER
         assert msg.device_id == "dev-001"
 
@@ -286,42 +303,50 @@ class TestProtocolCompat:
 
     def test_v2_accepted(self):
         """AIP/2.0 message is normalised and accepted."""
-        msg = self.parse({
-            "version": "2.0",
-            "type": "heartbeat",
-            "device_id": "dev-v2",
-        })
+        msg = self.parse(
+            {
+                "version": "2.0",
+                "type": "heartbeat",
+                "device_id": "dev-v2",
+            }
+        )
         assert msg.type == self.MessageType.DEVICE_HEARTBEAT
         assert msg.device_id == "dev-v2"
 
     def test_v2_register(self):
         """AIP/2.0 device_register is accepted."""
-        msg = self.parse({
-            "version": "2.0",
-            "type": "device_register",
-            "device_id": "dev-v2-reg",
-        })
+        msg = self.parse(
+            {
+                "version": "2.0",
+                "type": "device_register",
+                "device_id": "dev-v2-reg",
+            }
+        )
         assert msg.type == self.MessageType.DEVICE_REGISTER
 
     # --- AIP/3.0 ---
 
     def test_v3_passthrough(self):
         """AIP/3.0 message passes through unchanged."""
-        msg = self.parse({
-            "version": "3.0",
-            "type": "heartbeat",
-            "device_id": "dev-v3",
-        })
+        msg = self.parse(
+            {
+                "version": "3.0",
+                "type": "heartbeat",
+                "device_id": "dev-v3",
+            }
+        )
         assert msg.type == self.MessageType.DEVICE_HEARTBEAT
         assert msg.version == "3.0"
 
     def test_v3_device_register(self):
         """AIP/3.0 device_register passes through unchanged."""
-        msg = self.parse({
-            "version": "3.0",
-            "type": "device_register",
-            "device_id": "dev-v3-reg",
-        })
+        msg = self.parse(
+            {
+                "version": "3.0",
+                "type": "device_register",
+                "device_id": "dev-v3-reg",
+            }
+        )
         assert msg.type == self.MessageType.DEVICE_REGISTER
 
     def test_json_string_input(self):
@@ -364,17 +389,21 @@ class TestProtocolCompat:
 # 4. New v1 device endpoints  (core/routes/devices.py)
 # ============================================================================
 
+
 class TestDeviceEndpoints:
     """Tests for /api/v1/devices/* endpoints including the new DELETE."""
 
     @pytest.fixture(scope="class", autouse=True)
     def _client(self, request):
-        from core.api_routes import create_api_routes
         from fastapi import FastAPI
+
+        from core.api_routes import create_api_routes
+
         app = FastAPI()
         router = create_api_routes()
         app.include_router(router)
         from fastapi.testclient import TestClient
+
         request.cls.client = TestClient(app)
 
     def test_delete_device(self):

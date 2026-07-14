@@ -36,11 +36,11 @@ class UnifiedHealthManager:
 
     def __init__(self):
         # 延迟赋值——由 wire() 统一连接
-        self._monitoring = None      # MonitoringManager
-        self._load_monitor = None    # SystemLoadMonitor
-        self._error_tracker = None   # ErrorTracker
-        self._concurrency = None     # ConcurrencyManager
-        self._discovery = None       # NodeDiscoveryService
+        self._monitoring = None  # MonitoringManager
+        self._load_monitor = None  # SystemLoadMonitor
+        self._error_tracker = None  # ErrorTracker
+        self._concurrency = None  # ConcurrencyManager
+        self._discovery = None  # NodeDiscoveryService
         self._health_checker = None  # HealthChecker
         self._channel_loader = None  # ChannelPluginLoader
 
@@ -69,25 +69,15 @@ class UnifiedHealthManager:
         # 向 HealthAggregator 注册额外检查
         if monitoring and monitoring.health:
             if load_monitor:
-                monitoring.health.register_check(
-                    "system_load", self._check_system_load
-                )
+                monitoring.health.register_check("system_load", self._check_system_load)
             if error_tracker:
-                monitoring.health.register_check(
-                    "error_rate", self._check_error_rate
-                )
+                monitoring.health.register_check("error_rate", self._check_error_rate)
             if concurrency:
-                monitoring.health.register_check(
-                    "concurrency", self._check_concurrency
-                )
+                monitoring.health.register_check("concurrency", self._check_concurrency)
             if discovery:
-                monitoring.health.register_check(
-                    "node_discovery", self._check_discovery
-                )
+                monitoring.health.register_check("node_discovery", self._check_discovery)
             if channel_loader:
-                monitoring.health.register_check(
-                    "channel_plugins", self._check_channel_plugins
-                )
+                monitoring.health.register_check("channel_plugins", self._check_channel_plugins)
 
         logger.info(
             "UnifiedHealthManager 已连接 "
@@ -335,9 +325,7 @@ class UnifiedHealthManager:
                 from core.nodes.node_fabric_registry import get_node_fabric_registry
 
                 fabric = get_node_fabric_registry()
-                dashboard["node_discovery"] = build_discovery_health_surface(
-                    self._discovery, fabric
-                )
+                dashboard["node_discovery"] = build_discovery_health_surface(self._discovery, fabric)
             except Exception as exc:
                 logger.debug(
                     "UnifiedHealthManager.get_dashboard: discovery health surface "
@@ -359,10 +347,7 @@ class UnifiedHealthManager:
         if self._monitoring:
             health = self._monitoring.health.get_status()
             result["overall"] = health.get("overall", "unknown")
-            result["components"] = {
-                k: v.get("status", "unknown")
-                for k, v in health.get("components", {}).items()
-            }
+            result["components"] = {k: v.get("status", "unknown") for k, v in health.get("components", {}).items()}
 
         if self._load_monitor:
             try:

@@ -30,6 +30,7 @@ flags communicate availability, and all signal fields default to None.
 
 Schema version: 1
 """
+
 from __future__ import annotations
 
 import time
@@ -37,15 +38,15 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from .audio_features import AudioState
-from .video_features import VideoState
 from .signal_quality import SignalQuality
+from .video_features import VideoState
 
 
 @dataclass
 class SystemSignals:
     """System-level signals (screen activity, resource usage, etc.)."""
 
-    screen_activity: float = 0.0    # Proxy for engagement [0, 1]
+    screen_activity: float = 0.0  # Proxy for engagement [0, 1]
     cpu_load: Optional[float] = None
     memory_load: Optional[float] = None
     active_app: Optional[str] = None
@@ -66,9 +67,9 @@ class ScreenState:
     + 可选结构化屏幕上下文（如前台窗口 UIA 树）+ 一个便宜的帧间变化分数。
     """
 
-    image_b64: Optional[str] = None        # raw JPEG base64 (NOT serialised)
+    image_b64: Optional[str] = None  # raw JPEG base64 (NOT serialised)
     mime: str = "image/jpeg"
-    change_score: float = 0.0              # cheap 0..1 change vs previous frame
+    change_score: float = 0.0  # cheap 0..1 change vs previous frame
     meta: Optional[Dict[str, Any]] = None  # structured screen context (UIA tree, etc.)
     screen_freshness_ms: float = 0.0
     has_image: bool = False

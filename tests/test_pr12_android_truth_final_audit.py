@@ -58,6 +58,7 @@ class TestGroupA_SentinelAccessibility:
         from core.unified_execution_governance import (
             EXECUTION_LIFECYCLE_TRUTH_BINDING_SENTINEL,
         )
+
         assert isinstance(EXECUTION_LIFECYCLE_TRUTH_BINDING_SENTINEL, str)
         assert len(EXECUTION_LIFECYCLE_TRUTH_BINDING_SENTINEL) > 20
         assert "PR5_V2" in EXECUTION_LIFECYCLE_TRUTH_BINDING_SENTINEL
@@ -67,6 +68,7 @@ class TestGroupA_SentinelAccessibility:
         from core.android_evidence_integration_pipeline import (
             ANDROID_EVIDENCE_INTEGRATION_SENTINEL,
         )
+
         assert isinstance(ANDROID_EVIDENCE_INTEGRATION_SENTINEL, str)
         assert len(ANDROID_EVIDENCE_INTEGRATION_SENTINEL) > 50
         assert "PR8_V2" in ANDROID_EVIDENCE_INTEGRATION_SENTINEL
@@ -76,6 +78,7 @@ class TestGroupA_SentinelAccessibility:
         from core.closed_loop_governance_consolidation import (
             CLOSED_LOOP_GOVERNANCE_CONSOLIDATION_SENTINEL,
         )
+
         assert isinstance(CLOSED_LOOP_GOVERNANCE_CONSOLIDATION_SENTINEL, str)
         assert len(CLOSED_LOOP_GOVERNANCE_CONSOLIDATION_SENTINEL) > 50
         assert "PR13_V2" in CLOSED_LOOP_GOVERNANCE_CONSOLIDATION_SENTINEL
@@ -85,6 +88,7 @@ class TestGroupA_SentinelAccessibility:
         from core.execution_governance_audit_authority import (
             GOVERNANCE_AUDIT_AUTHORITY_SENTINEL,
         )
+
         assert isinstance(GOVERNANCE_AUDIT_AUTHORITY_SENTINEL, str)
         assert len(GOVERNANCE_AUDIT_AUTHORITY_SENTINEL) > 50
         assert "PR14_V2" in GOVERNANCE_AUDIT_AUTHORITY_SENTINEL
@@ -94,6 +98,7 @@ class TestGroupA_SentinelAccessibility:
         from core.android_mode_gate_policy import (
             ANDROID_MODE_GATE_POLICY_PR_SENTINEL,
         )
+
         assert isinstance(ANDROID_MODE_GATE_POLICY_PR_SENTINEL, str)
         assert len(ANDROID_MODE_GATE_POLICY_PR_SENTINEL) > 0
 
@@ -111,6 +116,7 @@ class TestGroupB_ContractVersionStability:
         from core.unified_execution_governance import (
             EXECUTION_LIFECYCLE_TRUTH_BINDING_CONTRACT_VERSION,
         )
+
         assert isinstance(EXECUTION_LIFECYCLE_TRUTH_BINDING_CONTRACT_VERSION, str)
         assert EXECUTION_LIFECYCLE_TRUTH_BINDING_CONTRACT_VERSION == "5.0.0"
 
@@ -119,6 +125,7 @@ class TestGroupB_ContractVersionStability:
         from core.android_evidence_integration_pipeline import (
             ANDROID_EVIDENCE_INTEGRATION_CONTRACT_VERSION,
         )
+
         assert isinstance(ANDROID_EVIDENCE_INTEGRATION_CONTRACT_VERSION, str)
         assert ANDROID_EVIDENCE_INTEGRATION_CONTRACT_VERSION == "8.0.0"
 
@@ -127,6 +134,7 @@ class TestGroupB_ContractVersionStability:
         from core.closed_loop_governance_consolidation import (
             CLOSED_LOOP_GOVERNANCE_CONTRACT_VERSION,
         )
+
         assert isinstance(CLOSED_LOOP_GOVERNANCE_CONTRACT_VERSION, str)
         assert CLOSED_LOOP_GOVERNANCE_CONTRACT_VERSION == "13.0.0"
 
@@ -135,6 +143,7 @@ class TestGroupB_ContractVersionStability:
         from core.execution_governance_audit_authority import (
             GOVERNANCE_AUDIT_CONTRACT_VERSION,
         )
+
         assert isinstance(GOVERNANCE_AUDIT_CONTRACT_VERSION, str)
         assert GOVERNANCE_AUDIT_CONTRACT_VERSION == "14.0.0"
 
@@ -143,6 +152,7 @@ class TestGroupB_ContractVersionStability:
         from core.unified_governance_semantics import (
             UNIFIED_GOVERNANCE_SEMANTICS_CONTRACT_VERSION,
         )
+
         assert isinstance(UNIFIED_GOVERNANCE_SEMANTICS_CONTRACT_VERSION, str)
         assert len(UNIFIED_GOVERNANCE_SEMANTICS_CONTRACT_VERSION) > 0
 
@@ -160,6 +170,7 @@ class TestGroupC_PolicyNamingConvention:
         from core.unified_execution_governance import (
             CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY,
         )
+
         assert CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY.startswith("POLICY::")
 
     def test_C01_proof_input_policy_enumerates_all_eight_classes(self) -> None:
@@ -167,17 +178,18 @@ class TestGroupC_PolicyNamingConvention:
         from core.unified_execution_governance import (
             CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY,
         )
-        for cls in ("complete", "stale", "conflicting", "malformed", "unknown",
-                    "downgraded", "partial", "missing"):
-            assert cls in CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY, (
-                f"proof class '{cls}' missing from CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY"
-            )
+
+        for cls in ("complete", "stale", "conflicting", "malformed", "unknown", "downgraded", "partial", "missing"):
+            assert (
+                cls in CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY
+            ), f"proof class '{cls}' missing from CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY"
 
     def test_C02_android_execution_lifecycle_truth_policy(self) -> None:
         """C02: ANDROID_EXECUTION_LIFECYCLE_TRUTH_POLICY starts with 'POLICY::'."""
         from core.unified_execution_governance import (
             ANDROID_EXECUTION_LIFECYCLE_TRUTH_POLICY,
         )
+
         assert ANDROID_EXECUTION_LIFECYCLE_TRUTH_POLICY.startswith("POLICY::")
 
     def test_C03_android_capability_truth_absent_degrades_readiness_policy(self) -> None:
@@ -185,6 +197,7 @@ class TestGroupC_PolicyNamingConvention:
         from core.android_mode_gate_policy import (
             ANDROID_CAPABILITY_TRUTH_ABSENT_DEGRADES_READINESS_POLICY,
         )
+
         assert ANDROID_CAPABILITY_TRUTH_ABSENT_DEGRADES_READINESS_POLICY.startswith("POLICY::")
 
     def test_C04_end_to_end_android_evidence_gate_policy(self) -> None:
@@ -192,6 +205,7 @@ class TestGroupC_PolicyNamingConvention:
         from core.android_evidence_integration_pipeline import (
             END_TO_END_ANDROID_EVIDENCE_GATE_POLICY,
         )
+
         assert END_TO_END_ANDROID_EVIDENCE_GATE_POLICY.startswith("POLICY::")
 
     def test_C05_optimistic_android_fallback_elimination_policy(self) -> None:
@@ -199,6 +213,7 @@ class TestGroupC_PolicyNamingConvention:
         from core.android_evidence_integration_pipeline import (
             OPTIMISTIC_ANDROID_FALLBACK_ELIMINATION_POLICY,
         )
+
         assert OPTIMISTIC_ANDROID_FALLBACK_ELIMINATION_POLICY.startswith("POLICY::")
 
 
@@ -232,15 +247,18 @@ def _make_runtime_state(**overrides: object) -> dict:
     return base
 
 
-@pytest.mark.parametrize("proof_class", [
-    "missing",
-    "stale",
-    "conflicting",
-    "malformed",
-    "unknown",
-    "downgraded",
-    "partial",
-])
+@pytest.mark.parametrize(
+    "proof_class",
+    [
+        "missing",
+        "stale",
+        "conflicting",
+        "malformed",
+        "unknown",
+        "downgraded",
+        "partial",
+    ],
+)
 def test_D01_non_complete_proof_class_fails_integration(proof_class: str) -> None:
     """D01: Every non-complete proof class causes integration to deny."""
     from core.android_evidence_integration_pipeline import (
@@ -295,21 +313,14 @@ def test_D01_non_complete_proof_class_fails_integration(proof_class: str) -> Non
             return_value=[],
         ),
     ):
-        verdict = evaluate_android_evidence_integration(
-            f"dev_D01_{proof_class}", f"exec_D01_{proof_class}"
-        )
+        verdict = evaluate_android_evidence_integration(f"dev_D01_{proof_class}", f"exec_D01_{proof_class}")
 
-    assert verdict.integration_decision == IntegrationDecision.deny, (
-        f"proof_class={proof_class!r} should produce deny but got {verdict.integration_decision}"
-    )
+    assert (
+        verdict.integration_decision == IntegrationDecision.deny
+    ), f"proof_class={proof_class!r} should produce deny but got {verdict.integration_decision}"
     assert verdict.integration_allowed is False
-    capability = next(
-        r for r in verdict.dimension_results
-        if r.dimension == AndroidEvidenceDimension.capability_truth
-    )
-    assert capability.passed is False, (
-        f"proof_class={proof_class!r}: capability dimension should not pass"
-    )
+    capability = next(r for r in verdict.dimension_results if r.dimension == AndroidEvidenceDimension.capability_truth)
+    assert capability.passed is False, f"proof_class={proof_class!r}: capability dimension should not pass"
 
 
 def test_D02_complete_proof_class_passes_capability_dimension() -> None:
@@ -371,10 +382,7 @@ def test_D02_complete_proof_class_passes_capability_dimension() -> None:
 
     assert verdict.integration_decision == IntegrationDecision.allow
     assert verdict.integration_allowed is True
-    capability = next(
-        r for r in verdict.dimension_results
-        if r.dimension == AndroidEvidenceDimension.capability_truth
-    )
+    capability = next(r for r in verdict.dimension_results if r.dimension == AndroidEvidenceDimension.capability_truth)
     assert capability.passed is True
     assert capability.grade == AndroidEvidenceGrade.strong
 
@@ -447,20 +455,24 @@ class TestGroupE_DecisionCausalityFieldStability:
         from core.unified_governance_semantics import build_unified_governance_state
 
         with (
-            patch("core.attached_runtime_session_registry.list_active_sessions",
-                  MagicMock(return_value=active_sessions)),
-            patch("core.android_mode_gate_policy.build_mode_state_for_device",
-                  MagicMock(return_value=mode_state)),
-            patch("core.android_mode_gate_policy.evaluate_android_mode_readiness",
-                  MagicMock(return_value=readiness)),
-            patch("core.unified_execution_governance.is_takeover_active",
-                  MagicMock(return_value=False)),
-            patch("core.unified_execution_governance.get_execution_runtime_snapshot",
-                  MagicMock(return_value=runtime_snapshot)),
-            patch("core.android_evidence_integration_pipeline.get_android_evidence_integration_summary",
-                  MagicMock(return_value=integration_summary)),
-            patch("core.canonical_cross_repo_evidence_pipeline.get_canonical_cross_repo_evidence_report",
-                  MagicMock(return_value=cross_repo_truth_report)),
+            patch(
+                "core.attached_runtime_session_registry.list_active_sessions", MagicMock(return_value=active_sessions)
+            ),
+            patch("core.android_mode_gate_policy.build_mode_state_for_device", MagicMock(return_value=mode_state)),
+            patch("core.android_mode_gate_policy.evaluate_android_mode_readiness", MagicMock(return_value=readiness)),
+            patch("core.unified_execution_governance.is_takeover_active", MagicMock(return_value=False)),
+            patch(
+                "core.unified_execution_governance.get_execution_runtime_snapshot",
+                MagicMock(return_value=runtime_snapshot),
+            ),
+            patch(
+                "core.android_evidence_integration_pipeline.get_android_evidence_integration_summary",
+                MagicMock(return_value=integration_summary),
+            ),
+            patch(
+                "core.canonical_cross_repo_evidence_pipeline.get_canonical_cross_repo_evidence_report",
+                MagicMock(return_value=cross_repo_truth_report),
+            ),
         ):
             state = build_unified_governance_state()
         return state
@@ -468,18 +480,14 @@ class TestGroupE_DecisionCausalityFieldStability:
     def test_E01_pr7a_fields_in_decision_causality(self) -> None:
         """E01: PR-7A capability truth fields are present in decision_causality."""
         state = self._build_governance_state_with_mocks()
-        causality = (
-            state["devices"][0]["governance_precedence"]["delegated_execution"]["decision_causality"]
-        )
+        causality = state["devices"][0]["governance_precedence"]["delegated_execution"]["decision_causality"]
         assert "android_capability_truth_quality" in causality
         assert "android_capability_truth_degraded" in causality
 
     def test_E02_pr5_fields_in_decision_causality(self) -> None:
         """E02: PR-5 lifecycle truth fields are present in decision_causality."""
         state = self._build_governance_state_with_mocks()
-        causality = (
-            state["devices"][0]["governance_precedence"]["delegated_execution"]["decision_causality"]
-        )
+        causality = state["devices"][0]["governance_precedence"]["delegated_execution"]["decision_causality"]
         assert "android_lifecycle_truth_quality" in causality
         assert "android_lifecycle_truth_reason" in causality
         assert "android_lifecycle_truth_degraded" in causality
@@ -488,9 +496,7 @@ class TestGroupE_DecisionCausalityFieldStability:
     def test_E03_pr8_integration_fields_in_decision_causality(self) -> None:
         """E03: PR-8 integration fields are present in decision_causality."""
         state = self._build_governance_state_with_mocks()
-        causality = (
-            state["devices"][0]["governance_precedence"]["delegated_execution"]["decision_causality"]
-        )
+        causality = state["devices"][0]["governance_precedence"]["delegated_execution"]["decision_causality"]
         assert "android_evidence_integration_execution_id" in causality
         assert "android_evidence_integration_decision" in causality
         assert "android_evidence_integration_allowed" in causality

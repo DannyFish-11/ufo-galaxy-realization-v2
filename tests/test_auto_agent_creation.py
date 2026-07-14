@@ -16,22 +16,22 @@ Note on running:
 """
 
 import asyncio
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from core.agent.intent_router import (
-    IntentRouter,
-    IntentResult,
-    IntentMode,
-    _classify_by_rules,
-)
+import pytest
+
 from core.agent.execution_planner import (
-    ExecutionPlanner,
     ExecutionPlan,
+    ExecutionPlanner,
     ExecutionResult,
 )
-from core.agent_factory import AgentFactory, AGENT_TEMPLATES
-
+from core.agent.intent_router import (
+    IntentMode,
+    IntentResult,
+    IntentRouter,
+    _classify_by_rules,
+)
+from core.agent_factory import AGENT_TEMPLATES, AgentFactory
 
 # ─────────────────────────── Fixtures ──────────────────────────────────────
 
@@ -58,23 +58,27 @@ def planner():
 @pytest.fixture
 def mock_llm_router():
     router = MagicMock()
-    router.chat = AsyncMock(return_value=MagicMock(
-        content='{"analysis": "test result", "result": "done"}',
-        provider="mock",
-        model="mock-model",
-        latency_ms=10.0,
-        input_tokens=10,
-        output_tokens=20,
-    ))
-    router.chat_json = AsyncMock(return_value={
-        "role": "analyst",
-        "name": "Auto Analyst",
-        "description": "Test agent",
-        "capabilities": [{"name": "analysis", "description": "analyze", "strength": 0.9}],
-        "system_prompt": "You are an analyst.",
-        "max_subtasks": 3,
-        "max_depth": 2,
-    })
+    router.chat = AsyncMock(
+        return_value=MagicMock(
+            content='{"analysis": "test result", "result": "done"}',
+            provider="mock",
+            model="mock-model",
+            latency_ms=10.0,
+            input_tokens=10,
+            output_tokens=20,
+        )
+    )
+    router.chat_json = AsyncMock(
+        return_value={
+            "role": "analyst",
+            "name": "Auto Analyst",
+            "description": "Test agent",
+            "capabilities": [{"name": "analysis", "description": "analyze", "strength": 0.9}],
+            "system_prompt": "You are an analyst.",
+            "max_subtasks": 3,
+            "max_depth": 2,
+        }
+    )
     router.is_available = MagicMock(return_value=True)
     return router
 
@@ -98,9 +102,7 @@ class TestIntentRouter:
         ]
         for msg in task_messages:
             result = _classify_by_rules(msg)
-            assert result.mode == IntentMode.TASK_EXECUTE, (
-                f"Expected task_execute for '{msg}', got {result.mode}"
-            )
+            assert result.mode == IntentMode.TASK_EXECUTE, f"Expected task_execute for '{msg}', got {result.mode}"
             assert result.confidence >= 0.8
 
     def test_high_confidence_task_keywords_en(self):
@@ -115,9 +117,7 @@ class TestIntentRouter:
         ]
         for msg in task_messages:
             result = _classify_by_rules(msg)
-            assert result.mode == IntentMode.TASK_EXECUTE, (
-                f"Expected task_execute for '{msg}', got {result.mode}"
-            )
+            assert result.mode == IntentMode.TASK_EXECUTE, f"Expected task_execute for '{msg}', got {result.mode}"
 
     def test_low_confidence_task_keywords_classified_as_task(self):
         """Low-confidence task keywords in longer messages → task_execute or hybrid (execution mode)."""
@@ -125,13 +125,11 @@ class TestIntentRouter:
             "help me do something",
             "can you help me",
             "please complete the work",
-            "帮我写一下这个功能",   # "帮我" + action context (>= 4 chars)
+            "帮我写一下这个功能",  # "帮我" + action context (>= 4 chars)
         ]
         for msg in low_task_messages:
             result = _classify_by_rules(msg)
-            assert result.is_execution(), (
-                f"Expected execution intent for '{msg}', got mode={result.mode}"
-            )
+            assert result.is_execution(), f"Expected execution intent for '{msg}', got mode={result.mode}"
             assert result.confidence >= 0.6
 
     def test_very_short_messages_are_chat(self):
@@ -139,13 +137,13 @@ class TestIntentRouter:
         short_chat_messages = [
             "hi",
             "ok",
-            "帮我",   # 2 chars, LOW keyword but too short — ambiguous
+            "帮我",  # 2 chars, LOW keyword but too short — ambiguous
         ]
         for msg in short_chat_messages:
             result = _classify_by_rules(msg)
-            assert result.mode == IntentMode.CHAT_ONLY, (
-                f"Short/ambiguous message '{msg}' should be chat_only, got {result.mode}"
-            )
+            assert (
+                result.mode == IntentMode.CHAT_ONLY
+            ), f"Short/ambiguous message '{msg}' should be chat_only, got {result.mode}"
 
     def test_pure_chat_keywords(self):
         """Pure chat keywords → chat_only."""
@@ -157,9 +155,7 @@ class TestIntentRouter:
         ]
         for msg in chat_messages:
             result = _classify_by_rules(msg)
-            assert result.mode == IntentMode.CHAT_ONLY, (
-                f"Expected chat_only for '{msg}', got {result.mode}"
-            )
+            assert result.mode == IntentMode.CHAT_ONLY, f"Expected chat_only for '{msg}', got {result.mode}"
 
     def test_short_message_is_chat(self):
         """Very short messages (<4 chars) → chat_only."""
@@ -240,9 +236,7 @@ class TestAutoTemplateSelection:
         for msg, expected in test_cases:
             intent = IntentResult(mode=IntentMode.TASK_EXECUTE)
             template = planner._auto_select_template(msg, intent)
-            assert template in AGENT_TEMPLATES, (
-                f"Template '{template}' not in AGENT_TEMPLATES"
-            )
+            assert template in AGENT_TEMPLATES, f"Template '{template}' not in AGENT_TEMPLATES"
 
 
 # ──────────────────────── ExecutionResult Model ──────────────────────────────
@@ -369,9 +363,7 @@ async def test_e2e_intent_routing_to_auto_agent():
     # Step 1: Route the message
     message = "帮我分析一下这段数据"
     intent_result = await router.route(message, use_llm=False)
-    assert intent_result.is_execution(), (
-        f"Expected execution mode, got {intent_result.mode}"
-    )
+    assert intent_result.is_execution(), f"Expected execution mode, got {intent_result.mode}"
 
     # Step 2: Build plan and execute
     plan = ExecutionPlan(message=message, intent=intent_result)
@@ -417,8 +409,7 @@ async def test_e2e_chat_message_no_agent_creation():
     for msg in chat_messages:
         result = await router.route(msg, use_llm=False)
         assert not result.is_execution(), (
-            f"Chat message '{msg}' should not be classified as execution, "
-            f"got mode={result.mode}"
+            f"Chat message '{msg}' should not be classified as execution, " f"got mode={result.mode}"
         )
 
 
@@ -441,9 +432,9 @@ async def test_e2e_multiple_task_types():
     for message, expected_template in task_cases:
         intent_result = await router.route(message, use_llm=False)
         selected = planner._auto_select_template(message, intent_result)
-        assert selected == expected_template, (
-            f"Message '{message}': expected template '{expected_template}', got '{selected}'"
-        )
+        assert (
+            selected == expected_template
+        ), f"Message '{message}': expected template '{expected_template}', got '{selected}'"
 
 
 # ──────────────────────── New Flow: Strategy Selection ───────────────────────
@@ -552,9 +543,9 @@ class TestIntentRouterDefaultExecute:
     def test_medium_length_ambiguous_message_defaults_to_task(self):
         """Ambiguous messages of length >= 10 should default to task_execute."""
         result = _classify_by_rules("这是一个测试消息，没有明确的任务关键词")
-        assert result.mode == IntentMode.TASK_EXECUTE, (
-            f"Expected task_execute for ambiguous long message, got {result.mode}"
-        )
+        assert (
+            result.mode == IntentMode.TASK_EXECUTE
+        ), f"Expected task_execute for ambiguous long message, got {result.mode}"
 
     def test_short_ambiguous_message_stays_chat(self):
         """Short ambiguous messages (< 10 chars without clear signals) → chat_only."""

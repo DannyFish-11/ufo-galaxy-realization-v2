@@ -55,14 +55,14 @@ OpenClaw 风格的能力注册、发现和调用系统（兼容层）。
 日期：2026-02-11
 """
 
-import json
 import asyncio
+import json
 import logging
-from pathlib import Path
-from typing import Dict, List, Set, Optional, Any
-from dataclasses import dataclass, field, fields, asdict
+from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set
 
 logger = logging.getLogger("CapabilityManager")
 
@@ -80,8 +80,10 @@ CAPABILITY_MANAGER_CANONICAL_BRIDGE_ACTIVE = True
 # 能力状态定义
 # ============================================================================
 
+
 class CapabilityStatus(Enum):
     """能力状态"""
+
     UNKNOWN = "unknown"
     REGISTERED = "registered"
     ONLINE = "online"
@@ -93,9 +95,11 @@ class CapabilityStatus(Enum):
 # 能力数据模型
 # ============================================================================
 
+
 @dataclass
 class Capability:
     """能力定义"""
+
     name: str
     description: str
     node_id: str
@@ -109,11 +113,11 @@ class Capability:
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
         data = asdict(self)
-        data['status'] = self.status.value
+        data["status"] = self.status.value
         return data
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Capability':
+    def from_dict(cls, data: Dict[str, Any]) -> "Capability":
         """从字典创建 — 兼容 capabilities.json 和内部格式
 
         capabilities.json 使用 group/port/health_endpoint/critical,
@@ -122,19 +126,19 @@ class Capability:
         d = dict(data)
 
         # 字段映射: JSON → dataclass
-        if 'group' in d and 'category' not in d:
-            d['category'] = d.pop('group')
-        if 'node_id' not in d:
-            d['node_id'] = d.get('name', '')
-        if 'node_name' not in d:
-            d['node_name'] = d.get('name', '')
+        if "group" in d and "category" not in d:
+            d["category"] = d.pop("group")
+        if "node_id" not in d:
+            d["node_id"] = d.get("name", "")
+        if "node_name" not in d:
+            d["node_name"] = d.get("name", "")
 
         # status 转换
-        if 'status' in d and isinstance(d['status'], str):
+        if "status" in d and isinstance(d["status"], str):
             try:
-                d['status'] = CapabilityStatus(d['status'])
+                d["status"] = CapabilityStatus(d["status"])
             except ValueError:
-                d['status'] = CapabilityStatus.UNKNOWN
+                d["status"] = CapabilityStatus.UNKNOWN
 
         # 过滤 dataclass 不认识的字段
         valid_fields = {f.name for f in fields(cls)}
@@ -146,6 +150,7 @@ class Capability:
 # ============================================================================
 # 能力管理器
 # ============================================================================
+
 
 class CapabilityManager:
     """
@@ -204,6 +209,7 @@ class CapabilityManager:
             from core.agent.capability_registry import CapabilityItem  # noqa: PLC0415
             from core.capability_runtime.capability_state import CapabilityAvailability  # noqa: PLC0415
             from core.unified.capability_authority import CapabilityAuthority  # noqa: PLC0415
+
             item = CapabilityItem(
                 name=capability.name,
                 description=capability.description or f"Capability: {capability.name}",
@@ -238,13 +244,9 @@ class CapabilityManager:
                 mutation_source="capability_manager.register_capability",
                 lifecycle_event="capability_runtime_registered",
             )
-            logger.debug(
-                "CapabilityManager bridge → CapabilityAuthority: %s", capability.name
-            )
+            logger.debug("CapabilityManager bridge → CapabilityAuthority: %s", capability.name)
         except Exception as exc:
-            logger.debug(
-                "CapabilityManager._bridge_to_canonical_registry failed (non-fatal): %s", exc
-            )
+            logger.debug("CapabilityManager._bridge_to_canonical_registry failed (non-fatal): %s", exc)
 
     async def register_capability(
         self,
@@ -254,7 +256,7 @@ class CapabilityManager:
         node_name: str,
         category: str = "general",
         input_schema: Optional[Dict[str, Any]] = None,
-        output_schema: Optional[Dict[str, Any]] = None
+        output_schema: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """
         注册能力
@@ -280,7 +282,7 @@ class CapabilityManager:
                 category=category,
                 input_schema=input_schema or {},
                 output_schema=output_schema or {},
-                status=CapabilityStatus.ONLINE
+                status=CapabilityStatus.ONLINE,
             )
 
             # 注册能力
@@ -356,11 +358,7 @@ class CapabilityManager:
 
             return True
 
-    async def update_capability_status(
-        self,
-        name: str,
-        status: CapabilityStatus
-    ) -> bool:
+    async def update_capability_status(self, name: str, status: CapabilityStatus) -> bool:
         """
         更新能力状态
 
@@ -407,11 +405,7 @@ class CapabilityManager:
 
             return True
 
-    async def update_node_status(
-        self,
-        node_id: str,
-        status: CapabilityStatus
-    ) -> int:
+    async def update_node_status(self, node_id: str, status: CapabilityStatus) -> int:
         """
         批量更新节点的所有能力状态
 
@@ -435,10 +429,7 @@ class CapabilityManager:
     # ========================================================================
 
     def discover_capabilities(
-        self,
-        category: Optional[str] = None,
-        status: Optional[CapabilityStatus] = None,
-        node_id: Optional[str] = None
+        self, category: Optional[str] = None, status: Optional[CapabilityStatus] = None, node_id: Optional[str] = None
     ) -> List[Capability]:
         """
         发现能力
@@ -500,7 +491,8 @@ class CapabilityManager:
         """
         keyword_lower = keyword.lower()
         return [
-            cap for cap in self.capabilities.values()
+            cap
+            for cap in self.capabilities.values()
             if keyword_lower in cap.name.lower() or keyword_lower in cap.description.lower()
         ]
 
@@ -529,7 +521,7 @@ class CapabilityManager:
             "offline": offline,
             "unknown": total - online - offline,
             "categories": categories,
-            "nodes_with_capabilities": len(self.node_capabilities)
+            "nodes_with_capabilities": len(self.node_capabilities),
         }
 
     def get_status_summary(self) -> Dict[str, Any]:
@@ -543,21 +535,19 @@ class CapabilityManager:
 
         capabilities_list = []
         for cap in self.capabilities.values():
-            capabilities_list.append({
-                "name": cap.name,
-                "description": cap.description,
-                "node_id": cap.node_id,
-                "node_name": cap.node_name,
-                "category": cap.category,
-                "status": cap.status.value,
-                "last_updated": cap.last_updated
-            })
+            capabilities_list.append(
+                {
+                    "name": cap.name,
+                    "description": cap.description,
+                    "node_id": cap.node_id,
+                    "node_name": cap.node_name,
+                    "category": cap.category,
+                    "status": cap.status.value,
+                    "last_updated": cap.last_updated,
+                }
+            )
 
-        return {
-            "stats": stats,
-            "capabilities": capabilities_list,
-            "timestamp": datetime.now().isoformat()
-        }
+        return {"stats": stats, "capabilities": capabilities_list, "timestamp": datetime.now().isoformat()}
 
     # ========================================================================
     # 持久化
@@ -570,10 +560,10 @@ class CapabilityManager:
             return
 
         try:
-            with open(self.config_file, 'r', encoding='utf-8') as f:
+            with open(self.config_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
-            capabilities_data = data.get('capabilities', [])
+            capabilities_data = data.get("capabilities", [])
             for cap_data in capabilities_data:
                 cap = Capability.from_dict(cap_data)
                 self.capabilities[cap.name] = cap
@@ -602,13 +592,9 @@ class CapabilityManager:
 
             capabilities_list = [cap.to_dict() for cap in self.capabilities.values()]
 
-            data = {
-                "version": "1.0.0",
-                "timestamp": datetime.now().isoformat(),
-                "capabilities": capabilities_list
-            }
+            data = {"version": "1.0.0", "timestamp": datetime.now().isoformat(), "capabilities": capabilities_list}
 
-            with open(self.config_file, 'w', encoding='utf-8') as f:
+            with open(self.config_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
 
             logger.debug(f"已保存 {len(capabilities_list)} 个能力到配置文件")
@@ -636,19 +622,13 @@ def get_capability_manager() -> CapabilityManager:
 # 便捷函数
 # ============================================================================
 
+
 async def register_capability(
-    name: str,
-    description: str,
-    node_id: str,
-    node_name: str,
-    category: str = "general",
-    **kwargs
+    name: str, description: str, node_id: str, node_name: str, category: str = "general", **kwargs
 ) -> bool:
     """注册能力（便捷函数）"""
     manager = get_capability_manager()
-    return await manager.register_capability(
-        name, description, node_id, node_name, category, **kwargs
-    )
+    return await manager.register_capability(name, description, node_id, node_name, category, **kwargs)
 
 
 def discover_capabilities(**filters) -> List[Capability]:

@@ -11,6 +11,7 @@
 说明：默认 min_chars=6，即"内容不足 6 字的碎片并入邻句"以避免像"好。""是。"
 这类独块造成播放频繁启停。因此多块用例统一采用内容 ≥6 字的真实句子。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -29,7 +30,8 @@ class TestSplitChunks:
 
     def test_splits_on_english_punctuation_and_newline(self):
         chunks = split_into_speakable_chunks(
-            "This is the first sentence. Here comes the second one!\nAnd a third line here.")
+            "This is the first sentence. Here comes the second one!\nAnd a third line here."
+        )
         assert len(chunks) == 3
 
     def test_merges_tiny_fragments(self):
@@ -54,6 +56,7 @@ class TestSplitChunks:
 
 class _Recorder:
     """记录合成/播放顺序的可注入桩。"""
+
     def __init__(self, play_delay: float = 0.0):
         self.synthed: List[str] = []
         self.played: List[str] = []
@@ -86,7 +89,9 @@ class TestStreamingSpeaker:
         sp = StreamingSpeaker(rec.synth, rec.play, stop=rec.stop, on_speaking=rec.on_speaking)
         asyncio.run(sp.speak(_THREE))
         assert rec.played == [
-            "handle::这是第一句话内容。", "handle::这是第二句话内容。", "handle::这是第三句话内容。",
+            "handle::这是第一句话内容。",
+            "handle::这是第二句话内容。",
+            "handle::这是第三句话内容。",
         ]
         assert sp.chunks_spoken == 3
         assert rec.speaking_events[0] is True and rec.speaking_events[-1] is False
@@ -106,14 +111,14 @@ class TestStreamingSpeaker:
         async def run():
             sp = StreamingSpeaker(rec.synth, rec.play, stop=rec.stop, on_speaking=rec.on_speaking)
             task = asyncio.ensure_future(sp.speak(five))
-            await asyncio.sleep(0.06)   # 让第一句播起来
+            await asyncio.sleep(0.06)  # 让第一句播起来
             await sp.interrupt()
             await task
             return sp
 
         sp = asyncio.run(run())
-        assert rec.stopped >= 1            # 掐断了当前播放
-        assert len(rec.played) < 5         # 没把五句全播完
+        assert rec.stopped >= 1  # 掐断了当前播放
+        assert len(rec.played) < 5  # 没把五句全播完
         assert rec.speaking_events[-1] is False
 
     def test_empty_text_is_noop(self):
@@ -130,7 +135,9 @@ class TestStreamingSpeaker:
 
         async def run():
             sp = StreamingSpeaker(
-                rec.synth, rec.play, stop=rec.stop,
+                rec.synth,
+                rec.play,
+                stop=rec.stop,
                 discard=lambda h: discarded.append(h),
             )
             task = asyncio.ensure_future(sp.speak(five))

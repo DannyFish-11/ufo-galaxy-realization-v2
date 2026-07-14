@@ -1,6 +1,9 @@
 """PR-8: API compatibility surface boundary containment checks."""
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from core.api_routes import (
     API_COMPATIBILITY_SURFACE_BOUNDARY_POLICY,
@@ -8,13 +11,10 @@ from core.api_routes import (
     CANONICAL_API_ROUTES_AUTHORITY,
     PROTECTED_CORE_COMPAT_WS_OVERRIDE_ENV,
     create_websocket_routes,
+    get_api_compatibility_surface_registry,
     get_core_compat_device_ingress_policy,
     get_device_ingress_surface_report,
-    get_api_compatibility_surface_registry,
 )
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-from starlette.websockets import WebSocketDisconnect
 
 
 def test_pr8_compatibility_boundary_sentinels_present() -> None:
@@ -72,11 +72,7 @@ def test_device_ingress_surface_report_exposes_gateway_registry_and_core_policy(
         }
     )
     assert report["canonical_device_ingress_authority"]
-    canonical = [
-        entry
-        for entry in report["gateway_device_ingress_surfaces"]
-        if entry["classification"] == "canonical"
-    ]
+    canonical = [entry for entry in report["gateway_device_ingress_surfaces"] if entry["classification"] == "canonical"]
     assert len(canonical) == 1
     assert canonical[0]["path"] == "/ws/device/{device_id}"
     assert report["core_compat_device_ingress_policy"]["blocked_by_protected_mode"] is True

@@ -10,8 +10,8 @@ import pytest
 @pytest.fixture(autouse=True)
 def _reset_task_runtimes():
     from core.canonical_task import reset_canonical_task_runtime
-    from core.task_graph_runtime import reset_task_graph_runtime
     from core.routes._shared import task_queue
+    from core.task_graph_runtime import reset_task_graph_runtime
 
     reset_canonical_task_runtime()
     reset_task_graph_runtime()

@@ -47,34 +47,30 @@ Coverage
 
 from __future__ import annotations
 
-from core.pr3_session_continuity_authority import (
-    # Sentinels
+from core.pr3_session_continuity_authority import (  # Sentinels; Enums; Data classes; Functions
+    CENTER_IS_SESSION_COMPLETION_AUTHORITY_POLICY,
+    DEGRADED_TAKEOVER_REQUIRES_EXPLICIT_GOVERNANCE_POLICY,
+    DUPLICATE_STALE_REPLAY_MUST_NOT_BE_CONFLATED_POLICY,
+    LOCAL_AI_AUTHORITY_BOUNDARY_IS_ENFORCED_POLICY,
     PR3_CONVERGENCE_AUTHORITY,
     PR3_CONVERGENCE_CONTRACT_VERSION,
     PR3_CONVERGENCE_PR3_SENTINEL,
     RECONNECT_CLASSIFICATION_IS_EXPLICIT_POLICY,
-    DUPLICATE_STALE_REPLAY_MUST_NOT_BE_CONFLATED_POLICY,
-    LOCAL_AI_AUTHORITY_BOUNDARY_IS_ENFORCED_POLICY,
-    DEGRADED_TAKEOVER_REQUIRES_EXPLICIT_GOVERNANCE_POLICY,
-    CENTER_IS_SESSION_COMPLETION_AUTHORITY_POLICY,
-    # Enums
     ContinuityReconnectClass,
-    TakeoverGovernanceDecision,
     LocalAIProposalClass,
-    # Data classes
-    ReconnectClassificationResult,
     PR3ConvergenceAuditSnapshot,
-    # Functions
+    ReconnectClassificationResult,
+    TakeoverGovernanceDecision,
+    build_pr3_convergence_audit_snapshot,
+    classify_local_ai_proposal,
     classify_reconnect_event,
     govern_takeover_decision,
-    classify_local_ai_proposal,
-    build_pr3_convergence_audit_snapshot,
 )
-
 
 # ---------------------------------------------------------------------------
 # 1. Authority sentinels and contract version
 # ---------------------------------------------------------------------------
+
 
 class TestAuthoritySentinels:
 
@@ -111,6 +107,7 @@ class TestAuthoritySentinels:
 # 2. ContinuityReconnectClass enum values
 # ---------------------------------------------------------------------------
 
+
 class TestContinuityReconnectClass:
 
     def test_all_five_classes_present(self):
@@ -137,6 +134,7 @@ class TestContinuityReconnectClass:
 # ---------------------------------------------------------------------------
 # 3. classify_reconnect_event — all rule branches
 # ---------------------------------------------------------------------------
+
 
 class TestClassifyReconnectEvent:
 
@@ -261,6 +259,7 @@ class TestClassifyReconnectEvent:
 # 4. TakeoverGovernanceDecision and govern_takeover_decision
 # ---------------------------------------------------------------------------
 
+
 class TestTakeoverGovernanceDecision:
 
     def test_all_five_decisions_present(self):
@@ -317,14 +316,17 @@ class TestGovernTakeoverDecision:
 
     def test_only_confirmed_strong_is_not_blocked(self):
         non_strong_classes = [
-            "degraded_partial", "degraded_stale", "degraded_conflicting",
-            "degraded_unresolved", "incomplete",
+            "degraded_partial",
+            "degraded_stale",
+            "degraded_conflicting",
+            "degraded_unresolved",
+            "incomplete",
         ]
         for proof_class in non_strong_classes:
             result = govern_takeover_decision(proof_class)
-            assert result.is_execution_blocked is True, (
-                f"Expected is_execution_blocked=True for proof_class={proof_class!r}"
-            )
+            assert (
+                result.is_execution_blocked is True
+            ), f"Expected is_execution_blocked=True for proof_class={proof_class!r}"
 
     def test_result_carries_proof_class(self):
         result = govern_takeover_decision("degraded_stale", takeover_id="t-99")
@@ -347,6 +349,7 @@ class TestGovernTakeoverDecision:
 # ---------------------------------------------------------------------------
 # 5. LocalAIProposalClass and classify_local_ai_proposal
 # ---------------------------------------------------------------------------
+
 
 class TestLocalAIProposalClass:
 
@@ -439,29 +442,33 @@ class TestClassifyLocalAIProposal:
 # 6. Policy invariants
 # ---------------------------------------------------------------------------
 
+
 class TestPolicyInvariants:
 
     def test_duplicate_stale_replay_are_distinct_classes(self):
         """Duplicate, stale (restart from terminal), and replay produce distinct classes."""
-        duplicate = classify_reconnect_event(is_duplicate=True,
-                                             runtime_session_id="s", runtime_attachment_session_id="a")
-        replay = classify_reconnect_event(is_replay=True,
-                                          runtime_session_id="s", runtime_attachment_session_id="a")
-        terminal = classify_reconnect_event(session_is_terminal=True,
-                                            runtime_session_id="s", runtime_attachment_session_id="a")
+        duplicate = classify_reconnect_event(
+            is_duplicate=True, runtime_session_id="s", runtime_attachment_session_id="a"
+        )
+        replay = classify_reconnect_event(is_replay=True, runtime_session_id="s", runtime_attachment_session_id="a")
+        terminal = classify_reconnect_event(
+            session_is_terminal=True, runtime_session_id="s", runtime_attachment_session_id="a"
+        )
         classes = {
             duplicate.reconnect_class,
             replay.reconnect_class,
             terminal.reconnect_class,
         }
-        assert len(classes) == 3, (
-            f"duplicate, replay, and terminal must produce 3 distinct classes; got {classes}"
-        )
+        assert len(classes) == 3, f"duplicate, replay, and terminal must produce 3 distinct classes; got {classes}"
 
     def test_confirmed_strong_is_only_non_blocking_takeover(self):
         all_classes = [
-            "confirmed_strong", "degraded_partial", "degraded_stale",
-            "degraded_conflicting", "degraded_unresolved", "incomplete",
+            "confirmed_strong",
+            "degraded_partial",
+            "degraded_stale",
+            "degraded_conflicting",
+            "degraded_unresolved",
+            "incomplete",
         ]
         for c in all_classes:
             result = govern_takeover_decision(c)
@@ -474,21 +481,22 @@ class TestPolicyInvariants:
         suggestion_inputs = ["suggestion", "suggestion_only", "SUGGESTION", "totally_unknown_level"]
         for level in suggestion_inputs:
             result = classify_local_ai_proposal(level.lower())
-            assert result.may_influence_center_planning is False, (
-                f"suggestion_only should never influence center planning, got True for {level!r}"
-            )
+            assert (
+                result.may_influence_center_planning is False
+            ), f"suggestion_only should never influence center planning, got True for {level!r}"
 
     def test_sub_agent_without_scope_cannot_influence_planning(self):
         for variant in ["sub_agent", "sub_agent_decision"]:
             result = classify_local_ai_proposal(variant, scope=None)
-            assert result.may_influence_center_planning is False, (
-                f"sub_agent without scope must not influence planning for variant={variant!r}"
-            )
+            assert (
+                result.may_influence_center_planning is False
+            ), f"sub_agent without scope must not influence planning for variant={variant!r}"
 
 
 # ---------------------------------------------------------------------------
 # 7. PR3ConvergenceAuditSnapshot
 # ---------------------------------------------------------------------------
+
 
 class TestPR3ConvergenceAuditSnapshot:
 
@@ -515,9 +523,9 @@ class TestPR3ConvergenceAuditSnapshot:
             "LocalPlannerService.kt",
         }
         for key in required:
-            assert key in snap.android_integration_points, (
-                f"Android integration point {key!r} must be present in snapshot"
-            )
+            assert (
+                key in snap.android_integration_points
+            ), f"Android integration point {key!r} must be present in snapshot"
 
     def test_policies_affirmed_contains_pr3_policies(self):
         snap = build_pr3_convergence_audit_snapshot()
@@ -583,6 +591,7 @@ class TestPR3ConvergenceAuditSnapshot:
 # 8–10. Data class serialisation
 # ---------------------------------------------------------------------------
 
+
 class TestDataClassSerialisations:
 
     def test_reconnect_result_to_dict_keys(self):
@@ -594,8 +603,13 @@ class TestDataClassSerialisations:
         )
         d = result.to_dict()
         required_keys = {
-            "reconnect_class", "device_id", "runtime_session_id",
-            "runtime_attachment_session_id", "policy", "reason", "evidence",
+            "reconnect_class",
+            "device_id",
+            "runtime_session_id",
+            "runtime_attachment_session_id",
+            "policy",
+            "reason",
+            "evidence",
             "classified_at",
         }
         assert required_keys.issubset(d.keys())
@@ -604,8 +618,14 @@ class TestDataClassSerialisations:
         result = govern_takeover_decision("degraded_partial", takeover_id="tk-1", device_id="d-1")
         d = result.to_dict()
         required_keys = {
-            "governance_decision", "proof_class", "takeover_id", "device_id",
-            "policy", "reason", "is_execution_blocked", "governed_at",
+            "governance_decision",
+            "proof_class",
+            "takeover_id",
+            "device_id",
+            "policy",
+            "reason",
+            "is_execution_blocked",
+            "governed_at",
         }
         assert required_keys.issubset(d.keys())
 
@@ -617,8 +637,14 @@ class TestDataClassSerialisations:
         )
         d = result.to_dict()
         required_keys = {
-            "proposal_class", "may_influence_center_planning", "requires_center_review",
-            "policy", "reason", "proposal_source", "scope", "classified_at",
+            "proposal_class",
+            "may_influence_center_planning",
+            "requires_center_review",
+            "policy",
+            "reason",
+            "proposal_source",
+            "scope",
+            "classified_at",
         }
         assert required_keys.issubset(d.keys())
 

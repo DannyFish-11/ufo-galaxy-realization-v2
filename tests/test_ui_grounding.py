@@ -3,6 +3,7 @@
 
 grounding 脑:意图→控件、模型回复→控件、结构确定性快路径 vs 交多模态模型判断。
 """
+
 from __future__ import annotations
 
 from core.schemas.ui_element import (
@@ -24,16 +25,37 @@ from core.ui_grounding import (
 
 
 def _wechat() -> UIGraph:
-    return UIGraph(root=UIElementNode(role="window", label="微信", children=[
-        UIElementNode(role="edit", label="输入消息", editable=True, clickable=True,
-                      bounds=UIBounds(x=60, y=2010, width=1000, height=80),
-                      actions=[UIActionKind.SET_TEXT]),
-        UIElementNode(role="button", label="发送", clickable=True,
-                      bounds=UIBounds(x=1180, y=2020, width=120, height=80),
-                      actions=[UIActionKind.TAP]),
-        UIElementNode(role="button", label="发送文件", clickable=True,
-                      bounds=UIBounds(x=1000, y=2020, width=120, height=80)),
-    ]), source=UISource.ANDROID_A11Y, app="com.tencent.mm")
+    return UIGraph(
+        root=UIElementNode(
+            role="window",
+            label="微信",
+            children=[
+                UIElementNode(
+                    role="edit",
+                    label="输入消息",
+                    editable=True,
+                    clickable=True,
+                    bounds=UIBounds(x=60, y=2010, width=1000, height=80),
+                    actions=[UIActionKind.SET_TEXT],
+                ),
+                UIElementNode(
+                    role="button",
+                    label="发送",
+                    clickable=True,
+                    bounds=UIBounds(x=1180, y=2020, width=120, height=80),
+                    actions=[UIActionKind.TAP],
+                ),
+                UIElementNode(
+                    role="button",
+                    label="发送文件",
+                    clickable=True,
+                    bounds=UIBounds(x=1000, y=2020, width=120, height=80),
+                ),
+            ],
+        ),
+        source=UISource.ANDROID_A11Y,
+        app="com.tencent.mm",
+    )
 
 
 class TestInferAction:
@@ -56,7 +78,7 @@ class TestExtract:
         assert "发送" in extract_target("点发送")
 
     def test_extract_text_to_type_quoted(self):
-        assert extract_text_to_type('输入「你好世界」') == "你好世界"
+        assert extract_text_to_type("输入「你好世界」") == "你好世界"
 
     def test_extract_text_to_type_colon(self):
         assert extract_text_to_type("输入:今天天气不错") == "今天天气不错"
@@ -71,7 +93,7 @@ class TestResolveTargetStructural:
         assert r.target_center() == (1240, 2060)
 
     def test_set_text_carries_text(self):
-        r = resolve_target(_wechat(), '在「输入消息」输入「你好」')
+        r = resolve_target(_wechat(), "在「输入消息」输入「你好」")
         assert r.ok and r.node.role == "edit"
         assert r.action is UIActionKind.SET_TEXT and r.text == "你好"
 

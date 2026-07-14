@@ -66,7 +66,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Availability guards
 # ---------------------------------------------------------------------------
@@ -91,6 +90,7 @@ try:
         get_unified_continuity_legality_authority,
         reset_unified_continuity_legality_authority,
     )
+
     _MODULE_AVAILABLE = True
 except ImportError:
     _MODULE_AVAILABLE = False
@@ -101,6 +101,7 @@ try:
         ResultSourceChannel,
         UnifiedResultIngressOutcome,
     )
+
     _RESULT_INGRESS_AVAILABLE = True
 except ImportError:
     _RESULT_INGRESS_AVAILABLE = False
@@ -110,6 +111,7 @@ try:
         CONTINUITY_GATE_PRECEDES_ROUTING_POLICY,
         RuntimeTruthIngressOutcome,
     )
+
     _RUNTIME_INGRESS_AVAILABLE = True
 except ImportError:
     _RUNTIME_INGRESS_AVAILABLE = False
@@ -118,6 +120,7 @@ try:
     from core.unified_dispatch_readiness_gate import (
         DISPATCH_GATE_SHARES_CONTINUITY_AUTHORITY_POLICY,
     )
+
     _DISPATCH_GATE_AVAILABLE = True
 except ImportError:
     _DISPATCH_GATE_AVAILABLE = False
@@ -131,6 +134,7 @@ try:
         register_session,
         reset_session_registry,
     )
+
     _REGISTRY_AVAILABLE = True
 except ImportError:
     _REGISTRY_AVAILABLE = False
@@ -161,6 +165,7 @@ def _context(**kwargs: Any) -> "ContinuityLegalityContext":
 # A — Module importable; authority sentinel and PR sentinel present
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(not _MODULE_AVAILABLE, reason="module unavailable")
 class TestModuleImportable:
     def test_authority_sentinel_non_empty(self) -> None:
@@ -178,6 +183,7 @@ class TestModuleImportable:
 # ---------------------------------------------------------------------------
 # B — All policy sentinels are non-empty strings
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(not _MODULE_AVAILABLE, reason="module unavailable")
 class TestPolicySentinels:
@@ -212,6 +218,7 @@ class TestPolicySentinels:
 # C — ContinuityLegalityPath has all 8 required values
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(not _MODULE_AVAILABLE, reason="module unavailable")
 class TestContinuityLegalityPath:
     EXPECTED_VALUES = {
@@ -237,6 +244,7 @@ class TestContinuityLegalityPath:
 # ---------------------------------------------------------------------------
 # D — ContinuityLegalityDimension has all 12 required values
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(not _MODULE_AVAILABLE, reason="module unavailable")
 class TestContinuityLegalityDimension:
@@ -268,6 +276,7 @@ class TestContinuityLegalityDimension:
 # E — ContinuityLegalityVerdict values
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(not _MODULE_AVAILABLE, reason="module unavailable")
 class TestContinuityLegalityVerdict:
     def test_allow_value(self) -> None:
@@ -283,6 +292,7 @@ class TestContinuityLegalityVerdict:
 # ---------------------------------------------------------------------------
 # F — is_rejected() and is_hard_rejected() semantics
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(not _MODULE_AVAILABLE, reason="module unavailable")
 class TestVerdictPredicates:
@@ -308,6 +318,7 @@ class TestVerdictPredicates:
 # ---------------------------------------------------------------------------
 # G — ContinuityLegalityContext serialisation
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(not _MODULE_AVAILABLE, reason="module unavailable")
 class TestContinuityLegalityContextSerialisation:
@@ -342,6 +353,7 @@ class TestContinuityLegalityContextSerialisation:
 # H — DimensionLegalityOutcome serialisation
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(not _MODULE_AVAILABLE, reason="module unavailable")
 class TestDimensionLegalityOutcomeSerialisation:
     def test_to_dict_contains_expected_keys(self) -> None:
@@ -369,6 +381,7 @@ class TestDimensionLegalityOutcomeSerialisation:
 # ---------------------------------------------------------------------------
 # I — ContinuityLegalityReport serialisation
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(not _MODULE_AVAILABLE, reason="module unavailable")
 class TestContinuityLegalityReportSerialisation:
@@ -405,6 +418,7 @@ class TestContinuityLegalityReportSerialisation:
 # J — Report predicates
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(not _MODULE_AVAILABLE, reason="module unavailable")
 class TestReportPredicates:
     def test_allow_report_is_allowed(self) -> None:
@@ -430,33 +444,37 @@ class TestReportPredicates:
 # K — Empty context → ALLOW for all paths
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(not _MODULE_AVAILABLE, reason="module unavailable")
 class TestEmptyContextAllows:
     """No identity fields → cannot assert illegality → ALLOW on every path."""
 
-    @pytest.mark.parametrize("path_val", [
-        "reconnect",
-        "re_register",
-        "replay_ingress",
-        "delegated_recovery",
-        "attachment_resume",
-        "online_dispatch_acceptance",
-        "online_signal_ingestion",
-        "terminal_result_ingestion",
-    ])
+    @pytest.mark.parametrize(
+        "path_val",
+        [
+            "reconnect",
+            "re_register",
+            "replay_ingress",
+            "delegated_recovery",
+            "attachment_resume",
+            "online_dispatch_acceptance",
+            "online_signal_ingestion",
+            "terminal_result_ingestion",
+        ],
+    )
     def test_empty_context_allows_all_paths(self, path_val: str) -> None:
         path = ContinuityLegalityPath(path_val)
         ctx = ContinuityLegalityContext()  # all fields empty / default
         report = evaluate_continuity_legality(path, ctx)
         assert report.is_allowed, (
-            f"Expected ALLOW for empty context on {path_val}, "
-            f"got {report.verdict.value}: {report.reject_reason}"
+            f"Expected ALLOW for empty context on {path_val}, " f"got {report.verdict.value}: {report.reject_reason}"
         )
 
 
 # ---------------------------------------------------------------------------
 # L — Stale terminal session → REJECT (when registry is available)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(
     not _MODULE_AVAILABLE or not _REGISTRY_AVAILABLE,
@@ -486,12 +504,9 @@ class TestStaleSessionRejects:
             runtime_session_id=session_id,
             runtime_attachment_session_id=attachment_id,
         )
-        report = evaluate_continuity_legality(
-            ContinuityLegalityPath.ONLINE_DISPATCH_ACCEPTANCE, ctx
-        )
+        report = evaluate_continuity_legality(ContinuityLegalityPath.ONLINE_DISPATCH_ACCEPTANCE, ctx)
         assert report.is_hard_rejected, (
-            f"Expected REJECT for invalidated session, got {report.verdict.value}: "
-            f"{report.reject_reason}"
+            f"Expected REJECT for invalidated session, got {report.verdict.value}: " f"{report.reject_reason}"
         )
         reset_session_registry()
 
@@ -514,9 +529,7 @@ class TestStaleSessionRejects:
             device_id=device_id,
             runtime_attachment_session_id=attachment_id,
         )
-        report = evaluate_continuity_legality(
-            ContinuityLegalityPath.TERMINAL_RESULT_INGESTION, ctx
-        )
+        report = evaluate_continuity_legality(ContinuityLegalityPath.TERMINAL_RESULT_INGESTION, ctx)
         assert report.is_hard_rejected, (
             f"Expected REJECT for invalidated session on TERMINAL_RESULT_INGESTION, "
             f"got {report.verdict.value}: {report.reject_reason}"
@@ -527,6 +540,7 @@ class TestStaleSessionRejects:
 # ---------------------------------------------------------------------------
 # M & N — Session/attachment ID mismatch → REJECT (when registry available)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(
     not _MODULE_AVAILABLE or not _REGISTRY_AVAILABLE,
@@ -555,12 +569,9 @@ class TestIdentityMismatchRejects:
             runtime_session_id=stale_session_id,  # wrong session
             runtime_attachment_session_id=attachment_id,
         )
-        report = evaluate_continuity_legality(
-            ContinuityLegalityPath.ONLINE_DISPATCH_ACCEPTANCE, ctx
-        )
+        report = evaluate_continuity_legality(ContinuityLegalityPath.ONLINE_DISPATCH_ACCEPTANCE, ctx)
         assert report.is_hard_rejected, (
-            f"Expected REJECT for session_id mismatch, "
-            f"got {report.verdict.value}: {report.reject_reason}"
+            f"Expected REJECT for session_id mismatch, " f"got {report.verdict.value}: {report.reject_reason}"
         )
         reset_session_registry()
 
@@ -584,12 +595,9 @@ class TestIdentityMismatchRejects:
             runtime_session_id=session_id,
             runtime_attachment_session_id=stale_attachment_id,  # wrong
         )
-        report = evaluate_continuity_legality(
-            ContinuityLegalityPath.TERMINAL_RESULT_INGESTION, ctx
-        )
+        report = evaluate_continuity_legality(ContinuityLegalityPath.TERMINAL_RESULT_INGESTION, ctx)
         assert report.is_hard_rejected, (
-            f"Expected REJECT for attachment_id mismatch, "
-            f"got {report.verdict.value}: {report.reject_reason}"
+            f"Expected REJECT for attachment_id mismatch, " f"got {report.verdict.value}: {report.reject_reason}"
         )
         reset_session_registry()
 
@@ -598,14 +606,18 @@ class TestIdentityMismatchRejects:
 # P — Report carries correct path value
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(not _MODULE_AVAILABLE, reason="module unavailable")
 class TestReportPathValue:
-    @pytest.mark.parametrize("path_val", [
-        "reconnect",
-        "re_register",
-        "online_dispatch_acceptance",
-        "terminal_result_ingestion",
-    ])
+    @pytest.mark.parametrize(
+        "path_val",
+        [
+            "reconnect",
+            "re_register",
+            "online_dispatch_acceptance",
+            "terminal_result_ingestion",
+        ],
+    )
     def test_report_path_matches_input(self, path_val: str) -> None:
         path = ContinuityLegalityPath(path_val)
         ctx = ContinuityLegalityContext()
@@ -617,6 +629,7 @@ class TestReportPathValue:
 # ---------------------------------------------------------------------------
 # Q — All 8 paths produce a report with non-empty authority sentinel
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(not _MODULE_AVAILABLE, reason="module unavailable")
 class TestAllPathsProduceReport:
@@ -632,6 +645,7 @@ class TestAllPathsProduceReport:
 # ---------------------------------------------------------------------------
 # U — Singleton factory returns same instance across calls
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(not _MODULE_AVAILABLE, reason="module unavailable")
 class TestSingleton:
@@ -651,6 +665,7 @@ class TestSingleton:
 # ---------------------------------------------------------------------------
 # V — ContinuityLegalityPath.from_string
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(not _MODULE_AVAILABLE, reason="module unavailable")
 class TestPathFromString:
@@ -672,13 +687,12 @@ class TestPathFromString:
 # X — Report serialisable to JSON
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(not _MODULE_AVAILABLE, reason="module unavailable")
 class TestReportJson:
     def test_report_json_round_trip(self) -> None:
         ctx = ContinuityLegalityContext(device_id="d1")
-        report = evaluate_continuity_legality(
-            ContinuityLegalityPath.RECONNECT, ctx
-        )
+        report = evaluate_continuity_legality(ContinuityLegalityPath.RECONNECT, ctx)
         json_str = report.to_json()
         parsed = json.loads(json_str)
         assert parsed["path"] == "reconnect"
@@ -687,9 +701,7 @@ class TestReportJson:
 
     def test_report_id_is_non_empty_string(self) -> None:
         ctx = ContinuityLegalityContext()
-        report = evaluate_continuity_legality(
-            ContinuityLegalityPath.ONLINE_SIGNAL_INGESTION, ctx
-        )
+        report = evaluate_continuity_legality(ContinuityLegalityPath.ONLINE_SIGNAL_INGESTION, ctx)
         assert isinstance(report.report_id, str)
         assert len(report.report_id) > 0
 
@@ -697,6 +709,7 @@ class TestReportJson:
 # ---------------------------------------------------------------------------
 # Z — unified_result_ingress: NormalizedResultEvent has continuity fields
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(not _RESULT_INGRESS_AVAILABLE, reason="result_ingress unavailable")
 class TestResultIngressContinuityFields:
@@ -718,6 +731,7 @@ class TestResultIngressContinuityFields:
 # AA — unified_result_ingress: UnifiedResultIngressOutcome has continuity fields
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(not _RESULT_INGRESS_AVAILABLE, reason="result_ingress unavailable")
 class TestResultIngressOutcomeContinuityFields:
     def test_outcome_has_continuity_rejected(self) -> None:
@@ -735,9 +749,8 @@ class TestResultIngressOutcomeContinuityFields:
 # AB — unified_runtime_truth_ingress: RuntimeTruthIngressOutcome has continuity fields
 # ---------------------------------------------------------------------------
 
-@pytest.mark.skipif(
-    not _RUNTIME_INGRESS_AVAILABLE, reason="runtime_ingress unavailable"
-)
+
+@pytest.mark.skipif(not _RUNTIME_INGRESS_AVAILABLE, reason="runtime_ingress unavailable")
 class TestRuntimeIngressOutcomeContinuityFields:
     def test_outcome_has_continuity_rejected(self) -> None:
         outcome = RuntimeTruthIngressOutcome()
@@ -754,9 +767,8 @@ class TestRuntimeIngressOutcomeContinuityFields:
 # AC — RuntimeTruthIngressOutcome.to_dict() includes continuity fields
 # ---------------------------------------------------------------------------
 
-@pytest.mark.skipif(
-    not _RUNTIME_INGRESS_AVAILABLE, reason="runtime_ingress unavailable"
-)
+
+@pytest.mark.skipif(not _RUNTIME_INGRESS_AVAILABLE, reason="runtime_ingress unavailable")
 class TestRuntimeIngressOutcomeToDictContinuity:
     def test_to_dict_includes_continuity_rejected(self) -> None:
         outcome = RuntimeTruthIngressOutcome(continuity_rejected=True, continuity_legality_verdict="reject")
@@ -771,9 +783,8 @@ class TestRuntimeIngressOutcomeToDictContinuity:
 # AD — unified_dispatch_readiness_gate: DISPATCH_GATE_SHARES_CONTINUITY_AUTHORITY_POLICY
 # ---------------------------------------------------------------------------
 
-@pytest.mark.skipif(
-    not _DISPATCH_GATE_AVAILABLE, reason="dispatch_gate unavailable"
-)
+
+@pytest.mark.skipif(not _DISPATCH_GATE_AVAILABLE, reason="dispatch_gate unavailable")
 class TestDispatchGateSentinel:
     def test_sentinel_non_empty(self) -> None:
         assert isinstance(DISPATCH_GATE_SHARES_CONTINUITY_AUTHORITY_POLICY, str)
@@ -783,30 +794,25 @@ class TestDispatchGateSentinel:
         assert "online" in DISPATCH_GATE_SHARES_CONTINUITY_AUTHORITY_POLICY.lower()
 
     def test_sentinel_mentions_continuity_authority(self) -> None:
-        assert (
-            "continuity" in DISPATCH_GATE_SHARES_CONTINUITY_AUTHORITY_POLICY.lower()
-        )
+        assert "continuity" in DISPATCH_GATE_SHARES_CONTINUITY_AUTHORITY_POLICY.lower()
 
 
 # ---------------------------------------------------------------------------
 # AG — epoch dimension skipped when epoch == 0
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(not _MODULE_AVAILABLE, reason="module unavailable")
 class TestEpochDimensionSkipped:
     def test_zero_epoch_skips_epoch_dimension(self) -> None:
         ctx = ContinuityLegalityContext(continuity_epoch=0)
-        report = evaluate_continuity_legality(
-            ContinuityLegalityPath.RECONNECT, ctx
-        )
+        report = evaluate_continuity_legality(ContinuityLegalityPath.RECONNECT, ctx)
         dim_names = {d.dimension.value for d in report.dimensions}
         assert "continuity_epoch_ordering" not in dim_names
 
     def test_nonzero_epoch_evaluates_epoch_dimension(self) -> None:
         ctx = ContinuityLegalityContext(continuity_epoch=5)
-        report = evaluate_continuity_legality(
-            ContinuityLegalityPath.RECONNECT, ctx
-        )
+        report = evaluate_continuity_legality(ContinuityLegalityPath.RECONNECT, ctx)
         dim_names = {d.dimension.value for d in report.dimensions}
         assert "continuity_epoch_ordering" in dim_names
 
@@ -815,13 +821,12 @@ class TestEpochDimensionSkipped:
 # AH — signal guard skipped when signal_id empty
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(not _MODULE_AVAILABLE, reason="module unavailable")
 class TestSignalGuardSkipped:
     def test_empty_signal_id_skips_guard(self) -> None:
         ctx = ContinuityLegalityContext(signal_id="")
-        report = evaluate_continuity_legality(
-            ContinuityLegalityPath.ONLINE_SIGNAL_INGESTION, ctx
-        )
+        report = evaluate_continuity_legality(ContinuityLegalityPath.ONLINE_SIGNAL_INGESTION, ctx)
         dim_names = {d.dimension.value for d in report.dimensions}
         # Signal guard dimension should NOT be present when signal_id is absent
         assert "duplicate_signal_rejection" not in dim_names
@@ -831,21 +836,18 @@ class TestSignalGuardSkipped:
 # AI — DELEGATED_RECOVERY evaluates delegated legality dimension
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(not _MODULE_AVAILABLE, reason="module unavailable")
 class TestDelegatedRecoveryDimension:
     def test_delegated_recovery_evaluates_its_dimension_when_contract_id(self) -> None:
         ctx = ContinuityLegalityContext(contract_id="c1")
-        report = evaluate_continuity_legality(
-            ContinuityLegalityPath.DELEGATED_RECOVERY, ctx
-        )
+        report = evaluate_continuity_legality(ContinuityLegalityPath.DELEGATED_RECOVERY, ctx)
         dim_names = {d.dimension.value for d in report.dimensions}
         assert "delegated_recovery_legality" in dim_names
 
     def test_delegated_recovery_no_contract_skips_dimension(self) -> None:
         ctx = ContinuityLegalityContext()  # no contract_id or flow_id
-        report = evaluate_continuity_legality(
-            ContinuityLegalityPath.DELEGATED_RECOVERY, ctx
-        )
+        report = evaluate_continuity_legality(ContinuityLegalityPath.DELEGATED_RECOVERY, ctx)
         # When no contract/flow context, delegated recovery legality returns ALLOW
         dim_names = {d.dimension.value for d in report.dimensions}
         assert "delegated_recovery_legality" in dim_names  # still evaluated
@@ -859,35 +861,34 @@ class TestDelegatedRecoveryDimension:
 # AJ — ATTACHMENT_RESUME and RECONNECT evaluate session identity
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(not _MODULE_AVAILABLE, reason="module unavailable")
 class TestSessionIdentityDimension:
-    @pytest.mark.parametrize("path_val", [
-        "attachment_resume",
-        "reconnect",
-        "re_register",
-        "online_dispatch_acceptance",
-        "online_signal_ingestion",
-        "terminal_result_ingestion",
-    ])
+    @pytest.mark.parametrize(
+        "path_val",
+        [
+            "attachment_resume",
+            "reconnect",
+            "re_register",
+            "online_dispatch_acceptance",
+            "online_signal_ingestion",
+            "terminal_result_ingestion",
+        ],
+    )
     def test_identity_dimension_evaluated_on_strict_paths(self, path_val: str) -> None:
         path = ContinuityLegalityPath(path_val)
         ctx = ContinuityLegalityContext(device_id="dev_test")
         report = evaluate_continuity_legality(path, ctx)
         # Should have session identity or online_execution_legality dimension
         dim_names = {d.dimension.value for d in report.dimensions}
-        has_identity = (
-            "runtime_session_continuity" in dim_names
-            or "online_execution_legality" in dim_names
-        )
-        assert has_identity, (
-            f"Expected session identity dimension for {path_val}, "
-            f"got dimensions: {dim_names}"
-        )
+        has_identity = "runtime_session_continuity" in dim_names or "online_execution_legality" in dim_names
+        assert has_identity, f"Expected session identity dimension for {path_val}, " f"got dimensions: {dim_names}"
 
 
 # ---------------------------------------------------------------------------
 # AK — All 8 paths covered without exception
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(not _MODULE_AVAILABLE, reason="module unavailable")
 class TestAllPathsCoveredNoException:
@@ -911,9 +912,8 @@ class TestAllPathsCoveredNoException:
 # Runtime truth ingress continuity gate sentinel test
 # ---------------------------------------------------------------------------
 
-@pytest.mark.skipif(
-    not _RUNTIME_INGRESS_AVAILABLE, reason="runtime_ingress unavailable"
-)
+
+@pytest.mark.skipif(not _RUNTIME_INGRESS_AVAILABLE, reason="runtime_ingress unavailable")
 class TestRuntimeIngressContinuityGateSentinel:
     def test_continuity_gate_precedes_routing_policy_non_empty(self) -> None:
         assert isinstance(CONTINUITY_GATE_PRECEDES_ROUTING_POLICY, str)

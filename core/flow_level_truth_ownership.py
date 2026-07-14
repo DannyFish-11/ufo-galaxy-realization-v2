@@ -142,9 +142,8 @@ logger = logging.getLogger("Galaxy.FlowLevelTruthOwnership")
 # ---------------------------------------------------------------------------
 
 try:
-    from core.android_participant_truth_ingress import (
-        AndroidParticipantTruthKind as _AndroidTruthKind,
-    )
+    from core.android_participant_truth_ingress import AndroidParticipantTruthKind as _AndroidTruthKind
+
     _ANDROID_TRUTH_KIND_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _ANDROID_TRUTH_KIND_AVAILABLE = False
@@ -152,15 +151,15 @@ except ImportError:  # pragma: no cover
 
 try:
     from core.delegated_flow_entity import DelegatedFlowPhase as _FlowPhase
+
     _FLOW_PHASE_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _FLOW_PHASE_AVAILABLE = False
     _FlowPhase = None  # type: ignore[assignment]
 
 try:
-    from core.compat_fallback_authority_guard import (
-        CompatInfluenceRole as _CompatRole,
-    )
+    from core.compat_fallback_authority_guard import CompatInfluenceRole as _CompatRole
+
     _COMPAT_ROLE_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _COMPAT_ROLE_AVAILABLE = False
@@ -432,17 +431,13 @@ class PostureChangeHandling(str, Enum):
 
 
 # Internal terminal phase strings — kept in sync with DelegatedFlowPhase
-_V2_TERMINAL_PHASES: frozenset = frozenset(
-    {"completed", "failed", "cancelled", "suspended"}
-)
+_V2_TERMINAL_PHASES: frozenset = frozenset({"completed", "failed", "cancelled", "suspended"})
 
 # Android truth kinds that are authoritative upward when V2 is non-terminal
 # PR-4V2-GOV: governance_artifact is a first-class canonical gate input (not advisory).
 # Android evaluator governance/readiness/acceptance/strategy artifacts are authoritative
 # upward so that DelegatedFlowReadinessGate.truth_ownership dimension can reflect them.
-_AUTHORITATIVE_TRUTH_KINDS: frozenset = frozenset(
-    {"cancel", "failure", "result", "governance_artifact"}
-)
+_AUTHORITATIVE_TRUTH_KINDS: frozenset = frozenset({"cancel", "failure", "result", "governance_artifact"})
 
 # Android truth kinds that are advisory (do not alter V2 canonical state)
 _ADVISORY_TRUTH_KINDS: frozenset = frozenset(
@@ -459,9 +454,7 @@ _ADVISORY_TRUTH_KINDS: frozenset = frozenset(
 _PARTIAL_RESULT_KINDS: frozenset = frozenset({"partial_result"})
 
 # task_phase terminal values that should be treated as authoritative
-_AUTHORITATIVE_TASK_PHASES: frozenset = frozenset(
-    {"completed", "failed", "cancelled"}
-)
+_AUTHORITATIVE_TASK_PHASES: frozenset = frozenset({"completed", "failed", "cancelled"})
 
 
 @dataclass
@@ -581,9 +574,7 @@ class FlowTruthDecisionArtifact:
         Free-form evidence dictionary forwarded to operator surfaces.
     """
 
-    artifact_id: str = field(
-        default_factory=lambda: f"ftda_{uuid.uuid4().hex[:12]}"
-    )
+    artifact_id: str = field(default_factory=lambda: f"ftda_{uuid.uuid4().hex[:12]}")
     decision: FlowTruthDecisionKind = FlowTruthDecisionKind.accept_as_advisory
     semantic_kind: FlowTruthSemanticKind = FlowTruthSemanticKind.advisory
     truth_owner: FlowTruthOwnerKind = FlowTruthOwnerKind.v2_canonical
@@ -641,9 +632,7 @@ class PostureChangeImpactRecord:
 
     prior_artifact_id: str = ""
     truth_kind: str = ""
-    original_decision: FlowTruthDecisionKind = (
-        FlowTruthDecisionKind.accept_as_advisory
-    )
+    original_decision: FlowTruthDecisionKind = FlowTruthDecisionKind.accept_as_advisory
     revised_handling: PostureChangeHandling = PostureChangeHandling.retain
     reason: str = ""
 
@@ -676,13 +665,9 @@ class FlowTruthAlignmentSnapshot:
         Unix epoch seconds when this snapshot was produced.
     """
 
-    snapshot_id: str = field(
-        default_factory=lambda: f"ftas_{uuid.uuid4().hex[:8]}"
-    )
+    snapshot_id: str = field(default_factory=lambda: f"ftas_{uuid.uuid4().hex[:8]}")
     total_decisions: int = 0
-    recent_artifacts: List[FlowTruthDecisionArtifact] = field(
-        default_factory=list
-    )
+    recent_artifacts: List[FlowTruthDecisionArtifact] = field(default_factory=list)
     decision_counts: Dict[str, int] = field(default_factory=dict)
     timestamp: float = field(default_factory=time.time)
 
@@ -894,8 +879,7 @@ def align_android_truth_with_canonical(
             ),
         )
         logger.debug(
-            "flow_truth_align: block_due_to_compat_influence "
-            "flow=%s kind=%s",
+            "flow_truth_align: block_due_to_compat_influence " "flow=%s kind=%s",
             ctx.delegated_flow_id,
             ctx.truth_kind,
         )
@@ -918,8 +902,7 @@ def align_android_truth_with_canonical(
             ),
         )
         logger.debug(
-            "flow_truth_align: reject_due_to_canonical_terminal "
-            "flow=%s phase=%s kind=%s",
+            "flow_truth_align: reject_due_to_canonical_terminal " "flow=%s phase=%s kind=%s",
             ctx.delegated_flow_id,
             ctx.v2_canonical_flow_phase,
             ctx.truth_kind,
@@ -946,8 +929,7 @@ def align_android_truth_with_canonical(
             ),
         )
         logger.debug(
-            "flow_truth_align: quarantine_due_to_posture_conflict "
-            "flow=%s kind=%s posture=%s",
+            "flow_truth_align: quarantine_due_to_posture_conflict " "flow=%s kind=%s posture=%s",
             ctx.delegated_flow_id,
             ctx.truth_kind,
             ctx.device_posture,
@@ -976,8 +958,7 @@ def align_android_truth_with_canonical(
             pending_v2_confirmation=True,
         )
         logger.debug(
-            "flow_truth_align: accept_as_authoritative "
-            "flow=%s kind=%s",
+            "flow_truth_align: accept_as_authoritative " "flow=%s kind=%s",
             ctx.delegated_flow_id,
             ctx.truth_kind,
         )
@@ -999,8 +980,7 @@ def align_android_truth_with_canonical(
             ),
         )
         logger.debug(
-            "flow_truth_align: accept_as_advisory (partial_result) "
-            "flow=%s",
+            "flow_truth_align: accept_as_advisory (partial_result) " "flow=%s",
             ctx.delegated_flow_id,
         )
         return artifact
@@ -1015,14 +995,10 @@ def align_android_truth_with_canonical(
             semantic_kind,
             FlowTruthOwnerKind.android_execution,
             "ADVISORY_TRUTH_IS_NOTED_NOT_APPLIED_POLICY",
-            (
-                f"Android truth_kind={ctx.truth_kind!r} is advisory; "
-                "noted for audit — V2 canonical state unaffected"
-            ),
+            (f"Android truth_kind={ctx.truth_kind!r} is advisory; " "noted for audit — V2 canonical state unaffected"),
         )
         logger.debug(
-            "flow_truth_align: accept_as_advisory (advisory) "
-            "flow=%s kind=%s",
+            "flow_truth_align: accept_as_advisory (advisory) " "flow=%s kind=%s",
             ctx.delegated_flow_id,
             ctx.truth_kind,
         )
@@ -1047,8 +1023,7 @@ def align_android_truth_with_canonical(
             ),
         )
         logger.debug(
-            "flow_truth_align: record_as_execution_evidence "
-            "flow=%s kind=%s",
+            "flow_truth_align: record_as_execution_evidence " "flow=%s kind=%s",
             ctx.delegated_flow_id,
             ctx.truth_kind,
         )
@@ -1063,14 +1038,10 @@ def align_android_truth_with_canonical(
         FlowTruthSemanticKind.advisory,
         FlowTruthOwnerKind.v2_canonical,
         "UNKNOWN_TRUTH_KIND_DEFAULTS_TO_ADVISORY_POLICY",
-        (
-            f"truth_kind={ctx.truth_kind!r} could not be resolved; "
-            "defaulting to advisory per safe-default policy"
-        ),
+        (f"truth_kind={ctx.truth_kind!r} could not be resolved; " "defaulting to advisory per safe-default policy"),
     )
     logger.debug(
-        "flow_truth_align: accept_as_advisory (unknown fallback) "
-        "flow=%s kind=%s",
+        "flow_truth_align: accept_as_advisory (unknown fallback) " "flow=%s kind=%s",
         ctx.delegated_flow_id,
         ctx.truth_kind,
     )
@@ -1120,57 +1091,60 @@ def evaluate_posture_change_impact(
     list[PostureChangeImpactRecord]
         One record per input artifact describing the revised handling.
     """
-    _quarantine_semantics = frozenset({
-        FlowTruthSemanticKind.execution_evidence,
-        FlowTruthSemanticKind.partial_result,
-        FlowTruthSemanticKind.posture_sensitive,
-    })
-    _retain_decisions = frozenset({
-        FlowTruthDecisionKind.reject_due_to_canonical_terminal,
-        FlowTruthDecisionKind.block_due_to_compat_influence,
-        FlowTruthDecisionKind.accept_as_authoritative,
-    })
+    _quarantine_semantics = frozenset(
+        {
+            FlowTruthSemanticKind.execution_evidence,
+            FlowTruthSemanticKind.partial_result,
+            FlowTruthSemanticKind.posture_sensitive,
+        }
+    )
+    _retain_decisions = frozenset(
+        {
+            FlowTruthDecisionKind.reject_due_to_canonical_terminal,
+            FlowTruthDecisionKind.block_due_to_compat_influence,
+            FlowTruthDecisionKind.accept_as_authoritative,
+        }
+    )
 
     records: List[PostureChangeImpactRecord] = []
     for art in prior_artifacts:
         if art.decision in _retain_decisions:
-            records.append(PostureChangeImpactRecord(
-                prior_artifact_id=art.artifact_id,
-                truth_kind=art.evidence.get("truth_kind", ""),
-                original_decision=art.decision,
-                revised_handling=PostureChangeHandling.retain,
-                reason=(
-                    f"decision={art.decision.value} is posture-independent; "
-                    "retained after posture change"
-                ),
-            ))
+            records.append(
+                PostureChangeImpactRecord(
+                    prior_artifact_id=art.artifact_id,
+                    truth_kind=art.evidence.get("truth_kind", ""),
+                    original_decision=art.decision,
+                    revised_handling=PostureChangeHandling.retain,
+                    reason=(f"decision={art.decision.value} is posture-independent; " "retained after posture change"),
+                )
+            )
         elif art.semantic_kind in _quarantine_semantics:
-            records.append(PostureChangeImpactRecord(
-                prior_artifact_id=art.artifact_id,
-                truth_kind=art.evidence.get("truth_kind", ""),
-                original_decision=art.decision,
-                revised_handling=PostureChangeHandling.quarantine,
-                reason=(
-                    f"posture changed {old_posture!r} → {new_posture!r}; "
-                    f"semantic={art.semantic_kind.value} must be quarantined "
-                    "per POSTURE_CHANGE_QUARANTINES_PRIOR_EVIDENCE_POLICY"
-                ),
-            ))
+            records.append(
+                PostureChangeImpactRecord(
+                    prior_artifact_id=art.artifact_id,
+                    truth_kind=art.evidence.get("truth_kind", ""),
+                    original_decision=art.decision,
+                    revised_handling=PostureChangeHandling.quarantine,
+                    reason=(
+                        f"posture changed {old_posture!r} → {new_posture!r}; "
+                        f"semantic={art.semantic_kind.value} must be quarantined "
+                        "per POSTURE_CHANGE_QUARANTINES_PRIOR_EVIDENCE_POLICY"
+                    ),
+                )
+            )
         else:
-            records.append(PostureChangeImpactRecord(
-                prior_artifact_id=art.artifact_id,
-                truth_kind=art.evidence.get("truth_kind", ""),
-                original_decision=art.decision,
-                revised_handling=PostureChangeHandling.retain,
-                reason=(
-                    f"advisory truth retained after posture change "
-                    f"{old_posture!r} → {new_posture!r}"
-                ),
-            ))
+            records.append(
+                PostureChangeImpactRecord(
+                    prior_artifact_id=art.artifact_id,
+                    truth_kind=art.evidence.get("truth_kind", ""),
+                    original_decision=art.decision,
+                    revised_handling=PostureChangeHandling.retain,
+                    reason=(f"advisory truth retained after posture change " f"{old_posture!r} → {new_posture!r}"),
+                )
+            )
 
     logger.debug(
-        "evaluate_posture_change_impact: flow=%s old=%s new=%s "
-        "items=%d quarantined=%d",
+        "evaluate_posture_change_impact: flow=%s old=%s new=%s " "items=%d quarantined=%d",
         delegated_flow_id,
         old_posture,
         new_posture,
@@ -1219,9 +1193,7 @@ class FlowTruthAlignmentRuntime:
         with self._lock:
             return list(self._ring)[:n]
 
-    def get_by_artifact_id(
-        self, artifact_id: str
-    ) -> Optional[FlowTruthDecisionArtifact]:
+    def get_by_artifact_id(self, artifact_id: str) -> Optional[FlowTruthDecisionArtifact]:
         """Return the artifact matching *artifact_id*, or ``None``."""
         with self._lock:
             for art in self._ring:
@@ -1229,14 +1201,10 @@ class FlowTruthAlignmentRuntime:
                     return art
         return None
 
-    def get_by_flow_id(
-        self, delegated_flow_id: str
-    ) -> List[FlowTruthDecisionArtifact]:
+    def get_by_flow_id(self, delegated_flow_id: str) -> List[FlowTruthDecisionArtifact]:
         """Return all artifacts for *delegated_flow_id*, newest-first."""
         with self._lock:
-            return [
-                a for a in self._ring if a.delegated_flow_id == delegated_flow_id
-            ]
+            return [a for a in self._ring if a.delegated_flow_id == delegated_flow_id]
 
     def build_snapshot(self) -> FlowTruthAlignmentSnapshot:
         """Build and return a :class:`FlowTruthAlignmentSnapshot`."""

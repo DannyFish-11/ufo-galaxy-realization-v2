@@ -642,8 +642,7 @@ def build_enforcement_scaffold(
     strict_rejection_ready_pathways = [
         decision.compatibility_pathway
         for decision in decisions.values()
-        if decision.deprecation_stage == UGCPDeprecationStage.strict_reject_candidate
-        and decision.compatibility_pathway
+        if decision.deprecation_stage == UGCPDeprecationStage.strict_reject_candidate and decision.compatibility_pathway
     ]
     deprecation_markers = {
         surface: decision.deprecation_stage.value
@@ -697,9 +696,7 @@ def normalize_conformance_payload(payload: Mapping[str, Any]) -> Dict[str, Any]:
         "truth_event_type": truth_event.normalized_value,
         "semantic_classes": {key: item.semantic_class.value for key, item in classifications.items()},
         "compatibility_pathways": {
-            key: item.compatibility_pathway
-            for key, item in classifications.items()
-            if item.compatibility_pathway
+            key: item.compatibility_pathway for key, item in classifications.items() if item.compatibility_pathway
         },
     }
 
@@ -763,8 +760,7 @@ def _build_canonical_consistency_checks(normalized: Mapping[str, Any]) -> Dict[s
     compatibility_pathways = normalized.get("compatibility_pathways") or {}
 
     transfer_terminal_lifecycle_consistent = (
-        transfer_state not in _TRANSFER_COMPLETION_STATES
-        or composed_lifecycle_state in _TERMINAL_CANONICAL_STATES
+        transfer_state not in _TRANSFER_COMPLETION_STATES or composed_lifecycle_state in _TERMINAL_CANONICAL_STATES
     )
     coordination_active_lifecycle_non_terminal = (
         coordination_state not in _COORDINATION_ACTIVE_STATES
@@ -781,13 +777,10 @@ def _build_canonical_consistency_checks(normalized: Mapping[str, Any]) -> Dict[s
     elif truth_event_type == CanonicalTruthEventType.session_truth_recorded.value:
         truth_event_surface_alignment = authority_source != "unknown"
 
-    canonical_representation_consistent = (
-        lifecycle_state == composed_lifecycle_state
-        or (
-            lifecycle_state == "unknown"
-            and lifecycle_source_surface in {"transfer", "coordination"}
-            and composed_lifecycle_state != "unknown"
-        )
+    canonical_representation_consistent = lifecycle_state == composed_lifecycle_state or (
+        lifecycle_state == "unknown"
+        and lifecycle_source_surface in {"transfer", "coordination"}
+        and composed_lifecycle_state != "unknown"
     )
 
     checks = {
@@ -821,9 +814,7 @@ def build_conformance_invariant_report(payload: Optional[Mapping[str, Any]] = No
         "semantic_drift_signals_empty": not normalized["semantic_drift_signals"],
         "canonical_consistency_checks_passed": not canonical_consistency["failed_checks"],
     }
-    violations: List[str] = [
-        name for name, passed in invariants.items() if not passed
-    ]
+    violations: List[str] = [name for name, passed in invariants.items() if not passed]
     violations.extend(canonical_consistency["failed_checks"])
     return {
         "conforms": not violations,
@@ -851,19 +842,13 @@ def get_ugcp_retirement_stage_catalog() -> Dict[str, Dict[str, List[str]]]:
     for surface in UGCPConformanceSurface:
         aliases = _SURFACE_ALIAS_DEPRECATION_STAGE.get(surface, {})
         migration_required_aliases = sorted(
-            alias
-            for alias, stage in aliases.items()
-            if stage == UGCPDeprecationStage.migration_required
+            alias for alias, stage in aliases.items() if stage == UGCPDeprecationStage.migration_required
         )
         transitional_tolerated_aliases = sorted(
-            alias
-            for alias, stage in aliases.items()
-            if stage == UGCPDeprecationStage.transitional_tolerated
+            alias for alias, stage in aliases.items() if stage == UGCPDeprecationStage.transitional_tolerated
         )
         strict_reject_candidate_aliases = sorted(
-            alias
-            for alias, stage in aliases.items()
-            if stage == UGCPDeprecationStage.strict_reject_candidate
+            alias for alias, stage in aliases.items() if stage == UGCPDeprecationStage.strict_reject_candidate
         )
         stage_catalog[surface.value] = {
             "migration_required_aliases": migration_required_aliases,
@@ -904,9 +889,7 @@ def build_migration_readiness_scaffold(
     stage_catalog = get_ugcp_retirement_stage_catalog()
     enforcement = build_enforcement_scaffold(source_payload, mode=parsed_mode)
 
-    canonical_surfaces_ready_for_staged_enforcement = sorted(
-        surface.value for surface in UGCPConformanceSurface
-    )
+    canonical_surfaces_ready_for_staged_enforcement = sorted(surface.value for surface in UGCPConformanceSurface)
     decisions = enforcement.get("decisions", {})
     transitional_surfaces_requiring_tolerance = [
         {
@@ -924,8 +907,7 @@ def build_migration_readiness_scaffold(
     migration_required_pathways = sorted(
         item["compatibility_pathway"]
         for item in transitional_surfaces_requiring_tolerance
-        if item["deprecation_stage"] == UGCPDeprecationStage.migration_required.value
-        and item["compatibility_pathway"]
+        if item["deprecation_stage"] == UGCPDeprecationStage.migration_required.value and item["compatibility_pathway"]
     )
     strict_reject_candidate_pathways = sorted(
         item["compatibility_pathway"]
@@ -1142,14 +1124,10 @@ def build_staged_strictness_rollout_gating_scaffold(
         }
 
     normalize_first_surfaces = sorted(
-        key
-        for key, record in surface_strictness_inventory.items()
-        if record["strictness_tier"] == "normalize_first"
+        key for key, record in surface_strictness_inventory.items() if record["strictness_tier"] == "normalize_first"
     )
     warning_surfaces = sorted(
-        key
-        for key, record in surface_strictness_inventory.items()
-        if record["strictness_tier"] == "warn_diagnostics"
+        key for key, record in surface_strictness_inventory.items() if record["strictness_tier"] == "warn_diagnostics"
     )
     canonical_preferred_surfaces = sorted(
         key
@@ -1157,19 +1135,13 @@ def build_staged_strictness_rollout_gating_scaffold(
         if record["strictness_tier"] == "canonical_preferred"
     )
     reject_ready_surfaces = sorted(
-        key
-        for key, record in surface_strictness_inventory.items()
-        if record["strictness_tier"] == "reject_ready"
+        key for key, record in surface_strictness_inventory.items() if record["strictness_tier"] == "reject_ready"
     )
     earlier_tightening_candidates = sorted(
-        key
-        for key, record in surface_strictness_inventory.items()
-        if record["earlier_tightening_candidate"]
+        key for key, record in surface_strictness_inventory.items() if record["earlier_tightening_candidate"]
     )
     coordination_required_surfaces = sorted(
-        key
-        for key, record in surface_strictness_inventory.items()
-        if record["requires_cross_repo_coordination"]
+        key for key, record in surface_strictness_inventory.items() if record["requires_cross_repo_coordination"]
     )
     gated_reject_ready_surfaces = sorted(
         key

@@ -73,8 +73,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Helper: reset singleton between tests
 # ---------------------------------------------------------------------------
 
+
 def _reset():
     from core.multi_device_control_integrity import reset_multi_device_integrity_runtime
+
     reset_multi_device_integrity_runtime()
 
 
@@ -88,6 +90,7 @@ class TestA_ModuleStructure(unittest.TestCase):
 
     def test_all_symbols_importable(self):
         import core.multi_device_control_integrity as m
+
         for name in m.__all__:
             self.assertTrue(
                 hasattr(m, name),
@@ -96,6 +99,7 @@ class TestA_ModuleStructure(unittest.TestCase):
 
     def test_module_docstring_present(self):
         import core.multi_device_control_integrity as m
+
         self.assertIsNotNone(m.__doc__)
         self.assertIn("PR-517", m.__doc__)
 
@@ -105,41 +109,49 @@ class TestB_AuthoritySentinels(unittest.TestCase):
 
     def test_main_authority_string(self):
         from core.multi_device_control_integrity import MULTI_DEVICE_CONTROL_INTEGRITY_AUTHORITY
+
         self.assertIsInstance(MULTI_DEVICE_CONTROL_INTEGRITY_AUTHORITY, str)
         self.assertIn("MULTI_DEVICE_CONTROL_INTEGRITY", MULTI_DEVICE_CONTROL_INTEGRITY_AUTHORITY)
 
     def test_layer_position_is_int(self):
         from core.multi_device_control_integrity import MULTI_DEVICE_CONTROL_INTEGRITY_LAYER_POSITION
+
         self.assertIsInstance(MULTI_DEVICE_CONTROL_INTEGRITY_LAYER_POSITION, int)
         self.assertGreater(MULTI_DEVICE_CONTROL_INTEGRITY_LAYER_POSITION, 0)
 
     def test_integrated_sentinel_string(self):
         from core.multi_device_control_integrity import MULTI_DEVICE_CONTROL_INTEGRITY_INTEGRATED
+
         self.assertIsInstance(MULTI_DEVICE_CONTROL_INTEGRITY_INTEGRATED, str)
         self.assertIn("INTEGRATED", MULTI_DEVICE_CONTROL_INTEGRITY_INTEGRATED)
 
     def test_entry_unification_authority(self):
         from core.multi_device_control_integrity import MULTI_DEVICE_ENTRY_UNIFICATION_AUTHORITY
+
         self.assertIsInstance(MULTI_DEVICE_ENTRY_UNIFICATION_AUTHORITY, str)
         self.assertIn("CommandRouter", MULTI_DEVICE_ENTRY_UNIFICATION_AUTHORITY)
 
     def test_dispatch_authority_sentinel(self):
         from core.multi_device_control_integrity import SINGLE_CROSS_DEVICE_DISPATCH_AUTHORITY
+
         self.assertIsInstance(SINGLE_CROSS_DEVICE_DISPATCH_AUTHORITY, str)
         self.assertIn("CommandRouter", SINGLE_CROSS_DEVICE_DISPATCH_AUTHORITY)
 
     def test_formation_truth_authority(self):
         from core.multi_device_control_integrity import DEVICE_FORMATION_TRUTH_AUTHORITY
+
         self.assertIsInstance(DEVICE_FORMATION_TRUTH_AUTHORITY, str)
         self.assertIn("DeviceFormationGroup", DEVICE_FORMATION_TRUTH_AUTHORITY)
 
     def test_control_semantic_authority(self):
         from core.multi_device_control_integrity import CONTROL_SEMANTIC_SEPARATION_AUTHORITY
+
         self.assertIsInstance(CONTROL_SEMANTIC_SEPARATION_AUTHORITY, str)
         self.assertIn("source_device_id", CONTROL_SEMANTIC_SEPARATION_AUTHORITY)
 
     def test_result_surface_authority(self):
         from core.multi_device_control_integrity import RESULT_CANONICAL_SURFACE_AUTHORITY
+
         self.assertIsInstance(RESULT_CANONICAL_SURFACE_AUTHORITY, str)
         self.assertIn("ResultEnvelope", RESULT_CANONICAL_SURFACE_AUTHORITY)
 
@@ -151,20 +163,24 @@ class TestC_PolicySentinels(unittest.TestCase):
         from core.multi_device_control_integrity import (
             ALL_DEVICE_ENTRY_CONVERGES_ON_COMMAND_ROUTER_POLICY,
         )
+
         self.assertIn("CommandRouter", ALL_DEVICE_ENTRY_CONVERGES_ON_COMMAND_ROUTER_POLICY)
         self.assertIn("TaskEnvelope", ALL_DEVICE_ENTRY_CONVERGES_ON_COMMAND_ROUTER_POLICY)
 
     def test_no_parallel_dispatch_policy(self):
         from core.multi_device_control_integrity import NO_PARALLEL_CROSS_DEVICE_DISPATCH_POLICY
+
         self.assertIn("CommandRouter", NO_PARALLEL_CROSS_DEVICE_DISPATCH_POLICY)
         self.assertIn("CrossDeviceCoordinator", NO_PARALLEL_CROSS_DEVICE_DISPATCH_POLICY)
 
     def test_formation_truth_policy(self):
         from core.multi_device_control_integrity import FORMATION_TRUTH_SINGLE_SOURCE_POLICY
+
         self.assertIn("DeviceFormationGroup", FORMATION_TRUTH_SINGLE_SOURCE_POLICY)
 
     def test_source_target_separation_policy(self):
         from core.multi_device_control_integrity import SOURCE_TARGET_SEMANTIC_SEPARATION_POLICY
+
         self.assertIn("source_device_id", SOURCE_TARGET_SEMANTIC_SEPARATION_POLICY)
         self.assertIn("target_device_id", SOURCE_TARGET_SEMANTIC_SEPARATION_POLICY)
 
@@ -172,6 +188,7 @@ class TestC_PolicySentinels(unittest.TestCase):
         from core.multi_device_control_integrity import (
             CROSS_DEVICE_RESULT_SURFACES_CANONICALLY_POLICY,
         )
+
         self.assertIn("ResultEnvelope", CROSS_DEVICE_RESULT_SURFACES_CANONICALLY_POLICY)
         self.assertIn("OperatorSurface", CROSS_DEVICE_RESULT_SURFACES_CANONICALLY_POLICY)
 
@@ -181,26 +198,32 @@ class TestD_EntryUnificationKind(unittest.TestCase):
 
     def test_canonical_present(self):
         from core.multi_device_control_integrity import EntryUnificationKind
+
         self.assertIn("canonical", EntryUnificationKind._value2member_map_)
 
     def test_legacy_direct_dispatch_present(self):
         from core.multi_device_control_integrity import EntryUnificationKind
+
         self.assertIn("legacy_direct_dispatch", EntryUnificationKind._value2member_map_)
 
     def test_legacy_coordinator_bypass_present(self):
         from core.multi_device_control_integrity import EntryUnificationKind
+
         self.assertIn("legacy_coordinator_bypass", EntryUnificationKind._value2member_map_)
 
     def test_legacy_route_bypass_present(self):
         from core.multi_device_control_integrity import EntryUnificationKind
+
         self.assertIn("legacy_route_bypass", EntryUnificationKind._value2member_map_)
 
     def test_unknown_present(self):
         from core.multi_device_control_integrity import EntryUnificationKind
+
         self.assertIn("unknown", EntryUnificationKind._value2member_map_)
 
     def test_is_str_subclass(self):
         from core.multi_device_control_integrity import EntryUnificationKind
+
         self.assertTrue(issubclass(EntryUnificationKind, str))
 
 
@@ -209,22 +232,27 @@ class TestE_DispatchPathKind(unittest.TestCase):
 
     def test_command_router_canonical_present(self):
         from core.multi_device_control_integrity import DispatchPathKind
+
         self.assertIn("command_router_canonical", DispatchPathKind._value2member_map_)
 
     def test_device_router_substrate_present(self):
         from core.multi_device_control_integrity import DispatchPathKind
+
         self.assertIn("device_router_substrate", DispatchPathKind._value2member_map_)
 
     def test_coordinator_legacy_present(self):
         from core.multi_device_control_integrity import DispatchPathKind
+
         self.assertIn("coordinator_legacy", DispatchPathKind._value2member_map_)
 
     def test_parallel_legacy_present(self):
         from core.multi_device_control_integrity import DispatchPathKind
+
         self.assertIn("parallel_legacy", DispatchPathKind._value2member_map_)
 
     def test_unknown_present(self):
         from core.multi_device_control_integrity import DispatchPathKind
+
         self.assertIn("unknown", DispatchPathKind._value2member_map_)
 
 
@@ -233,22 +261,27 @@ class TestF_FormationTruthConsistency(unittest.TestCase):
 
     def test_consistent_present(self):
         from core.multi_device_control_integrity import FormationTruthConsistency
+
         self.assertIn("consistent", FormationTruthConsistency._value2member_map_)
 
     def test_participation_drift_present(self):
         from core.multi_device_control_integrity import FormationTruthConsistency
+
         self.assertIn("participation_drift", FormationTruthConsistency._value2member_map_)
 
     def test_readiness_drift_present(self):
         from core.multi_device_control_integrity import FormationTruthConsistency
+
         self.assertIn("readiness_drift", FormationTruthConsistency._value2member_map_)
 
     def test_formation_missing_present(self):
         from core.multi_device_control_integrity import FormationTruthConsistency
+
         self.assertIn("formation_missing", FormationTruthConsistency._value2member_map_)
 
     def test_unknown_present(self):
         from core.multi_device_control_integrity import FormationTruthConsistency
+
         self.assertIn("unknown", FormationTruthConsistency._value2member_map_)
 
 
@@ -257,22 +290,27 @@ class TestG_ControlSemanticKind(unittest.TestCase):
 
     def test_local_execution_present(self):
         from core.multi_device_control_integrity import ControlSemanticKind
+
         self.assertIn("local_execution", ControlSemanticKind._value2member_map_)
 
     def test_remote_dispatch_present(self):
         from core.multi_device_control_integrity import ControlSemanticKind
+
         self.assertIn("remote_dispatch", ControlSemanticKind._value2member_map_)
 
     def test_takeover_present(self):
         from core.multi_device_control_integrity import ControlSemanticKind
+
         self.assertIn("takeover", ControlSemanticKind._value2member_map_)
 
     def test_hybrid_present(self):
         from core.multi_device_control_integrity import ControlSemanticKind
+
         self.assertIn("hybrid", ControlSemanticKind._value2member_map_)
 
     def test_unknown_present(self):
         from core.multi_device_control_integrity import ControlSemanticKind
+
         self.assertIn("unknown", ControlSemanticKind._value2member_map_)
 
 
@@ -281,22 +319,27 @@ class TestH_ResultSurfaceKind(unittest.TestCase):
 
     def test_canonical_full_present(self):
         from core.multi_device_control_integrity import ResultSurfaceKind
+
         self.assertIn("canonical_full", ResultSurfaceKind._value2member_map_)
 
     def test_canonical_partial_present(self):
         from core.multi_device_control_integrity import ResultSurfaceKind
+
         self.assertIn("canonical_partial", ResultSurfaceKind._value2member_map_)
 
     def test_transport_local_only_present(self):
         from core.multi_device_control_integrity import ResultSurfaceKind
+
         self.assertIn("transport_local_only", ResultSurfaceKind._value2member_map_)
 
     def test_coordinator_only_present(self):
         from core.multi_device_control_integrity import ResultSurfaceKind
+
         self.assertIn("coordinator_only", ResultSurfaceKind._value2member_map_)
 
     def test_unknown_present(self):
         from core.multi_device_control_integrity import ResultSurfaceKind
+
         self.assertIn("unknown", ResultSurfaceKind._value2member_map_)
 
 
@@ -304,7 +347,8 @@ class TestI_EntryUnificationRecord(unittest.TestCase):
     """I) EntryUnificationRecord structure and round-trip."""
 
     def test_default_construction(self):
-        from core.multi_device_control_integrity import EntryUnificationRecord, EntryUnificationKind
+        from core.multi_device_control_integrity import EntryUnificationKind, EntryUnificationRecord
+
         r = EntryUnificationRecord()
         self.assertIsInstance(r.record_id, str)
         self.assertEqual(r.entry_kind, EntryUnificationKind.UNKNOWN)
@@ -312,19 +356,32 @@ class TestI_EntryUnificationRecord(unittest.TestCase):
 
     def test_to_dict_keys(self):
         from core.multi_device_control_integrity import EntryUnificationRecord
+
         r = EntryUnificationRecord(task_id="t1", source_device_id="dev1")
         d = r.to_dict()
-        for key in ("record_id", "task_id", "trace_id", "source_device_id",
-                    "entry_kind", "is_canonical", "entry_point", "reasons",
-                    "timestamp", "extra"):
+        for key in (
+            "record_id",
+            "task_id",
+            "trace_id",
+            "source_device_id",
+            "entry_kind",
+            "is_canonical",
+            "entry_point",
+            "reasons",
+            "timestamp",
+            "extra",
+        ):
             self.assertIn(key, d, f"key {key!r} missing from to_dict()")
 
     def test_to_dict_json_serialisable(self):
         from core.multi_device_control_integrity import (
-            EntryUnificationRecord, EntryUnificationKind,
+            EntryUnificationKind,
+            EntryUnificationRecord,
         )
+
         r = EntryUnificationRecord(
-            task_id="t1", source_device_id="dev1",
+            task_id="t1",
+            source_device_id="dev1",
             entry_kind=EntryUnificationKind.CANONICAL,
             reasons=["via_command_router"],
         )
@@ -332,10 +389,13 @@ class TestI_EntryUnificationRecord(unittest.TestCase):
 
     def test_from_dict_round_trip(self):
         from core.multi_device_control_integrity import (
-            EntryUnificationRecord, EntryUnificationKind,
+            EntryUnificationKind,
+            EntryUnificationRecord,
         )
+
         r = EntryUnificationRecord(
-            task_id="t1", source_device_id="dev1",
+            task_id="t1",
+            source_device_id="dev1",
             entry_kind=EntryUnificationKind.LEGACY_COORDINATOR_BYPASS,
             is_canonical=False,
             entry_point="core.routes.devices.cross_device_task",
@@ -352,6 +412,7 @@ class TestJ_DispatchAuthorityRecord(unittest.TestCase):
 
     def test_default_construction(self):
         from core.multi_device_control_integrity import DispatchAuthorityRecord, DispatchPathKind
+
         r = DispatchAuthorityRecord()
         self.assertIsInstance(r.record_id, str)
         self.assertEqual(r.dispatch_path, DispatchPathKind.UNKNOWN)
@@ -359,17 +420,30 @@ class TestJ_DispatchAuthorityRecord(unittest.TestCase):
 
     def test_to_dict_keys(self):
         from core.multi_device_control_integrity import DispatchAuthorityRecord
+
         r = DispatchAuthorityRecord(task_id="t1")
         d = r.to_dict()
-        for key in ("record_id", "task_id", "trace_id", "source_device_id",
-                    "target_device_ids", "dispatch_path", "is_canonical",
-                    "dispatcher_module", "reasons", "timestamp", "extra"):
+        for key in (
+            "record_id",
+            "task_id",
+            "trace_id",
+            "source_device_id",
+            "target_device_ids",
+            "dispatch_path",
+            "is_canonical",
+            "dispatcher_module",
+            "reasons",
+            "timestamp",
+            "extra",
+        ):
             self.assertIn(key, d)
 
     def test_json_serialisable(self):
         from core.multi_device_control_integrity import (
-            DispatchAuthorityRecord, DispatchPathKind,
+            DispatchAuthorityRecord,
+            DispatchPathKind,
         )
+
         r = DispatchAuthorityRecord(
             task_id="t1",
             target_device_ids=["dev2", "dev3"],
@@ -379,8 +453,10 @@ class TestJ_DispatchAuthorityRecord(unittest.TestCase):
 
     def test_from_dict_round_trip(self):
         from core.multi_device_control_integrity import (
-            DispatchAuthorityRecord, DispatchPathKind,
+            DispatchAuthorityRecord,
+            DispatchPathKind,
         )
+
         r = DispatchAuthorityRecord(
             task_id="t2",
             source_device_id="src",
@@ -399,26 +475,42 @@ class TestK_FormationTruthRecord(unittest.TestCase):
 
     def test_default_construction(self):
         from core.multi_device_control_integrity import (
-            FormationTruthRecord, FormationTruthConsistency,
+            FormationTruthConsistency,
+            FormationTruthRecord,
         )
+
         r = FormationTruthRecord()
         self.assertEqual(r.consistency, FormationTruthConsistency.UNKNOWN)
         self.assertFalse(r.is_consistent)
 
     def test_to_dict_keys(self):
         from core.multi_device_control_integrity import FormationTruthRecord
+
         r = FormationTruthRecord(task_id="t1", formation_id="f1")
         d = r.to_dict()
-        for key in ("record_id", "task_id", "trace_id", "formation_id",
-                    "consistency", "is_consistent", "member_device_ids",
-                    "ineligible_members", "drift_reasons", "source_device_id",
-                    "primary_device_id", "timestamp", "extra"):
+        for key in (
+            "record_id",
+            "task_id",
+            "trace_id",
+            "formation_id",
+            "consistency",
+            "is_consistent",
+            "member_device_ids",
+            "ineligible_members",
+            "drift_reasons",
+            "source_device_id",
+            "primary_device_id",
+            "timestamp",
+            "extra",
+        ):
             self.assertIn(key, d)
 
     def test_from_dict_round_trip(self):
         from core.multi_device_control_integrity import (
-            FormationTruthRecord, FormationTruthConsistency,
+            FormationTruthConsistency,
+            FormationTruthRecord,
         )
+
         r = FormationTruthRecord(
             task_id="t3",
             formation_id="form-abc",
@@ -438,26 +530,42 @@ class TestL_ControlSemanticRecord(unittest.TestCase):
 
     def test_default_construction(self):
         from core.multi_device_control_integrity import (
-            ControlSemanticRecord, ControlSemanticKind,
+            ControlSemanticKind,
+            ControlSemanticRecord,
         )
+
         r = ControlSemanticRecord()
         self.assertEqual(r.control_kind, ControlSemanticKind.UNKNOWN)
         self.assertFalse(r.is_semantically_clear)
 
     def test_to_dict_keys(self):
         from core.multi_device_control_integrity import ControlSemanticRecord
+
         r = ControlSemanticRecord(task_id="t1")
         d = r.to_dict()
-        for key in ("record_id", "task_id", "trace_id", "source_device_id",
-                    "target_device_id", "control_kind", "is_local",
-                    "is_remote_dispatch", "is_takeover", "is_semantically_clear",
-                    "ambiguity_reasons", "timestamp", "extra"):
+        for key in (
+            "record_id",
+            "task_id",
+            "trace_id",
+            "source_device_id",
+            "target_device_id",
+            "control_kind",
+            "is_local",
+            "is_remote_dispatch",
+            "is_takeover",
+            "is_semantically_clear",
+            "ambiguity_reasons",
+            "timestamp",
+            "extra",
+        ):
             self.assertIn(key, d)
 
     def test_from_dict_round_trip(self):
         from core.multi_device_control_integrity import (
-            ControlSemanticRecord, ControlSemanticKind,
+            ControlSemanticKind,
+            ControlSemanticRecord,
         )
+
         r = ControlSemanticRecord(
             task_id="t4",
             source_device_id="phone",
@@ -476,24 +584,39 @@ class TestM_ResultSurfaceRecord(unittest.TestCase):
     """M) ResultSurfaceRecord structure and round-trip."""
 
     def test_default_construction(self):
-        from core.multi_device_control_integrity import ResultSurfaceRecord, ResultSurfaceKind
+        from core.multi_device_control_integrity import ResultSurfaceKind, ResultSurfaceRecord
+
         r = ResultSurfaceRecord()
         self.assertEqual(r.surface_kind, ResultSurfaceKind.UNKNOWN)
         self.assertFalse(r.is_canonically_surfaced)
 
     def test_to_dict_keys(self):
         from core.multi_device_control_integrity import ResultSurfaceRecord
+
         r = ResultSurfaceRecord(task_id="t1")
         d = r.to_dict()
-        for key in ("record_id", "task_id", "trace_id", "source_device_id",
-                    "target_device_ids", "surface_kind", "is_canonically_surfaced",
-                    "result_envelope_produced", "operator_surface_updated",
-                    "task_graph_updated", "replay_foundation_updated",
-                    "projection_updated", "surface_gap_reasons", "timestamp", "extra"):
+        for key in (
+            "record_id",
+            "task_id",
+            "trace_id",
+            "source_device_id",
+            "target_device_ids",
+            "surface_kind",
+            "is_canonically_surfaced",
+            "result_envelope_produced",
+            "operator_surface_updated",
+            "task_graph_updated",
+            "replay_foundation_updated",
+            "projection_updated",
+            "surface_gap_reasons",
+            "timestamp",
+            "extra",
+        ):
             self.assertIn(key, d)
 
     def test_from_dict_round_trip(self):
-        from core.multi_device_control_integrity import ResultSurfaceRecord, ResultSurfaceKind
+        from core.multi_device_control_integrity import ResultSurfaceKind, ResultSurfaceRecord
+
         r = ResultSurfaceRecord(
             task_id="t5",
             surface_kind=ResultSurfaceKind.CANONICAL_FULL,
@@ -511,11 +634,13 @@ class TestN_ResidualIntegrityGap(unittest.TestCase):
 
     def test_default_construction(self):
         from core.multi_device_control_integrity import ResidualIntegrityGap
+
         g = ResidualIntegrityGap()
         self.assertFalse(g.is_resolved)
 
     def test_to_dict_keys(self):
         from core.multi_device_control_integrity import ResidualIntegrityGap
+
         g = ResidualIntegrityGap(
             gap_id="GAP-517-001",
             area="entry_unification",
@@ -523,13 +648,21 @@ class TestN_ResidualIntegrityGap(unittest.TestCase):
             description="test gap",
         )
         d = g.to_dict()
-        for key in ("gap_id", "area", "severity", "description",
-                    "affected_modules", "recommended_action",
-                    "is_resolved", "resolution_note"):
+        for key in (
+            "gap_id",
+            "area",
+            "severity",
+            "description",
+            "affected_modules",
+            "recommended_action",
+            "is_resolved",
+            "resolution_note",
+        ):
             self.assertIn(key, d)
 
     def test_json_serialisable(self):
         from core.multi_device_control_integrity import ResidualIntegrityGap
+
         g = ResidualIntegrityGap(gap_id="GAP-517-001", area="entry_unification")
         json.dumps(g.to_dict())
 
@@ -539,28 +672,39 @@ class TestO_MultiDeviceIntegritySnapshot(unittest.TestCase):
 
     def test_default_construction(self):
         from core.multi_device_control_integrity import MultiDeviceIntegritySnapshot
+
         s = MultiDeviceIntegritySnapshot()
         self.assertIsInstance(s.snapshot_id, str)
         self.assertEqual(s.canonical_entry_count, 0)
 
     def test_to_dict_keys(self):
         from core.multi_device_control_integrity import MultiDeviceIntegritySnapshot
+
         s = MultiDeviceIntegritySnapshot()
         d = s.to_dict()
-        for key in ("snapshot_id", "recent_entry_records",
-                    "recent_dispatch_records", "recent_formation_records",
-                    "recent_control_semantic_records",
-                    "recent_result_surface_records", "residual_gaps",
-                    "canonical_entry_count", "legacy_entry_count",
-                    "canonical_dispatch_count", "legacy_dispatch_count",
-                    "timestamp", "authority"):
+        for key in (
+            "snapshot_id",
+            "recent_entry_records",
+            "recent_dispatch_records",
+            "recent_formation_records",
+            "recent_control_semantic_records",
+            "recent_result_surface_records",
+            "residual_gaps",
+            "canonical_entry_count",
+            "legacy_entry_count",
+            "canonical_dispatch_count",
+            "legacy_dispatch_count",
+            "timestamp",
+            "authority",
+        ):
             self.assertIn(key, d)
 
     def test_authority_in_to_dict(self):
         from core.multi_device_control_integrity import (
-            MultiDeviceIntegritySnapshot,
             MULTI_DEVICE_CONTROL_INTEGRITY_AUTHORITY,
+            MultiDeviceIntegritySnapshot,
         )
+
         s = MultiDeviceIntegritySnapshot()
         self.assertEqual(s.to_dict()["authority"], MULTI_DEVICE_CONTROL_INTEGRITY_AUTHORITY)
 
@@ -570,8 +714,10 @@ class TestP_BuildEntryUnificationRecord(unittest.TestCase):
 
     def test_canonical_entry(self):
         from core.multi_device_control_integrity import (
-            build_entry_unification_record, EntryUnificationKind,
+            EntryUnificationKind,
+            build_entry_unification_record,
         )
+
         r = build_entry_unification_record(
             task_id="t1",
             source_device_id="dev1",
@@ -582,8 +728,10 @@ class TestP_BuildEntryUnificationRecord(unittest.TestCase):
 
     def test_legacy_coordinator_bypass(self):
         from core.multi_device_control_integrity import (
-            build_entry_unification_record, EntryUnificationKind,
+            EntryUnificationKind,
+            build_entry_unification_record,
         )
+
         r = build_entry_unification_record(
             task_id="t2",
             source_device_id="dev1",
@@ -593,8 +741,10 @@ class TestP_BuildEntryUnificationRecord(unittest.TestCase):
 
     def test_legacy_route_bypass(self):
         from core.multi_device_control_integrity import (
-            build_entry_unification_record, EntryUnificationKind,
+            EntryUnificationKind,
+            build_entry_unification_record,
         )
+
         r = build_entry_unification_record(
             entry_kind=EntryUnificationKind.LEGACY_ROUTE_BYPASS,
         )
@@ -602,8 +752,10 @@ class TestP_BuildEntryUnificationRecord(unittest.TestCase):
 
     def test_unknown_not_canonical(self):
         from core.multi_device_control_integrity import (
-            build_entry_unification_record, EntryUnificationKind,
+            EntryUnificationKind,
+            build_entry_unification_record,
         )
+
         r = build_entry_unification_record(
             entry_kind=EntryUnificationKind.UNKNOWN,
         )
@@ -611,8 +763,10 @@ class TestP_BuildEntryUnificationRecord(unittest.TestCase):
 
     def test_reasons_propagated(self):
         from core.multi_device_control_integrity import (
-            build_entry_unification_record, EntryUnificationKind,
+            EntryUnificationKind,
+            build_entry_unification_record,
         )
+
         r = build_entry_unification_record(
             entry_kind=EntryUnificationKind.CANONICAL,
             reasons=["via_command_router", "task_envelope_normalised"],
@@ -625,8 +779,10 @@ class TestQ_BuildDispatchAuthorityRecord(unittest.TestCase):
 
     def test_command_router_is_canonical(self):
         from core.multi_device_control_integrity import (
-            build_dispatch_authority_record, DispatchPathKind,
+            DispatchPathKind,
+            build_dispatch_authority_record,
         )
+
         r = build_dispatch_authority_record(
             task_id="t1",
             dispatch_path=DispatchPathKind.COMMAND_ROUTER_CANONICAL,
@@ -635,8 +791,10 @@ class TestQ_BuildDispatchAuthorityRecord(unittest.TestCase):
 
     def test_device_router_substrate_not_canonical(self):
         from core.multi_device_control_integrity import (
-            build_dispatch_authority_record, DispatchPathKind,
+            DispatchPathKind,
+            build_dispatch_authority_record,
         )
+
         r = build_dispatch_authority_record(
             dispatch_path=DispatchPathKind.DEVICE_ROUTER_SUBSTRATE,
         )
@@ -644,8 +802,10 @@ class TestQ_BuildDispatchAuthorityRecord(unittest.TestCase):
 
     def test_coordinator_legacy_not_canonical(self):
         from core.multi_device_control_integrity import (
-            build_dispatch_authority_record, DispatchPathKind,
+            DispatchPathKind,
+            build_dispatch_authority_record,
         )
+
         r = build_dispatch_authority_record(
             dispatch_path=DispatchPathKind.COORDINATOR_LEGACY,
         )
@@ -653,8 +813,10 @@ class TestQ_BuildDispatchAuthorityRecord(unittest.TestCase):
 
     def test_target_device_ids_propagated(self):
         from core.multi_device_control_integrity import (
-            build_dispatch_authority_record, DispatchPathKind,
+            DispatchPathKind,
+            build_dispatch_authority_record,
         )
+
         r = build_dispatch_authority_record(
             task_id="t2",
             target_device_ids=["dev2", "dev3"],
@@ -669,8 +831,10 @@ class TestR_BuildFormationTruthRecord(unittest.TestCase):
 
     def test_consistent_verdict(self):
         from core.multi_device_control_integrity import (
-            build_formation_truth_record, FormationTruthConsistency,
+            FormationTruthConsistency,
+            build_formation_truth_record,
         )
+
         r = build_formation_truth_record(
             task_id="t1",
             consistency=FormationTruthConsistency.CONSISTENT,
@@ -680,8 +844,10 @@ class TestR_BuildFormationTruthRecord(unittest.TestCase):
 
     def test_participation_drift_not_consistent(self):
         from core.multi_device_control_integrity import (
-            build_formation_truth_record, FormationTruthConsistency,
+            FormationTruthConsistency,
+            build_formation_truth_record,
         )
+
         r = build_formation_truth_record(
             consistency=FormationTruthConsistency.PARTICIPATION_DRIFT,
             ineligible_members=["dev2"],
@@ -692,8 +858,10 @@ class TestR_BuildFormationTruthRecord(unittest.TestCase):
 
     def test_formation_missing_not_consistent(self):
         from core.multi_device_control_integrity import (
-            build_formation_truth_record, FormationTruthConsistency,
+            FormationTruthConsistency,
+            build_formation_truth_record,
         )
+
         r = build_formation_truth_record(
             consistency=FormationTruthConsistency.FORMATION_MISSING,
         )
@@ -705,8 +873,10 @@ class TestS_BuildControlSemanticRecord(unittest.TestCase):
 
     def test_local_execution_clear(self):
         from core.multi_device_control_integrity import (
-            build_control_semantic_record, ControlSemanticKind,
+            ControlSemanticKind,
+            build_control_semantic_record,
         )
+
         r = build_control_semantic_record(
             task_id="t1",
             source_device_id="phone",
@@ -718,8 +888,10 @@ class TestS_BuildControlSemanticRecord(unittest.TestCase):
 
     def test_remote_dispatch_clear(self):
         from core.multi_device_control_integrity import (
-            build_control_semantic_record, ControlSemanticKind,
+            ControlSemanticKind,
+            build_control_semantic_record,
         )
+
         r = build_control_semantic_record(
             task_id="t1",
             source_device_id="phone",
@@ -732,8 +904,10 @@ class TestS_BuildControlSemanticRecord(unittest.TestCase):
 
     def test_takeover_flagged(self):
         from core.multi_device_control_integrity import (
-            build_control_semantic_record, ControlSemanticKind,
+            ControlSemanticKind,
+            build_control_semantic_record,
         )
+
         r = build_control_semantic_record(
             source_device_id="phone",
             target_device_id="tablet",
@@ -744,8 +918,10 @@ class TestS_BuildControlSemanticRecord(unittest.TestCase):
 
     def test_unknown_not_clear(self):
         from core.multi_device_control_integrity import (
-            build_control_semantic_record, ControlSemanticKind,
+            ControlSemanticKind,
+            build_control_semantic_record,
         )
+
         r = build_control_semantic_record(
             control_kind=ControlSemanticKind.UNKNOWN,
         )
@@ -753,8 +929,10 @@ class TestS_BuildControlSemanticRecord(unittest.TestCase):
 
     def test_ambiguity_reasons_make_unclear(self):
         from core.multi_device_control_integrity import (
-            build_control_semantic_record, ControlSemanticKind,
+            ControlSemanticKind,
+            build_control_semantic_record,
         )
+
         r = build_control_semantic_record(
             source_device_id="phone",
             target_device_id="desktop",
@@ -769,8 +947,10 @@ class TestT_BuildResultSurfaceRecord(unittest.TestCase):
 
     def test_full_canonical_when_all_surfaces_true(self):
         from core.multi_device_control_integrity import (
-            build_result_surface_record, ResultSurfaceKind,
+            ResultSurfaceKind,
+            build_result_surface_record,
         )
+
         r = build_result_surface_record(
             task_id="t1",
             result_envelope_produced=True,
@@ -783,8 +963,10 @@ class TestT_BuildResultSurfaceRecord(unittest.TestCase):
 
     def test_partial_when_some_surfaces(self):
         from core.multi_device_control_integrity import (
-            build_result_surface_record, ResultSurfaceKind,
+            ResultSurfaceKind,
+            build_result_surface_record,
         )
+
         r = build_result_surface_record(
             task_id="t2",
             result_envelope_produced=True,
@@ -797,14 +979,17 @@ class TestT_BuildResultSurfaceRecord(unittest.TestCase):
 
     def test_transport_local_when_no_surfaces(self):
         from core.multi_device_control_integrity import (
-            build_result_surface_record, ResultSurfaceKind,
+            ResultSurfaceKind,
+            build_result_surface_record,
         )
+
         r = build_result_surface_record(task_id="t3")
         self.assertEqual(r.surface_kind, ResultSurfaceKind.TRANSPORT_LOCAL_ONLY)
         self.assertFalse(r.is_canonically_surfaced)
 
     def test_target_device_ids_propagated(self):
         from core.multi_device_control_integrity import build_result_surface_record
+
         r = build_result_surface_record(
             task_id="t4",
             target_device_ids=["dev1", "dev2"],
@@ -823,14 +1008,13 @@ class TestU_RecordIntegrityEvent(unittest.TestCase):
 
     def test_entry_record_added(self):
         from core.multi_device_control_integrity import (
-            record_integrity_event,
-            build_entry_unification_record,
             EntryUnificationKind,
+            build_entry_unification_record,
             get_multi_device_integrity_runtime,
+            record_integrity_event,
         )
-        r = build_entry_unification_record(
-            task_id="t1", entry_kind=EntryUnificationKind.CANONICAL
-        )
+
+        r = build_entry_unification_record(task_id="t1", entry_kind=EntryUnificationKind.CANONICAL)
         record_integrity_event(entry_record=r)
         rt = get_multi_device_integrity_runtime()
         snap = rt.snapshot()
@@ -838,14 +1022,13 @@ class TestU_RecordIntegrityEvent(unittest.TestCase):
 
     def test_dispatch_record_added(self):
         from core.multi_device_control_integrity import (
-            record_integrity_event,
-            build_dispatch_authority_record,
             DispatchPathKind,
+            build_dispatch_authority_record,
             get_multi_device_integrity_runtime,
+            record_integrity_event,
         )
-        r = build_dispatch_authority_record(
-            task_id="t2", dispatch_path=DispatchPathKind.COORDINATOR_LEGACY
-        )
+
+        r = build_dispatch_authority_record(task_id="t2", dispatch_path=DispatchPathKind.COORDINATOR_LEGACY)
         record_integrity_event(dispatch_record=r)
         rt = get_multi_device_integrity_runtime()
         snap = rt.snapshot()
@@ -853,25 +1036,25 @@ class TestU_RecordIntegrityEvent(unittest.TestCase):
 
     def test_formation_record_added(self):
         from core.multi_device_control_integrity import (
-            record_integrity_event,
-            build_formation_truth_record,
             FormationTruthConsistency,
+            build_formation_truth_record,
             get_multi_device_integrity_runtime,
+            record_integrity_event,
         )
-        r = build_formation_truth_record(
-            task_id="t3", consistency=FormationTruthConsistency.CONSISTENT
-        )
+
+        r = build_formation_truth_record(task_id="t3", consistency=FormationTruthConsistency.CONSISTENT)
         record_integrity_event(formation_record=r)
         snap = get_multi_device_integrity_runtime().snapshot()
         self.assertEqual(len(snap.recent_formation_records), 1)
 
     def test_control_record_added(self):
         from core.multi_device_control_integrity import (
-            record_integrity_event,
-            build_control_semantic_record,
             ControlSemanticKind,
+            build_control_semantic_record,
             get_multi_device_integrity_runtime,
+            record_integrity_event,
         )
+
         r = build_control_semantic_record(
             task_id="t4",
             source_device_id="dev1",
@@ -884,10 +1067,11 @@ class TestU_RecordIntegrityEvent(unittest.TestCase):
 
     def test_result_record_added(self):
         from core.multi_device_control_integrity import (
-            record_integrity_event,
             build_result_surface_record,
             get_multi_device_integrity_runtime,
+            record_integrity_event,
         )
+
         r = build_result_surface_record(task_id="t5")
         record_integrity_event(result_record=r)
         snap = get_multi_device_integrity_runtime().snapshot()
@@ -895,20 +1079,17 @@ class TestU_RecordIntegrityEvent(unittest.TestCase):
 
     def test_multiple_records_same_call(self):
         from core.multi_device_control_integrity import (
-            record_integrity_event,
-            build_entry_unification_record,
-            build_dispatch_authority_record,
-            EntryUnificationKind,
             DispatchPathKind,
+            EntryUnificationKind,
+            build_dispatch_authority_record,
+            build_entry_unification_record,
             get_multi_device_integrity_runtime,
+            record_integrity_event,
         )
+
         record_integrity_event(
-            entry_record=build_entry_unification_record(
-                entry_kind=EntryUnificationKind.CANONICAL
-            ),
-            dispatch_record=build_dispatch_authority_record(
-                dispatch_path=DispatchPathKind.COMMAND_ROUTER_CANONICAL
-            ),
+            entry_record=build_entry_unification_record(entry_kind=EntryUnificationKind.CANONICAL),
+            dispatch_record=build_dispatch_authority_record(dispatch_path=DispatchPathKind.COMMAND_ROUTER_CANONICAL),
         )
         snap = get_multi_device_integrity_runtime().snapshot()
         self.assertEqual(len(snap.recent_entry_records), 1)
@@ -926,11 +1107,13 @@ class TestV_RecordIntegrityEventWarnings(unittest.TestCase):
 
     def test_legacy_entry_warning(self):
         import logging
+
         from core.multi_device_control_integrity import (
-            record_integrity_event,
-            build_entry_unification_record,
             EntryUnificationKind,
+            build_entry_unification_record,
+            record_integrity_event,
         )
+
         with self.assertLogs("Galaxy.MultiDeviceControlIntegrity", level=logging.WARNING):
             record_integrity_event(
                 entry_record=build_entry_unification_record(
@@ -941,11 +1124,13 @@ class TestV_RecordIntegrityEventWarnings(unittest.TestCase):
 
     def test_legacy_dispatch_warning(self):
         import logging
+
         from core.multi_device_control_integrity import (
-            record_integrity_event,
-            build_dispatch_authority_record,
             DispatchPathKind,
+            build_dispatch_authority_record,
+            record_integrity_event,
         )
+
         with self.assertLogs("Galaxy.MultiDeviceControlIntegrity", level=logging.WARNING):
             record_integrity_event(
                 dispatch_record=build_dispatch_authority_record(
@@ -956,11 +1141,13 @@ class TestV_RecordIntegrityEventWarnings(unittest.TestCase):
 
     def test_formation_drift_warning(self):
         import logging
+
         from core.multi_device_control_integrity import (
-            record_integrity_event,
-            build_formation_truth_record,
             FormationTruthConsistency,
+            build_formation_truth_record,
+            record_integrity_event,
         )
+
         with self.assertLogs("Galaxy.MultiDeviceControlIntegrity", level=logging.WARNING):
             record_integrity_event(
                 formation_record=build_formation_truth_record(
@@ -971,24 +1158,26 @@ class TestV_RecordIntegrityEventWarnings(unittest.TestCase):
 
     def test_result_surface_incomplete_warning(self):
         import logging
+
         from core.multi_device_control_integrity import (
-            record_integrity_event,
             build_result_surface_record,
+            record_integrity_event,
         )
+
         # A record with no surfaces triggers a warning
         with self.assertLogs("Galaxy.MultiDeviceControlIntegrity", level=logging.WARNING):
-            record_integrity_event(
-                result_record=build_result_surface_record(task_id="t4")
-            )
+            record_integrity_event(result_record=build_result_surface_record(task_id="t4"))
 
     def test_canonical_entry_no_warning(self):
         """No warning emitted for canonical entries."""
         import logging
+
         from core.multi_device_control_integrity import (
-            record_integrity_event,
-            build_entry_unification_record,
             EntryUnificationKind,
+            build_entry_unification_record,
+            record_integrity_event,
         )
+
         # Should not raise (no WARNING logs expected)
         logger = logging.getLogger("Galaxy.MultiDeviceControlIntegrity")
         with self.assertRaises(AssertionError):
@@ -1014,6 +1203,7 @@ class TestW_SingletonManagement(unittest.TestCase):
 
     def test_get_returns_same_instance(self):
         from core.multi_device_control_integrity import get_multi_device_integrity_runtime
+
         rt1 = get_multi_device_integrity_runtime()
         rt2 = get_multi_device_integrity_runtime()
         self.assertIs(rt1, rt2)
@@ -1023,6 +1213,7 @@ class TestW_SingletonManagement(unittest.TestCase):
             get_multi_device_integrity_runtime,
             reset_multi_device_integrity_runtime,
         )
+
         rt1 = get_multi_device_integrity_runtime()
         reset_multi_device_integrity_runtime()
         rt2 = get_multi_device_integrity_runtime()
@@ -1030,17 +1221,14 @@ class TestW_SingletonManagement(unittest.TestCase):
 
     def test_reset_clears_records(self):
         from core.multi_device_control_integrity import (
-            record_integrity_event,
-            build_entry_unification_record,
             EntryUnificationKind,
+            build_entry_unification_record,
             get_multi_device_integrity_runtime,
+            record_integrity_event,
             reset_multi_device_integrity_runtime,
         )
-        record_integrity_event(
-            entry_record=build_entry_unification_record(
-                entry_kind=EntryUnificationKind.CANONICAL
-            )
-        )
+
+        record_integrity_event(entry_record=build_entry_unification_record(entry_kind=EntryUnificationKind.CANONICAL))
         reset_multi_device_integrity_runtime()
         snap = get_multi_device_integrity_runtime().snapshot()
         self.assertEqual(len(snap.recent_entry_records), 0)
@@ -1057,10 +1245,11 @@ class TestX_RingBufferOverflow(unittest.TestCase):
 
     def test_entry_overflow_no_crash(self):
         from core.multi_device_control_integrity import (
+            EntryUnificationKind,
             MultiDeviceControlIntegrityRuntime,
             build_entry_unification_record,
-            EntryUnificationKind,
         )
+
         rt = MultiDeviceControlIntegrityRuntime(max_records=5)
         for i in range(10):
             rt.append_entry(
@@ -1074,10 +1263,11 @@ class TestX_RingBufferOverflow(unittest.TestCase):
 
     def test_dispatch_overflow_no_crash(self):
         from core.multi_device_control_integrity import (
+            DispatchPathKind,
             MultiDeviceControlIntegrityRuntime,
             build_dispatch_authority_record,
-            DispatchPathKind,
         )
+
         rt = MultiDeviceControlIntegrityRuntime(max_records=3)
         for i in range(6):
             rt.append_dispatch(
@@ -1101,21 +1291,18 @@ class TestY_Counters(unittest.TestCase):
 
     def test_entry_canonical_counter(self):
         from core.multi_device_control_integrity import (
-            record_integrity_event,
-            build_entry_unification_record,
             EntryUnificationKind,
+            build_entry_unification_record,
             get_multi_device_integrity_runtime,
+            record_integrity_event,
         )
+
         for _ in range(3):
             record_integrity_event(
-                entry_record=build_entry_unification_record(
-                    entry_kind=EntryUnificationKind.CANONICAL
-                )
+                entry_record=build_entry_unification_record(entry_kind=EntryUnificationKind.CANONICAL)
             )
         record_integrity_event(
-            entry_record=build_entry_unification_record(
-                entry_kind=EntryUnificationKind.LEGACY_ROUTE_BYPASS
-            )
+            entry_record=build_entry_unification_record(entry_kind=EntryUnificationKind.LEGACY_ROUTE_BYPASS)
         )
         snap = get_multi_device_integrity_runtime().snapshot()
         self.assertEqual(snap.canonical_entry_count, 3)
@@ -1123,20 +1310,17 @@ class TestY_Counters(unittest.TestCase):
 
     def test_dispatch_canonical_counter(self):
         from core.multi_device_control_integrity import (
-            record_integrity_event,
-            build_dispatch_authority_record,
             DispatchPathKind,
+            build_dispatch_authority_record,
             get_multi_device_integrity_runtime,
+            record_integrity_event,
+        )
+
+        record_integrity_event(
+            dispatch_record=build_dispatch_authority_record(dispatch_path=DispatchPathKind.COMMAND_ROUTER_CANONICAL)
         )
         record_integrity_event(
-            dispatch_record=build_dispatch_authority_record(
-                dispatch_path=DispatchPathKind.COMMAND_ROUTER_CANONICAL
-            )
-        )
-        record_integrity_event(
-            dispatch_record=build_dispatch_authority_record(
-                dispatch_path=DispatchPathKind.COORDINATOR_LEGACY
-            )
+            dispatch_record=build_dispatch_authority_record(dispatch_path=DispatchPathKind.COORDINATOR_LEGACY)
         )
         snap = get_multi_device_integrity_runtime().snapshot()
         self.assertEqual(snap.canonical_dispatch_count, 1)
@@ -1148,12 +1332,14 @@ class TestZ_ResidualGapCatalog(unittest.TestCase):
 
     def test_get_residual_integrity_gaps_returns_list(self):
         from core.multi_device_control_integrity import get_residual_integrity_gaps
+
         gaps = get_residual_integrity_gaps()
         self.assertIsInstance(gaps, list)
         self.assertGreater(len(gaps), 0)
 
     def test_all_gaps_have_required_fields(self):
         from core.multi_device_control_integrity import get_residual_integrity_gaps
+
         for gap in get_residual_integrity_gaps():
             self.assertTrue(gap.gap_id, f"gap_id empty for gap {gap!r}")
             self.assertTrue(gap.area, f"area empty for gap {gap.gap_id!r}")
@@ -1161,39 +1347,37 @@ class TestZ_ResidualGapCatalog(unittest.TestCase):
 
     def test_entry_unification_area_has_gaps(self):
         from core.multi_device_control_integrity import get_residual_integrity_gaps
+
         entry_gaps = [g for g in get_residual_integrity_gaps() if g.area == "entry_unification"]
         self.assertGreater(len(entry_gaps), 0, "No entry_unification gaps in catalog")
 
     def test_dispatch_authority_area_has_gaps(self):
         from core.multi_device_control_integrity import get_residual_integrity_gaps
-        dispatch_gaps = [
-            g for g in get_residual_integrity_gaps() if g.area == "dispatch_authority"
-        ]
+
+        dispatch_gaps = [g for g in get_residual_integrity_gaps() if g.area == "dispatch_authority"]
         self.assertGreater(len(dispatch_gaps), 0, "No dispatch_authority gaps in catalog")
 
     def test_formation_truth_area_has_gaps(self):
         from core.multi_device_control_integrity import get_residual_integrity_gaps
-        formation_gaps = [
-            g for g in get_residual_integrity_gaps() if g.area == "formation_truth"
-        ]
+
+        formation_gaps = [g for g in get_residual_integrity_gaps() if g.area == "formation_truth"]
         self.assertGreater(len(formation_gaps), 0, "No formation_truth gaps in catalog")
 
     def test_control_semantics_area_has_gaps(self):
         from core.multi_device_control_integrity import get_residual_integrity_gaps
-        cs_gaps = [
-            g for g in get_residual_integrity_gaps() if g.area == "control_semantics"
-        ]
+
+        cs_gaps = [g for g in get_residual_integrity_gaps() if g.area == "control_semantics"]
         self.assertGreater(len(cs_gaps), 0, "No control_semantics gaps in catalog")
 
     def test_result_surface_area_has_gaps(self):
         from core.multi_device_control_integrity import get_residual_integrity_gaps
-        rs_gaps = [
-            g for g in get_residual_integrity_gaps() if g.area == "result_surface"
-        ]
+
+        rs_gaps = [g for g in get_residual_integrity_gaps() if g.area == "result_surface"]
         self.assertGreater(len(rs_gaps), 0, "No result_surface gaps in catalog")
 
     def test_gap_ids_stable(self):
         from core.multi_device_control_integrity import get_residual_integrity_gaps
+
         gap_ids = [g.gap_id for g in get_residual_integrity_gaps()]
         self.assertIn("GAP-517-001", gap_ids)
         self.assertIn("GAP-517-003", gap_ids)
@@ -1201,6 +1385,7 @@ class TestZ_ResidualGapCatalog(unittest.TestCase):
 
     def test_all_gaps_json_serialisable(self):
         from core.multi_device_control_integrity import get_residual_integrity_gaps
+
         for gap in get_residual_integrity_gaps():
             json.dumps(gap.to_dict())
 
@@ -1216,28 +1401,33 @@ class TestAA_BuildIntegritySnapshot(unittest.TestCase):
 
     def test_returns_snapshot_instance(self):
         from core.multi_device_control_integrity import (
-            build_integrity_snapshot, MultiDeviceIntegritySnapshot,
+            MultiDeviceIntegritySnapshot,
+            build_integrity_snapshot,
         )
+
         snap = build_integrity_snapshot()
         self.assertIsInstance(snap, MultiDeviceIntegritySnapshot)
 
     def test_snapshot_has_residual_gaps(self):
         from core.multi_device_control_integrity import build_integrity_snapshot
+
         snap = build_integrity_snapshot()
         self.assertGreater(len(snap.residual_gaps), 0)
 
     def test_snapshot_json_serialisable(self):
         from core.multi_device_control_integrity import build_integrity_snapshot
+
         snap = build_integrity_snapshot()
         json.dumps(snap.to_dict())
 
     def test_snapshot_max_recent_respected(self):
         from core.multi_device_control_integrity import (
-            record_integrity_event,
-            build_entry_unification_record,
             EntryUnificationKind,
+            build_entry_unification_record,
             build_integrity_snapshot,
+            record_integrity_event,
         )
+
         for i in range(30):
             record_integrity_event(
                 entry_record=build_entry_unification_record(
@@ -1254,8 +1444,10 @@ class TestBB_SnapshotHelpers(unittest.TestCase):
 
     def test_open_gaps_excludes_resolved(self):
         from core.multi_device_control_integrity import (
-            MultiDeviceIntegritySnapshot, ResidualIntegrityGap,
+            MultiDeviceIntegritySnapshot,
+            ResidualIntegrityGap,
         )
+
         s = MultiDeviceIntegritySnapshot(
             residual_gaps=[
                 ResidualIntegrityGap(gap_id="G1", area="x", is_resolved=False),
@@ -1268,8 +1460,10 @@ class TestBB_SnapshotHelpers(unittest.TestCase):
 
     def test_gaps_by_area_filter(self):
         from core.multi_device_control_integrity import (
-            MultiDeviceIntegritySnapshot, ResidualIntegrityGap,
+            MultiDeviceIntegritySnapshot,
+            ResidualIntegrityGap,
         )
+
         s = MultiDeviceIntegritySnapshot(
             residual_gaps=[
                 ResidualIntegrityGap(gap_id="G1", area="entry_unification"),
@@ -1293,8 +1487,10 @@ class TestCC_DeviceEntryUnification(unittest.TestCase):
     def test_canonical_entry_via_command_router(self):
         """A flow through CommandRouter → TaskEnvelope should be classified canonical."""
         from core.multi_device_control_integrity import (
-            build_entry_unification_record, EntryUnificationKind,
+            EntryUnificationKind,
+            build_entry_unification_record,
         )
+
         r = build_entry_unification_record(
             task_id="task-001",
             trace_id="trace-001",
@@ -1309,8 +1505,10 @@ class TestCC_DeviceEntryUnification(unittest.TestCase):
     def test_legacy_route_cross_device_endpoint(self):
         """The /api/v1/devices/cross-device endpoint is a legacy bypass (GAP-517-001)."""
         from core.multi_device_control_integrity import (
-            build_entry_unification_record, EntryUnificationKind,
+            EntryUnificationKind,
+            build_entry_unification_record,
         )
+
         r = build_entry_unification_record(
             task_id="task-002",
             source_device_id="tablet-001",
@@ -1324,9 +1522,12 @@ class TestCC_DeviceEntryUnification(unittest.TestCase):
     def test_multiple_devices_can_enter_canonically(self):
         """Multiple different devices can all contribute canonical entry records."""
         from core.multi_device_control_integrity import (
-            build_entry_unification_record, EntryUnificationKind,
-            record_integrity_event, get_multi_device_integrity_runtime,
+            EntryUnificationKind,
+            build_entry_unification_record,
+            get_multi_device_integrity_runtime,
+            record_integrity_event,
         )
+
         for device_id in ["phone-001", "tablet-002", "desktop-003"]:
             r = build_entry_unification_record(
                 task_id=f"task-{device_id}",
@@ -1350,8 +1551,10 @@ class TestDD_CrossDeviceDispatchAuthority(unittest.TestCase):
 
     def test_command_router_is_canonical_dispatcher(self):
         from core.multi_device_control_integrity import (
-            build_dispatch_authority_record, DispatchPathKind,
+            DispatchPathKind,
+            build_dispatch_authority_record,
         )
+
         r = build_dispatch_authority_record(
             task_id="task-010",
             trace_id="trace-010",
@@ -1365,8 +1568,10 @@ class TestDD_CrossDeviceDispatchAuthority(unittest.TestCase):
     def test_cross_device_coordinator_is_legacy(self):
         """Calling coordinator directly is not canonical (GAP-517-003)."""
         from core.multi_device_control_integrity import (
-            build_dispatch_authority_record, DispatchPathKind,
+            DispatchPathKind,
+            build_dispatch_authority_record,
         )
+
         r = build_dispatch_authority_record(
             task_id="task-011",
             source_device_id="phone-001",
@@ -1381,8 +1586,10 @@ class TestDD_CrossDeviceDispatchAuthority(unittest.TestCase):
     def test_device_router_substrate_not_independent_authority(self):
         """DeviceRouter as substrate is not canonical dispatch authority."""
         from core.multi_device_control_integrity import (
-            build_dispatch_authority_record, DispatchPathKind,
+            DispatchPathKind,
+            build_dispatch_authority_record,
         )
+
         r = build_dispatch_authority_record(
             task_id="task-012",
             dispatch_path=DispatchPathKind.DEVICE_ROUTER_SUBSTRATE,
@@ -1397,8 +1604,10 @@ class TestEE_FormationTruth(unittest.TestCase):
 
     def test_consistent_formation(self):
         from core.multi_device_control_integrity import (
-            build_formation_truth_record, FormationTruthConsistency,
+            FormationTruthConsistency,
+            build_formation_truth_record,
         )
+
         r = build_formation_truth_record(
             task_id="task-020",
             formation_id="form-abc",
@@ -1412,8 +1621,10 @@ class TestEE_FormationTruth(unittest.TestCase):
 
     def test_participation_drift_detected(self):
         from core.multi_device_control_integrity import (
-            build_formation_truth_record, FormationTruthConsistency,
+            FormationTruthConsistency,
+            build_formation_truth_record,
         )
+
         r = build_formation_truth_record(
             task_id="task-021",
             formation_id="form-def",
@@ -1427,8 +1638,10 @@ class TestEE_FormationTruth(unittest.TestCase):
 
     def test_missing_formation_descriptor(self):
         from core.multi_device_control_integrity import (
-            build_formation_truth_record, FormationTruthConsistency,
+            FormationTruthConsistency,
+            build_formation_truth_record,
         )
+
         r = build_formation_truth_record(
             task_id="task-022",
             consistency=FormationTruthConsistency.FORMATION_MISSING,
@@ -1443,8 +1656,10 @@ class TestFF_ControlSemantics(unittest.TestCase):
 
     def test_local_control_source_equals_target(self):
         from core.multi_device_control_integrity import (
-            build_control_semantic_record, ControlSemanticKind,
+            ControlSemanticKind,
+            build_control_semantic_record,
         )
+
         r = build_control_semantic_record(
             task_id="task-030",
             source_device_id="phone-001",
@@ -1457,8 +1672,10 @@ class TestFF_ControlSemantics(unittest.TestCase):
 
     def test_cross_device_dispatch(self):
         from core.multi_device_control_integrity import (
-            build_control_semantic_record, ControlSemanticKind,
+            ControlSemanticKind,
+            build_control_semantic_record,
         )
+
         r = build_control_semantic_record(
             task_id="task-031",
             source_device_id="phone-001",
@@ -1471,8 +1688,10 @@ class TestFF_ControlSemantics(unittest.TestCase):
 
     def test_takeover_semantics(self):
         from core.multi_device_control_integrity import (
-            build_control_semantic_record, ControlSemanticKind,
+            ControlSemanticKind,
+            build_control_semantic_record,
         )
+
         r = build_control_semantic_record(
             task_id="task-032",
             source_device_id="phone-001",
@@ -1485,8 +1704,10 @@ class TestFF_ControlSemantics(unittest.TestCase):
 
     def test_hybrid_multi_device(self):
         from core.multi_device_control_integrity import (
-            build_control_semantic_record, ControlSemanticKind,
+            ControlSemanticKind,
+            build_control_semantic_record,
         )
+
         r = build_control_semantic_record(
             task_id="task-033",
             source_device_id="phone-001",
@@ -1497,8 +1718,10 @@ class TestFF_ControlSemantics(unittest.TestCase):
 
     def test_semantic_ambiguity_when_device_ids_missing(self):
         from core.multi_device_control_integrity import (
-            build_control_semantic_record, ControlSemanticKind,
+            ControlSemanticKind,
+            build_control_semantic_record,
         )
+
         r = build_control_semantic_record(
             task_id="task-034",
             # No source or target device_id provided
@@ -1513,8 +1736,10 @@ class TestGG_ResultSurface(unittest.TestCase):
 
     def test_full_canonical_surface(self):
         from core.multi_device_control_integrity import (
-            build_result_surface_record, ResultSurfaceKind,
+            ResultSurfaceKind,
+            build_result_surface_record,
         )
+
         r = build_result_surface_record(
             task_id="task-040",
             source_device_id="phone-001",
@@ -1530,8 +1755,10 @@ class TestGG_ResultSurface(unittest.TestCase):
 
     def test_partial_surface_result_envelope_only(self):
         from core.multi_device_control_integrity import (
-            build_result_surface_record, ResultSurfaceKind,
+            ResultSurfaceKind,
+            build_result_surface_record,
         )
+
         r = build_result_surface_record(
             task_id="task-041",
             result_envelope_produced=True,
@@ -1544,8 +1771,10 @@ class TestGG_ResultSurface(unittest.TestCase):
 
     def test_transport_local_no_surface(self):
         from core.multi_device_control_integrity import (
-            build_result_surface_record, ResultSurfaceKind,
+            ResultSurfaceKind,
+            build_result_surface_record,
         )
+
         r = build_result_surface_record(
             task_id="task-042",
             surface_gap_reasons=["coordinator returned raw dict; no surface exposure"],

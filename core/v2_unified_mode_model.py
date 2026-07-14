@@ -159,11 +159,7 @@ def derive_governance_state(
     device_mode: Optional[str] = None,
 ) -> tuple[str, Dict[str, Any]]:
     device_entry = _select_governance_device_entry(governance_state, selected_device)
-    policy = dict(
-        governance_policy
-        or _select_governance_policy(governance_state, selected_device, device_entry)
-        or {}
-    )
+    policy = dict(governance_policy or _select_governance_policy(governance_state, selected_device, device_entry) or {})
     reasons = _dedupe(
         list(blocking_reasons or [])
         + list(policy.get("dependency_classification", {}).get("reasons") or [])
@@ -179,9 +175,7 @@ def derive_governance_state(
             False,
         )
     )
-    mode_readiness_state = str(
-        _truth_get(android_truth_block, "mode_readiness_state", "") or ""
-    ).strip().lower()
+    mode_readiness_state = str(_truth_get(android_truth_block, "mode_readiness_state", "") or "").strip().lower()
     runtime_constrained = bool(
         _coalesce(
             _truth_get(android_truth_block, "runtime_constrained"),
@@ -201,9 +195,9 @@ def derive_governance_state(
             False,
         )
     )
-    resolved_device_mode = str(
-        _coalesce(device_mode, _truth_get(android_truth_block, "device_mode"), "")
-    ).strip().lower()
+    resolved_device_mode = (
+        str(_coalesce(device_mode, _truth_get(android_truth_block, "device_mode"), "")).strip().lower()
+    )
     if operation_state == "hard_block":
         return "governance_blocked", {
             "operation_state": operation_state,
@@ -256,10 +250,7 @@ def derive_governance_state(
             "reasons": reasons,
             "runtime_deferred": True,
         }
-    if automatic_decision == "hold" or any(
-        "defer" in reason
-        for reason in reasons
-    ):
+    if automatic_decision == "hold" or any("defer" in reason for reason in reasons):
         return "deferred", {
             "operation_state": operation_state,
             "automatic_decision": automatic_decision,
@@ -272,10 +263,7 @@ def derive_governance_state(
         operation_state == "soft_degraded"
         or runtime_constrained
         or mode_readiness_state in {"degraded", "transitioning"}
-        or any(
-            any(token in reason for token in degraded_reason_tokens)
-            for reason in reasons
-        )
+        or any(any(token in reason for token in degraded_reason_tokens) for reason in reasons)
     ):
         return "constrained", {
             "operation_state": operation_state,
@@ -431,9 +419,7 @@ def build_unified_mode_model(
     truth_participation_tier = _truth_get(android_truth_block, "participation_tier")
     truth_device_mode = _truth_get(android_truth_block, "device_mode")
     truth_mode_readiness = _truth_get(android_truth_block, "mode_readiness_state")
-    resolved_participation_tier = str(
-        _coalesce(participation_tier, truth_participation_tier, "local_only")
-    )
+    resolved_participation_tier = str(_coalesce(participation_tier, truth_participation_tier, "local_only"))
     resolved_device_mode = str(_coalesce(device_mode, truth_device_mode, "unknown"))
     resolved_mode_readiness = _coalesce(
         mode_readiness_state,
@@ -462,29 +448,21 @@ def build_unified_mode_model(
         selected_device=selected_device,
         participation_tier=resolved_participation_tier,
         device_mode=resolved_device_mode,
-        mode_readiness_state=(
-            str(resolved_mode_readiness) if resolved_mode_readiness not in (None, "") else None
-        ),
+        mode_readiness_state=(str(resolved_mode_readiness) if resolved_mode_readiness not in (None, "") else None),
         participation_semantics=_build_participation_semantics(
             participation_tier=resolved_participation_tier,
             participation_layer=participation_layer,
             execution_location=execution_location,
             governance_state=governance_value,
             device_mode=resolved_device_mode,
-            mode_readiness_state=(
-                str(resolved_mode_readiness) if resolved_mode_readiness not in (None, "") else None
-            ),
+            mode_readiness_state=(str(resolved_mode_readiness) if resolved_mode_readiness not in (None, "") else None),
         ),
         governance_basis=governance_basis,
         blocking_reasons=_dedupe(
             list(blocking_reasons or [])
             + list(_truth_get(android_truth_block, "participation_blocking_reasons", []) or [])
             + list(_truth_get(android_truth_block, "degraded_reasons", []) or [])
-            + (
-                ["runtime_constrained"]
-                if bool(_truth_get(android_truth_block, "runtime_constrained", False))
-                else []
-            )
+            + (["runtime_constrained"] if bool(_truth_get(android_truth_block, "runtime_constrained", False)) else [])
             + (
                 ["runtime_deferred"]
                 if bool(
@@ -496,15 +474,9 @@ def build_unified_mode_model(
                 )
                 else []
             )
-            + (
-                ["local_mode_active"]
-                if bool(_truth_get(android_truth_block, "local_mode_active", False))
-                else []
-            )
+            + (["local_mode_active"] if bool(_truth_get(android_truth_block, "local_mode_active", False)) else [])
         ),
-        source_of_truth_refs=_dedupe(
-            list(source_of_truth_refs or []) + [UNIFIED_MODE_MODEL_AUTHORITY]
-        ),
+        source_of_truth_refs=_dedupe(list(source_of_truth_refs or []) + [UNIFIED_MODE_MODEL_AUTHORITY]),
     )
     return model.to_dict()
 

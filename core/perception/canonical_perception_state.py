@@ -186,6 +186,7 @@ class CanonicalPerceptionState:
 # Builder
 # ---------------------------------------------------------------------------
 
+
 def build_canonical_perception_state(
     *,
     runtime_session_id: Optional[str] = None,
@@ -242,9 +243,7 @@ def build_canonical_perception_state(
         state.continuous_wall_clock = getattr(continuous_frame, "wall_clock", None)
         state.continuous_overall_quality = getattr(continuous_frame, "overall_quality", None)
 
-        frame_modalities: List[str] = list(
-            getattr(continuous_frame, "active_modalities", None) or []
-        )
+        frame_modalities: List[str] = list(getattr(continuous_frame, "active_modalities", None) or [])
         active_modalities.extend(frame_modalities)
 
         # Audio features from continuous perception
@@ -284,15 +283,9 @@ def build_canonical_perception_state(
         sq = getattr(continuous_frame, "system_quality", None)
         state.quality_summary = {
             "overall": getattr(continuous_frame, "overall_quality", 0.0),
-            "audio_flag": (
-                getattr(getattr(aq, "flag", None), "value", None) if aq else None
-            ),
-            "video_flag": (
-                getattr(getattr(vq, "flag", None), "value", None) if vq else None
-            ),
-            "system_flag": (
-                getattr(getattr(sq, "flag", None), "value", None) if sq else None
-            ),
+            "audio_flag": (getattr(getattr(aq, "flag", None), "value", None) if aq else None),
+            "video_flag": (getattr(getattr(vq, "flag", None), "value", None) if vq else None),
+            "system_flag": (getattr(getattr(sq, "flag", None), "value", None) if sq else None),
         }
     else:
         degradation_reasons.append("continuous_perception_unavailable")
@@ -406,13 +399,9 @@ def build_canonical_perception_state(
     parts: List[str] = []
     if state.has_continuous_perception:
         q = state.continuous_overall_quality
-        parts.append(
-            f"continuous(q={q:.2f})" if q is not None else "continuous"
-        )
+        parts.append(f"continuous(q={q:.2f})" if q is not None else "continuous")
     if state.has_request_multimodal:
-        parts.append(
-            f"request({state.fusion_summary})" if state.fusion_summary else "request(multimodal)"
-        )
+        parts.append(f"request({state.fusion_summary})" if state.fusion_summary else "request(multimodal)")
     if not parts:
         parts.append("text-only")
     non_trivial = [d for d in degradation_reasons if d != "text_only"]

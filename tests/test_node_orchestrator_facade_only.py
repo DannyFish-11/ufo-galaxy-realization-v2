@@ -69,7 +69,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # ===========================================================================
 # A) SmartOrchestrator (Node_110) facade sentinel
 # ===========================================================================
@@ -78,6 +77,7 @@ import pytest
 def _import_smart_orchestrator_sentinel():
     try:
         from nodes.Node_110_SmartOrchestrator.main import SMART_ORCHESTRATOR_NODE_FACADE_ONLY
+
         return SMART_ORCHESTRATOR_NODE_FACADE_ONLY
     except (ImportError, Exception) as e:
         pytest.skip(f"Node_110_SmartOrchestrator import unavailable (missing dependency): {e}")
@@ -106,16 +106,19 @@ def test_a03_smart_orchestrator_sentinel_contains_facade_or_only():
 
 def test_b01_capability_orchestrator_facade_sentinel_importable():
     from core.capability_orchestrator import CAPABILITY_ORCHESTRATOR_FACADE_ONLY
+
     assert CAPABILITY_ORCHESTRATOR_FACADE_ONLY is not None
 
 
 def test_b02_capability_orchestrator_sentinel_non_empty():
     from core.capability_orchestrator import CAPABILITY_ORCHESTRATOR_FACADE_ONLY
+
     assert len(CAPABILITY_ORCHESTRATOR_FACADE_ONLY) > 0
 
 
 def test_b03_capability_orchestrator_sentinel_contains_facade_or_only():
     from core.capability_orchestrator import CAPABILITY_ORCHESTRATOR_FACADE_ONLY
+
     upper = CAPABILITY_ORCHESTRATOR_FACADE_ONLY.upper()
     assert "FACADE" in upper or "ONLY" in upper
 
@@ -127,24 +130,27 @@ def test_b03_capability_orchestrator_sentinel_contains_facade_or_only():
 
 def test_c01_node_orchestrator_assimilation_policy_importable():
     from core.capability_assimilation import NODE_ORCHESTRATOR_ASSIMILATION_POLICY
+
     assert NODE_ORCHESTRATOR_ASSIMILATION_POLICY is not None
 
 
 def test_c02_policy_contains_adapter_or_facade():
     from core.capability_assimilation import NODE_ORCHESTRATOR_ASSIMILATION_POLICY
+
     upper = NODE_ORCHESTRATOR_ASSIMILATION_POLICY.upper()
     assert "ADAPTER" in upper or "FACADE" in upper
 
 
 def test_c03_policy_does_not_grant_authority_to_node_orchestrators():
     from core.capability_assimilation import NODE_ORCHESTRATOR_ASSIMILATION_POLICY
+
     # The policy string should explicitly state nodes are NOT authorities
     # (check it says "NO" or "NOT" or "ONLY" near authority)
     upper = NODE_ORCHESTRATOR_ASSIMILATION_POLICY.upper()
     # The policy must contain a constraint word
-    assert any(word in upper for word in ("ONLY", "NOT", "NO ", "EXCLUDED", "FACADE")), (
-        f"Policy does not contain a constraint word: {NODE_ORCHESTRATOR_ASSIMILATION_POLICY!r}"
-    )
+    assert any(
+        word in upper for word in ("ONLY", "NOT", "NO ", "EXCLUDED", "FACADE")
+    ), f"Policy does not contain a constraint word: {NODE_ORCHESTRATOR_ASSIMILATION_POLICY!r}"
 
 
 # ===========================================================================
@@ -237,11 +243,13 @@ def test_e01_legacy_orchestrator_maps_to_legacy_facade():
     reset_task_graph_runtime()
 
     layer = get_capability_assimilation_layer()
-    rec = layer.assimilate_from_node_info({
-        "node_id": "arch-legacy",
-        "architectural_class": "legacy_orchestrator_node",
-        "capabilities": [],
-    })
+    rec = layer.assimilate_from_node_info(
+        {
+            "node_id": "arch-legacy",
+            "architectural_class": "legacy_orchestrator_node",
+            "capabilities": [],
+        }
+    )
     assert rec.execution_profile.participant_kind == NodeParticipantKind.LEGACY_FACADE
 
     reset_capability_assimilation_layer()
@@ -263,11 +271,13 @@ def test_e02_capability_node_maps_to_capability_provider():
     reset_task_graph_runtime()
 
     layer = get_capability_assimilation_layer()
-    rec = layer.assimilate_from_node_info({
-        "node_id": "arch-cap",
-        "architectural_class": "capability_node",
-        "capabilities": ["foo"],
-    })
+    rec = layer.assimilate_from_node_info(
+        {
+            "node_id": "arch-cap",
+            "architectural_class": "capability_node",
+            "capabilities": ["foo"],
+        }
+    )
     assert rec.execution_profile.participant_kind == NodeParticipantKind.CAPABILITY_PROVIDER
 
     reset_capability_assimilation_layer()
@@ -289,10 +299,12 @@ def test_e03_service_node_maps_to_specialist():
     reset_task_graph_runtime()
 
     layer = get_capability_assimilation_layer()
-    rec = layer.assimilate_from_node_info({
-        "node_id": "arch-svc",
-        "architectural_class": "service_node",
-    })
+    rec = layer.assimilate_from_node_info(
+        {
+            "node_id": "arch-svc",
+            "architectural_class": "service_node",
+        }
+    )
     assert rec.execution_profile.participant_kind == NodeParticipantKind.SPECIALIST
 
     reset_capability_assimilation_layer()
@@ -314,10 +326,12 @@ def test_e04_worker_role_maps_to_worker():
     reset_task_graph_runtime()
 
     layer = get_capability_assimilation_layer()
-    rec = layer.assimilate_from_node_info({
-        "node_id": "arch-worker",
-        "architectural_class": "worker",
-    })
+    rec = layer.assimilate_from_node_info(
+        {
+            "node_id": "arch-worker",
+            "architectural_class": "worker",
+        }
+    )
     assert rec.execution_profile.participant_kind == NodeParticipantKind.WORKER
 
     reset_capability_assimilation_layer()
@@ -339,10 +353,12 @@ def test_e05_experimental_node_maps_to_fabric_participant():
     reset_task_graph_runtime()
 
     layer = get_capability_assimilation_layer()
-    rec = layer.assimilate_from_node_info({
-        "node_id": "arch-exp",
-        "architectural_class": "experimental_node",
-    })
+    rec = layer.assimilate_from_node_info(
+        {
+            "node_id": "arch-exp",
+            "architectural_class": "experimental_node",
+        }
+    )
     assert rec.execution_profile.participant_kind == NodeParticipantKind.FABRIC_PARTICIPANT
 
     reset_capability_assimilation_layer()
@@ -364,10 +380,12 @@ def test_e06_archived_node_maps_to_fabric_participant():
     reset_task_graph_runtime()
 
     layer = get_capability_assimilation_layer()
-    rec = layer.assimilate_from_node_info({
-        "node_id": "arch-arch",
-        "architectural_class": "archived_node",
-    })
+    rec = layer.assimilate_from_node_info(
+        {
+            "node_id": "arch-arch",
+            "architectural_class": "archived_node",
+        }
+    )
     assert rec.execution_profile.participant_kind == NodeParticipantKind.FABRIC_PARTICIPANT
 
     reset_capability_assimilation_layer()
@@ -382,6 +400,7 @@ def test_e06_archived_node_maps_to_fabric_participant():
 
 def test_f01_task_graph_runtime_authority_intact():
     from core.task_graph_runtime import TASK_GRAPH_RUNTIME_AUTHORITY
+
     assert TASK_GRAPH_RUNTIME_AUTHORITY
 
 
@@ -397,6 +416,7 @@ def test_f02_galaxy_orchestrator_facade_authority_intact():
 
 def test_f03_unified_orchestrator_facade_authority_intact():
     import warnings
+
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
@@ -408,6 +428,7 @@ def test_f03_unified_orchestrator_facade_authority_intact():
 
 def test_f04_device_orchestrator_facade_authority_intact():
     from core.device_orchestrator import DEVICE_ORCHESTRATOR_FACADE_AUTHORITY
+
     assert DEVICE_ORCHESTRATOR_FACADE_AUTHORITY
 
 
@@ -418,16 +439,19 @@ def test_f04_device_orchestrator_facade_authority_intact():
 
 def test_g01_capability_assimilation_authority_importable():
     from core.capability_assimilation import CAPABILITY_ASSIMILATION_AUTHORITY
+
     assert CAPABILITY_ASSIMILATION_AUTHORITY
 
 
 def test_g02_capability_assimilation_layer_position_is_7():
     from core.capability_assimilation import CAPABILITY_ASSIMILATION_LAYER_POSITION
+
     assert CAPABILITY_ASSIMILATION_LAYER_POSITION == 7
 
 
 def test_g03_authority_sentinel_references_pr7():
     from core.capability_assimilation import CAPABILITY_ASSIMILATION_AUTHORITY
+
     assert "PR-7" in CAPABILITY_ASSIMILATION_AUTHORITY or "pr-7" in CAPABILITY_ASSIMILATION_AUTHORITY.lower()
 
 
@@ -450,11 +474,13 @@ def test_h01_legacy_orchestrator_node_gets_legacy_facade_kind():
     reset_task_graph_runtime()
 
     layer = get_capability_assimilation_layer()
-    rec = layer.assimilate_from_node_info({
-        "node_id": "orch-110",
-        "architectural_class": "legacy_orchestrator_node",
-        "capabilities": ["orchestrate", "schedule"],
-    })
+    rec = layer.assimilate_from_node_info(
+        {
+            "node_id": "orch-110",
+            "architectural_class": "legacy_orchestrator_node",
+            "capabilities": ["orchestrate", "schedule"],
+        }
+    )
     # Should be LEGACY_FACADE, not CAPABILITY_PROVIDER
     assert rec.execution_profile.participant_kind == NodeParticipantKind.LEGACY_FACADE
 
@@ -477,10 +503,12 @@ def test_h02_legacy_facade_not_in_task_graph():
     reset_task_graph_runtime()
 
     layer = get_capability_assimilation_layer()
-    layer.assimilate_from_node_info({
-        "node_id": "orch-tg-check",
-        "architectural_class": "legacy_orchestrator_node",
-    })
+    layer.assimilate_from_node_info(
+        {
+            "node_id": "orch-tg-check",
+            "architectural_class": "legacy_orchestrator_node",
+        }
+    )
 
     # The task graph runtime should NOT have a node for this orchestrator
     tgr = get_task_graph_runtime()
@@ -558,10 +586,7 @@ def test_i03_legacy_facade_event_kind_is_registered_or_rejoin():
 
     layer = get_capability_assimilation_layer()
     layer.assimilate("legacy-ev-3", participant_kind=NodeParticipantKind.LEGACY_FACADE)
-    events = [
-        e for e in layer.get_event_log()
-        if e.node_id == "legacy-ev-3"
-    ]
+    events = [e for e in layer.get_event_log() if e.node_id == "legacy-ev-3"]
     assert all(e.event_kind in ("registered", "rejoin") for e in events)
 
     reset_capability_assimilation_layer()
@@ -576,9 +601,11 @@ def test_i03_legacy_facade_event_kind_is_registered_or_rejoin():
 
 def test_j01_policy_is_at_least_10_chars():
     from core.capability_assimilation import NODE_ORCHESTRATOR_ASSIMILATION_POLICY
+
     assert len(NODE_ORCHESTRATOR_ASSIMILATION_POLICY) >= 10
 
 
 def test_j02_policy_does_not_contain_todo():
     from core.capability_assimilation import NODE_ORCHESTRATOR_ASSIMILATION_POLICY
+
     assert "TODO" not in NODE_ORCHESTRATOR_ASSIMILATION_POLICY.upper()

@@ -36,14 +36,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_group_with_fallback():
     from core.device_formation.formation_group import DeviceFormationGroup
     from core.device_formation.formation_role import FormationMember, FormationRole
+
     members = [
         FormationMember(device_id="source-dev", role=FormationRole.SOURCE, reason="s"),
         FormationMember(device_id="primary-dev", role=FormationRole.PRIMARY_EXECUTION, reason="p"),
@@ -60,18 +61,22 @@ def _make_group_with_fallback():
 # 1: Sentinels
 # ---------------------------------------------------------------------------
 
+
 class TestSentinels:
     def test_authority_sentinel(self):
         from core.multi_device_runtime_harness import MULTI_DEVICE_RUNTIME_HARNESS_IS_AUTHORITY
+
         assert isinstance(MULTI_DEVICE_RUNTIME_HARNESS_IS_AUTHORITY, str)
 
     def test_gap_closure_sentinel(self):
         from core.multi_device_runtime_harness import MULTI_DEVICE_RUNTIME_HARNESS_GAP_CLOSURE_SENTINEL
+
         assert isinstance(MULTI_DEVICE_RUNTIME_HARNESS_GAP_CLOSURE_SENTINEL, str)
         assert "GAP_CLOSURE" in MULTI_DEVICE_RUNTIME_HARNESS_GAP_CLOSURE_SENTINEL
 
     def test_wires_policy(self):
         from core.multi_device_runtime_harness import HARNESS_WIRES_PERSISTENCE_REBALANCE_SCHEDULING_POLICY
+
         assert isinstance(HARNESS_WIRES_PERSISTENCE_REBALANCE_SCHEDULING_POLICY, str)
         assert "persistence" in HARNESS_WIRES_PERSISTENCE_REBALANCE_SCHEDULING_POLICY.lower()
         assert "rebalance" in HARNESS_WIRES_PERSISTENCE_REBALANCE_SCHEDULING_POLICY.lower()
@@ -81,15 +86,18 @@ class TestSentinels:
 # 2–3: Data classes
 # ---------------------------------------------------------------------------
 
+
 class TestDeviceHealthEvent:
     def test_construction(self):
         from core.multi_device_runtime_harness import DeviceHealthEvent
+
         e = DeviceHealthEvent(device_id="d1", health_score=0.5, event_type="disconnect")
         assert e.device_id == "d1"
         assert e.health_score == 0.5
 
     def test_to_dict(self):
         from core.multi_device_runtime_harness import DeviceHealthEvent
+
         e = DeviceHealthEvent(device_id="d2", health_score=0.9, session_id="s1")
         d = e.to_dict()
         assert d["device_id"] == "d2"
@@ -99,11 +107,13 @@ class TestDeviceHealthEvent:
 class TestRuntimeHarnessResult:
     def test_default_success_true(self):
         from core.multi_device_runtime_harness import RuntimeHarnessResult
+
         r = RuntimeHarnessResult(operation="test")
         assert r.success is True
 
     def test_to_dict(self):
         from core.multi_device_runtime_harness import RuntimeHarnessResult
+
         r = RuntimeHarnessResult(
             operation="test",
             rebalance_triggered=True,
@@ -118,35 +128,43 @@ class TestRuntimeHarnessResult:
 # 4–11: MultiDeviceRuntimeHarness
 # ---------------------------------------------------------------------------
 
+
 class TestMultiDeviceRuntimeHarness:
     def test_on_coordinator_state_updated_persists_snapshot(self, tmp_path):
-        from core.multi_device_runtime_harness import MultiDeviceRuntimeHarness
         from core.mesh.mesh_session_persistence import MeshSessionPersistenceStore
+        from core.multi_device_runtime_harness import MultiDeviceRuntimeHarness
+
         harness = MultiDeviceRuntimeHarness()
         store = MeshSessionPersistenceStore(store_dir=str(tmp_path))
         harness._persistence_store = store
-        result = harness.on_coordinator_state_updated({
-            "session_id": "coord-session",
-            "coordinator_id": "c-1",
-            "overall_status": "coordinating",
-        })
+        result = harness.on_coordinator_state_updated(
+            {
+                "session_id": "coord-session",
+                "coordinator_id": "c-1",
+                "overall_status": "coordinating",
+            }
+        )
         assert result.snapshot_saved is True
 
     def test_on_coordinator_state_updated_no_persistence(self):
         from core.multi_device_runtime_harness import MultiDeviceRuntimeHarness
+
         harness = MultiDeviceRuntimeHarness()
         # No backing persistence store
-        result = harness.on_coordinator_state_updated({
-            "session_id": "orphan-session",
-            "coordinator_id": "c-2",
-            "overall_status": "coordinating",
-        })
+        result = harness.on_coordinator_state_updated(
+            {
+                "session_id": "orphan-session",
+                "coordinator_id": "c-2",
+                "overall_status": "coordinating",
+            }
+        )
         # Graceful — may not save but should not raise
         assert result is not None
         assert hasattr(result, "snapshot_saved")
 
     def test_on_device_health_changed_triggers_rebalance(self):
-        from core.multi_device_runtime_harness import MultiDeviceRuntimeHarness, DeviceHealthEvent
+        from core.multi_device_runtime_harness import DeviceHealthEvent, MultiDeviceRuntimeHarness
+
         harness = MultiDeviceRuntimeHarness()
         group = _make_group_with_fallback()
         event = DeviceHealthEvent(
@@ -160,7 +178,8 @@ class TestMultiDeviceRuntimeHarness:
         assert result.rebalance_triggered is True
 
     def test_on_device_health_changed_healthy_no_rebalance(self):
-        from core.multi_device_runtime_harness import MultiDeviceRuntimeHarness, DeviceHealthEvent
+        from core.multi_device_runtime_harness import DeviceHealthEvent, MultiDeviceRuntimeHarness
+
         harness = MultiDeviceRuntimeHarness()
         group = _make_group_with_fallback()
         event = DeviceHealthEvent(
@@ -174,10 +193,13 @@ class TestMultiDeviceRuntimeHarness:
         assert result.rebalance_triggered is False
 
     def test_on_device_health_changed_without_formation(self):
-        from core.multi_device_runtime_harness import MultiDeviceRuntimeHarness, DeviceHealthEvent
+        from core.multi_device_runtime_harness import DeviceHealthEvent, MultiDeviceRuntimeHarness
+
         harness = MultiDeviceRuntimeHarness()
         event = DeviceHealthEvent(
-            device_id="some-dev", health_score=0.0, is_reachable=False,
+            device_id="some-dev",
+            health_score=0.0,
+            is_reachable=False,
         )
         result = harness.on_device_health_changed(event, formation=None)
         assert result is not None
@@ -185,16 +207,16 @@ class TestMultiDeviceRuntimeHarness:
 
     def test_on_task_admitted_for_dispatch_returns_result(self):
         from core.multi_device_runtime_harness import MultiDeviceRuntimeHarness
+
         harness = MultiDeviceRuntimeHarness()
-        result = harness.on_task_admitted_for_dispatch(
-            {"task_id": "test-task", "task_type": "relay"}
-        )
+        result = harness.on_task_admitted_for_dispatch({"task_id": "test-task", "task_type": "relay"})
         assert result is not None
         assert hasattr(result, "task_registered")
         assert hasattr(result, "routable_executor_ids")
 
     def test_on_task_admitted_never_blocks_dispatch(self):
         from core.multi_device_runtime_harness import MultiDeviceRuntimeHarness
+
         harness = MultiDeviceRuntimeHarness()
         # Even with None task — dispatch must not be blocked
         result = harness.on_task_admitted_for_dispatch(None)
@@ -202,6 +224,7 @@ class TestMultiDeviceRuntimeHarness:
 
     def test_recover_sessions_returns_list(self):
         from core.multi_device_runtime_harness import MultiDeviceRuntimeHarness
+
         harness = MultiDeviceRuntimeHarness()
         result = harness.recover_sessions()
         assert isinstance(result, list)
@@ -211,23 +234,27 @@ class TestMultiDeviceRuntimeHarness:
 # 12–14: Module-level functions
 # ---------------------------------------------------------------------------
 
+
 class TestModuleLevelFunctions:
     def test_on_coordinator_state_updated_fn(self):
         from core.multi_device_runtime_harness import (
-            on_coordinator_state_updated,
             get_multi_device_runtime_harness,
+            on_coordinator_state_updated,
         )
+
         result = on_coordinator_state_updated({"session_id": "", "overall_status": "unknown"})
         assert result is not None
 
     def test_on_device_health_changed_fn(self):
-        from core.multi_device_runtime_harness import on_device_health_changed, DeviceHealthEvent
+        from core.multi_device_runtime_harness import DeviceHealthEvent, on_device_health_changed
+
         event = DeviceHealthEvent(device_id="d", health_score=0.0, is_reachable=False)
         result = on_device_health_changed(event)
         assert result is not None
 
     def test_on_task_admitted_for_dispatch_fn(self):
         from core.multi_device_runtime_harness import on_task_admitted_for_dispatch
+
         result = on_task_admitted_for_dispatch({"task_id": "fn-task"})
         assert result is not None
 
@@ -236,11 +263,14 @@ class TestModuleLevelFunctions:
 # 15–16: Singleton
 # ---------------------------------------------------------------------------
 
+
 class TestSingleton:
     def test_get_returns_same_instance(self):
         from core.multi_device_runtime_harness import (
-            get_multi_device_runtime_harness, reset_multi_device_runtime_harness,
+            get_multi_device_runtime_harness,
+            reset_multi_device_runtime_harness,
         )
+
         reset_multi_device_runtime_harness()
         h1 = get_multi_device_runtime_harness()
         h2 = get_multi_device_runtime_harness()
@@ -248,8 +278,10 @@ class TestSingleton:
 
     def test_reset_clears_singleton(self):
         from core.multi_device_runtime_harness import (
-            get_multi_device_runtime_harness, reset_multi_device_runtime_harness,
+            get_multi_device_runtime_harness,
+            reset_multi_device_runtime_harness,
         )
+
         reset_multi_device_runtime_harness()
         h1 = get_multi_device_runtime_harness()
         reset_multi_device_runtime_harness()
@@ -261,17 +293,22 @@ class TestSingleton:
 # 18–20: Edge cases and never-raises
 # ---------------------------------------------------------------------------
 
+
 class TestEdgeCases:
     def test_health_event_session_id_propagates(self):
         from core.multi_device_runtime_harness import DeviceHealthEvent
+
         e = DeviceHealthEvent(
-            device_id="d", health_score=0.0, is_reachable=False,
+            device_id="d",
+            health_score=0.0,
+            is_reachable=False,
             session_id="session-abc",
         )
         assert e.session_id == "session-abc"
 
     def test_on_coordinator_state_updated_none_graceful(self):
         from core.multi_device_runtime_harness import MultiDeviceRuntimeHarness
+
         harness = MultiDeviceRuntimeHarness()
         result = harness.on_coordinator_state_updated(None)
         assert result is not None
@@ -279,15 +316,15 @@ class TestEdgeCases:
 
     def test_harness_never_raises(self):
         from core.multi_device_runtime_harness import (
-            MultiDeviceRuntimeHarness, DeviceHealthEvent,
+            DeviceHealthEvent,
+            MultiDeviceRuntimeHarness,
         )
+
         harness = MultiDeviceRuntimeHarness()
         try:
             harness.on_coordinator_state_updated(None)
             harness.on_coordinator_state_updated({})
-            harness.on_device_health_changed(
-                DeviceHealthEvent(device_id="x", health_score=0.0, is_reachable=False)
-            )
+            harness.on_device_health_changed(DeviceHealthEvent(device_id="x", health_score=0.0, is_reachable=False))
             harness.on_task_admitted_for_dispatch(None)
             harness.recover_sessions()
         except Exception as exc:

@@ -28,7 +28,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -167,8 +166,7 @@ class TestHandleDeviceRegister:
         coord = get_lifecycle_coordinator()
         active_ids = coord.find_sessions_for_device(device_id)
         assert len(active_ids) >= 1, (
-            f"Expected at least one active mesh session for device {device_id}, "
-            f"found: {active_ids}"
+            f"Expected at least one active mesh session for device {device_id}, " f"found: {active_ids}"
         )
         record = coord.get_record(active_ids[0])
         assert record is not None
@@ -199,9 +197,9 @@ class TestHandleDeviceRegister:
         ):
             result = await handle_device_register(bridge, MagicMock(), message)
 
-        assert result.get("success") is True, (
-            f"Registration should succeed even when mesh session wiring fails: {result}"
-        )
+        assert (
+            result.get("success") is True
+        ), f"Registration should succeed even when mesh session wiring fails: {result}"
 
 
 # ---------------------------------------------------------------------------
@@ -256,9 +254,11 @@ class TestPatchDisconnectToUdm:
         coord = get_lifecycle_coordinator()
         updated = coord.get_record(session_id)
         assert updated is not None
-        assert updated.status in {"cancelled", "failed", "completed"}, (
-            f"Expected terminal status after disconnect, got '{updated.status}'"
-        )
+        assert updated.status in {
+            "cancelled",
+            "failed",
+            "completed",
+        }, f"Expected terminal status after disconnect, got '{updated.status}'"
 
     def test_disconnect_is_nonfatal_when_mesh_session_terminate_fails(self):
         """_patch_disconnect_to_udm must not raise even if mesh session termination fails."""
@@ -334,9 +334,7 @@ class TestCheckOfflineDevices:
         coord = get_lifecycle_coordinator()
         updated = coord.get_record(session_id)
         assert updated is not None
-        assert updated.status == "suspended", (
-            f"Expected 'suspended' after heartbeat-miss, got '{updated.status}'"
-        )
+        assert updated.status == "suspended", f"Expected 'suspended' after heartbeat-miss, got '{updated.status}'"
 
 
 # ---------------------------------------------------------------------------
@@ -385,9 +383,7 @@ class TestSwarmCoordinatorMeshSession:
             coordinator = SwarmCoordinator()
             coordinator._command_router = MagicMock()
             coordinator._scoring_engine = MagicMock()
-            coordinator._scoring_engine.select_best_device.return_value = MagicMock(
-                device_id="device_01", total=0.9
-            )
+            coordinator._scoring_engine.select_best_device.return_value = MagicMock(device_id="device_01", total=0.9)
             coordinator._ledger = MagicMock()
 
             async def fake_dispatch(manifest):
@@ -408,12 +404,8 @@ class TestSwarmCoordinatorMeshSession:
         # The session should now be terminal (completed)
         # session_id is used as mesh session id
         record = coord.get_record(session_id)
-        assert record is not None, (
-            f"Expected mesh session record for session_id={session_id}"
-        )
-        assert record.status == "completed", (
-            f"Expected 'completed' after successful dispatch, got '{record.status}'"
-        )
+        assert record is not None, f"Expected mesh session record for session_id={session_id}"
+        assert record.status == "completed", f"Expected 'completed' after successful dispatch, got '{record.status}'"
 
     @pytest.mark.asyncio
     async def test_dispatch_team_terminates_with_failed_on_member_error(self):
@@ -440,9 +432,7 @@ class TestSwarmCoordinatorMeshSession:
             coordinator = SwarmCoordinator()
             coordinator._command_router = MagicMock()
             coordinator._scoring_engine = MagicMock()
-            coordinator._scoring_engine.select_best_device.return_value = MagicMock(
-                device_id="device_02", total=0.8
-            )
+            coordinator._scoring_engine.select_best_device.return_value = MagicMock(device_id="device_02", total=0.8)
             coordinator._ledger = MagicMock()
 
             async def fake_dispatch_fail(manifest):
@@ -462,9 +452,7 @@ class TestSwarmCoordinatorMeshSession:
         coord = get_lifecycle_coordinator()
         record = coord.get_record(session_id)
         assert record is not None
-        assert record.status == "failed", (
-            f"Expected 'failed' after member exception, got '{record.status}'"
-        )
+        assert record.status == "failed", f"Expected 'failed' after member exception, got '{record.status}'"
 
     @pytest.mark.asyncio
     async def test_dispatch_team_proceeds_when_mesh_session_wiring_unavailable(self):
@@ -474,9 +462,7 @@ class TestSwarmCoordinatorMeshSession:
         coordinator = SwarmCoordinator()
         coordinator._command_router = MagicMock()
         coordinator._scoring_engine = MagicMock()
-        coordinator._scoring_engine.select_best_device.return_value = MagicMock(
-            device_id="device_03", total=0.7
-        )
+        coordinator._scoring_engine.select_best_device.return_value = MagicMock(device_id="device_03", total=0.7)
         coordinator._ledger = MagicMock()
 
         member = self._make_member()
@@ -484,11 +470,13 @@ class TestSwarmCoordinatorMeshSession:
         async def fake_dispatch_ok(manifest):
             return {"success": True, "output": "done", "latency_ms": 5}
 
-        with patch.object(coordinator, "_dispatch_one", side_effect=fake_dispatch_ok), \
-             patch(
+        with (
+            patch.object(coordinator, "_dispatch_one", side_effect=fake_dispatch_ok),
+            patch(
                 "core.mesh.mesh_session_lifecycle.get_lifecycle_coordinator",
                 side_effect=RuntimeError("simulated import failure"),
-            ):
+            ),
+        ):
             result = await coordinator.dispatch_team(
                 members=[member],
                 task="task that is fine",

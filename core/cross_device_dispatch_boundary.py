@@ -347,9 +347,7 @@ class DispatchBoundaryClassification:
 
 
 _CATEGORY_POLICY_NOTES: Dict[DispatchPathCategory, str] = {
-    DispatchPathCategory.CANONICAL: (
-        "Primary governed path.  Valid for all new cross-device work."
-    ),
+    DispatchPathCategory.CANONICAL: ("Primary governed path.  Valid for all new cross-device work."),
     DispatchPathCategory.CONTROLLED_FALLBACK: (
         "Sanctioned fallback from DeviceRouter when AgentBridge is "
         "unavailable.  Substrate-caller contract preserved."
@@ -363,9 +361,7 @@ _CATEGORY_POLICY_NOTES: Dict[DispatchPathCategory, str] = {
         "Fail-open.  Emits LEGACY_DISPATCH warning.  Must not be used in "
         "new code."
     ),
-    DispatchPathCategory.UNKNOWN: (
-        "Unclassified dispatch path.  Treated conservatively as legacy_bypass."
-    ),
+    DispatchPathCategory.UNKNOWN: ("Unclassified dispatch path.  Treated conservatively as legacy_bypass."),
 }
 
 # ---------------------------------------------------------------------------

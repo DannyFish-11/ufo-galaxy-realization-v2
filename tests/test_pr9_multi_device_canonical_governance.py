@@ -76,26 +76,25 @@ if _PROJECT_ROOT not in sys.path:
 
 import core.multi_device_canonical_governance as _mod
 from core.multi_device_canonical_governance import (
-    MULTI_DEVICE_CANONICAL_GOVERNANCE_AUTHORITY,
-    MULTI_DEVICE_CANONICAL_GOVERNANCE_PR09_SENTINEL,
     DELEGATED_HOOKS_DO_NOT_EQUAL_FULLY_ACTIVE_POLICY,
-    NO_DELEGATED_PARTICIPANT_NO_MULTI_DEVICE_OPERATIONAL_POLICY,
     EVIDENCE_REQUIRED_FOR_DEFAULT_MAINLINE_POLICY,
     EXPLICIT_DOWNGRADE_ON_PARTIAL_EVIDENCE_POLICY,
-    SINGLE_DEVICE_BASELINE_WHEN_NO_DELEGATED_PARTICIPANT_POLICY,
+    MULTI_DEVICE_CANONICAL_GOVERNANCE_AUTHORITY,
+    MULTI_DEVICE_CANONICAL_GOVERNANCE_PR09_SENTINEL,
+    NO_DELEGATED_PARTICIPANT_NO_MULTI_DEVICE_OPERATIONAL_POLICY,
     OPTIONAL_REALITY_MUST_NOT_UPGRADE_TO_FULLY_OPERATIONAL_DEFAULT_POLICY,
-    MultiDeviceSystemTier,
-    DelegatedParticipantRole,
-    MultiDeviceGovernanceVerdict,
-    ParticipantClassification,
+    SINGLE_DEVICE_BASELINE_WHEN_NO_DELEGATED_PARTICIPANT_POLICY,
     CapabilityGovernanceEntry,
-    MultiDeviceGovernanceReport,
+    DelegatedParticipantRole,
     MultiDeviceGovernanceEvaluator,
+    MultiDeviceGovernanceReport,
+    MultiDeviceGovernanceVerdict,
+    MultiDeviceSystemTier,
+    ParticipantClassification,
     build_multi_device_governance_report,
     get_multi_device_governance_evaluator,
     reset_multi_device_governance_evaluator,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -253,7 +252,9 @@ class TestMultiDeviceSystemTierFromString:
         assert MultiDeviceSystemTier.from_string("guarded") == MultiDeviceSystemTier.guarded
 
     def test_valid_single_device_baseline(self):
-        assert MultiDeviceSystemTier.from_string("single_device_baseline") == MultiDeviceSystemTier.single_device_baseline
+        assert (
+            MultiDeviceSystemTier.from_string("single_device_baseline") == MultiDeviceSystemTier.single_device_baseline
+        )
 
     def test_invalid_string_returns_no_evidence(self):
         assert MultiDeviceSystemTier.from_string("totally_invalid") == MultiDeviceSystemTier.no_evidence
@@ -832,15 +833,15 @@ class TestScenarioNoActiveDelegatedParticipant:
 
     def test_is_not_operational(self):  # S2
         report = self._evaluate_with_no_participants()
-        assert report.is_operational is False, (
-            "System must not report operational when no delegated participant present."
-        )
+        assert (
+            report.is_operational is False
+        ), "System must not report operational when no delegated participant present."
 
     def test_is_not_default_mainline(self):  # S3
         report = self._evaluate_with_no_participants()
-        assert report.is_default_mainline is False, (
-            "System must not report default-mainline when no delegated participant."
-        )
+        assert (
+            report.is_default_mainline is False
+        ), "System must not report default-mainline when no delegated participant."
 
     def test_delegated_participant_count_is_zero(self):
         report = self._evaluate_with_no_participants()
@@ -848,16 +849,14 @@ class TestScenarioNoActiveDelegatedParticipant:
 
     def test_downgrade_reason_recorded(self):  # S9
         report = self._evaluate_with_no_participants()
-        assert len(report.downgrade_reasons) > 0, (
-            "Downgrade reason must be recorded for single-device baseline state."
-        )
+        assert len(report.downgrade_reasons) > 0, "Downgrade reason must be recorded for single-device baseline state."
 
     def test_downgrade_reason_mentions_single_device(self):
         report = self._evaluate_with_no_participants()
         all_reasons = " ".join(report.downgrade_reasons).lower()
-        assert "single" in all_reasons or "delegated participant" in all_reasons, (
-            "Downgrade reason should mention single-device or delegated participant."
-        )
+        assert (
+            "single" in all_reasons or "delegated participant" in all_reasons
+        ), "Downgrade reason should mention single-device or delegated participant."
 
 
 class TestScenarioDelegatedParticipantWithoutEvidence:
@@ -895,9 +894,9 @@ class TestScenarioDelegatedParticipantWithoutEvidence:
             f"Got: {report.verdict.value!r}.  "
             "EVIDENCE_REQUIRED_FOR_DEFAULT_MAINLINE_POLICY violated."
         )
-        assert report.verdict == MultiDeviceGovernanceVerdict.conditional_active, (
-            f"Expected conditional_active but got {report.verdict.value!r}."
-        )
+        assert (
+            report.verdict == MultiDeviceGovernanceVerdict.conditional_active
+        ), f"Expected conditional_active but got {report.verdict.value!r}."
 
     def test_is_operational_is_true(self):
         # Delegated participant is present, so operational state is True
@@ -915,16 +914,13 @@ class TestScenarioDelegatedParticipantWithoutEvidence:
     def test_downgrade_reason_recorded(self):  # S7
         report = self._evaluate_with_delegated_no_evidence()
         assert len(report.downgrade_reasons) > 0, (
-            "Downgrade reason must be recorded when delegated participant "
-            "has no evidence."
+            "Downgrade reason must be recorded when delegated participant " "has no evidence."
         )
 
     def test_downgrade_reason_mentions_evidence(self):
         report = self._evaluate_with_delegated_no_evidence()
         all_reasons = " ".join(report.downgrade_reasons).lower()
-        assert "evidence" in all_reasons, (
-            "Downgrade reason should mention missing evidence."
-        )
+        assert "evidence" in all_reasons, "Downgrade reason should mention missing evidence."
 
 
 class TestScenarioGuardedCapabilitiesPreventDefaultMainline:
@@ -1010,8 +1006,7 @@ class TestScenarioCapabilityMap:
             entry = report.capability_map.get(cap_name)
             assert entry is not None, f"{cap_name} must be in capability_map"
             assert entry.tier == MultiDeviceSystemTier.default_mainline, (
-                f"{cap_name} must be default-mainline, "
-                f"got {entry.tier.value!r}"
+                f"{cap_name} must be default-mainline, " f"got {entry.tier.value!r}"
             )
 
     def test_both_default_mainline_and_guarded_present(self):  # S13

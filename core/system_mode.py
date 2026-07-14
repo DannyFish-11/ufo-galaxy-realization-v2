@@ -110,6 +110,7 @@ SYSTEM_MODE_CONFIG_AUTHORITY: str = "core.system_mode"
 # Enums
 # ---------------------------------------------------------------------------
 
+
 class SystemMode(str, Enum):
     """Canonical Galaxy system operating modes."""
 
@@ -132,6 +133,7 @@ class NetworkMode(str, Enum):
 # ---------------------------------------------------------------------------
 # Config dataclass
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class FabricConfig:
@@ -248,9 +250,7 @@ def _resolve_mode(env: Optional[str], cross_device_env: Optional[str]) -> System
             return SystemMode.DESKTOP_CROSS_DEVICE
         if normalized == SystemMode.DESKTOP_LOCAL.value:
             return SystemMode.DESKTOP_LOCAL
-        logger.warning(
-            "Unknown GALAXY_SYSTEM_MODE=%r; falling back to 'desktop-local'", env
-        )
+        logger.warning("Unknown GALAXY_SYSTEM_MODE=%r; falling back to 'desktop-local'", env)
 
     # Fallback: infer from legacy GALAXY_CROSS_DEVICE_ENABLED
     if cross_device_env is not None:
@@ -269,9 +269,7 @@ def _resolve_network_mode(env: Optional[str]) -> NetworkMode:
         try:
             return NetworkMode(normalized)
         except ValueError:
-            logger.warning(
-                "Unknown GALAXY_NETWORK_MODE=%r; falling back to 'local'", env
-            )
+            logger.warning("Unknown GALAXY_NETWORK_MODE=%r; falling back to 'local'", env)
     return NetworkMode.LOCAL
 
 
@@ -288,16 +286,13 @@ def _resolve_transport_priority(env: Optional[str], mode: SystemMode) -> List[st
         items = [t.strip() for t in env.split(",") if t.strip()]
         if items:
             return items
-    return list(
-        _TRANSPORT_CROSS_DEVICE
-        if mode == SystemMode.DESKTOP_CROSS_DEVICE
-        else _TRANSPORT_LOCAL
-    )
+    return list(_TRANSPORT_CROSS_DEVICE if mode == SystemMode.DESKTOP_CROSS_DEVICE else _TRANSPORT_LOCAL)
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def resolve_fabric_config(environ: Optional[dict] = None) -> FabricConfig:
     """Build a :class:`FabricConfig` from environment variables.

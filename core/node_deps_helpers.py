@@ -26,8 +26,8 @@ that ``node_dependencies.json`` is the authoritative node-metadata source.
 from __future__ import annotations
 
 import json
-import re
 import logging
+import re
 from pathlib import Path
 from typing import Dict, Iterator, Optional, Tuple
 
@@ -183,7 +183,5 @@ def build_node_id_to_key_map(path: Optional[Path] = None) -> Dict[str, str]:
     (e.g. ``"Node_00_StateMachine"``).
     """
     return {
-        meta["id"]: node_key
-        for node_key, meta in iter_active_node_metadata(path, include_skip=True)
-        if meta.get("id")
+        meta["id"]: node_key for node_key, meta in iter_active_node_metadata(path, include_skip=True) if meta.get("id")
     }

@@ -19,6 +19,7 @@
 
 白名单条目支持 fnmatch 通配(如 ``get_*``)。
 """
+
 from __future__ import annotations
 
 import json
@@ -42,18 +43,22 @@ def _strict_mode() -> bool:
 @dataclass(frozen=True)
 class PermissionDecision:
     """一次动作权限判定的结构化结果(冻结,防事后篡改)。"""
+
     allowed: bool
-    declared: bool               # 该节点是否有权限声明
+    declared: bool  # 该节点是否有权限声明
     node_id: str = ""
     action: str = ""
     reason: str = ""
-    matched_pattern: str = ""    # 命中的白名单条目(便于审计)
+    matched_pattern: str = ""  # 命中的白名单条目(便于审计)
 
     def to_dict(self) -> Dict[str, object]:
         return {
-            "allowed": self.allowed, "declared": self.declared,
-            "node_id": self.node_id, "action": self.action,
-            "reason": self.reason, "matched_pattern": self.matched_pattern,
+            "allowed": self.allowed,
+            "declared": self.declared,
+            "node_id": self.node_id,
+            "action": self.action,
+            "reason": self.reason,
+            "matched_pattern": self.matched_pattern,
         }
 
 
@@ -113,12 +118,18 @@ def evaluate_action_permission(node_id: str, action: str) -> PermissionDecision:
         # 未声明节点:legacy 放行(strict 模式收紧为拒绝)
         if _strict_mode():
             return PermissionDecision(
-                allowed=False, declared=False, node_id=node_id, action=action,
+                allowed=False,
+                declared=False,
+                node_id=node_id,
+                action=action,
                 reason="strict 模式:节点未声明动作权限,一律拒绝",
             )
         logger.debug("节点 %s 未声明动作权限,legacy 放行 action=%s", node_id, action)
         return PermissionDecision(
-            allowed=True, declared=False, node_id=node_id, action=action,
+            allowed=True,
+            declared=False,
+            node_id=node_id,
+            action=action,
             reason="节点未声明权限(legacy 放行)",
         )
 
@@ -126,10 +137,17 @@ def evaluate_action_permission(node_id: str, action: str) -> PermissionDecision:
     for pattern in whitelist:
         if action == pattern or fnmatch(action, pattern):
             return PermissionDecision(
-                allowed=True, declared=True, node_id=node_id, action=action,
-                reason="动作在声明白名单内", matched_pattern=pattern,
+                allowed=True,
+                declared=True,
+                node_id=node_id,
+                action=action,
+                reason="动作在声明白名单内",
+                matched_pattern=pattern,
             )
     return PermissionDecision(
-        allowed=False, declared=True, node_id=node_id, action=action,
+        allowed=False,
+        declared=True,
+        node_id=node_id,
+        action=action,
         reason=f"动作 {action!r} 不在节点声明的白名单内(fail-closed)",
     )

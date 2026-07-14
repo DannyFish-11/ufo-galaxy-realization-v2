@@ -164,15 +164,12 @@ from typing import Any, Dict, List, Optional
 
 import pytest
 
-
 # ===========================================================================
 # Helpers
 # ===========================================================================
 
 
-def _native_multimodal_route(
-    provider: str = "openai", model: str = "gpt-4o"
-) -> Dict[str, Any]:
+def _native_multimodal_route(provider: str = "openai", model: str = "gpt-4o") -> Dict[str, Any]:
     return {
         "route_type": "native_multimodal",
         "provider": provider,
@@ -272,41 +269,28 @@ class TestDegradedOperationLevel:
         from core.degraded_operation_envelope import DegradedOperationLevel
 
         assert (
-            DegradedOperationLevel.from_route_type("native_multimodal")
-            == DegradedOperationLevel.FULL_NATIVE_MULTIMODAL
+            DegradedOperationLevel.from_route_type("native_multimodal") == DegradedOperationLevel.FULL_NATIVE_MULTIMODAL
         )
 
     def test_from_route_type_partial_multimodal(self):
         from core.degraded_operation_envelope import DegradedOperationLevel
 
-        assert (
-            DegradedOperationLevel.from_route_type("partial_multimodal")
-            == DegradedOperationLevel.PARTIAL_MULTIMODAL
-        )
+        assert DegradedOperationLevel.from_route_type("partial_multimodal") == DegradedOperationLevel.PARTIAL_MULTIMODAL
 
     def test_from_route_type_text_only(self):
         from core.degraded_operation_envelope import DegradedOperationLevel
 
-        assert (
-            DegradedOperationLevel.from_route_type("text_only")
-            == DegradedOperationLevel.TEXT_SUMMARY_FALLBACK
-        )
+        assert DegradedOperationLevel.from_route_type("text_only") == DegradedOperationLevel.TEXT_SUMMARY_FALLBACK
 
     def test_from_route_type_advisory(self):
         from core.degraded_operation_envelope import DegradedOperationLevel
 
-        assert (
-            DegradedOperationLevel.from_route_type("advisory")
-            == DegradedOperationLevel.OBSERVE_ONLY
-        )
+        assert DegradedOperationLevel.from_route_type("advisory") == DegradedOperationLevel.OBSERVE_ONLY
 
     def test_from_route_type_none_string(self):
         from core.degraded_operation_envelope import DegradedOperationLevel
 
-        assert (
-            DegradedOperationLevel.from_route_type("none")
-            == DegradedOperationLevel.NO_OP
-        )
+        assert DegradedOperationLevel.from_route_type("none") == DegradedOperationLevel.NO_OP
 
     def test_from_route_type_unknown_returns_unknown(self):
         from core.degraded_operation_envelope import DegradedOperationLevel
@@ -383,9 +367,7 @@ class TestProviderFailoverReason:
     def test_from_string_normalises_confidence_threshold(self):
         from core.degraded_operation_envelope import ProviderFailoverReason
 
-        result = ProviderFailoverReason.from_string(
-            "confidence_below_threshold reason=CONFIDENCE_BELOW_THRESHOLD"
-        )
+        result = ProviderFailoverReason.from_string("confidence_below_threshold reason=CONFIDENCE_BELOW_THRESHOLD")
         assert result == ProviderFailoverReason.CONFIDENCE_BELOW_THRESHOLD
 
     def test_from_string_unknown_for_garbage(self):
@@ -458,10 +440,7 @@ class TestDegradedOperationSeverity:
             DegradedOperationSeverity,
         )
 
-        assert (
-            DegradedOperationSeverity.from_level(DegradedOperationLevel.NO_OP)
-            == DegradedOperationSeverity.CRITICAL
-        )
+        assert DegradedOperationSeverity.from_level(DegradedOperationLevel.NO_OP) == DegradedOperationSeverity.CRITICAL
 
     def test_from_level_unknown_returns_unknown(self):
         from core.degraded_operation_envelope import (
@@ -469,10 +448,7 @@ class TestDegradedOperationSeverity:
             DegradedOperationSeverity,
         )
 
-        assert (
-            DegradedOperationSeverity.from_level(DegradedOperationLevel.UNKNOWN)
-            == DegradedOperationSeverity.UNKNOWN
-        )
+        assert DegradedOperationSeverity.from_level(DegradedOperationLevel.UNKNOWN) == DegradedOperationSeverity.UNKNOWN
 
     def test_from_string_round_trips(self):
         from core.degraded_operation_envelope import DegradedOperationSeverity
@@ -734,8 +710,9 @@ class TestDegradedOperationEnvelope:
         uuid.UUID(env.envelope_id, version=4)
 
     def test_timestamp_auto_populated(self):
-        from core.degraded_operation_envelope import DegradedOperationEnvelope
         import time
+
+        from core.degraded_operation_envelope import DegradedOperationEnvelope
 
         before = time.time()
         env = DegradedOperationEnvelope()
@@ -839,9 +816,7 @@ class TestBuildProviderFailoverStep:
             build_provider_failover_step,
         )
 
-        step = build_provider_failover_step(
-            0, "p", "m", failover_reason="router_unavailable degraded_to=advisory"
-        )
+        step = build_provider_failover_step(0, "p", "m", failover_reason="router_unavailable degraded_to=advisory")
         assert step.failover_reason == ProviderFailoverReason.ROUTER_UNAVAILABLE.value
 
     def test_defaults_are_safe(self):
@@ -894,9 +869,7 @@ class TestBuildProviderFailoverChain:
         )
 
         route = _native_multimodal_route(provider="openai")
-        supply = _supply_snapshot_with_down_provider(
-            down_provider="bad_provider", available_provider="openai"
-        )
+        supply = _supply_snapshot_with_down_provider(down_provider="bad_provider", available_provider="openai")
         chain = build_provider_failover_chain(route, supply)
         skipped = [s for s in chain.steps if s.skipped]
         assert len(skipped) >= 1
@@ -1155,18 +1128,14 @@ class TestBuildDegradedOperationEnvelope:
     def test_provider_and_model_propagated(self):
         from core.degraded_operation_envelope import build_degraded_operation_envelope
 
-        env = build_degraded_operation_envelope(
-            _native_multimodal_route(provider="openai", model="gpt-4o")
-        )
+        env = build_degraded_operation_envelope(_native_multimodal_route(provider="openai", model="gpt-4o"))
         assert env.provider == "openai"
         assert env.model == "gpt-4o"
 
     def test_trace_id_propagated(self):
         from core.degraded_operation_envelope import build_degraded_operation_envelope
 
-        env = build_degraded_operation_envelope(
-            _native_multimodal_route(), trace_id="test_trace_123"
-        )
+        env = build_degraded_operation_envelope(_native_multimodal_route(), trace_id="test_trace_123")
         assert env.trace_id == "test_trace_123"
 
     def test_prior_level_extracted_from_prior_envelope(self):
@@ -1175,12 +1144,8 @@ class TestBuildDegradedOperationEnvelope:
             build_degraded_operation_envelope,
         )
 
-        prior = {
-            "current_level": DegradedOperationLevel.FULL_NATIVE_MULTIMODAL.value
-        }
-        env = build_degraded_operation_envelope(
-            _partial_multimodal_route(), prior_envelope=prior
-        )
+        prior = {"current_level": DegradedOperationLevel.FULL_NATIVE_MULTIMODAL.value}
+        env = build_degraded_operation_envelope(_partial_multimodal_route(), prior_envelope=prior)
         assert env.prior_level == DegradedOperationLevel.FULL_NATIVE_MULTIMODAL.value
 
     def test_transition_occurred_when_level_changes(self):
@@ -1190,9 +1155,7 @@ class TestBuildDegradedOperationEnvelope:
         )
 
         prior = {"current_level": DegradedOperationLevel.FULL_NATIVE_MULTIMODAL.value}
-        env = build_degraded_operation_envelope(
-            _partial_multimodal_route(), prior_envelope=prior
-        )
+        env = build_degraded_operation_envelope(_partial_multimodal_route(), prior_envelope=prior)
         assert env.transition_occurred is True
 
     def test_no_transition_when_level_unchanged(self):
@@ -1202,9 +1165,7 @@ class TestBuildDegradedOperationEnvelope:
         )
 
         prior = {"current_level": DegradedOperationLevel.PARTIAL_MULTIMODAL.value}
-        env = build_degraded_operation_envelope(
-            _partial_multimodal_route(), prior_envelope=prior
-        )
+        env = build_degraded_operation_envelope(_partial_multimodal_route(), prior_envelope=prior)
         assert env.transition_occurred is False
 
     def test_envelope_includes_failover_chain(self):
@@ -1251,9 +1212,7 @@ class TestBuildDegradedOperationEnvelope:
         from core.degraded_operation_envelope import build_degraded_operation_envelope
 
         supply = _supply_snapshot_with_down_provider("bad_prov", "openai")
-        env = build_degraded_operation_envelope(
-            _native_multimodal_route(provider="openai"), supply_snapshot=supply
-        )
+        env = build_degraded_operation_envelope(_native_multimodal_route(provider="openai"), supply_snapshot=supply)
         chain = env.failover_chain
         assert chain is not None
         skipped = [s for s in chain.get("steps", []) if s.get("skipped")]
@@ -1308,9 +1267,7 @@ class TestEnvelopeSummary:
         )
 
         supply = _supply_snapshot_with_down_provider("bad_prov", "openai")
-        env = build_degraded_operation_envelope(
-            _native_multimodal_route(provider="openai"), supply_snapshot=supply
-        )
+        env = build_degraded_operation_envelope(_native_multimodal_route(provider="openai"), supply_snapshot=supply)
         summary = envelope_summary(env)
         assert isinstance(summary["failover_occurred"], bool)
 
@@ -1339,9 +1296,7 @@ class TestProviderUnavailabilityFailover:
         )
 
         route = _text_only_route(provider="fallback_prov", reason="provider_unavailable")
-        supply = _supply_snapshot_with_down_provider(
-            down_provider="preferred_prov", available_provider="fallback_prov"
-        )
+        supply = _supply_snapshot_with_down_provider(down_provider="preferred_prov", available_provider="fallback_prov")
         chain = build_provider_failover_chain(route, supply)
         skipped = [s for s in chain.steps if s.skipped]
         selected = [s for s in chain.steps if s.selected]
@@ -1455,9 +1410,7 @@ class TestEnvelopeSerialisation:
         )
 
         supply = _supply_snapshot_with_down_provider("bad_prov", "openai")
-        env = build_degraded_operation_envelope(
-            _partial_multimodal_route(), supply_snapshot=supply, trace_id="rt_123"
-        )
+        env = build_degraded_operation_envelope(_partial_multimodal_route(), supply_snapshot=supply, trace_id="rt_123")
         # Serialize to JSON
         raw_json = json.dumps(env.to_dict())
         # Deserialize
@@ -1535,17 +1488,13 @@ class TestRepeatedTransitions:
         assert env1.transition_occurred is False
 
         # Step 2: Degrade to partial multimodal
-        env2 = build_degraded_operation_envelope(
-            _partial_multimodal_route(), prior_envelope=env1.to_dict()
-        )
+        env2 = build_degraded_operation_envelope(_partial_multimodal_route(), prior_envelope=env1.to_dict())
         assert env2.current_level == DegradedOperationLevel.PARTIAL_MULTIMODAL.value
         assert env2.prior_level == DegradedOperationLevel.FULL_NATIVE_MULTIMODAL.value
         assert env2.transition_occurred is True
 
         # Step 3: Degrade to text summary
-        env3 = build_degraded_operation_envelope(
-            _text_only_route(), prior_envelope=env2.to_dict()
-        )
+        env3 = build_degraded_operation_envelope(_text_only_route(), prior_envelope=env2.to_dict())
         assert env3.current_level == DegradedOperationLevel.TEXT_SUMMARY_FALLBACK.value
         assert env3.prior_level == DegradedOperationLevel.PARTIAL_MULTIMODAL.value
         assert env3.transition_occurred is True
@@ -1557,9 +1506,7 @@ class TestRepeatedTransitions:
         )
 
         env1 = build_degraded_operation_envelope(_partial_multimodal_route())
-        env2 = build_degraded_operation_envelope(
-            _partial_multimodal_route(), prior_envelope=env1.to_dict()
-        )
+        env2 = build_degraded_operation_envelope(_partial_multimodal_route(), prior_envelope=env1.to_dict())
         assert env2.transition_occurred is False
 
     def test_ladder_current_level_matches_envelope_level(self):
@@ -1628,9 +1575,7 @@ class TestOpenClawdIntegration:
         if oc is None:
             pytest.skip("OpenClawd unavailable")
 
-        result = oc._build_degraded_operation_envelope(
-            route_dict={"route_type": None, "provider": 42}
-        )
+        result = oc._build_degraded_operation_envelope(route_dict={"route_type": None, "provider": 42})
         assert result is None or isinstance(result, dict)
 
 

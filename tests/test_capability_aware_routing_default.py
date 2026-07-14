@@ -39,7 +39,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ===========================================================================
 # A) Sentinels
 # ===========================================================================
@@ -100,8 +99,8 @@ class TestCapabilityBestMatchRouting:
         """When no explicit target is given and a capable device exists,
         outcome is CAPABILITY_MATCHED with the capable device recommended."""
         from core.capability_aware_routing_default import (
-            apply_capability_aware_default,
             CapabilityRoutingOutcome,
+            apply_capability_aware_default,
         )
 
         executors = [_FakeExecutor("device-camera-1")]
@@ -119,8 +118,8 @@ class TestCapabilityBestMatchRouting:
         """Multiple capable devices are all recommended when none is explicitly
         chosen — capability graph provides all candidates."""
         from core.capability_aware_routing_default import (
-            apply_capability_aware_default,
             CapabilityRoutingOutcome,
+            apply_capability_aware_default,
         )
 
         executors = [
@@ -141,8 +140,8 @@ class TestCapabilityBestMatchRouting:
         """When no target is given and the capability graph is empty, the
         outcome is INSUFFICIENT_DATA — not a silent bypass."""
         from core.capability_aware_routing_default import (
-            apply_capability_aware_default,
             CapabilityRoutingOutcome,
+            apply_capability_aware_default,
         )
 
         decision = apply_capability_aware_default(
@@ -158,8 +157,8 @@ class TestCapabilityBestMatchRouting:
         """When neither explicit caps nor inferred caps exist and no target is
         given, outcome is NO_REQUIREMENTS (backward-compatible no-op)."""
         from core.capability_aware_routing_default import (
-            apply_capability_aware_default,
             CapabilityRoutingOutcome,
+            apply_capability_aware_default,
         )
 
         decision = apply_capability_aware_default(
@@ -183,8 +182,8 @@ class TestMultiDeviceCapabilitySelection:
         """Given two candidates but only one is in the routable set for the
         required capabilities, routing selects the capable device."""
         from core.capability_aware_routing_default import (
-            apply_capability_aware_default,
             CapabilityRoutingOutcome,
+            apply_capability_aware_default,
         )
 
         # Only 'device-capable' is in the routable executors for 'camera'
@@ -203,8 +202,8 @@ class TestMultiDeviceCapabilitySelection:
         """When the explicit target IS in the capability graph, routing
         proceeds with that device (CAPABILITY_MATCHED)."""
         from core.capability_aware_routing_default import (
-            apply_capability_aware_default,
             CapabilityRoutingOutcome,
+            apply_capability_aware_default,
         )
 
         executors = [_FakeExecutor("device-capable"), _FakeExecutor("device-other")]
@@ -222,8 +221,8 @@ class TestMultiDeviceCapabilitySelection:
     def test_multi_device_all_confirmed_capability_matched(self):
         """Multiple explicit targets are all confirmed → CAPABILITY_MATCHED."""
         from core.capability_aware_routing_default import (
-            apply_capability_aware_default,
             CapabilityRoutingOutcome,
+            apply_capability_aware_default,
         )
 
         executors = [_FakeExecutor("dev-1"), _FakeExecutor("dev-2")]
@@ -241,8 +240,8 @@ class TestMultiDeviceCapabilitySelection:
         """When some explicit targets are confirmed and some are not, routing
         filters to the confirmed subset only."""
         from core.capability_aware_routing_default import (
-            apply_capability_aware_default,
             CapabilityRoutingOutcome,
+            apply_capability_aware_default,
         )
 
         executors = [_FakeExecutor("dev-capable")]
@@ -271,8 +270,8 @@ class TestCapabilityMismatchReject:
         are no capable alternatives, the outcome is CAPABILITY_REJECTED.
         This is a structured rejection, NOT a warning-only bypass."""
         from core.capability_aware_routing_default import (
-            apply_capability_aware_default,
             CapabilityRoutingOutcome,
+            apply_capability_aware_default,
         )
 
         # The routable graph is empty → no capable alternatives
@@ -306,8 +305,8 @@ class TestCapabilityMismatchReject:
     def test_mismatch_with_all_unconfirmed_and_no_alt_is_rejected(self):
         """Multiple explicit targets, all unconfirmed, no alternatives → REJECTED."""
         from core.capability_aware_routing_default import (
-            apply_capability_aware_default,
             CapabilityRoutingOutcome,
+            apply_capability_aware_default,
         )
 
         decision = apply_capability_aware_default(
@@ -334,8 +333,8 @@ class TestCapabilityMismatchReroute:
         """When an explicit target is not in the capability graph but there
         IS a capable alternative, routing redirects to the capable device."""
         from core.capability_aware_routing_default import (
-            apply_capability_aware_default,
             CapabilityRoutingOutcome,
+            apply_capability_aware_default,
         )
 
         # Only 'capable-device' is in the graph (not 'bad-device')
@@ -400,8 +399,8 @@ class TestExplicitOverrideExceptionPath:
         supplies an explicit device_id, the outcome is EXPLICIT_OVERRIDE —
         indicating the request is on the exception path, not the default."""
         from core.capability_aware_routing_default import (
-            apply_capability_aware_default,
             CapabilityRoutingOutcome,
+            apply_capability_aware_default,
         )
 
         decision = apply_capability_aware_default(
@@ -418,8 +417,8 @@ class TestExplicitOverrideExceptionPath:
         """The EXPLICIT_OVERRIDE outcome must be flagged so callers can
         distinguish it from the default capability-matched path."""
         from core.capability_aware_routing_default import (
-            apply_capability_aware_default,
             CapabilityRoutingOutcome,
+            apply_capability_aware_default,
         )
 
         decision = apply_capability_aware_default(
@@ -437,8 +436,8 @@ class TestExplicitOverrideExceptionPath:
         """No explicit target, no inferrable capabilities → NO_REQUIREMENTS
         (backward-compatible no-op; gate is inactive)."""
         from core.capability_aware_routing_default import (
-            apply_capability_aware_default,
             CapabilityRoutingOutcome,
+            apply_capability_aware_default,
         )
 
         decision = apply_capability_aware_default(
@@ -491,8 +490,8 @@ class TestCapabilityInferenceFromToolName:
         """When required_capabilities is absent but tool_name is recognisable,
         inference activates the gate and produces a non-trivial outcome."""
         from core.capability_aware_routing_default import (
-            apply_capability_aware_default,
             CapabilityRoutingOutcome,
+            apply_capability_aware_default,
         )
 
         # take_photo infers ['camera']; 'camera-device' is in the graph.
@@ -579,8 +578,8 @@ class TestApplyCapabilityAwareDefaultOutcomes:
         """Every outcome path produces a non-empty reason string for
         observability."""
         from core.capability_aware_routing_default import (
-            apply_capability_aware_default,
             CapabilityRoutingOutcome,
+            apply_capability_aware_default,
         )
 
         cases = [
@@ -630,20 +629,16 @@ class TestApplyCapabilityAwareDefaultOutcomes:
                 required_capabilities=req_caps,
             )
             assert decision.outcome == expected_outcome, (
-                f"Expected {expected_outcome} but got {decision.outcome} "
-                f"for tool={tool!r} targets={targets!r}"
+                f"Expected {expected_outcome} but got {decision.outcome} " f"for tool={tool!r} targets={targets!r}"
             )
-            assert decision.reason, (
-                f"Reason must not be empty for outcome {decision.outcome} "
-                f"(tool={tool!r})"
-            )
+            assert decision.reason, f"Reason must not be empty for outcome {decision.outcome} " f"(tool={tool!r})"
 
     def test_capability_matched_no_explicit_target_sets_applied_caps(self):
         """The CAPABILITY_MATCHED path (no explicit target) populates
         applied_capabilities from inference so the decision is auditable."""
         from core.capability_aware_routing_default import (
-            apply_capability_aware_default,
             CapabilityRoutingOutcome,
+            apply_capability_aware_default,
         )
 
         decision = apply_capability_aware_default(
@@ -659,8 +654,8 @@ class TestApplyCapabilityAwareDefaultOutcomes:
         """After rerouting, original_explicit_targets records the caller's
         original request for audit purposes."""
         from core.capability_aware_routing_default import (
-            apply_capability_aware_default,
             CapabilityRoutingOutcome,
+            apply_capability_aware_default,
         )
 
         decision = apply_capability_aware_default(

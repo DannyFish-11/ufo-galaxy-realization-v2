@@ -89,6 +89,7 @@ governance flow.  Companion Android repo: ``DannyFish-11/ufo-galaxy-android``.
 from __future__ import annotations
 
 import logging  # auto: ensure module _logger is defined
+
 _logger = logging.getLogger(__name__)
 
 
@@ -115,10 +116,8 @@ except Exception as exc:
 # ---------------------------------------------------------------------------
 
 try:
-    from core.android_participant_truth_ingress import (
-        AndroidParticipantReconcileOutcome as _ReconcileOutcome,
-        ingest_android_participant_truth_message as _ingest_truth_message,
-    )
+    from core.android_participant_truth_ingress import AndroidParticipantReconcileOutcome as _ReconcileOutcome
+    from core.android_participant_truth_ingress import ingest_android_participant_truth_message as _ingest_truth_message
 
     _TRUTH_INGRESS_AVAILABLE: bool = True
 except ImportError:  # pragma: no cover
@@ -356,8 +355,7 @@ class AndroidEvaluatorArtifactIngestOutcome:
             "artifact": self.artifact.to_dict() if self.artifact else None,
             "truth_reconcile": (
                 self.truth_reconcile_outcome.to_dict()
-                if self.truth_reconcile_outcome is not None
-                and hasattr(self.truth_reconcile_outcome, "to_dict")
+                if self.truth_reconcile_outcome is not None and hasattr(self.truth_reconcile_outcome, "to_dict")
                 else None
             ),
         }
@@ -424,9 +422,7 @@ class AndroidEvaluatorArtifactRegistry:
         with self._lock:
             return self._total
 
-    def list_for_kind(
-        self, kind: AndroidEvaluatorArtifactKind, n: int = 20
-    ) -> List[AndroidEvaluatorArtifact]:
+    def list_for_kind(self, kind: AndroidEvaluatorArtifactKind, n: int = 20) -> List[AndroidEvaluatorArtifact]:
         """Return up to *n* most-recent artifacts of the given *kind*."""
         with self._lock:
             return [a for a in self._ring if a.kind == kind][:n]
@@ -453,9 +449,7 @@ class AndroidEvaluatorArtifactRegistry:
             "artifact_counts_by_kind": counts,
             "latest_by_kind": latest_by_kind,
             "canonical_gate_input_kinds": [
-                k.value
-                for k in AndroidEvaluatorArtifactKind
-                if k.is_canonical_gate_input()
+                k.value for k in AndroidEvaluatorArtifactKind if k.is_canonical_gate_input()
             ],
         }
 
@@ -531,9 +525,7 @@ def extract_evaluator_artifact(
         is_compliant = raw_compliant
 
     # verdict label
-    verdict_label = str(
-        payload.get("verdict_label") or payload.get("verdict") or ""
-    )
+    verdict_label = str(payload.get("verdict_label") or payload.get("verdict") or "")
 
     return AndroidEvaluatorArtifact(
         kind=kind,
@@ -648,9 +640,7 @@ def ingest_android_evaluator_artifact(
             _logger.debug("Fallback triggered: %s", exc)
             reject_reason = f"truth_ingress_error:{exc}"
             if _logger:
-                _logger.warning(
-                    "ingest_android_evaluator_artifact truth ingress failed: %s", exc
-                )
+                _logger.warning("ingest_android_evaluator_artifact truth ingress failed: %s", exc)
     else:
         reject_reason = "truth_ingress_unavailable"
 

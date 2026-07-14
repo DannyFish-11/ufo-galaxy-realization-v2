@@ -56,11 +56,11 @@ import pytest
 
 try:
     from core.runtime.source_dispatch_orchestrator import (
-        POST_RELEASE_DISPATCH_CLIENT_SEMANTICS_TIGHTENING_PR29_SENTINEL,
-        DISPATCH_SELECTION_COHESION_POST_RELEASE_PR29_POLICY,
-        REGISTRATION_READINESS_CAPABILITY_STABILITY_POST_RELEASE_PR29_POLICY,
-        DELEGATED_EXECUTION_FALLBACK_SEMANTIC_CONSISTENCY_PR29_POLICY,
         CLIENT_GATEWAY_RESULT_CONTRACT_ALIGNMENT_POST_RELEASE_PR29_POLICY,
+        DELEGATED_EXECUTION_FALLBACK_SEMANTIC_CONSISTENCY_PR29_POLICY,
+        DISPATCH_SELECTION_COHESION_POST_RELEASE_PR29_POLICY,
+        POST_RELEASE_DISPATCH_CLIENT_SEMANTICS_TIGHTENING_PR29_SENTINEL,
+        REGISTRATION_READINESS_CAPABILITY_STABILITY_POST_RELEASE_PR29_POLICY,
     )
 
     _ORCHESTRATOR_AVAILABLE = True
@@ -77,13 +77,11 @@ except ImportError:
     _PROJECTION_AVAILABLE = False
 
 try:
-    from core.runtime import (
-        POST_RELEASE_DISPATCH_CLIENT_SEMANTICS_TIGHTENING_PR29_SENTINEL as _rt_sentinel,
-        DISPATCH_SELECTION_COHESION_POST_RELEASE_PR29_POLICY as _rt_selection,
-        REGISTRATION_READINESS_CAPABILITY_STABILITY_POST_RELEASE_PR29_POLICY as _rt_registration,
-        DELEGATED_EXECUTION_FALLBACK_SEMANTIC_CONSISTENCY_PR29_POLICY as _rt_delegated,
-        CLIENT_GATEWAY_RESULT_CONTRACT_ALIGNMENT_POST_RELEASE_PR29_POLICY as _rt_client,
-    )
+    from core.runtime import CLIENT_GATEWAY_RESULT_CONTRACT_ALIGNMENT_POST_RELEASE_PR29_POLICY as _rt_client
+    from core.runtime import DELEGATED_EXECUTION_FALLBACK_SEMANTIC_CONSISTENCY_PR29_POLICY as _rt_delegated
+    from core.runtime import DISPATCH_SELECTION_COHESION_POST_RELEASE_PR29_POLICY as _rt_selection
+    from core.runtime import POST_RELEASE_DISPATCH_CLIENT_SEMANTICS_TIGHTENING_PR29_SENTINEL as _rt_sentinel
+    from core.runtime import REGISTRATION_READINESS_CAPABILITY_STABILITY_POST_RELEASE_PR29_POLICY as _rt_registration
 
     _RUNTIME_EXPORTS_AVAILABLE = True
 except ImportError:
@@ -93,6 +91,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_dispatch_request(
     trace_id: str = "trace-pr29-001",
@@ -147,6 +146,7 @@ def _make_registration_record(
 # ---------------------------------------------------------------------------
 # A — Orchestrator module: all PR-29 sentinels present and non-empty
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(
     not _ORCHESTRATOR_AVAILABLE,
@@ -208,6 +208,7 @@ class TestOrchestratorPR29Sentinels:
 # B — Projection: PR-29 sentinel is importable and not UNAVAILABLE
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(
     not _PROJECTION_AVAILABLE,
     reason="projection module unavailable",
@@ -221,13 +222,16 @@ class TestProjectionPR29Sentinel:
         assert "UNAVAILABLE" not in POST_RELEASE_DISPATCH_CLIENT_SEMANTICS_TIGHTENING_ALIGNED_PR29
 
     def test_projection_sentinel_contains_pr29(self) -> None:
-        assert "PR29" in POST_RELEASE_DISPATCH_CLIENT_SEMANTICS_TIGHTENING_ALIGNED_PR29 or \
-               "PR-29" in POST_RELEASE_DISPATCH_CLIENT_SEMANTICS_TIGHTENING_ALIGNED_PR29
+        assert (
+            "PR29" in POST_RELEASE_DISPATCH_CLIENT_SEMANTICS_TIGHTENING_ALIGNED_PR29
+            or "PR-29" in POST_RELEASE_DISPATCH_CLIENT_SEMANTICS_TIGHTENING_ALIGNED_PR29
+        )
 
 
 # ---------------------------------------------------------------------------
 # C — core.runtime re-exports all PR-29 sentinels
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(
     not _RUNTIME_EXPORTS_AVAILABLE,
@@ -265,6 +269,7 @@ class TestCoreRuntimePR29Exports:
 # ---------------------------------------------------------------------------
 # D — Dispatch selection cohesion: deterministic output for given input state
 # ---------------------------------------------------------------------------
+
 
 class TestDispatchSelectionCohesion:
     """Dispatch selection produces consistent, deterministic results."""
@@ -322,6 +327,7 @@ class TestDispatchSelectionCohesion:
 # E — Selection gating: only readiness-eligible candidates pass the gate
 # ---------------------------------------------------------------------------
 
+
 class TestSelectionGating:
     """Readiness gate correctly excludes non-ready candidates."""
 
@@ -366,6 +372,7 @@ class TestSelectionGating:
 # F — Fallback triggering: absent eligible candidate invokes canonical fallback
 # ---------------------------------------------------------------------------
 
+
 class TestFallbackTriggering:
     """Canonical fallback is invoked deterministically when no candidate passes gating."""
 
@@ -402,6 +409,7 @@ class TestFallbackTriggering:
 
     def test_fallback_is_idempotent_for_same_input(self) -> None:
         """Fallback resolution MUST be idempotent: same input -> same fallback decision."""
+
         def _fallback(registry_state: Dict[str, Any]) -> str:
             if not registry_state.get("has_active_session"):
                 return "local_fallback"
@@ -417,11 +425,13 @@ class TestFallbackTriggering:
 # G — Registration idempotency: repeated register/reconnect/reattach is stable
 # ---------------------------------------------------------------------------
 
+
 class TestRegistrationIdempotency:
     """Registration transitions are idempotent under repeated operations."""
 
     def test_repeated_register_preserves_active_state(self) -> None:
         """Registering the same device twice MUST leave it in active state."""
+
         def _register(registry: Dict[str, str], device_id: str) -> None:
             registry[device_id] = "active"
 
@@ -454,6 +464,7 @@ class TestRegistrationIdempotency:
 # H — Readiness degradation: failure_kind is stable across degradation paths
 # ---------------------------------------------------------------------------
 
+
 class TestReadinessDegradationFailureKind:
     """failure_kind is stable and well-known across readiness degradation paths."""
 
@@ -479,6 +490,7 @@ class TestReadinessDegradationFailureKind:
 
     def test_same_degradation_path_produces_same_failure_kind(self) -> None:
         """Readiness degradation MUST consistently produce the same failure_kind."""
+
         def _get_failure_kind(degradation_reason: str) -> str:
             if degradation_reason == "readiness_gate":
                 return "readiness_failure"
@@ -500,6 +512,7 @@ class TestReadinessDegradationFailureKind:
 # ---------------------------------------------------------------------------
 # I — Capability-not-satisfied after partial delegated execution is actionable
 # ---------------------------------------------------------------------------
+
 
 class TestCapabilityNotSatisfiedPostDelegated:
     """capability_failure after partial delegated execution is actionable."""
@@ -545,6 +558,7 @@ class TestCapabilityNotSatisfiedPostDelegated:
 # ---------------------------------------------------------------------------
 # J — Delegated execution terminal signals update tracker before fallback
 # ---------------------------------------------------------------------------
+
 
 class TestDelegatedTerminalSignalBeforeFallback:
     """Delegated execution terminal signals update tracker phase before fallback."""
@@ -595,6 +609,7 @@ class TestDelegatedTerminalSignalBeforeFallback:
 # K — Fallback outcome shape matches pre-dispatch fallback shape
 # ---------------------------------------------------------------------------
 
+
 class TestFallbackOutcomeShape:
     """Fallback triggered by terminal delegated signal matches pre-dispatch fallback shape."""
 
@@ -625,6 +640,7 @@ class TestFallbackOutcomeShape:
 # ---------------------------------------------------------------------------
 # L — Result identity fields preserved across all paths
 # ---------------------------------------------------------------------------
+
 
 class TestResultIdentityPreservation:
     """trace_id, task_id, session_id are preserved from request to result."""
@@ -683,6 +699,7 @@ class TestResultIdentityPreservation:
 # M — failure_kind vocabulary is exhaustive (no unclassified kind)
 # ---------------------------------------------------------------------------
 
+
 class TestFailureKindVocabulary:
     """failure_kind vocabulary is exhaustive; no unclassified kind reaches the client."""
 
@@ -709,6 +726,7 @@ class TestFailureKindVocabulary:
 
     def test_unknown_failure_kind_would_be_classified(self) -> None:
         """Simulate that any failure must map to a known failure_kind."""
+
         def _classify_failure(raw_reason: str) -> str:
             if "registration" in raw_reason:
                 return "registration_failure"
@@ -726,6 +744,7 @@ class TestFailureKindVocabulary:
 # ---------------------------------------------------------------------------
 # N — Registered runtime device contract consistent with registry state
 # ---------------------------------------------------------------------------
+
 
 class TestRegisteredRuntimeDeviceContractConsistency:
     """RegisteredRuntimeDevice contract reflects the dispatch registry device state."""
@@ -753,6 +772,7 @@ class TestRegisteredRuntimeDeviceContractConsistency:
 
     def test_contract_importable_from_contracts_package(self) -> None:
         from contracts.registered_runtime_device import RegisteredRuntimeDevice
+
         assert RegisteredRuntimeDevice is not None
 
     def test_contract_to_dict_includes_status_field(self) -> None:
@@ -760,6 +780,7 @@ class TestRegisteredRuntimeDeviceContractConsistency:
             RegisteredRuntimeDevice,
             RuntimeDeviceStatus,
         )
+
         d_online = RegisteredRuntimeDevice(
             device_id="dev-contract-002",
             status=RuntimeDeviceStatus.ONLINE,
@@ -780,6 +801,7 @@ class TestRegisteredRuntimeDeviceContractConsistency:
 
     def test_contract_device_id_preserved_in_serialisation(self) -> None:
         from contracts.registered_runtime_device import RegisteredRuntimeDevice
+
         d = RegisteredRuntimeDevice(device_id="dev-serial-001")
         data = d.to_dict()
         assert data["device_id"] == "dev-serial-001"
@@ -788,6 +810,7 @@ class TestRegisteredRuntimeDeviceContractConsistency:
 # ---------------------------------------------------------------------------
 # O — Sentinel strings contain expected policy keywords
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(
     not _ORCHESTRATOR_AVAILABLE,
@@ -831,6 +854,7 @@ class TestSentinelKeywords:
 # P — No parallel authority or duplicate client contract
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(
     not _ORCHESTRATOR_AVAILABLE,
     reason="source_dispatch_orchestrator unavailable",
@@ -838,30 +862,18 @@ class TestSentinelKeywords:
 class TestNoParallelAuthority:
     def test_selection_policy_prohibits_new_authority(self) -> None:
         lower = DISPATCH_SELECTION_COHESION_POST_RELEASE_PR29_POLICY.lower()
-        assert any(
-            phrase in lower
-            for phrase in ("no new", "not introduced", "no parallel", "existing architecture")
-        )
+        assert any(phrase in lower for phrase in ("no new", "not introduced", "no parallel", "existing architecture"))
 
     def test_delegated_policy_prohibits_new_coordinator(self) -> None:
         lower = DELEGATED_EXECUTION_FALLBACK_SEMANTIC_CONSISTENCY_PR29_POLICY.lower()
-        assert any(
-            phrase in lower
-            for phrase in ("no new", "not introduced", "no parallel", "existing")
-        )
+        assert any(phrase in lower for phrase in ("no new", "not introduced", "no parallel", "existing"))
 
     def test_client_policy_prohibits_duplicate_contract(self) -> None:
         lower = CLIENT_GATEWAY_RESULT_CONTRACT_ALIGNMENT_POST_RELEASE_PR29_POLICY.lower()
-        assert any(
-            phrase in lower
-            for phrase in ("no duplicate", "not introduced", "no new", "existing")
-        )
+        assert any(phrase in lower for phrase in ("no duplicate", "not introduced", "no new", "existing"))
 
     def test_projection_sentinel_confirms_no_new_authority(self) -> None:
         if not _PROJECTION_AVAILABLE:
             pytest.skip("projection unavailable")
         lower = POST_RELEASE_DISPATCH_CLIENT_SEMANTICS_TIGHTENING_ALIGNED_PR29.lower()
-        assert any(
-            phrase in lower
-            for phrase in ("no new", "not introduced", "no parallel", "existing")
-        )
+        assert any(phrase in lower for phrase in ("no new", "not introduced", "no parallel", "existing"))

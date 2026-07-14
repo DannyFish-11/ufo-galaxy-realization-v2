@@ -68,24 +68,24 @@ try:
     from core.canonical_task_dispatch_chain import (
         CANONICAL_TASK_DISPATCH_CHAIN_IS_AUTHORITY,
         CANONICAL_TASK_DISPATCH_CHAIN_PR7_SENTINEL,
+        DISPATCH_CHAIN_ANDROID_INBOUND_IS_SAME_SYSTEM_POLICY,
+        DISPATCH_CHAIN_BLOCKED_PATH_IS_FINAL_POLICY,
+        DISPATCH_CHAIN_FALLBACK_IS_DISTINGUISHABLE_POLICY,
         DISPATCH_CHAIN_PRIMARY_PATH_IS_LOCAL_POLICY,
         DISPATCH_CHAIN_REMOTE_HANDOFF_BLOCKS_LOCAL_POLICY,
-        DISPATCH_CHAIN_FALLBACK_IS_DISTINGUISHABLE_POLICY,
-        DISPATCH_CHAIN_ANDROID_INBOUND_IS_SAME_SYSTEM_POLICY,
         DISPATCH_CHAIN_STAGED_MESH_IS_COORDINATION_ONLY_POLICY,
-        DISPATCH_CHAIN_BLOCKED_PATH_IS_FINAL_POLICY,
+        DispatchChainRecord,
+        DispatchChainSnapshot,
         DispatchPathKind,
         DispatchPathRole,
         DispatchResultOwner,
-        DispatchChainRecord,
-        DispatchChainSnapshot,
-        get_dispatch_path_catalogue,
+        build_dispatch_chain_snapshot,
         classify_dispatch_path,
+        get_dispatch_path_catalogue,
+        get_primary_dispatch_path,
+        is_android_inbound_path,
         is_canonical_path,
         is_fallback_path,
-        is_android_inbound_path,
-        get_primary_dispatch_path,
-        build_dispatch_chain_snapshot,
     )
 
     _MODULE_AVAILABLE = True
@@ -99,12 +99,8 @@ try:
 except ImportError:
     _PROJECTION_AVAILABLE = False
 
-_SKIP_MODULE = pytest.mark.skipif(
-    not _MODULE_AVAILABLE, reason="core.canonical_task_dispatch_chain not available"
-)
-_SKIP_PROJECTION = pytest.mark.skipif(
-    not _PROJECTION_AVAILABLE, reason="projection sentinel not available"
-)
+_SKIP_MODULE = pytest.mark.skipif(not _MODULE_AVAILABLE, reason="core.canonical_task_dispatch_chain not available")
+_SKIP_PROJECTION = pytest.mark.skipif(not _PROJECTION_AVAILABLE, reason="projection sentinel not available")
 
 
 # ---------------------------------------------------------------------------
@@ -270,9 +266,7 @@ class TestGroupD_CatalogueCompleteness:
     def test_d7_each_record_has_non_empty_signal_modules_list(self):
         for record in get_dispatch_path_catalogue():
             assert isinstance(record.signal_modules, list)
-            assert len(record.signal_modules) > 0, (
-                f"{record.path_kind} has empty signal_modules"
-            )
+            assert len(record.signal_modules) > 0, f"{record.path_kind} has empty signal_modules"
 
     def test_d8_catalogue_returns_new_list_each_call(self):
         c1 = get_dispatch_path_catalogue()

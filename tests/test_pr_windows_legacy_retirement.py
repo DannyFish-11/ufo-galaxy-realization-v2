@@ -72,32 +72,36 @@ def _import_raises_runtime_error(module_name: str) -> bool:
 class TestHardDisabledLegacyModules:
     """Legacy modules must raise RuntimeError on import (hard-disabled stubs)."""
 
-    @pytest.mark.parametrize("module_name", [
-        "windows_client.client",
-        "windows_client.ui_sidebar",
-        "windows_client.desktop_automation",
-        "windows_client.windows_mcp_server",
-        "windows_client.windows_client_integrated",
-        "windows_client.key_listener",
-    ])
+    @pytest.mark.parametrize(
+        "module_name",
+        [
+            "windows_client.client",
+            "windows_client.ui_sidebar",
+            "windows_client.desktop_automation",
+            "windows_client.windows_mcp_server",
+            "windows_client.windows_client_integrated",
+            "windows_client.key_listener",
+        ],
+    )
     def test_module_raises_runtime_error(self, module_name):
-        assert _import_raises_runtime_error(module_name), (
-            f"{module_name} must raise RuntimeError on import (hard-disabled stub)"
-        )
+        assert _import_raises_runtime_error(
+            module_name
+        ), f"{module_name} must raise RuntimeError on import (hard-disabled stub)"
 
-    @pytest.mark.parametrize("module_name", [
-        "windows_client.client",
-        "windows_client.ui_sidebar",
-        "windows_client.desktop_automation",
-        "windows_client.windows_mcp_server",
-        "windows_client.windows_client_integrated",
-        "windows_client.key_listener",
-    ])
+    @pytest.mark.parametrize(
+        "module_name",
+        [
+            "windows_client.client",
+            "windows_client.ui_sidebar",
+            "windows_client.desktop_automation",
+            "windows_client.windows_mcp_server",
+            "windows_client.windows_client_integrated",
+            "windows_client.key_listener",
+        ],
+    )
     def test_module_emits_deprecation_warning(self, module_name):
         warns = _reload_capture_warnings(module_name)
-        assert len(warns) >= 1, (
-            f"{module_name} must emit DeprecationWarning before raising RuntimeError"
-        )
+        assert len(warns) >= 1, f"{module_name} must emit DeprecationWarning before raising RuntimeError"
 
     def test_main_stub_is_deleted(self):
         """windows_client/main.py has moved from hard-disabled stub to deleted surface."""
@@ -128,6 +132,7 @@ class TestActiveWindowsDirectionModules:
         """windows_client.status_board_v2 must be importable (active surface)."""
         try:
             import windows_client.status_board_v2 as sb
+
             assert sb is not None
         except ImportError as e:
             pytest.skip(f"status_board_v2 has optional deps: {e}")
@@ -136,6 +141,7 @@ class TestActiveWindowsDirectionModules:
         """windows_client.windows_aip_client must be importable (active ingress)."""
         try:
             import windows_client.windows_aip_client as aip
+
             assert aip is not None
         except ImportError as e:
             pytest.skip(f"windows_aip_client has optional deps: {e}")
@@ -144,15 +150,16 @@ class TestActiveWindowsDirectionModules:
         """windows_client.autonomy must be importable (active execution layer)."""
         try:
             import windows_client.autonomy as aut
+
             assert aut is not None
         except ImportError as e:
             pytest.skip(f"autonomy package has optional deps: {e}")
 
     def test_status_board_v2_does_not_raise_runtime_error(self):
         """status_board_v2 must NOT raise RuntimeError on import."""
-        assert not _import_raises_runtime_error("windows_client.status_board_v2"), (
-            "status_board_v2 is the active desktop status surface and must not be disabled"
-        )
+        assert not _import_raises_runtime_error(
+            "windows_client.status_board_v2"
+        ), "status_board_v2 is the active desktop status surface and must not be disabled"
 
 
 # ===========================================================================
@@ -202,49 +209,41 @@ class TestLegacyDirectoryContainsMoved:
 
     def test_start_client_bat_fully_deleted(self):
         """START_CLIENT.bat must have been fully deleted in PR-8 (not in _legacy/ either)."""
-        assert not (self._LEGACY / "START_CLIENT.bat").exists(), (
-            "START_CLIENT.bat was fully deleted in PR-8 and must not reappear in _legacy/"
-        )
-        assert not (_WC / "START_CLIENT.bat").exists(), (
-            "START_CLIENT.bat was fully deleted in PR-8 and must not reappear in active root"
-        )
+        assert not (
+            self._LEGACY / "START_CLIENT.bat"
+        ).exists(), "START_CLIENT.bat was fully deleted in PR-8 and must not reappear in _legacy/"
+        assert not (
+            _WC / "START_CLIENT.bat"
+        ).exists(), "START_CLIENT.bat was fully deleted in PR-8 and must not reappear in active root"
 
     def test_start_galaxy_client_bat_fully_deleted(self):
         """start_galaxy_client.bat must have been fully deleted in PR-8 (not in _legacy/ either)."""
-        assert not (self._LEGACY / "start_galaxy_client.bat").exists(), (
-            "start_galaxy_client.bat was fully deleted in PR-8 and must not reappear in _legacy/"
-        )
-        assert not (_WC / "start_galaxy_client.bat").exists(), (
-            "start_galaxy_client.bat was fully deleted in PR-8 and must not reappear in active root"
-        )
+        assert not (
+            self._LEGACY / "start_galaxy_client.bat"
+        ).exists(), "start_galaxy_client.bat was fully deleted in PR-8 and must not reappear in _legacy/"
+        assert not (
+            _WC / "start_galaxy_client.bat"
+        ).exists(), "start_galaxy_client.bat was fully deleted in PR-8 and must not reappear in active root"
 
     def test_ui_dir_in_legacy(self):
-        assert (self._LEGACY / "ui").is_dir(), (
-            "windows_client/ui/ (legacy chat UI) must be moved to _legacy/"
-        )
+        assert (self._LEGACY / "ui").is_dir(), "windows_client/ui/ (legacy chat UI) must be moved to _legacy/"
 
     def test_legacy_init_exists(self):
-        assert (self._LEGACY / "__init__.py").exists(), (
-            "_legacy/__init__.py must exist to mark the archive package"
-        )
+        assert (self._LEGACY / "__init__.py").exists(), "_legacy/__init__.py must exist to mark the archive package"
 
     def test_start_client_bat_no_longer_in_active_root(self):
         """START_CLIENT.bat must NOT appear in the active windows_client/ root."""
-        assert not (_WC / "START_CLIENT.bat").exists(), (
-            "START_CLIENT.bat must be moved to _legacy/, not in active root"
-        )
+        assert not (_WC / "START_CLIENT.bat").exists(), "START_CLIENT.bat must be moved to _legacy/, not in active root"
 
     def test_start_galaxy_client_bat_no_longer_in_active_root(self):
         """start_galaxy_client.bat must NOT appear in the active windows_client/ root."""
-        assert not (_WC / "start_galaxy_client.bat").exists(), (
-            "start_galaxy_client.bat must be moved to _legacy/, not in active root"
-        )
+        assert not (
+            _WC / "start_galaxy_client.bat"
+        ).exists(), "start_galaxy_client.bat must be moved to _legacy/, not in active root"
 
     def test_ui_dir_no_longer_in_active_root(self):
         """windows_client/ui/ must NOT appear in the active root."""
-        assert not (_WC / "ui").is_dir(), (
-            "windows_client/ui/ must be moved to _legacy/"
-        )
+        assert not (_WC / "ui").is_dir(), "windows_client/ui/ must be moved to _legacy/"
 
 
 # ===========================================================================
@@ -253,14 +252,17 @@ class TestLegacyDirectoryContainsMoved:
 
 
 class TestStubsReferenceDocumentation:
-    @pytest.mark.parametrize("filename", [
-        "client.py",
-        "ui_sidebar.py",
-        "desktop_automation.py",
-        "windows_mcp_server.py",
-        "windows_client_integrated.py",
-        "key_listener.py",
-    ])
+    @pytest.mark.parametrize(
+        "filename",
+        [
+            "client.py",
+            "ui_sidebar.py",
+            "desktop_automation.py",
+            "windows_mcp_server.py",
+            "windows_client_integrated.py",
+            "key_listener.py",
+        ],
+    )
     def test_stub_mentions_pipeline_doc(self, filename):
         """Each hard-disabled stub must reference the pipeline docs or active direction."""
         content = (_WC / filename).read_text()
@@ -270,8 +272,7 @@ class TestStubsReferenceDocumentation:
             or "status_board_v2" in content
         )
         assert has_doc_ref, (
-            f"{filename} stub must reference WINDOWS_EXECUTION_PIPELINE.md "
-            f"or the active Windows direction"
+            f"{filename} stub must reference WINDOWS_EXECUTION_PIPELINE.md " f"or the active Windows direction"
         )
 
 
@@ -300,8 +301,4 @@ class TestEnhancementsRunUiHardDisabled:
     def test_run_ui_mentions_active_direction(self):
         """run_ui.py stub must mention the active Windows direction."""
         content = self._RUN_UI.read_text()
-        assert (
-            "DesktopPresenceRuntime" in content
-            or "status_board_v2" in content
-            or "unified_launcher" in content
-        )
+        assert "DesktopPresenceRuntime" in content or "status_board_v2" in content or "unified_launcher" in content

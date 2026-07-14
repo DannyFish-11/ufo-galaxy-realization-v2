@@ -403,9 +403,7 @@ class LocalAIProposalClassificationResult:
 class PR3ConvergenceAuditSnapshot:
     """Full PR-3 convergence state snapshot for operator observability and audit."""
 
-    snapshot_id: str = field(
-        default_factory=lambda: f"pr3snap_{uuid.uuid4().hex[:12]}"
-    )
+    snapshot_id: str = field(default_factory=lambda: f"pr3snap_{uuid.uuid4().hex[:12]}")
     created_at: float = field(default_factory=time.time)
 
     # Session axis
@@ -510,6 +508,7 @@ class PR3ConvergenceAuditSnapshot:
 # ---------------------------------------------------------------------------
 # Reconnect / rebind classification
 # ---------------------------------------------------------------------------
+
 
 def classify_reconnect_event(
     *,
@@ -764,10 +763,7 @@ def govern_takeover_decision(
     if rule is None:
         # Unknown proof class — treat as incomplete (safest).
         rule = _TAKEOVER_GOVERNANCE_RULES["incomplete"]
-        reason = (
-            f"Unknown proof_class={proof_class!r}; treated as incomplete. "
-            + rule[2]
-        )
+        reason = f"Unknown proof_class={proof_class!r}; treated as incomplete. " + rule[2]
     else:
         reason = rule[2]
 
@@ -828,9 +824,7 @@ def classify_local_ai_proposal(
         requires_center_review flags.
     """
     normalized = (authority_level or "").lower().strip()
-    proposal_class = _LOCAL_AI_AUTHORITY_LEVELS.get(
-        normalized, LocalAIProposalClass.suggestion_only
-    )
+    proposal_class = _LOCAL_AI_AUTHORITY_LEVELS.get(normalized, LocalAIProposalClass.suggestion_only)
 
     if proposal_class == LocalAIProposalClass.suggestion_only:
         may_influence = False
@@ -894,6 +888,7 @@ def classify_local_ai_proposal(
 # Convergence audit snapshot builder
 # ---------------------------------------------------------------------------
 
+
 def build_pr3_convergence_audit_snapshot() -> PR3ConvergenceAuditSnapshot:
     """Build a point-in-time PR-3 convergence audit snapshot.
 
@@ -917,6 +912,7 @@ def build_pr3_convergence_audit_snapshot() -> PR3ConvergenceAuditSnapshot:
             CANONICAL_SESSION_AXIS_AUTHORITY,
             get_session_family_catalogue,
         )
+
         families = get_session_family_catalogue()
         snap.session_axis_loaded = True
         snap.session_family_count = len(families)
@@ -928,9 +924,10 @@ def build_pr3_convergence_audit_snapshot() -> PR3ConvergenceAuditSnapshot:
     try:
         from core.center_authority_boundary import (
             CENTER_AUTHORITY_BOUNDARY_AUTHORITY,
-            assert_center_authority_intact,
             CenterAuthorityViolation,
+            assert_center_authority_intact,
         )
+
         try:
             assert_center_authority_intact()
             snap.center_authority_intact = True
@@ -946,6 +943,7 @@ def build_pr3_convergence_audit_snapshot() -> PR3ConvergenceAuditSnapshot:
         from core.android_originated_authority_boundary import (
             ANDROID_CANNOT_OVERRIDE_CENTER_AUTHORITY_POLICY,
         )
+
         snap.android_boundary_loaded = True
         policies_affirmed.append(ANDROID_CANNOT_OVERRIDE_CENTER_AUTHORITY_POLICY[:80])
     except Exception as exc:
@@ -957,8 +955,9 @@ def build_pr3_convergence_audit_snapshot() -> PR3ConvergenceAuditSnapshot:
             FLOW_CONTINUITY_COORDINATOR_IS_AUTHORITY,
             get_flow_continuity_coordinator,
         )
+
         _coord = get_flow_continuity_coordinator()
-        snap.continuity_coordinator_loaded = (_coord is not None)
+        snap.continuity_coordinator_loaded = _coord is not None
         if snap.continuity_coordinator_loaded:
             policies_affirmed.append(FLOW_CONTINUITY_COORDINATOR_IS_AUTHORITY[:80])
     except Exception as exc:
@@ -970,8 +969,9 @@ def build_pr3_convergence_audit_snapshot() -> PR3ConvergenceAuditSnapshot:
             ATTACHED_SESSION_REGISTRY_IS_AUTHORITY,
             get_session_registry,
         )
+
         _registry = get_session_registry()
-        snap.session_registry_loaded = (_registry is not None)
+        snap.session_registry_loaded = _registry is not None
         if snap.session_registry_loaded:
             policies_affirmed.append(ATTACHED_SESSION_REGISTRY_IS_AUTHORITY[:80])
     except Exception as exc:
@@ -983,8 +983,9 @@ def build_pr3_convergence_audit_snapshot() -> PR3ConvergenceAuditSnapshot:
             TAKEOVER_TRACKING_AUTHORITY,
             get_takeover_tracking_runtime,
         )
+
         _tracking = get_takeover_tracking_runtime()
-        snap.takeover_tracking_loaded = (_tracking is not None)
+        snap.takeover_tracking_loaded = _tracking is not None
         if snap.takeover_tracking_loaded:
             policies_affirmed.append(TAKEOVER_TRACKING_AUTHORITY[:80])
     except Exception as exc:
@@ -995,6 +996,7 @@ def build_pr3_convergence_audit_snapshot() -> PR3ConvergenceAuditSnapshot:
         from core.ownership_transfer_proof_quality import (
             OWNERSHIP_TRANSFER_PROOF_QUALITY_SENTINEL,
         )
+
         snap.ownership_proof_quality_loaded = True
         policies_affirmed.append(OWNERSHIP_TRANSFER_PROOF_QUALITY_SENTINEL[:80])
     except Exception as exc:
@@ -1005,10 +1007,9 @@ def build_pr3_convergence_audit_snapshot() -> PR3ConvergenceAuditSnapshot:
         from core.v2_android_recovery_continuity_hardening import (
             V2_ANDROID_RECOVERY_CONTINUITY_HARDENING_AUTHORITY,
         )
+
         snap.recovery_hardening_loaded = True
-        policies_affirmed.append(
-            V2_ANDROID_RECOVERY_CONTINUITY_HARDENING_AUTHORITY[:80]
-        )
+        policies_affirmed.append(V2_ANDROID_RECOVERY_CONTINUITY_HARDENING_AUTHORITY[:80])
     except Exception as exc:
         errors.append(f"v2_android_recovery_continuity_hardening unavailable: {exc}")
 
@@ -1018,8 +1019,9 @@ def build_pr3_convergence_audit_snapshot() -> PR3ConvergenceAuditSnapshot:
             CONTINUATION_REBIND_REGISTRY_IS_AUTHORITY,
             get_continuation_rebind_registry,
         )
+
         _rebind = get_continuation_rebind_registry()
-        snap.rebind_registry_loaded = (_rebind is not None)
+        snap.rebind_registry_loaded = _rebind is not None
         if snap.rebind_registry_loaded:
             policies_affirmed.append(CONTINUATION_REBIND_REGISTRY_IS_AUTHORITY[:80])
     except Exception as exc:
@@ -1027,13 +1029,9 @@ def build_pr3_convergence_audit_snapshot() -> PR3ConvergenceAuditSnapshot:
 
     # ── PR-3 own policies ─────────────────────────────────────────────────
     policies_affirmed.append(RECONNECT_CLASSIFICATION_IS_EXPLICIT_POLICY[:80])
-    policies_affirmed.append(
-        DUPLICATE_STALE_REPLAY_MUST_NOT_BE_CONFLATED_POLICY[:80]
-    )
+    policies_affirmed.append(DUPLICATE_STALE_REPLAY_MUST_NOT_BE_CONFLATED_POLICY[:80])
     policies_affirmed.append(LOCAL_AI_AUTHORITY_BOUNDARY_IS_ENFORCED_POLICY[:80])
-    policies_affirmed.append(
-        DEGRADED_TAKEOVER_REQUIRES_EXPLICIT_GOVERNANCE_POLICY[:80]
-    )
+    policies_affirmed.append(DEGRADED_TAKEOVER_REQUIRES_EXPLICIT_GOVERNANCE_POLICY[:80])
     policies_affirmed.append(CENTER_IS_SESSION_COMPLETION_AUTHORITY_POLICY[:80])
 
     # ── Android integration points ─────────────────────────────────────────
@@ -1050,12 +1048,10 @@ def build_pr3_convergence_audit_snapshot() -> PR3ConvergenceAuditSnapshot:
         "for V2 duplicate/stale/gap classification."
     )
     android_points["DelegatedTakeoverExecutor.kt"] = (
-        "REQUIRED: Takeover responses must include proof_quality metadata "
-        "so V2 governance rules can be applied."
+        "REQUIRED: Takeover responses must include proof_quality metadata " "so V2 governance rules can be applied."
     )
     android_points["TakeoverEligibilityAssessor.kt"] = (
-        "REQUIRED: Android must pre-check takeover eligibility using "
-        "OwnershipTransferProofClass thresholds."
+        "REQUIRED: Android must pre-check takeover eligibility using " "OwnershipTransferProofClass thresholds."
     )
     android_points["LocalPlannerService.kt"] = (
         "REQUIRED: Local planner proposals must carry authority_level field "

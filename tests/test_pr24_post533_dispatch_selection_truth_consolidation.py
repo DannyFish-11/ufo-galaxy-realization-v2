@@ -58,15 +58,15 @@ import pytest
 try:
     from core.runtime.source_dispatch_orchestrator import (
         DISPATCH_SELECTION_TRUTH_CONSOLIDATED_PR24_SENTINEL,
-        SELECTION_READINESS_IS_REQUIRED_TRUTH_PR24_POLICY,
+        SELECTION_FALLBACK_IS_STABLE_AND_EXPLAINABLE_PR24_POLICY,
         SELECTION_PARTICIPATION_IS_REQUIRED_TRUTH_PR24_POLICY,
+        SELECTION_READINESS_IS_REQUIRED_TRUTH_PR24_POLICY,
         SELECTION_REGISTRY_IS_CANONICAL_GATE_PR24_POLICY,
         SELECTION_REUSE_CONTRIBUTES_PREFERENCE_PR24_POLICY,
-        SELECTION_FALLBACK_IS_STABLE_AND_EXPLAINABLE_PR24_POLICY,
-        _select_target_from_candidates,
         _score_candidate,
-        select_dispatch_target,
+        _select_target_from_candidates,
         build_source_dispatch_plan,
+        select_dispatch_target,
     )
 
     _ORCHESTRATOR_AVAILABLE = True
@@ -76,11 +76,11 @@ except ImportError:
 try:
     from core.attached_runtime_session_registry import (
         AttachedSessionRegistry,
+        InvalidationReason,
         RegistryEntryState,
-        register_session,
         detach_session,
         invalidate_session,
-        InvalidationReason,
+        register_session,
     )
 
     _REGISTRY_AVAILABLE = True
@@ -355,9 +355,7 @@ class TestReadinessGateNotRegistered:
         reg = _make_registry_with_active_session("sess-f1", "dev-f1")
         result = _select_target_from_candidates(
             registry=reg,
-            readiness_inputs={
-                "dev-f1": _FakeReadiness("dev-f1", registered=False, routable=True)
-            },
+            readiness_inputs={"dev-f1": _FakeReadiness("dev-f1", registered=False, routable=True)},
             participation_inputs={"dev-f1": _FakeParticipation("dev-f1")},
         )
         assert result is None
@@ -366,16 +364,15 @@ class TestReadinessGateNotRegistered:
         reg = _make_registry_with_active_session("sess-f2", "dev-f2")
         result = _select_target_from_candidates(
             registry=reg,
-            readiness_inputs={
-                "dev-f2": _FakeReadiness("dev-f2", registered=False, routable=False)
-            },
+            readiness_inputs={"dev-f2": _FakeReadiness("dev-f2", registered=False, routable=False)},
             participation_inputs={"dev-f2": _FakeParticipation("dev-f2")},
         )
         assert result is None
 
     def test_score_candidate_not_registered(self):
         score, reason = _score_candidate(
-            "s", "d",
+            "s",
+            "d",
             readiness=_FakeReadiness("d", registered=False),
             participation=_FakeParticipation("d"),
             reuse_eligible=False,
@@ -398,16 +395,15 @@ class TestReadinessGateNotRoutable:
         reg = _make_registry_with_active_session("sess-g1", "dev-g1")
         result = _select_target_from_candidates(
             registry=reg,
-            readiness_inputs={
-                "dev-g1": _FakeReadiness("dev-g1", registered=True, routable=False)
-            },
+            readiness_inputs={"dev-g1": _FakeReadiness("dev-g1", registered=True, routable=False)},
             participation_inputs={"dev-g1": _FakeParticipation("dev-g1")},
         )
         assert result is None
 
     def test_score_candidate_not_routable(self):
         score, reason = _score_candidate(
-            "s", "d",
+            "s",
+            "d",
             readiness=_FakeReadiness("d", registered=True, routable=False),
             participation=_FakeParticipation("d"),
             reuse_eligible=False,
@@ -431,15 +427,14 @@ class TestParticipationGateNotEligible:
         result = _select_target_from_candidates(
             registry=reg,
             readiness_inputs={"dev-h1": _FakeReadiness("dev-h1")},
-            participation_inputs={
-                "dev-h1": _FakeParticipation("dev-h1", orchestration_eligible=False)
-            },
+            participation_inputs={"dev-h1": _FakeParticipation("dev-h1", orchestration_eligible=False)},
         )
         assert result is None
 
     def test_score_candidate_not_orchestration_eligible(self):
         score, reason = _score_candidate(
-            "s", "d",
+            "s",
+            "d",
             readiness=_FakeReadiness("d"),
             participation=_FakeParticipation("d", orchestration_eligible=False),
             reuse_eligible=False,
@@ -449,7 +444,8 @@ class TestParticipationGateNotEligible:
 
     def test_participation_unavailable_rejected(self):
         score, reason = _score_candidate(
-            "s", "d",
+            "s",
+            "d",
             readiness=_FakeReadiness("d"),
             participation=None,
             reuse_eligible=False,
@@ -459,7 +455,8 @@ class TestParticipationGateNotEligible:
 
     def test_score_candidate_observer_endpoint_rejected(self):
         score, reason = _score_candidate(
-            "s", "d",
+            "s",
+            "d",
             readiness=_FakeReadiness("d"),
             participation=_FakeParticipation("d", orchestration_eligible=True, participant_tier="observer_endpoint"),
             reuse_eligible=False,
@@ -469,7 +466,8 @@ class TestParticipationGateNotEligible:
 
     def test_score_candidate_command_endpoint_rejected(self):
         score, reason = _score_candidate(
-            "s", "d",
+            "s",
+            "d",
             readiness=_FakeReadiness("d"),
             participation=_FakeParticipation("d", orchestration_eligible=True, participant_tier="command_endpoint"),
             reuse_eligible=False,
@@ -567,13 +565,15 @@ class TestCandidateIsSelected:
 class TestReuseContributesToScore:
     def test_reuse_eligible_gives_higher_score(self):
         score_no_reuse, _ = _score_candidate(
-            "s", "d",
+            "s",
+            "d",
             readiness=_FakeReadiness("d"),
             participation=_FakeParticipation("d"),
             reuse_eligible=False,
         )
         score_reuse, _ = _score_candidate(
-            "s", "d",
+            "s",
+            "d",
             readiness=_FakeReadiness("d"),
             participation=_FakeParticipation("d"),
             reuse_eligible=True,
@@ -626,8 +626,10 @@ class TestReuseContributesToScore:
 class TestMultiTargetReusePreference:
     def test_reuse_wins_over_no_reuse(self):
         reg = _make_registry_with_two_active_sessions(
-            "sess-k1a", "dev-k1a",
-            "sess-k1b", "dev-k1b",
+            "sess-k1a",
+            "dev-k1a",
+            "sess-k1b",
+            "dev-k1b",
         )
         result = _select_target_from_candidates(
             registry=reg,
@@ -647,8 +649,10 @@ class TestMultiTargetReusePreference:
 
     def test_selection_is_deterministic(self):
         reg = _make_registry_with_two_active_sessions(
-            "sess-k2a", "dev-k2a",
-            "sess-k2b", "dev-k2b",
+            "sess-k2a",
+            "dev-k2a",
+            "sess-k2b",
+            "dev-k2b",
         )
         r1 = _select_target_from_candidates(
             registry=reg,
@@ -691,8 +695,10 @@ class TestMultiTargetReusePreference:
 class TestMultiTargetBestScoreWins:
     def test_one_rejected_one_selected(self):
         reg = _make_registry_with_two_active_sessions(
-            "sess-l1a", "dev-l1a",
-            "sess-l1b", "dev-l1b",
+            "sess-l1a",
+            "dev-l1a",
+            "sess-l1b",
+            "dev-l1b",
         )
         result = _select_target_from_candidates(
             registry=reg,
@@ -711,8 +717,10 @@ class TestMultiTargetBestScoreWins:
 
     def test_first_device_good_second_not_routable(self):
         reg = _make_registry_with_two_active_sessions(
-            "sess-l2a", "dev-l2a",
-            "sess-l2b", "dev-l2b",
+            "sess-l2a",
+            "dev-l2a",
+            "sess-l2b",
+            "dev-l2b",
         )
         result = _select_target_from_candidates(
             registry=reg,
@@ -731,8 +739,10 @@ class TestMultiTargetBestScoreWins:
 
     def test_both_pass_reuse_decides_winner(self):
         reg = _make_registry_with_two_active_sessions(
-            "sess-l3a", "dev-l3a",
-            "sess-l3b", "dev-l3b",
+            "sess-l3a",
+            "dev-l3a",
+            "sess-l3b",
+            "dev-l3b",
         )
         result = _select_target_from_candidates(
             registry=reg,
@@ -762,8 +772,10 @@ class TestMultiTargetBestScoreWins:
 class TestAllCandidatesRejected:
     def test_all_not_routable_returns_none(self):
         reg = _make_registry_with_two_active_sessions(
-            "sess-m1a", "dev-m1a",
-            "sess-m1b", "dev-m1b",
+            "sess-m1a",
+            "dev-m1a",
+            "sess-m1b",
+            "dev-m1b",
         )
         result = _select_target_from_candidates(
             registry=reg,
@@ -780,8 +792,10 @@ class TestAllCandidatesRejected:
 
     def test_all_not_eligible_returns_none(self):
         reg = _make_registry_with_two_active_sessions(
-            "sess-m2a", "dev-m2a",
-            "sess-m2b", "dev-m2b",
+            "sess-m2a",
+            "dev-m2a",
+            "sess-m2b",
+            "dev-m2b",
         )
         result = _select_target_from_candidates(
             registry=reg,
@@ -810,9 +824,7 @@ class TestMeshFallbackWhenRegistryEmpty:
         reg = AttachedSessionRegistry()
         mesh = {
             "session_id": "mesh-sess-1",
-            "participants": [
-                {"device_id": "mesh-dev-1", "runtime_id": "rt-1", "status": "active"}
-            ],
+            "participants": [{"device_id": "mesh-dev-1", "runtime_id": "rt-1", "status": "active"}],
         }
         result = select_dispatch_target(
             registry=reg,
@@ -828,9 +840,7 @@ class TestMeshFallbackWhenRegistryEmpty:
         reg = AttachedSessionRegistry()
         mesh = {
             "session_id": "mesh-sess-2",
-            "participants": [
-                {"device_id": "mesh-dev-2", "status": "joined"}
-            ],
+            "participants": [{"device_id": "mesh-dev-2", "status": "joined"}],
         }
         result = select_dispatch_target(
             registry=reg,
@@ -852,10 +862,7 @@ class TestMeshFallbackWhenRegistryEmpty:
 )
 class TestSelectionReasonsAreStable:
     def test_explicit_target_reason_constant(self):
-        results = [
-            select_dispatch_target(target_device_id=f"dev-{i}")
-            for i in range(5)
-        ]
+        results = [select_dispatch_target(target_device_id=f"dev-{i}") for i in range(5)]
         reasons = {r.selection_reason for r in results if r is not None}
         assert reasons == {"explicit_target_device_id"}
 
@@ -894,9 +901,7 @@ class TestSelectionReasonsAreStable:
             pytest.skip("registry unavailable")
         reg = AttachedSessionRegistry()
         mesh = {
-            "participants": [
-                {"device_id": "mesh-dev-f", "status": "active"}
-            ],
+            "participants": [{"device_id": "mesh-dev-f", "status": "active"}],
         }
         result = select_dispatch_target(registry=reg, mesh_session=mesh)
         if result is not None:
@@ -967,7 +972,8 @@ class TestBuildPlanPassesTruthInputs:
 class TestScoreCandidateReadinessUnavailable:
     def test_none_readiness_returns_zero_score(self):
         score, reason = _score_candidate(
-            "s", "d",
+            "s",
+            "d",
             readiness=None,
             participation=_FakeParticipation("d"),
             reuse_eligible=False,
@@ -978,7 +984,8 @@ class TestScoreCandidateReadinessUnavailable:
 
     def test_none_readiness_reason_contains_unavailable(self):
         _, reason = _score_candidate(
-            "s", "d",
+            "s",
+            "d",
             readiness=None,
             participation=_FakeParticipation("d"),
             reuse_eligible=False,
@@ -995,7 +1002,8 @@ class TestScoreCandidateReadinessUnavailable:
 class TestScoreCandidateParticipationUnavailable:
     def test_none_participation_returns_zero_score(self):
         score, reason = _score_candidate(
-            "s", "d",
+            "s",
+            "d",
             readiness=_FakeReadiness("d"),
             participation=None,
             reuse_eligible=False,
@@ -1006,13 +1014,15 @@ class TestScoreCandidateParticipationUnavailable:
 
     def test_none_participation_reason_is_stable(self):
         _, r1 = _score_candidate(
-            "s", "d",
+            "s",
+            "d",
             readiness=_FakeReadiness("d"),
             participation=None,
             reuse_eligible=False,
         )
         _, r2 = _score_candidate(
-            "s", "d",
+            "s",
+            "d",
             readiness=_FakeReadiness("d"),
             participation=None,
             reuse_eligible=False,
@@ -1029,13 +1039,15 @@ class TestScoreCandidateParticipationUnavailable:
 class TestScoreCandidateReuseEffect:
     def test_reuse_true_higher_score(self):
         score_no, _ = _score_candidate(
-            "s", "d",
+            "s",
+            "d",
             readiness=_FakeReadiness("d"),
             participation=_FakeParticipation("d"),
             reuse_eligible=False,
         )
         score_yes, _ = _score_candidate(
-            "s", "d",
+            "s",
+            "d",
             readiness=_FakeReadiness("d"),
             participation=_FakeParticipation("d"),
             reuse_eligible=True,
@@ -1044,13 +1056,15 @@ class TestScoreCandidateReuseEffect:
 
     def test_both_have_zero_rejection_reason_when_passing(self):
         _, reason_without_reuse = _score_candidate(
-            "s", "d",
+            "s",
+            "d",
             readiness=_FakeReadiness("d"),
             participation=_FakeParticipation("d"),
             reuse_eligible=False,
         )
         _, reason_with_reuse = _score_candidate(
-            "s", "d",
+            "s",
+            "d",
             readiness=_FakeReadiness("d"),
             participation=_FakeParticipation("d"),
             reuse_eligible=True,
@@ -1060,7 +1074,8 @@ class TestScoreCandidateReuseEffect:
 
     def test_score_is_positive_when_passing(self):
         score, reason = _score_candidate(
-            "s", "d",
+            "s",
+            "d",
             readiness=_FakeReadiness("d"),
             participation=_FakeParticipation("d"),
             reuse_eligible=False,

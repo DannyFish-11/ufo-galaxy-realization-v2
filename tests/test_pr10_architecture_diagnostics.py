@@ -63,6 +63,7 @@ if _PROJECT_ROOT not in sys.path:
 # Helpers
 # ===========================================================================
 
+
 def _valid_snapshot() -> Dict[str, Any]:
     """Return a representative valid architecture snapshot."""
     return {
@@ -105,12 +106,14 @@ class TestDiagnosticsModels:
 
     def test_severity_values(self):
         from core.architecture_diagnostics import DiagnosticSeverity
+
         assert DiagnosticSeverity.INFO.value == "info"
         assert DiagnosticSeverity.WARNING.value == "warning"
         assert DiagnosticSeverity.ERROR.value == "error"
 
     def test_finding_construction(self):
         from core.architecture_diagnostics import DiagnosticFinding, DiagnosticSeverity
+
         f = DiagnosticFinding(
             code="TEST_CODE",
             severity=DiagnosticSeverity.INFO,
@@ -121,6 +124,7 @@ class TestDiagnosticsModels:
 
     def test_finding_with_detail(self):
         from core.architecture_diagnostics import DiagnosticFinding, DiagnosticSeverity
+
         f = DiagnosticFinding(
             code="DETAIL_TEST",
             severity=DiagnosticSeverity.WARNING,
@@ -131,6 +135,7 @@ class TestDiagnosticsModels:
 
     def test_report_construction(self):
         from core.architecture_diagnostics import DiagnosticsReport
+
         r = DiagnosticsReport(overall_valid=True)
         assert r.overall_valid is True
         assert r.findings == []
@@ -140,6 +145,7 @@ class TestDiagnosticsModels:
 
     def test_report_to_dict_keys(self):
         from core.architecture_diagnostics import DiagnosticsReport
+
         r = DiagnosticsReport(
             overall_valid=True,
             error_count=0,
@@ -157,6 +163,7 @@ class TestDiagnosticsModels:
 
     def test_report_to_dict_overall_valid_false_when_errors(self):
         from core.architecture_diagnostics import DiagnosticsReport
+
         r = DiagnosticsReport(overall_valid=False, error_count=1)
         d = r.to_dict()
         assert d["overall_valid"] is False
@@ -173,6 +180,7 @@ class TestArchitectureDiagnosticsChecks:
 
     def test_entry_surface_not_authority_no_entry_surface(self):
         from core.architecture_diagnostics import ArchitectureDiagnostics
+
         diag = ArchitectureDiagnostics({})
         diag.check_entry_surface_not_authority()
         report = diag.build_report()
@@ -180,6 +188,7 @@ class TestArchitectureDiagnosticsChecks:
 
     def test_entry_surface_not_authority_clean(self):
         from core.architecture_diagnostics import ArchitectureDiagnostics
+
         snapshot = {
             "entry_surface": {"surface_role": "entry_surface"},
         }
@@ -190,6 +199,7 @@ class TestArchitectureDiagnosticsChecks:
 
     def test_entry_surface_claiming_runtime_shell_is_error(self):
         from core.architecture_diagnostics import ArchitectureDiagnostics
+
         snapshot = {
             "entry_surface": {
                 "authority_metadata": {"layer_role": "runtime_shell_authority"},
@@ -203,6 +213,7 @@ class TestArchitectureDiagnosticsChecks:
 
     def test_entry_surface_claiming_subject_decision_authority_is_error(self):
         from core.architecture_diagnostics import ArchitectureDiagnostics
+
         snapshot = {
             "entry_surface": {
                 "authority_role": "subject_decision_authority",
@@ -215,6 +226,7 @@ class TestArchitectureDiagnosticsChecks:
 
     def test_runtime_shell_above_subject_core_valid(self):
         from core.architecture_diagnostics import ArchitectureDiagnostics
+
         snapshot = {
             "runtime_shell": {
                 "authority_metadata": {"layer_role": "runtime_shell_authority"},
@@ -232,6 +244,7 @@ class TestArchitectureDiagnosticsChecks:
         """If the runtime_shell claims subject_decision_authority and subject_core
         claims runtime_shell_authority, the ordering invariant fires."""
         from core.architecture_diagnostics import ArchitectureDiagnostics
+
         snapshot = {
             "runtime_shell": {
                 # Wrong: claims a more inner role
@@ -249,6 +262,7 @@ class TestArchitectureDiagnosticsChecks:
 
     def test_openclawd_is_subject_decision_core_valid(self):
         from core.architecture_diagnostics import ArchitectureDiagnostics
+
         snapshot = {
             "subject_core": {
                 "metadata": {"authority_role": "subject_decision_authority"},
@@ -261,6 +275,7 @@ class TestArchitectureDiagnosticsChecks:
 
     def test_openclawd_wrong_role_is_error(self):
         from core.architecture_diagnostics import ArchitectureDiagnostics
+
         snapshot = {
             "subject_core": {
                 "authority_role": "entry_surface",  # wrong
@@ -274,6 +289,7 @@ class TestArchitectureDiagnosticsChecks:
 
     def test_agent_kernel_is_cognition_layer_valid(self):
         from core.architecture_diagnostics import ArchitectureDiagnostics
+
         snapshot = {
             "cognition_layer": {"authority_role": "cognition_planning_layer"},
         }
@@ -284,6 +300,7 @@ class TestArchitectureDiagnosticsChecks:
 
     def test_agent_kernel_wrong_role_is_error(self):
         from core.architecture_diagnostics import ArchitectureDiagnostics
+
         snapshot = {
             "cognition_layer": {"authority_role": "execution_substrate"},  # wrong
         }
@@ -294,6 +311,7 @@ class TestArchitectureDiagnosticsChecks:
 
     def test_subject_core_above_cognition_layer_valid(self):
         from core.architecture_diagnostics import ArchitectureDiagnostics
+
         snapshot = {
             "subject_core": {
                 "metadata": {"authority_role": "subject_decision_authority"},
@@ -307,6 +325,7 @@ class TestArchitectureDiagnosticsChecks:
 
     def test_substrate_distinct_from_orchestration_valid(self):
         from core.architecture_diagnostics import ArchitectureDiagnostics
+
         snapshot = {
             "execution_substrate": {"execution_substrate_role": "execution_substrate"},
             "orchestration_layer": {"authority_role": "orchestration_layer"},
@@ -318,6 +337,7 @@ class TestArchitectureDiagnosticsChecks:
 
     def test_substrate_same_role_as_orchestration_is_error(self):
         from core.architecture_diagnostics import ArchitectureDiagnostics
+
         snapshot = {
             "execution_substrate": {"authority_role": "orchestration_layer"},
             "orchestration_layer": {"authority_role": "orchestration_layer"},
@@ -329,6 +349,7 @@ class TestArchitectureDiagnosticsChecks:
 
     def test_remote_execution_coherence_no_mode(self):
         from core.architecture_diagnostics import ArchitectureDiagnostics
+
         snapshot = {
             "execution_substrate": {"execution_substrate_role": "execution_substrate"},
         }
@@ -339,6 +360,7 @@ class TestArchitectureDiagnosticsChecks:
 
     def test_remote_execution_coherence_agent_runtime_valid(self):
         from core.architecture_diagnostics import ArchitectureDiagnostics
+
         snapshot = {
             "execution_substrate": {
                 "execution_substrate_role": "execution_substrate",
@@ -352,6 +374,7 @@ class TestArchitectureDiagnosticsChecks:
 
     def test_remote_execution_coherence_command_only_valid(self):
         from core.architecture_diagnostics import ArchitectureDiagnostics
+
         snapshot = {
             "execution_substrate": {
                 "execution_substrate_role": "execution_substrate",
@@ -365,6 +388,7 @@ class TestArchitectureDiagnosticsChecks:
 
     def test_remote_execution_coherence_invalid_mode_is_error(self):
         from core.architecture_diagnostics import ArchitectureDiagnostics
+
         snapshot = {
             "execution_substrate": {
                 "execution_substrate_role": "execution_substrate",
@@ -379,6 +403,7 @@ class TestArchitectureDiagnosticsChecks:
 
     def test_authority_chain_complete_valid(self):
         from core.architecture_diagnostics import ArchitectureDiagnostics
+
         snapshot = _valid_snapshot()
         diag = ArchitectureDiagnostics(snapshot)
         diag.check_authority_chain_complete()
@@ -387,6 +412,7 @@ class TestArchitectureDiagnosticsChecks:
 
     def test_authority_chain_missing_runtime_shell_is_warning(self):
         from core.architecture_diagnostics import ArchitectureDiagnostics
+
         snapshot = {
             "subject_core": {"metadata": {"authority_role": "subject_decision_authority"}},
         }
@@ -407,12 +433,14 @@ class TestValidateAuthorityChain:
 
     def test_valid_full_chain_passes(self):
         from core.architecture_diagnostics import validate_authority_chain
+
         report = validate_authority_chain(_valid_snapshot())
         assert report.overall_valid
 
     def test_inverted_chain_detects_violation(self):
         """Swap runtime_shell and subject_core roles to trigger ordering check."""
         from core.architecture_diagnostics import validate_authority_chain
+
         snapshot = {
             "runtime_shell": {
                 # Simulated misconfiguration: shell claims inner role
@@ -428,17 +456,20 @@ class TestValidateAuthorityChain:
 
     def test_empty_snapshot_does_not_raise(self):
         from core.architecture_diagnostics import validate_authority_chain
+
         report = validate_authority_chain({})
         # Should complete without raising; may have warnings about missing layers
         assert isinstance(report.overall_valid, bool)
 
     def test_returns_diagnostics_report(self):
-        from core.architecture_diagnostics import validate_authority_chain, DiagnosticsReport
+        from core.architecture_diagnostics import DiagnosticsReport, validate_authority_chain
+
         report = validate_authority_chain(_valid_snapshot())
         assert isinstance(report, DiagnosticsReport)
 
     def test_checks_run_non_empty(self):
         from core.architecture_diagnostics import validate_authority_chain
+
         report = validate_authority_chain(_valid_snapshot())
         assert len(report.checks_run) > 0
 
@@ -453,11 +484,13 @@ class TestValidateLayerBoundaries:
 
     def test_valid_snapshot_passes(self):
         from core.architecture_diagnostics import validate_layer_boundaries
+
         report = validate_layer_boundaries(_valid_snapshot())
         assert report.overall_valid
 
     def test_entry_surface_claiming_authority_is_violation(self):
         from core.architecture_diagnostics import validate_layer_boundaries
+
         snapshot = {
             "entry_surface": {
                 "authority_metadata": {"layer_role": "runtime_shell_authority"},
@@ -468,6 +501,7 @@ class TestValidateLayerBoundaries:
 
     def test_subject_core_wrong_role_is_violation(self):
         from core.architecture_diagnostics import validate_layer_boundaries
+
         snapshot = {
             "subject_core": {
                 "authority_role": "orchestration_layer",  # wrong
@@ -478,6 +512,7 @@ class TestValidateLayerBoundaries:
 
     def test_substrate_and_orchestration_same_role_is_violation(self):
         from core.architecture_diagnostics import validate_layer_boundaries
+
         snapshot = {
             "execution_substrate": {"authority_role": "orchestration_layer"},
             "orchestration_layer": {"authority_role": "orchestration_layer"},
@@ -487,6 +522,7 @@ class TestValidateLayerBoundaries:
 
     def test_empty_snapshot_does_not_raise(self):
         from core.architecture_diagnostics import validate_layer_boundaries
+
         report = validate_layer_boundaries({})
         assert isinstance(report.overall_valid, bool)
 
@@ -501,11 +537,13 @@ class TestValidateRemoteExecutionCoherence:
 
     def test_no_substrate_passes(self):
         from core.architecture_diagnostics import validate_remote_execution_coherence
+
         report = validate_remote_execution_coherence({})
         assert report.overall_valid
 
     def test_agent_runtime_valid(self):
         from core.architecture_diagnostics import validate_remote_execution_coherence
+
         snapshot = {
             "execution_substrate": {
                 "execution_substrate_role": "execution_substrate",
@@ -517,6 +555,7 @@ class TestValidateRemoteExecutionCoherence:
 
     def test_command_only_valid(self):
         from core.architecture_diagnostics import validate_remote_execution_coherence
+
         snapshot = {
             "execution_substrate": {
                 "execution_substrate_role": "execution_substrate",
@@ -528,6 +567,7 @@ class TestValidateRemoteExecutionCoherence:
 
     def test_invalid_mode_is_error(self):
         from core.architecture_diagnostics import validate_remote_execution_coherence
+
         snapshot = {
             "execution_substrate": {
                 "execution_substrate_role": "execution_substrate",
@@ -540,6 +580,7 @@ class TestValidateRemoteExecutionCoherence:
 
     def test_no_mode_passes(self):
         from core.architecture_diagnostics import validate_remote_execution_coherence
+
         snapshot = {
             "execution_substrate": {
                 "execution_substrate_role": "execution_substrate",
@@ -559,23 +600,27 @@ class TestRunArchitectureDiagnostics:
 
     def test_valid_flow_passes_all_checks(self):
         from core.architecture_diagnostics import run_architecture_diagnostics
+
         report = run_architecture_diagnostics(_valid_snapshot())
         assert report.overall_valid
         assert report.error_count == 0
 
     def test_empty_snapshot_does_not_raise(self):
         from core.architecture_diagnostics import run_architecture_diagnostics
+
         report = run_architecture_diagnostics({})
         assert isinstance(report.overall_valid, bool)
 
     def test_none_snapshot_does_not_raise(self):
         from core.architecture_diagnostics import run_architecture_diagnostics
+
         report = run_architecture_diagnostics(None)
         assert isinstance(report.overall_valid, bool)
 
     def test_miswired_entry_surface_detected(self):
         """Entry surface claiming runtime authority is an ERROR."""
         from core.architecture_diagnostics import run_architecture_diagnostics
+
         snapshot = dict(_valid_snapshot())
         snapshot["entry_surface"] = {
             "authority_metadata": {"layer_role": "runtime_shell_authority"},
@@ -588,6 +633,7 @@ class TestRunArchitectureDiagnostics:
     def test_miswired_openclawd_detected(self):
         """subject_core with wrong role is an ERROR."""
         from core.architecture_diagnostics import run_architecture_diagnostics
+
         snapshot = dict(_valid_snapshot())
         snapshot["subject_core"] = {"authority_role": "orchestration_layer"}
         report = run_architecture_diagnostics(snapshot)
@@ -596,6 +642,7 @@ class TestRunArchitectureDiagnostics:
     def test_conflated_substrate_and_orchestration_detected(self):
         """Same role for substrate and orchestration layer is an ERROR."""
         from core.architecture_diagnostics import run_architecture_diagnostics
+
         snapshot = dict(_valid_snapshot())
         snapshot["execution_substrate"] = {"authority_role": "orchestration_layer"}
         snapshot["orchestration_layer"] = {"authority_role": "orchestration_layer"}
@@ -604,6 +651,7 @@ class TestRunArchitectureDiagnostics:
 
     def test_all_checks_run(self):
         from core.architecture_diagnostics import run_architecture_diagnostics
+
         report = run_architecture_diagnostics(_valid_snapshot())
         # At least 7 checks should be registered
         assert len(report.checks_run) >= 7
@@ -611,14 +659,17 @@ class TestRunArchitectureDiagnostics:
     def test_report_to_dict_serialisable(self):
         """DiagnosticsReport.to_dict() produces a JSON-serialisable dict."""
         import json
+
         from core.architecture_diagnostics import run_architecture_diagnostics
+
         report = run_architecture_diagnostics(_valid_snapshot())
         d = report.to_dict()
         # Should not raise
         json.dumps(d)
 
     def test_report_findings_list(self):
-        from core.architecture_diagnostics import run_architecture_diagnostics, DiagnosticFinding
+        from core.architecture_diagnostics import DiagnosticFinding, run_architecture_diagnostics
+
         report = run_architecture_diagnostics(_valid_snapshot())
         for f in report.findings:
             assert isinstance(f, DiagnosticFinding)
@@ -634,6 +685,7 @@ class TestBuildDiagnosticsSnapshotFromLayers:
 
     def test_builds_snapshot_from_tagged_dicts(self):
         from core.architecture_diagnostics import build_diagnostics_snapshot_from_layers
+
         runtime_result = {
             "arch_layer_id": "runtime_shell",
             "authority_metadata": {"layer_role": "runtime_shell_authority"},
@@ -648,6 +700,7 @@ class TestBuildDiagnosticsSnapshotFromLayers:
 
     def test_ignores_dicts_without_arch_layer_id(self):
         from core.architecture_diagnostics import build_diagnostics_snapshot_from_layers
+
         no_id = {"some_key": "some_value"}
         tagged = {"arch_layer_id": "runtime_shell", "x": 1}
         snapshot = build_diagnostics_snapshot_from_layers(no_id, tagged)
@@ -656,12 +709,14 @@ class TestBuildDiagnosticsSnapshotFromLayers:
 
     def test_ignores_non_dict_inputs(self):
         from core.architecture_diagnostics import build_diagnostics_snapshot_from_layers
+
         snapshot = build_diagnostics_snapshot_from_layers(None, "string", 42)  # type: ignore[arg-type]
         assert snapshot == {}
 
     def test_mixed_valid_and_invalid_inputs(self):
         """Valid tagged dicts are retained; invalid types and untagged dicts are filtered."""
         from core.architecture_diagnostics import build_diagnostics_snapshot_from_layers
+
         valid1 = {"arch_layer_id": "runtime_shell", "x": 1}
         valid2 = {"arch_layer_id": "subject_core", "y": 2}
         no_id = {"some_key": "no arch_layer_id here"}
@@ -674,6 +729,7 @@ class TestBuildDiagnosticsSnapshotFromLayers:
 
     def test_empty_input_returns_empty_dict(self):
         from core.architecture_diagnostics import build_diagnostics_snapshot_from_layers
+
         assert build_diagnostics_snapshot_from_layers() == {}
 
     def test_snapshot_can_be_passed_to_run_diagnostics(self):
@@ -681,6 +737,7 @@ class TestBuildDiagnosticsSnapshotFromLayers:
             build_diagnostics_snapshot_from_layers,
             run_architecture_diagnostics,
         )
+
         layers = [
             {
                 "arch_layer_id": "runtime_shell",
@@ -723,9 +780,19 @@ class TestIntegrationWithRuntimeLayers:
         runtime._active_sessions = {}
         runtime.created_at = 0.0
 
-        async def _fake_dispatch(msg, source, device_id, session_id, user_id,
-                                  context, required_capabilities, multimodal_context,
-                                  use_constellation, entry_mode, **kwargs):
+        async def _fake_dispatch(
+            msg,
+            source,
+            device_id,
+            session_id,
+            user_id,
+            context,
+            required_capabilities,
+            multimodal_context,
+            use_constellation,
+            entry_mode,
+            **kwargs,
+        ):
             return {"success": True, "response": "ok"}
 
         runtime._dispatch = _fake_dispatch
@@ -742,15 +809,14 @@ class TestIntegrationWithRuntimeLayers:
         runtime._log_request_start = MagicMock()
         runtime._log_request_end = MagicMock()
 
-        with patch("core.desktop_presence_runtime.DesktopPresenceRuntime._create_session",
-                   return_value=mock_session):
+        with patch("core.desktop_presence_runtime.DesktopPresenceRuntime._create_session", return_value=mock_session):
             result = self._run(runtime.handle_request("hello", source="test"))
 
         assert result.get("arch_layer_id") == "runtime_shell"
 
     def test_kernel_response_to_api_dict_stamps_arch_layer_id(self):
+        from core.agent.intent_router import IntentMode, IntentResult
         from core.agent.kernel import KernelResponse
-        from core.agent.intent_router import IntentResult, IntentMode
 
         intent = IntentResult(
             mode=IntentMode.CHAT_ONLY,
@@ -813,6 +879,7 @@ class TestIntegrationWithRuntimeLayers:
             build_diagnostics_snapshot_from_layers,
             run_architecture_diagnostics,
         )
+
         # Simulate response dicts as they would arrive from each module
         dpr_result = {
             "arch_layer_id": "runtime_shell",
@@ -838,12 +905,8 @@ class TestIntegrationWithRuntimeLayers:
             "execution_substrate_role": "execution_substrate",
             "remote_execution_mode": "command_only",
         }
-        snapshot = build_diagnostics_snapshot_from_layers(
-            dpr_result, oc_result, kernel_result, router_result
-        )
-        assert set(snapshot.keys()) == {
-            "runtime_shell", "subject_core", "cognition_layer", "execution_substrate"
-        }
+        snapshot = build_diagnostics_snapshot_from_layers(dpr_result, oc_result, kernel_result, router_result)
+        assert set(snapshot.keys()) == {"runtime_shell", "subject_core", "cognition_layer", "execution_substrate"}
         report = run_architecture_diagnostics(snapshot)
         assert report.overall_valid
 
@@ -865,9 +928,19 @@ class TestBackwardCompatibility:
         runtime._active_sessions = {}
         runtime.created_at = 0.0
 
-        async def _fake_dispatch(msg, source, device_id, session_id, user_id,
-                                  context, required_capabilities, multimodal_context,
-                                  use_constellation, entry_mode, **kwargs):
+        async def _fake_dispatch(
+            msg,
+            source,
+            device_id,
+            session_id,
+            user_id,
+            context,
+            required_capabilities,
+            multimodal_context,
+            use_constellation,
+            entry_mode,
+            **kwargs,
+        ):
             return {"success": True, "response": "ok"}
 
         runtime._dispatch = _fake_dispatch
@@ -884,11 +957,8 @@ class TestBackwardCompatibility:
         runtime._log_request_start = MagicMock()
         runtime._log_request_end = MagicMock()
 
-        with patch("core.desktop_presence_runtime.DesktopPresenceRuntime._create_session",
-                   return_value=mock_session):
-            result = asyncio.new_event_loop().run_until_complete(
-                runtime.handle_request("hello", source="test")
-            )
+        with patch("core.desktop_presence_runtime.DesktopPresenceRuntime._create_session", return_value=mock_session):
+            result = asyncio.new_event_loop().run_until_complete(runtime.handle_request("hello", source="test"))
 
         # PR-9 fields still present
         assert "authority_metadata" in result
@@ -898,8 +968,8 @@ class TestBackwardCompatibility:
 
     def test_kernel_response_to_api_dict_still_has_authority_role(self):
         """to_api_dict() must still return authority_role from PR-9."""
+        from core.agent.intent_router import IntentMode, IntentResult
         from core.agent.kernel import KernelResponse
-        from core.agent.intent_router import IntentResult, IntentMode
 
         intent = IntentResult(
             mode=IntentMode.CHAT_ONLY,
@@ -917,6 +987,7 @@ class TestBackwardCompatibility:
     def test_diagnostics_module_importable_without_side_effects(self):
         """Importing architecture_diagnostics must not execute any side effects."""
         import importlib
+
         mod = importlib.import_module("core.architecture_diagnostics")
         assert hasattr(mod, "run_architecture_diagnostics")
         assert hasattr(mod, "ArchitectureDiagnostics")

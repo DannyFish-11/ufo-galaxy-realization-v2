@@ -120,9 +120,10 @@ def _deployment_dep_error(exc: Exception) -> bool:
     msg_lower = str(exc).lower()
     for dep in _deployment_deps:
         # Match "no module named 'fastapi'" or "no module named 'fastapi.something'"
-        if f"'{dep}" in msg_lower or f"\"{dep}" in msg_lower:
+        if f"'{dep}" in msg_lower or f'"{dep}' in msg_lower:
             return True
     return False
+
 
 # ---------------------------------------------------------------------------
 # Methodology statement
@@ -187,6 +188,7 @@ def check_canonical_ws_ingress() -> AuditCheckResult:
     check = "canonical_ws_ingress"
     try:
         from galaxy_gateway.routes.websocket import CANONICAL_DEVICE_INGRESS_AUTHORITY
+
         assert isinstance(CANONICAL_DEVICE_INGRESS_AUTHORITY, str)
         assert "/ws/device/" in CANONICAL_DEVICE_INGRESS_AUTHORITY
         return AuditCheckResult(
@@ -224,16 +226,24 @@ def check_message_type_coverage() -> AuditCheckResult:
     """
     check = "message_type_coverage"
     required = {
-        "DEVICE_REGISTER", "DEVICE_HEARTBEAT",
-        "TASK_RESULT", "GOAL_EXECUTION", "GOAL_EXECUTION_RESULT",
-        "HANDOFF_ENVELOPE_V2", "HANDOFF_ENVELOPE_V2_RESULT",
-        "HANDOFF_ACK", "HANDOFF_RESULT", "HANDOFF_FAILURE",
+        "DEVICE_REGISTER",
+        "DEVICE_HEARTBEAT",
+        "TASK_RESULT",
+        "GOAL_EXECUTION",
+        "GOAL_EXECUTION_RESULT",
+        "HANDOFF_ENVELOPE_V2",
+        "HANDOFF_ENVELOPE_V2_RESULT",
+        "HANDOFF_ACK",
+        "HANDOFF_RESULT",
+        "HANDOFF_FAILURE",
         "RECONCILIATION_SIGNAL",
         "DELEGATED_EXECUTION_SIGNAL",
-        "TAKEOVER_REQUEST", "TAKEOVER_RESPONSE",
+        "TAKEOVER_REQUEST",
+        "TAKEOVER_RESPONSE",
     }
     try:
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         defined = {m.name for m in MessageType}
         missing = required - defined
         if missing:
@@ -281,9 +291,7 @@ def check_handler_registration_completeness() -> AuditCheckResult:
                 check_name=check,
                 passed=False,
                 evidence="galaxy_gateway.android_bridge.AndroidBridge._message_handlers",
-                failure_detail=(
-                    f"{len(unregistered)} MessageType values have no handler: {unregistered}"
-                ),
+                failure_detail=(f"{len(unregistered)} MessageType values have no handler: {unregistered}"),
             )
         return AuditCheckResult(
             check_name=check,
@@ -321,11 +329,11 @@ def check_reconciliation_signal_handler_wired() -> AuditCheckResult:
     """
     check = "reconciliation_signal_handler_wired"
     try:
-        from galaxy_gateway.android_bridge import AndroidBridge
-        from galaxy_gateway.protocol.aip_v3 import MessageType
         from galaxy_gateway.android.handlers.reconciliation_signal import (
             handle_reconciliation_signal,
         )
+        from galaxy_gateway.android_bridge import AndroidBridge
+        from galaxy_gateway.protocol.aip_v3 import MessageType
 
         bridge = AndroidBridge()
         handler = bridge._message_handlers.get(MessageType.RECONCILIATION_SIGNAL)
@@ -376,11 +384,11 @@ def check_handoff_v2_result_handler_wired() -> AuditCheckResult:
     """
     check = "handoff_v2_result_handler_wired"
     try:
-        from galaxy_gateway.android_bridge import AndroidBridge
-        from galaxy_gateway.protocol.aip_v3 import MessageType
         from galaxy_gateway.android.handlers.handoff_v2_result import (
             handle_handoff_v2_result,
         )
+        from galaxy_gateway.android_bridge import AndroidBridge
+        from galaxy_gateway.protocol.aip_v3 import MessageType
 
         bridge = AndroidBridge()
         uplink_types = [
@@ -436,24 +444,20 @@ def check_pending_delivery_buffer_implemented() -> AuditCheckResult:
     check = "pending_delivery_buffer_implemented"
     try:
         from galaxy_gateway.pending_delivery_buffer import (
-            DurablePendingDeliveryBuffer,
-            PENDING_DELIVERY_TTL_SECONDS,
             PENDING_DELIVERY_MAX_QUEUE_PER_DEVICE,
+            PENDING_DELIVERY_TTL_SECONDS,
+            DurablePendingDeliveryBuffer,
         )
 
         # Check interface by inspecting the class directly (avoids __init__ side-effects)
-        assert hasattr(DurablePendingDeliveryBuffer, "enqueue"), (
-            "DurablePendingDeliveryBuffer.enqueue missing"
-        )
-        assert hasattr(DurablePendingDeliveryBuffer, "flush"), (
-            "DurablePendingDeliveryBuffer.flush missing"
-        )
-        assert hasattr(DurablePendingDeliveryBuffer, "purge_expired"), (
-            "DurablePendingDeliveryBuffer.purge_expired missing"
-        )
-        assert hasattr(DurablePendingDeliveryBuffer, "discard_device"), (
-            "DurablePendingDeliveryBuffer.discard_device missing"
-        )
+        assert hasattr(DurablePendingDeliveryBuffer, "enqueue"), "DurablePendingDeliveryBuffer.enqueue missing"
+        assert hasattr(DurablePendingDeliveryBuffer, "flush"), "DurablePendingDeliveryBuffer.flush missing"
+        assert hasattr(
+            DurablePendingDeliveryBuffer, "purge_expired"
+        ), "DurablePendingDeliveryBuffer.purge_expired missing"
+        assert hasattr(
+            DurablePendingDeliveryBuffer, "discard_device"
+        ), "DurablePendingDeliveryBuffer.discard_device missing"
 
         # TTL must be positive
         assert PENDING_DELIVERY_TTL_SECONDS > 0
@@ -486,10 +490,10 @@ def check_reconnect_canonical_path_sentinel() -> AuditCheckResult:
     """
     check = "reconnect_canonical_path_sentinel"
     try:
-        from galaxy_gateway.android_bridge import ANDROID_RECONNECT_CANONICAL_PATH_SENTINEL
         from galaxy_gateway.android.handlers.registration import (
             DEVICE_REGISTER_IS_CANONICAL_RECONNECT_PATH,
         )
+        from galaxy_gateway.android_bridge import ANDROID_RECONNECT_CANONICAL_PATH_SENTINEL
 
         assert "device_register" in ANDROID_RECONNECT_CANONICAL_PATH_SENTINEL.lower()
         assert "device_register" in DEVICE_REGISTER_IS_CANONICAL_RECONNECT_PATH.lower()
@@ -537,8 +541,8 @@ def check_attached_session_registry_reconnect() -> AuditCheckResult:
     check = "attached_session_registry_reconnect"
     try:
         from core.attached_runtime_session_registry import (
-            reconnect_session,
             REGISTRY_RECONNECT_PRESERVES_RUNTIME_SESSION_ID_POLICY,
+            reconnect_session,
         )
 
         assert callable(reconnect_session)
@@ -660,10 +664,7 @@ def check_dispatch_blocked_on_registration_gap() -> AuditCheckResult:
         return AuditCheckResult(
             check_name=check,
             passed=False,
-            evidence=(
-                "galaxy_gateway.android.handlers.registration."
-                "DispatchBlockedByRegistrationGapError"
-            ),
+            evidence=("galaxy_gateway.android.handlers.registration." "DispatchBlockedByRegistrationGapError"),
             failure_detail=str(exc),
         )
 
@@ -681,13 +682,15 @@ def check_aip_compat_normalizer() -> AuditCheckResult:
 
         from galaxy_gateway.protocol.compat import normalise_to_v3_dict
 
-        sample = json.dumps({
-            "version": "3.0",
-            "type": "heartbeat",
-            "device_id": "test_device",
-            "message_id": str(uuid.uuid4()),
-            "timestamp": int(time.time() * 1000),
-        })
+        sample = json.dumps(
+            {
+                "version": "3.0",
+                "type": "heartbeat",
+                "device_id": "test_device",
+                "message_id": str(uuid.uuid4()),
+                "timestamp": int(time.time() * 1000),
+            }
+        )
         result = normalise_to_v3_dict(sample)
         assert isinstance(result, dict), "normalise_to_v3_dict must return a dict"
         assert result.get("type") == "heartbeat"
@@ -720,9 +723,9 @@ def check_lifecycle_coordinator_exists() -> AuditCheckResult:
     check = "lifecycle_coordinator_exists"
     try:
         from core.android_delegated_runtime_lifecycle_coordinator import (
+            ANDROID_DELEGATED_RUNTIME_LIFECYCLE_COORDINATOR_AUTHORITY,
             AndroidDelegatedRuntimeLifecycleCoordinator,
             get_lifecycle_coordinator,
-            ANDROID_DELEGATED_RUNTIME_LIFECYCLE_COORDINATOR_AUTHORITY,
         )
 
         assert callable(get_lifecycle_coordinator)
@@ -746,8 +749,7 @@ def check_lifecycle_coordinator_exists() -> AuditCheckResult:
             check_name=check,
             passed=False,
             evidence=(
-                "core.android_delegated_runtime_lifecycle_coordinator."
-                "AndroidDelegatedRuntimeLifecycleCoordinator"
+                "core.android_delegated_runtime_lifecycle_coordinator." "AndroidDelegatedRuntimeLifecycleCoordinator"
             ),
             failure_detail=str(exc),
         )

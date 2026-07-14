@@ -41,10 +41,8 @@ See ``docs/FALLBACK_DECISION_TRACE.md`` for the full specification.
 
 from __future__ import annotations
 
-import logging  # auto: missing import
-
-
 import json
+import logging  # auto: missing import
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -52,7 +50,6 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
-
 
 # ---------------------------------------------------------------------------
 # FallbackOutcome — canonical outcome vocabulary
@@ -299,10 +296,7 @@ class FallbackDecisionTrace(BaseModel):
     )
     outcome: str = Field(
         default=FallbackOutcome.BLOCKED.value,
-        description=(
-            "Final outcome of the fallback decision "
-            "(selected / blocked / noop / degraded / failed)."
-        ),
+        description=("Final outcome of the fallback decision " "(selected / blocked / noop / degraded / failed)."),
     )
     notes: Optional[str] = Field(
         default=None,
@@ -528,12 +522,11 @@ def _build_trace(
     decision_source = FallbackDecisionSource.UNKNOWN.value
     primary_block_reason: Optional[str] = None
     candidate_paths: List[Dict[str, Any]] = []
-    readiness_status: Optional[str] = None
     readiness_blocked_by: Optional[str] = None
 
     try:
         if readiness_result is not None:
-            readiness_status = str(getattr(readiness_result, "status", "") or "")
+            str(getattr(readiness_result, "status", "") or "")
             readiness_blocked_by = str(getattr(readiness_result, "blocked_by", "") or "")
             readiness_reason = str(getattr(readiness_result, "reason", "") or "")
             is_ready = bool(getattr(readiness_result, "ready", True))

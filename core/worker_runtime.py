@@ -14,6 +14,7 @@
 默认关 = 单机,不启用、零行为变化。执行与回传逻辑抽成 :meth:`execute_dispatch`
 纯方法(注入 bus 即可单测,不触网)。
 """
+
 from __future__ import annotations
 
 import logging
@@ -26,9 +27,7 @@ logger = logging.getLogger("Galaxy.WorkerRuntime")
 
 def worker_enabled() -> bool:
     """worker 消费循环是否启用(跟随多设备总开关)。"""
-    return str(os.getenv("GALAXY_MASTER_BRAIN_ENABLED", "")).strip().lower() in (
-        "1", "true", "yes", "on"
-    )
+    return str(os.getenv("GALAXY_MASTER_BRAIN_ENABLED", "")).strip().lower() in ("1", "true", "yes", "on")
 
 
 def default_worker_id() -> str:
@@ -56,8 +55,8 @@ class WorkerRuntime:
         派发 dict 形如 {task_id, node_id, action, params, ui_graph, trace_id}。
         node_id 缺省从 params.target_node 或 action 前缀推断失败则原样;执行经
         invoke_node(结构优先:透传 ui_graph)。"""
+        from core.node_invocation import InvocationSource, invoke_node
         from core.schemas.aip_v3 import TaskResultMsg
-        from core.node_invocation import invoke_node, InvocationSource
 
         task_id = str(msg.get("task_id") or msg.get("request_id") or "")
         trace_id = str(msg.get("trace_id") or "")
@@ -68,29 +67,43 @@ class WorkerRuntime:
 
         if not node_id or not action:
             return TaskResultMsg(
-                device_id=self.worker_id, task_id=task_id, trace_id=trace_id,
-                status="failed", error="worker: 派发缺 node_id/action",
+                device_id=self.worker_id,
+                task_id=task_id,
+                trace_id=trace_id,
+                status="failed",
+                error="worker: 派发缺 node_id/action",
             )
         try:
             result = await invoke_node(
-                node_id, action, params,
+                node_id,
+                action,
+                params,
                 invocation_source=InvocationSource.UNKNOWN,
-                task_id=task_id, trace_id=trace_id, ui_graph=ui_graph,
+                task_id=task_id,
+                trace_id=trace_id,
+                ui_graph=ui_graph,
             )
             return TaskResultMsg(
-                device_id=self.worker_id, task_id=task_id, trace_id=trace_id,
+                device_id=self.worker_id,
+                task_id=task_id,
+                trace_id=trace_id,
                 status="completed" if getattr(result, "success", False) else "failed",
-                result=(getattr(result, "result", None)
-                        if isinstance(getattr(result, "result", None), dict)
-                        else {"value": getattr(result, "result", None)}),
+                result=(
+                    getattr(result, "result", None)
+                    if isinstance(getattr(result, "result", None), dict)
+                    else {"value": getattr(result, "result", None)}
+                ),
                 error=getattr(result, "error", "") or "",
                 duration_ms=int(getattr(result, "duration_ms", 0)),
             )
         except Exception as exc:  # noqa: BLE001 — 单个任务失败不拖垮 worker
             logger.warning("worker 执行派发失败 task=%s: %s", task_id, exc)
             return TaskResultMsg(
-                device_id=self.worker_id, task_id=task_id, trace_id=trace_id,
-                status="failed", error=f"worker 执行异常: {exc}",
+                device_id=self.worker_id,
+                task_id=task_id,
+                trace_id=trace_id,
+                status="failed",
+                error=f"worker 执行异常: {exc}",
             )
 
     async def _on_dispatch(self, msg: Dict[str, Any]) -> None:
@@ -104,6 +117,7 @@ class WorkerRuntime:
     def _get_bus(self) -> Any:
         if self._nats is None:
             from core.nats_bus import get_nats_bus
+
             self._nats = get_nats_bus()
         return self._nats
 
@@ -120,6 +134,7 @@ class WorkerRuntime:
             # 注册 worker(best-effort)
             try:
                 from core.schemas.contracts import WorkerRegistrationModel
+
                 await bus.publish_worker_registration(
                     WorkerRegistrationModel(worker_id=self.worker_id, worker_version="v2")
                 )
@@ -127,8 +142,9 @@ class WorkerRuntime:
                 logger.debug("worker 注册跳过(非致命): %s", exc)
             await bus.subscribe_task_dispatches(self.worker_id, self._on_dispatch)
             self._running = True
-            logger.info("WorkerRuntime 启动 worker_id=%s(订阅 galaxy.tasks.dispatch.%s)",
-                        self.worker_id, self.worker_id)
+            logger.info(
+                "WorkerRuntime 启动 worker_id=%s(订阅 galaxy.tasks.dispatch.%s)", self.worker_id, self.worker_id
+            )
             return {"started": True, "worker_id": self.worker_id}
         except Exception as exc:  # noqa: BLE001
             logger.warning("WorkerRuntime 启动失败: %s", exc)

@@ -40,6 +40,7 @@ _CR_RESPONSE: Dict[str, Any] = {
 # A) GalaxyOrchestrator defaults to ConstellationRuntime
 # ===========================================================================
 
+
 class TestGalaxyOrchestratorDefaultEntry:
     """GalaxyOrchestrator.process_request() must route via ConstellationRuntime by default."""
 
@@ -54,6 +55,7 @@ class TestGalaxyOrchestratorDefaultEntry:
             return_value=mock_runtime,
         ):
             from galaxy_gateway.orchestrator.galaxy_orchestrator import GalaxyOrchestrator
+
             orch = GalaxyOrchestrator({})
             result = await orch.process_request("default entry test")
 
@@ -71,6 +73,7 @@ class TestGalaxyOrchestratorDefaultEntry:
             return_value=mock_runtime,
         ):
             from galaxy_gateway.orchestrator.galaxy_orchestrator import GalaxyOrchestrator
+
             orch = GalaxyOrchestrator({})
             result = await orch.process_request(
                 "explicit true",
@@ -90,6 +93,7 @@ class TestGalaxyOrchestratorDefaultEntry:
             return_value=mock_runtime,
         ):
             from galaxy_gateway.orchestrator.galaxy_orchestrator import GalaxyOrchestrator
+
             orch = GalaxyOrchestrator({})
             await orch.process_request(
                 "explicit false",
@@ -102,6 +106,7 @@ class TestGalaxyOrchestratorDefaultEntry:
 # ===========================================================================
 # B) process_user_input() defaults to ConstellationRuntime
 # ===========================================================================
+
 
 class TestE2EOrchestratorDefaultEntry:
     """process_user_input() must route via ConstellationRuntime by default."""
@@ -117,6 +122,7 @@ class TestE2EOrchestratorDefaultEntry:
             return_value=mock_runtime,
         ):
             from core.e2e_orchestrator import process_user_input
+
             result = await process_user_input("default entry e2e")
 
         mock_runtime.run.assert_called_once()
@@ -129,19 +135,27 @@ class TestE2EOrchestratorDefaultEntry:
         mock_runtime.run = AsyncMock(return_value=_CR_RESPONSE)
 
         mock_pipeline = MagicMock()
-        mock_pipeline.execute = AsyncMock(return_value={
-            "success": True, "reply": "pipeline", "session_id": "s1",
-            "mode": "chat", "data": {}, "devices_notified": [],
-        })
+        mock_pipeline.execute = AsyncMock(
+            return_value={
+                "success": True,
+                "reply": "pipeline",
+                "session_id": "s1",
+                "mode": "chat",
+                "data": {},
+                "devices_notified": [],
+            }
+        )
 
-        with patch(
-            "core.constellation_runtime.get_constellation_runtime",
-            return_value=mock_runtime,
-        ), patch("core.e2e_pipeline.get_pipeline", return_value=mock_pipeline):
+        with (
+            patch(
+                "core.constellation_runtime.get_constellation_runtime",
+                return_value=mock_runtime,
+            ),
+            patch("core.e2e_pipeline.get_pipeline", return_value=mock_pipeline),
+        ):
             from core.e2e_orchestrator import process_user_input
-            result = await process_user_input(
-                "bypass cr", use_constellation=False
-            )
+
+            result = await process_user_input("bypass cr", use_constellation=False)
 
         mock_runtime.run.assert_not_called()
         mock_pipeline.execute.assert_called_once()
@@ -151,12 +165,13 @@ class TestE2EOrchestratorDefaultEntry:
 # C) get_constellation_runtime() returns a singleton ConstellationRuntime
 # ===========================================================================
 
+
 class TestConstellationRuntimeSingleton:
     """Singleton factory must return identical instances across calls."""
 
     def test_same_instance_returned_on_repeated_calls(self):
-        from core.constellation_runtime import get_constellation_runtime, ConstellationRuntime
         import core.constellation_runtime as _mod
+        from core.constellation_runtime import ConstellationRuntime, get_constellation_runtime
 
         _mod._runtime_instance = None
         try:
@@ -168,8 +183,8 @@ class TestConstellationRuntimeSingleton:
             _mod._runtime_instance = None
 
     def test_singleton_type_is_constellation_runtime(self):
-        from core.constellation_runtime import get_constellation_runtime, ConstellationRuntime
         import core.constellation_runtime as _mod
+        from core.constellation_runtime import ConstellationRuntime, get_constellation_runtime
 
         _mod._runtime_instance = None
         try:
@@ -183,14 +198,15 @@ class TestConstellationRuntimeSingleton:
 # D) ConstellationRuntime.run() is actually invoked on the default path
 # ===========================================================================
 
+
 class TestConstellationRuntimeInvoked:
     """End-to-end: verify ConstellationRuntime.run() is called, not skipped."""
 
     @pytest.mark.asyncio
     async def test_run_called_via_galaxy_orchestrator(self):
         """Spy on ConstellationRuntime.run() to confirm it fires through GalaxyOrchestrator."""
-        from core.constellation_runtime import ConstellationRuntime
         import core.constellation_runtime as _mod
+        from core.constellation_runtime import ConstellationRuntime
 
         _mod._runtime_instance = None
         try:
@@ -199,6 +215,7 @@ class TestConstellationRuntimeInvoked:
             _mod._runtime_instance = real_runtime
 
             from galaxy_gateway.orchestrator.galaxy_orchestrator import GalaxyOrchestrator
+
             orch = GalaxyOrchestrator({})
             await orch.process_request("spy on run")
 
@@ -209,8 +226,8 @@ class TestConstellationRuntimeInvoked:
     @pytest.mark.asyncio
     async def test_run_called_via_e2e_orchestrator(self):
         """Spy on ConstellationRuntime.run() to confirm it fires through e2e_orchestrator."""
-        from core.constellation_runtime import ConstellationRuntime
         import core.constellation_runtime as _mod
+        from core.constellation_runtime import ConstellationRuntime
 
         _mod._runtime_instance = None
         try:
@@ -219,6 +236,7 @@ class TestConstellationRuntimeInvoked:
             _mod._runtime_instance = real_runtime
 
             from core.e2e_orchestrator import process_user_input
+
             await process_user_input("spy on e2e run")
 
             real_runtime.run.assert_called_once()
@@ -230,6 +248,7 @@ class TestConstellationRuntimeInvoked:
 # E) ConstellationRuntime.run() returns the expected dict shape
 # ===========================================================================
 
+
 class TestConstellationRuntimeResponseShape:
     """ConstellationRuntime.run() must return a dict with required keys."""
 
@@ -237,7 +256,7 @@ class TestConstellationRuntimeResponseShape:
     async def test_run_returns_required_keys(self):
         """run() must return success, reply, trace_id, session_id, mode."""
         from core.constellation_runtime import ConstellationRuntime
-        from core.schemas.orchestration import TaskDecomposition, SubTask, SubTaskStatus
+        from core.schemas.orchestration import SubTask, SubTaskStatus, TaskDecomposition
 
         rt = ConstellationRuntime(enable_dag_evolution=False)
 
@@ -245,9 +264,13 @@ class TestConstellationRuntimeResponseShape:
         subtask = SubTask(task_id="t1", name="step1", description="step", status=SubTaskStatus.PENDING)
         decomp = TaskDecomposition(goal="test", subtasks=[subtask])
         mock_orch._decompose_task = AsyncMock(return_value=decomp)
-        mock_orch._execute_subtask = AsyncMock(return_value={
-            "success": True, "result": "done", "tool": "noop",
-        })
+        mock_orch._execute_subtask = AsyncMock(
+            return_value={
+                "success": True,
+                "result": "done",
+                "tool": "noop",
+            }
+        )
         rt._smart_orchestrator = mock_orch
 
         result = await rt.run("test task description")

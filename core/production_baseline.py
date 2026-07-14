@@ -602,13 +602,9 @@ class ProductionBaselineRegistry:
             "canonical_primary_count": len(self.canonical_primary_artifacts),
             "derived_only_count": len(self.derived_only_artifacts),
             "legacy_secondary_count": len(self._legacy_paths),
-            "canonical_primary_artifacts": [
-                a.to_dict() for a in self.canonical_primary_artifacts
-            ],
+            "canonical_primary_artifacts": [a.to_dict() for a in self.canonical_primary_artifacts],
             "derived_only_artifacts": [a.to_dict() for a in self.derived_only_artifacts],
-            "legacy_path_declarations": [
-                lp.to_dict() for lp in self._legacy_paths
-            ],
+            "legacy_path_declarations": [lp.to_dict() for lp in self._legacy_paths],
         }
 
 
@@ -695,18 +691,14 @@ def build_production_baseline_summary(
     if response_metadata is not None:
         coverage = registry.check_canonical_coverage(response_metadata)
         summary["coverage"] = coverage
-        summary["projection_downstream"] = registry.assert_projection_is_downstream(
-            response_metadata
-        )
+        summary["projection_downstream"] = registry.assert_projection_is_downstream(response_metadata)
 
     try:
         from core.perception.perception_fact_boundary import (
             build_perception_fact_boundary_summary,
         )
 
-        summary["perception_boundary"] = build_perception_fact_boundary_summary(
-            response_metadata
-        )
+        summary["perception_boundary"] = build_perception_fact_boundary_summary(response_metadata)
     except Exception as exc:
         logger.debug("Fallback triggered: %s", exc)
         summary["perception_boundary"] = {

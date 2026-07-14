@@ -136,9 +136,7 @@ SYSTEM_COMPLETION_READINESS_POLICY: str = (
 # These values MUST remain synchronized with ExecutionLifecyclePhase in
 # core.unified_execution_governance (the authoritative enum definition).
 # Drift between these constants and the enum is a governance regression.
-_TERMINAL_PHASES: frozenset[str] = frozenset(
-    {"succeeded", "failed", "timed_out", "interrupted", "cancelled"}
-)
+_TERMINAL_PHASES: frozenset[str] = frozenset({"succeeded", "failed", "timed_out", "interrupted", "cancelled"})
 
 # Phases that can appear before execution is active (pre-running)
 _PRE_RUNNING_PHASES: frozenset[str] = frozenset({"created", "admitted"})
@@ -176,9 +174,7 @@ _COMPATIBILITY_RECONCILIATION_STATUSES: FrozenSet[str] = frozenset(
 DEFAULT_RUNTIME_HEALTH_STATUS: str = "stable"
 TERMINAL_TRUTH_SOURCE_CENTER_LIFECYCLE: str = "center_lifecycle"
 FAILURE_SEMANTIC_FALLBACK_LOCAL: str = "fallback_local"
-_FALLBACK_FAILURE_SEMANTICS: FrozenSet[str] = frozenset(
-    {FAILURE_SEMANTIC_FALLBACK_LOCAL}
-)
+_FALLBACK_FAILURE_SEMANTICS: FrozenSet[str] = frozenset({FAILURE_SEMANTIC_FALLBACK_LOCAL})
 
 GAP_LOOP_NOT_IN_COMPLETION_STAGE = "loop_not_in_completion_stage"
 GAP_TERMINAL_LIFECYCLE_NOT_REACHED = "terminal_lifecycle_not_reached"
@@ -485,9 +481,7 @@ def _derive_closed_loop_stage(
     if reconciliation_status in _ACTIVE_RECONCILIATION_STATUSES:
         return ClosedLoopStage.reconciliation
 
-    if has_uplink_observation and lifecycle_phase in (
-        "admitted", *_ACTIVE_PHASES
-    ):
+    if has_uplink_observation and lifecycle_phase in ("admitted", *_ACTIVE_PHASES):
         return ClosedLoopStage.observation
 
     if lifecycle_phase in ("admitted", *_ACTIVE_PHASES):
@@ -738,21 +732,12 @@ def _derive_closure_path_quality_profile(
         canonical_runtime_health=canonical_runtime_health,
         reconciliation_status=reconciliation_status,
     )
-    has_non_canonical_paths = (
-        fallback_path_used or compat_path_used or degraded_path_used
-    )
-    has_canonical_reconciliation = (
-        reconciliation_status in _FULLY_ACCEPTED_RECONCILIATION_STATUSES
-    )
-    has_center_authority = (
-        terminal_truth_authoritative_source == TERMINAL_TRUTH_SOURCE_CENTER_LIFECYCLE
-    )
+    has_non_canonical_paths = fallback_path_used or compat_path_used or degraded_path_used
+    has_canonical_reconciliation = reconciliation_status in _FULLY_ACCEPTED_RECONCILIATION_STATUSES
+    has_center_authority = terminal_truth_authoritative_source == TERMINAL_TRUTH_SOURCE_CENTER_LIFECYCLE
     has_lifecycle_evidence = len(lifecycle_history) > 0
     canonical_path_used = (
-        not has_non_canonical_paths
-        and has_canonical_reconciliation
-        and has_center_authority
-        and has_lifecycle_evidence
+        not has_non_canonical_paths and has_canonical_reconciliation and has_center_authority and has_lifecycle_evidence
     )
 
     mature_closure_blockers: List[str] = []
@@ -785,10 +770,7 @@ def _derive_closure_path_quality_profile(
 
 
 def _is_fallback_path_used(lifecycle_history: List[Dict[str, Any]]) -> bool:
-    return any(
-        event.get("failure_semantic", "") in _FALLBACK_FAILURE_SEMANTICS
-        for event in lifecycle_history
-    )
+    return any(event.get("failure_semantic", "") in _FALLBACK_FAILURE_SEMANTICS for event in lifecycle_history)
 
 
 def _is_degraded_path(
@@ -848,7 +830,9 @@ def query_closed_loop_governance_state(
         logger.error(
             "query_closed_loop_governance_state: error reading governance stores "
             "for execution_id=%r device_id=%r: %s",
-            execution_id, device_id, exc,
+            execution_id,
+            device_id,
+            exc,
         )
         store_read_violation = ClosedLoopInvariantViolation(
             invariant_id="I-STORE-READ-ERROR",
@@ -887,16 +871,12 @@ def query_closed_loop_governance_state(
     canonical_terminal_outcome: Optional[str] = uplink_truth.get("canonical_terminal_outcome")
     reconciliation_status: str = str(uplink_truth.get("reconciliation_status") or "missing")
     reconciliation_conflict: bool = bool(uplink_truth.get("reconciliation_conflict", False))
-    terminal_truth_authoritative_source: str = str(
-        uplink_truth.get("terminal_truth_authoritative_source") or "none"
-    )
+    terminal_truth_authoritative_source: str = str(uplink_truth.get("terminal_truth_authoritative_source") or "none")
     lifecycle_event_count: int = int(uplink_truth.get("lifecycle_event_count") or 0)
     uplink_result_count: int = int(uplink_truth.get("result_uplink_count") or 0)
     uplink_state_count: int = int(uplink_truth.get("state_uplink_count") or 0)
     has_uplink_observation: bool = (uplink_result_count + uplink_state_count) > 0
-    canonical_runtime_health: str = str(
-        uplink_truth.get("canonical_runtime_health") or DEFAULT_RUNTIME_HEALTH_STATUS
-    )
+    canonical_runtime_health: str = str(uplink_truth.get("canonical_runtime_health") or DEFAULT_RUNTIME_HEALTH_STATUS)
 
     stage = _derive_closed_loop_stage(
         lifecycle_phase=lifecycle_phase,
@@ -942,27 +922,19 @@ def query_closed_loop_governance_state(
         compat_path_used=closure_path_quality["compat_path_used"],
         degraded_path_used=closure_path_quality["degraded_path_used"],
         android_originated_gap_types=(
-            list(android_governance_context.get("gap_types", []))
-            if android_governance_context
-            else None
+            list(android_governance_context.get("gap_types", [])) if android_governance_context else None
         ),
     )
 
     # Extract android_originated fields from governance context (PR-Final)
     android_originated = bool(
-        android_governance_context.get("android_originated", False)
-        if android_governance_context
-        else False
+        android_governance_context.get("android_originated", False) if android_governance_context else False
     )
     android_originated_lineage = str(
-        android_governance_context.get("lineage", "unknown")
-        if android_governance_context
-        else "unknown"
+        android_governance_context.get("lineage", "unknown") if android_governance_context else "unknown"
     )
     android_originated_gap_types_list: List[str] = list(
-        android_governance_context.get("gap_types", [])
-        if android_governance_context
-        else []
+        android_governance_context.get("gap_types", []) if android_governance_context else []
     )
 
     return ClosedLoopGovernanceView(
@@ -1062,7 +1034,8 @@ def get_closed_loop_audit_record(
     except Exception as exc:
         logger.error(
             "get_closed_loop_audit_record: error reading stores for execution_id=%r: %s",
-            execution_id, exc,
+            execution_id,
+            exc,
         )
         lifecycle_history = []
         uplink_truth = {}

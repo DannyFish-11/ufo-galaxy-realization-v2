@@ -65,6 +65,7 @@ class RemoteDesktopManager:
     def _tailscale_ip(self) -> Optional[str]:
         try:
             from core.tailscale_manager import TailscaleManager
+
             return TailscaleManager().get_tailscale_ip() or None
         except Exception:  # noqa: BLE001
             return None
@@ -82,6 +83,7 @@ class RemoteDesktopManager:
         cmd = os.getenv("GALAXY_VNC_CMD", "").strip()
         if cmd:
             import shlex
+
             resolved = cmd.replace("{ip}", bind_ip).replace("{port}", str(self.port))
             try:
                 return shlex.split(resolved, posix=(os.name != "nt"))
@@ -90,11 +92,23 @@ class RemoteDesktopManager:
         # x11vnc(Linux/开发环境;绑定到指定网卡)——便于真机外的链路验证。
         x11vnc = shutil.which("x11vnc")
         if x11vnc:
-            args = [x11vnc, "-rfbport", str(self.port), "-localhost" if not bind_ip else "-listen", bind_ip,
-                    "-forever", "-shared", "-quiet", "-bg"]
+            args = [
+                x11vnc,
+                "-rfbport",
+                str(self.port),
+                "-localhost" if not bind_ip else "-listen",
+                bind_ip,
+                "-forever",
+                "-shared",
+                "-quiet",
+                "-bg",
+            ]
             # -localhost 与 -listen 互斥:有 bind_ip 用 -listen,否则 -localhost
-            return [x11vnc, "-rfbport", str(self.port), "-listen", bind_ip,
-                    "-forever", "-shared", "-quiet", "-bg"] if bind_ip else args
+            return (
+                [x11vnc, "-rfbport", str(self.port), "-listen", bind_ip, "-forever", "-shared", "-quiet", "-bg"]
+                if bind_ip
+                else args
+            )
         # Windows 常见服务端仅探测"是否安装"——绑定/认证参数交给 GALAXY_VNC_CMD,不擅自猜。
         return None
 
@@ -131,7 +145,9 @@ class RemoteDesktopManager:
         try:
             with self._lock:
                 self._proc = subprocess.Popen(
-                    cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    cmd,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
                 )
             logger.info("兜底远程桌面已启用:%s(绑定 %s:%d)", self.get_address(), ip, self.port)
             return {"success": True, "address": self.get_address(), "bind": f"{ip}:{self.port}"}

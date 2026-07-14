@@ -240,8 +240,10 @@ CAPABILITY_CLASSIFICATION_BASED_ON_CODE_AND_TESTS_POLICY: str = (
 # Enumerations
 # ---------------------------------------------------------------------------
 
+
 class GapClosureStatus(str, Enum):
     """Closure status for a tracked gap."""
+
     CLOSED = "CLOSED"
     CLOSED_CONDITIONAL = "CLOSED_CONDITIONAL"
     OPEN = "OPEN"
@@ -250,6 +252,7 @@ class GapClosureStatus(str, Enum):
 
 class CapabilityTier(str, Enum):
     """Production-readiness tier for a platform capability."""
+
     ACTIVE_MAINLINE = "ACTIVE_MAINLINE"
     CONDITIONAL = "CONDITIONAL"
     EXPERIMENTAL = "EXPERIMENTAL"
@@ -259,6 +262,7 @@ class CapabilityTier(str, Enum):
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class GapClosureEntry:
@@ -436,12 +440,9 @@ class PlatformClosureAuditReport:
     def summary(self) -> Dict[str, Any]:
         """Compact summary suitable for log output."""
         closed = sum(
-            1 for g in self.gap_closures
-            if g.status in (GapClosureStatus.CLOSED, GapClosureStatus.CLOSED_CONDITIONAL)
+            1 for g in self.gap_closures if g.status in (GapClosureStatus.CLOSED, GapClosureStatus.CLOSED_CONDITIONAL)
         )
-        open_count = sum(
-            1 for g in self.gap_closures if g.status == GapClosureStatus.OPEN
-        )
+        open_count = sum(1 for g in self.gap_closures if g.status == GapClosureStatus.OPEN)
         tiers: Dict[str, int] = {}
         for c in self.capability_boundary:
             tiers[c.tier.value] = tiers.get(c.tier.value, 0) + 1
@@ -460,6 +461,7 @@ class PlatformClosureAuditReport:
 # ---------------------------------------------------------------------------
 # Gap closure registry (PR-1 through PR-7)
 # ---------------------------------------------------------------------------
+
 
 def _build_gap_closures() -> List[GapClosureEntry]:
     """
@@ -485,8 +487,7 @@ def _build_gap_closures() -> List[GapClosureEntry]:
                 "core.task_lifecycle_persistence.TaskLifecyclePersistenceStore"
             ),
             test_reference=(
-                "tests/test_gap_v2_truth_persistence_closure.py; "
-                "tests/test_pr5_runtime_restart_recovery.py"
+                "tests/test_gap_v2_truth_persistence_closure.py; " "tests/test_pr5_runtime_restart_recovery.py"
             ),
             scope_note=(
                 "WebRTC transport bindings are intentionally NOT recovered "
@@ -495,7 +496,6 @@ def _build_gap_closures() -> List[GapClosureEntry]:
                 "Session truth and task lifecycle ARE durably recovered."
             ),
         ),
-
         # ------------------------------------------------------------------
         # GAP_DURABLE_TRUTH_AUTHORITY_CONVERGENCE  (PR-2 / PR-5)
         # Parallel persistence fragments unified under a single authority chain
@@ -503,42 +503,30 @@ def _build_gap_closures() -> List[GapClosureEntry]:
         GapClosureEntry(
             gap_id="GAP_DURABLE_TRUTH_AUTHORITY_CONVERGENCE",
             title=(
-                "Session truth, task lifecycle, and result continuity unified "
-                "under a single durable authority chain"
+                "Session truth, task lifecycle, and result continuity unified " "under a single durable authority chain"
             ),
             status=GapClosureStatus.CLOSED,
             closing_pr="PR-2 / PR-5 (core.durable_truth_authority_chain)",
-            code_reference=(
-                "core.durable_truth_authority_chain; "
-                "core.continuation_rebind_registry"
-            ),
+            code_reference=("core.durable_truth_authority_chain; " "core.continuation_rebind_registry"),
             test_reference=(
                 "tests/test_pr2_durable_authority_continuation_closure.py; "
                 "tests/test_pr2_unified_runtime_truth_closure.py"
             ),
         ),
-
         # ------------------------------------------------------------------
         # GAP_CONTINUATION_REBIND_CLOSED_LOOP  (PR-2 / PR-5)
         # Continuation/waiter cross-restart rebind tracked and closed
         # ------------------------------------------------------------------
         GapClosureEntry(
             gap_id="GAP_CONTINUATION_REBIND_CLOSED_LOOP",
-            title=(
-                "Continuation/waiter cross-restart rebind (second half of "
-                "closed loop) tracked and verified"
-            ),
+            title=("Continuation/waiter cross-restart rebind (second half of " "closed loop) tracked and verified"),
             status=GapClosureStatus.CLOSED,
             closing_pr="PR-2 / PR-5 (core.continuation_rebind_registry)",
             code_reference=(
-                "core.continuation_rebind_registry; "
-                "core.runtime_restart_recovery._reconcile_continuation_waiters"
+                "core.continuation_rebind_registry; " "core.runtime_restart_recovery._reconcile_continuation_waiters"
             ),
-            test_reference=(
-                "tests/test_pr2_durable_authority_continuation_closure.py"
-            ),
+            test_reference=("tests/test_pr2_durable_authority_continuation_closure.py"),
         ),
-
         # ------------------------------------------------------------------
         # GAP_CAPABILITY_GATE_DEFAULT_ENFORCEMENT  (PR-4)
         # Capability gate enforced by default in send_gateway_command
@@ -557,12 +545,8 @@ def _build_gap_closures() -> List[GapClosureEntry]:
                 "core.capability_enforcement_hardener."
                 "enforce_mainline_capability_gate"
             ),
-            test_reference=(
-                "tests/test_pr4_entry_mode_readiness.py; "
-                "tests/test_pr4_config_driven_inventory.py"
-            ),
+            test_reference=("tests/test_pr4_entry_mode_readiness.py; " "tests/test_pr4_config_driven_inventory.py"),
         ),
-
         # ------------------------------------------------------------------
         # GAP_JOINT_INTEGRATION_TEST  (PR-3)
         # Dual-repo separated-process WebSocket E2E framework
@@ -575,17 +559,11 @@ def _build_gap_closures() -> List[GapClosureEntry]:
                 "happy path"
             ),
             status=GapClosureStatus.CLOSED,
-            closing_pr=(
-                "PR-3 "
-                "(tests/integration/test_separated_process_ws_e2e.py)"
-            ),
+            closing_pr=("PR-3 " "(tests/integration/test_separated_process_ws_e2e.py)"),
             code_reference=(
-                "tests/integration/test_separated_process_ws_e2e.py; "
-                "tests/integration/_ws_e2e_server_helper.py"
+                "tests/integration/test_separated_process_ws_e2e.py; " "tests/integration/_ws_e2e_server_helper.py"
             ),
-            test_reference=(
-                "tests/integration/test_separated_process_ws_e2e.py"
-            ),
+            test_reference=("tests/integration/test_separated_process_ws_e2e.py"),
             scope_note=(
                 "Covers single-participant happy path at true network level. "
                 "Multi-device, takeover, and failure-recovery paths are "
@@ -593,7 +571,6 @@ def _build_gap_closures() -> List[GapClosureEntry]:
                 "(PR-7)."
             ),
         ),
-
         # ------------------------------------------------------------------
         # GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION  (PR-7)
         # Multi-device, takeover, failure/recovery paths — network-level E2E
@@ -607,18 +584,13 @@ def _build_gap_closures() -> List[GapClosureEntry]:
                 "by network-level automated tests"
             ),
             status=GapClosureStatus.CLOSED,
-            closing_pr=(
-                "#854 (PR-7 — "
-                "tests/integration/test_multi_device_failure_recovery_e2e.py)"
-            ),
+            closing_pr=("#854 (PR-7 — " "tests/integration/test_multi_device_failure_recovery_e2e.py)"),
             code_reference=(
                 "tests/integration/test_multi_device_failure_recovery_e2e.py; "
                 "tests/integration/_ws_e2e_multi_device_server_helper.py; "
                 "core.multi_device_runtime_harness"
             ),
-            test_reference=(
-                "tests/integration/test_multi_device_failure_recovery_e2e.py"
-            ),
+            test_reference=("tests/integration/test_multi_device_failure_recovery_e2e.py"),
             scope_note=(
                 "Tests run against a real in-process WebSocket server over "
                 "loopback TCP.  Android-device emulator is not required; "
@@ -629,22 +601,17 @@ def _build_gap_closures() -> List[GapClosureEntry]:
                 "mismatch routing, result aggregation, and degraded participant."
             ),
         ),
-
         # ------------------------------------------------------------------
         # GAP_RUNTIME_TRUTH_SINGLE_INGRESS  (OPEN — not in scope for PR-7)
         # Multiple active truth ingress paths not yet converged
         # ------------------------------------------------------------------
         GapClosureEntry(
             gap_id="GAP_RUNTIME_TRUTH_SINGLE_INGRESS",
-            title=(
-                "Runtime truth ingress convergence: websocket_handler.py:588 "
-                "live bypass not yet eliminated"
-            ),
+            title=("Runtime truth ingress convergence: websocket_handler.py:588 " "live bypass not yet eliminated"),
             status=GapClosureStatus.OPEN,
             closing_pr="(not targeted in PRs 1–7)",
             code_reference=(
-                "core.unified_runtime_truth_ingress; "
-                "galaxy_gateway.routes.websocket (bypass at line 588)"
+                "core.unified_runtime_truth_ingress; " "galaxy_gateway.routes.websocket (bypass at line 588)"
             ),
             test_reference="(no closing test — gap remains open)",
             scope_note=(
@@ -654,7 +621,6 @@ def _build_gap_closures() -> List[GapClosureEntry]:
                 "eliminating that bypass.  Tracked as P1 risk."
             ),
         ),
-
         # ------------------------------------------------------------------
         # GAP_ANDROID_LOCAL_AI_DEFAULT_OFF  (ACKNOWLEDGED)
         # Android local AI not activated by default — addressed by PR-2/PR-6
@@ -693,7 +659,6 @@ def _build_gap_closures() -> List[GapClosureEntry]:
                 "conditional on android-repo deployment."
             ),
         ),
-
         # ------------------------------------------------------------------
         # GAP_ANDROID_CI  (ACKNOWLEDGED)
         # Android repo has no CI pipeline — tracked, not in V2 PR scope
@@ -726,23 +691,16 @@ def _build_gap_closures() -> List[GapClosureEntry]:
                 "This is a documented P1 risk."
             ),
         ),
-
         # ------------------------------------------------------------------
         # GAP_RELEASE_GATE_HARD_ENFORCEMENT  (ACKNOWLEDGED)
         # Release/governance gate not yet wired to hard CI blocking
         # ------------------------------------------------------------------
         GapClosureEntry(
             gap_id="GAP_RELEASE_GATE_HARD_ENFORCEMENT",
-            title=(
-                "Governance/release gate: advisory-only; not wired to "
-                "hard CI blocking step"
-            ),
+            title=("Governance/release gate: advisory-only; not wired to " "hard CI blocking step"),
             status=GapClosureStatus.ACKNOWLEDGED,
             closing_pr="(targeted by V2 release gate hardening; not in PRs 1–7)",
-            code_reference=(
-                "core.runtime_readiness_matrix.evaluate_readiness_matrix; "
-                "core.release_blocking_gate"
-            ),
+            code_reference=("core.runtime_readiness_matrix.evaluate_readiness_matrix; " "core.release_blocking_gate"),
             test_reference=(
                 "tests/integration/test_runtime_readiness_matrix.py; "
                 ".github/workflows/dual_repo_integration.yml "
@@ -762,6 +720,7 @@ def _build_gap_closures() -> List[GapClosureEntry]:
 # ---------------------------------------------------------------------------
 # Capability boundary classification
 # ---------------------------------------------------------------------------
+
 
 def _build_capability_boundary() -> List[CapabilityBoundaryEntry]:
     """
@@ -787,8 +746,7 @@ def _build_capability_boundary() -> List[CapabilityBoundaryEntry]:
                 "core.canonical_session_truth.CanonicalSessionTruthRuntime"
             ),
             test_reference=(
-                "tests/test_gap_v2_truth_persistence_closure.py; "
-                "tests/test_pr5_runtime_restart_recovery.py"
+                "tests/test_gap_v2_truth_persistence_closure.py; " "tests/test_pr5_runtime_restart_recovery.py"
             ),
         ),
         CapabilityBoundaryEntry(
@@ -800,9 +758,7 @@ def _build_capability_boundary() -> List[CapabilityBoundaryEntry]:
             ),
             tier=CapabilityTier.ACTIVE_MAINLINE,
             code_reference="core.durable_truth_authority_chain",
-            test_reference=(
-                "tests/test_pr2_durable_authority_continuation_closure.py"
-            ),
+            test_reference=("tests/test_pr2_durable_authority_continuation_closure.py"),
         ),
         CapabilityBoundaryEntry(
             capability_id="CONTINUATION_REBIND_CLOSED_LOOP",
@@ -813,9 +769,7 @@ def _build_capability_boundary() -> List[CapabilityBoundaryEntry]:
             ),
             tier=CapabilityTier.ACTIVE_MAINLINE,
             code_reference="core.continuation_rebind_registry",
-            test_reference=(
-                "tests/test_pr2_durable_authority_continuation_closure.py"
-            ),
+            test_reference=("tests/test_pr2_durable_authority_continuation_closure.py"),
         ),
         CapabilityBoundaryEntry(
             capability_id="CAPABILITY_GATE_DEFAULT_ENFORCEMENT",
@@ -826,14 +780,8 @@ def _build_capability_boundary() -> List[CapabilityBoundaryEntry]:
                 "inference table covers all canonical commands."
             ),
             tier=CapabilityTier.ACTIVE_MAINLINE,
-            code_reference=(
-                "core.gateway_capability_default_enforcement."
-                "enforce_gateway_default_capability_gate"
-            ),
-            test_reference=(
-                "tests/test_pr4_entry_mode_readiness.py; "
-                "tests/test_pr4_config_driven_inventory.py"
-            ),
+            code_reference=("core.gateway_capability_default_enforcement." "enforce_gateway_default_capability_gate"),
+            test_reference=("tests/test_pr4_entry_mode_readiness.py; " "tests/test_pr4_config_driven_inventory.py"),
         ),
         CapabilityBoundaryEntry(
             capability_id="DUAL_REPO_SINGLE_PARTICIPANT_E2E",
@@ -845,12 +793,9 @@ def _build_capability_boundary() -> List[CapabilityBoundaryEntry]:
             ),
             tier=CapabilityTier.ACTIVE_MAINLINE,
             code_reference=(
-                "tests/integration/test_separated_process_ws_e2e.py; "
-                "tests/integration/_ws_e2e_server_helper.py"
+                "tests/integration/test_separated_process_ws_e2e.py; " "tests/integration/_ws_e2e_server_helper.py"
             ),
-            test_reference=(
-                "tests/integration/test_separated_process_ws_e2e.py"
-            ),
+            test_reference=("tests/integration/test_separated_process_ws_e2e.py"),
         ),
         CapabilityBoundaryEntry(
             capability_id="MULTI_DEVICE_CONCURRENT_REGISTRATION",
@@ -864,9 +809,7 @@ def _build_capability_boundary() -> List[CapabilityBoundaryEntry]:
                 "tests/integration/test_multi_device_failure_recovery_e2e.py; "
                 "tests/integration/_ws_e2e_multi_device_server_helper.py"
             ),
-            test_reference=(
-                "tests/integration/test_multi_device_failure_recovery_e2e.py"
-            ),
+            test_reference=("tests/integration/test_multi_device_failure_recovery_e2e.py"),
         ),
         CapabilityBoundaryEntry(
             capability_id="DELEGATED_TAKEOVER_RESULT_CONTINUITY",
@@ -880,9 +823,7 @@ def _build_capability_boundary() -> List[CapabilityBoundaryEntry]:
                 "tests/integration/test_multi_device_failure_recovery_e2e.py; "
                 "core.delegated_flow_recovery_coordinator"
             ),
-            test_reference=(
-                "tests/integration/test_multi_device_failure_recovery_e2e.py"
-            ),
+            test_reference=("tests/integration/test_multi_device_failure_recovery_e2e.py"),
         ),
         CapabilityBoundaryEntry(
             capability_id="PARTICIPANT_DISCONNECT_RECONNECT_RECOVERY",
@@ -893,12 +834,9 @@ def _build_capability_boundary() -> List[CapabilityBoundaryEntry]:
             ),
             tier=CapabilityTier.ACTIVE_MAINLINE,
             code_reference=(
-                "tests/integration/test_multi_device_failure_recovery_e2e.py; "
-                "core.multi_device_runtime_harness"
+                "tests/integration/test_multi_device_failure_recovery_e2e.py; " "core.multi_device_runtime_harness"
             ),
-            test_reference=(
-                "tests/integration/test_multi_device_failure_recovery_e2e.py"
-            ),
+            test_reference=("tests/integration/test_multi_device_failure_recovery_e2e.py"),
         ),
         CapabilityBoundaryEntry(
             capability_id="CAPABILITY_MISMATCH_ROUTING",
@@ -912,9 +850,7 @@ def _build_capability_boundary() -> List[CapabilityBoundaryEntry]:
                 "core.gateway_capability_default_enforcement; "
                 "tests/integration/test_multi_device_failure_recovery_e2e.py"
             ),
-            test_reference=(
-                "tests/integration/test_multi_device_failure_recovery_e2e.py"
-            ),
+            test_reference=("tests/integration/test_multi_device_failure_recovery_e2e.py"),
         ),
         CapabilityBoundaryEntry(
             capability_id="AIP_V3_PROTOCOL_STABILITY",
@@ -934,7 +870,6 @@ def _build_capability_boundary() -> List[CapabilityBoundaryEntry]:
                 "tests/integration/test_android_ci_baseline.py"
             ),
         ),
-
         # ==================================================================
         # CONDITIONAL — structurally present, condition required
         # ==================================================================
@@ -954,10 +889,7 @@ def _build_capability_boundary() -> List[CapabilityBoundaryEntry]:
                 "ufo-galaxy-android: LocalInferenceRuntimeManager "
                 "(android repo)"
             ),
-            test_reference=(
-                "tests/integration/test_android_ci_baseline.py "
-                "(V2-side contract only)"
-            ),
+            test_reference=("tests/integration/test_android_ci_baseline.py " "(V2-side contract only)"),
             condition=(
                 "Android-repo PR-2 and PR-6 must be deployed.  "
                 "Device must report 'local_intelligence' capability.  "
@@ -973,12 +905,9 @@ def _build_capability_boundary() -> List[CapabilityBoundaryEntry]:
             ),
             tier=CapabilityTier.CONDITIONAL,
             code_reference=(
-                "tests/integration/test_multi_device_failure_recovery_e2e.py; "
-                "core.failure_degraded_recovery_policy"
+                "tests/integration/test_multi_device_failure_recovery_e2e.py; " "core.failure_degraded_recovery_policy"
             ),
-            test_reference=(
-                "tests/integration/test_multi_device_failure_recovery_e2e.py"
-            ),
+            test_reference=("tests/integration/test_multi_device_failure_recovery_e2e.py"),
             condition=(
                 "Condition: at least one non-degraded participant must be "
                 "present for tasks requiring capabilities beyond the degraded "
@@ -996,9 +925,7 @@ def _build_capability_boundary() -> List[CapabilityBoundaryEntry]:
             ),
             tier=CapabilityTier.CONDITIONAL,
             code_reference="core.runtime_readiness_matrix.evaluate_readiness_matrix",
-            test_reference=(
-                "tests/integration/test_runtime_readiness_matrix.py"
-            ),
+            test_reference=("tests/integration/test_runtime_readiness_matrix.py"),
             condition=(
                 "Condition: blocking behavior applies only to dimensions "
                 "classified as DimensionSeverity.CRITICAL.  Advisory "
@@ -1006,7 +933,6 @@ def _build_capability_boundary() -> List[CapabilityBoundaryEntry]:
                 "(GovernanceValidationGate) remains advisory-only."
             ),
         ),
-
         # ==================================================================
         # EXPERIMENTAL — code present, insufficient automated coverage
         # ==================================================================
@@ -1019,19 +945,13 @@ def _build_capability_boundary() -> List[CapabilityBoundaryEntry]:
             ),
             tier=CapabilityTier.EXPERIMENTAL,
             code_reference=(
-                "tests/integration/test_multi_device_failure_recovery_e2e.py; "
-                "core.goal_result_aggregator"
+                "tests/integration/test_multi_device_failure_recovery_e2e.py; " "core.goal_result_aggregator"
             ),
-            test_reference=(
-                "tests/integration/test_multi_device_failure_recovery_e2e.py "
-                "(scenario 7 only)"
-            ),
+            test_reference=("tests/integration/test_multi_device_failure_recovery_e2e.py " "(scenario 7 only)"),
             condition=(
-                "Tested at 2-device / 3-task scale only.  "
-                "Behavior at higher concurrency (10+ devices) is untested."
+                "Tested at 2-device / 3-task scale only.  " "Behavior at higher concurrency (10+ devices) is untested."
             ),
         ),
-
         # ==================================================================
         # STRUCTURAL_ONLY — sentinels/declarations; no runtime enforcement
         # ==================================================================
@@ -1043,13 +963,9 @@ def _build_capability_boundary() -> List[CapabilityBoundaryEntry]:
                 "called in any CI blocking step or production dispatch path."
             ),
             tier=CapabilityTier.STRUCTURAL_ONLY,
-            code_reference=(
-                "core.governance_validation_gate; "
-                "core.final_cleanup_invariant_tightening"
-            ),
+            code_reference=("core.governance_validation_gate; " "core.final_cleanup_invariant_tightening"),
             test_reference=(
-                "tests/test_pr8_optional_governance.py "
-                "(imports sentinel; does not verify runtime enforcement)"
+                "tests/test_pr8_optional_governance.py " "(imports sentinel; does not verify runtime enforcement)"
             ),
         ),
         CapabilityBoundaryEntry(
@@ -1070,6 +986,7 @@ def _build_capability_boundary() -> List[CapabilityBoundaryEntry]:
 # ---------------------------------------------------------------------------
 # Readiness tier summaries
 # ---------------------------------------------------------------------------
+
 
 def _build_readiness_tiers(
     capabilities: List[CapabilityBoundaryEntry],
@@ -1123,6 +1040,7 @@ def _build_readiness_tiers(
 # ---------------------------------------------------------------------------
 # Operational risk register
 # ---------------------------------------------------------------------------
+
 
 def _build_operational_risks() -> List[OperationalRiskEntry]:
     """Return the register of remaining operational risks after PRs 1–7."""
@@ -1228,6 +1146,7 @@ def _build_operational_risks() -> List[OperationalRiskEntry]:
 # Module-level import probes (read-only, never raise on missing modules)
 # ---------------------------------------------------------------------------
 
+
 def _probe_module_present(module_path: str) -> bool:
     """Return True if the module can be imported without raising."""
     try:
@@ -1255,24 +1174,14 @@ def _collect_evidence_availability() -> Dict[str, bool]:
     and to surface any missing evidence as informational notes in the report.
     """
     return {
-        "core.runtime_restart_recovery": _probe_module_present(
-            "core.runtime_restart_recovery"
-        ),
+        "core.runtime_restart_recovery": _probe_module_present("core.runtime_restart_recovery"),
         "core.gateway_capability_default_enforcement": _probe_module_present(
             "core.gateway_capability_default_enforcement"
         ),
-        "core.dual_repo_system_map": _probe_module_present(
-            "core.dual_repo_system_map"
-        ),
-        "core.runtime_readiness_matrix": _probe_module_present(
-            "core.runtime_readiness_matrix"
-        ),
-        "core.durable_truth_authority_chain": _probe_module_present(
-            "core.durable_truth_authority_chain"
-        ),
-        "core.continuation_rebind_registry": _probe_module_present(
-            "core.continuation_rebind_registry"
-        ),
+        "core.dual_repo_system_map": _probe_module_present("core.dual_repo_system_map"),
+        "core.runtime_readiness_matrix": _probe_module_present("core.runtime_readiness_matrix"),
+        "core.durable_truth_authority_chain": _probe_module_present("core.durable_truth_authority_chain"),
+        "core.continuation_rebind_registry": _probe_module_present("core.continuation_rebind_registry"),
         "RUNTIME_RESTART_RECOVERY_IS_AUTHORITY": _probe_sentinel_present(
             "core.runtime_restart_recovery",
             "RUNTIME_RESTART_RECOVERY_IS_AUTHORITY",
@@ -1292,6 +1201,7 @@ def _collect_evidence_availability() -> Dict[str, bool]:
 # Build / singleton
 # ---------------------------------------------------------------------------
 
+
 def build_platform_closure_audit_report() -> PlatformClosureAuditReport:
     """
     Build and return a fresh ``PlatformClosureAuditReport``.
@@ -1309,10 +1219,7 @@ def build_platform_closure_audit_report() -> PlatformClosureAuditReport:
     readiness_tiers = _build_readiness_tiers(capability_boundary)
     operational_risks = _build_operational_risks()
 
-    open_gap_ids = [
-        g.gap_id for g in gap_closures
-        if g.status == GapClosureStatus.OPEN
-    ]
+    open_gap_ids = [g.gap_id for g in gap_closures if g.status == GapClosureStatus.OPEN]
 
     # Collect blocking issues: any P0 gap that is OPEN is a blocking issue.
     blocking_issues: List[str] = []
@@ -1324,21 +1231,15 @@ def build_platform_closure_audit_report() -> PlatformClosureAuditReport:
                     WORKSTREAM_GAP_REGISTRY,
                     GapSeverity,
                 )
+
                 for entry in WORKSTREAM_GAP_REGISTRY:
-                    if (
-                        entry.gap_id == g.gap_id
-                        and entry.severity == GapSeverity.P0
-                        and not entry.resolved
-                    ):
-                        blocking_issues.append(
-                            f"P0 gap OPEN: {g.gap_id} — {g.title}"
-                        )
+                    if entry.gap_id == g.gap_id and entry.severity == GapSeverity.P0 and not entry.resolved:
+                        blocking_issues.append(f"P0 gap OPEN: {g.gap_id} — {g.title}")
             except Exception as exc:
                 logger.warning("Exception suppressed: %s", exc)
 
     logger.info(
-        "PlatformClosureAuditReport built: %d gaps, %d open, "
-        "%d capabilities, %d blocking issues",
+        "PlatformClosureAuditReport built: %d gaps, %d open, " "%d capabilities, %d blocking issues",
         len(gap_closures),
         len(open_gap_ids),
         len(capability_boundary),

@@ -33,6 +33,7 @@ def _publish_m2(event_type: str, device_id: str, payload: dict, **kw) -> None:
     """发布 M2 统一事件的轻量辅助函数（失败不崩溃）。"""
     try:
         from integration.event_bus import build_m2_event, publish_m2_event
+
         evt = build_m2_event(event_type, device_id, payload, **kw)
         publish_m2_event(evt)
     except Exception as _exc:
@@ -64,7 +65,7 @@ class EventBridge:
         _total_connections = 9  # 连接 #1 ~ #9
 
         try:
-            from integration.event_bus import event_bus, EventType, UIGalaxyEvent
+            from integration.event_bus import EventType, UIGalaxyEvent, event_bus
         except ImportError:
             logger.info("event_bus 模块不可用，跳过事件桥接")
             return
@@ -98,7 +99,11 @@ class EventBridge:
 
                 # M2 并行发布 — task.lifecycle
                 try:
-                    m2_status = "completed" if str(cmd_result.status.value).lower() in ("success", "completed", "done") else "failed"
+                    m2_status = (
+                        "completed"
+                        if str(cmd_result.status.value).lower() in ("success", "completed", "done")
+                        else "failed"
+                    )
                     _publish_m2(
                         "task.lifecycle",
                         "command_router",
@@ -135,7 +140,7 @@ class EventBridge:
         # 2. Monitoring Alerts → EventBus
         # ====================================================================
         try:
-            from core.monitoring import get_monitoring_manager, AlertSeverity
+            from core.monitoring import get_monitoring_manager
 
             monitoring = get_monitoring_manager()
 
@@ -177,7 +182,9 @@ class EventBridge:
         # ====================================================================
         try:
             from core.command_router import (
-                get_command_router, CommandRequest, CommandMode,
+                CommandMode,
+                CommandRequest,
+                get_command_router,
             )
 
             async def _event_to_command(event: UIGalaxyEvent):
@@ -234,7 +241,7 @@ class EventBridge:
         # 5. Slow request → Monitoring Alert
         # ====================================================================
         try:
-            from core.monitoring import get_monitoring_manager, AlertSeverity
+            from core.monitoring import AlertSeverity, get_monitoring_manager
 
             async def _perf_alert_handler(event: UIGalaxyEvent):
                 """性能告警 → Monitoring Alert"""
@@ -260,8 +267,7 @@ class EventBridge:
                 event_bus.publish_sync(
                     EventType.DEVICE_REGISTERED,
                     source="device_registry",
-                    data={"device_id": device.device_id, "device_type": device.device_type.value,
-                          "name": device.name},
+                    data={"device_id": device.device_id, "device_type": device.device_type.value, "name": device.name},
                 )
                 # M2 并行发布 — device.presence
                 _publish_m2(
@@ -325,8 +331,8 @@ class EventBridge:
         try:
             from core.device_communication import device_comm
 
-            _orig_on_connected = getattr(device_comm, '_on_device_connected', None)
-            _orig_on_disconnected = getattr(device_comm, '_on_device_disconnected', None)
+            _orig_on_connected = getattr(device_comm, "_on_device_connected", None)
+            _orig_on_disconnected = getattr(device_comm, "_on_device_disconnected", None)
 
             async def _comm_device_connected(device_id: str, device_info: dict = None):
                 event_bus.publish_sync(
@@ -371,7 +377,7 @@ class EventBridge:
         try:
             from galaxy_gateway.session_roaming import session_roaming
 
-            _orig_on_migrate = getattr(session_roaming, '_on_session_migrated', None)
+            _orig_on_migrate = getattr(session_roaming, "_on_session_migrated", None)
 
             async def _session_migrated_handler(session_id: str, from_device: str, to_device: str):
                 event_bus.publish_sync(
@@ -403,23 +409,30 @@ class EventBridge:
             async def _event_to_ws(event: UIGalaxyEvent):
                 """将事件推送给所有 WebSocket 订阅者"""
                 try:
-                    await connection_manager.broadcast_status({
-                        "type": "event_stream",
-                        "event_type": event.event_type.name,
-                        "source": event.source,
-                        "data": event.data,
-                        "timestamp": event.timestamp.isoformat(),
-                    })
+                    await connection_manager.broadcast_status(
+                        {
+                            "type": "event_stream",
+                            "event_type": event.event_type.name,
+                            "source": event.source,
+                            "data": event.data,
+                            "timestamp": event.timestamp.isoformat(),
+                        }
+                    )
                 except Exception:
                     pass  # WebSocket 推送失败不影响主流程
 
             _ws_event_types = [
-                EventType.DEVICE_CONNECTED, EventType.DEVICE_DISCONNECTED,
-                EventType.DEVICE_REGISTERED, EventType.DEVICE_UNREGISTERED,
-                EventType.COMMAND_RESULT, EventType.COMMAND_PROGRESS,
-                EventType.ORCHESTRATION_STARTED, EventType.ORCHESTRATION_COMPLETED,
+                EventType.DEVICE_CONNECTED,
+                EventType.DEVICE_DISCONNECTED,
+                EventType.DEVICE_REGISTERED,
+                EventType.DEVICE_UNREGISTERED,
+                EventType.COMMAND_RESULT,
+                EventType.COMMAND_PROGRESS,
+                EventType.ORCHESTRATION_STARTED,
+                EventType.ORCHESTRATION_COMPLETED,
                 EventType.ORCHESTRATION_PROGRESS,
-                EventType.TASK_COMPLETED, EventType.ERROR_OCCURRED,
+                EventType.TASK_COMPLETED,
+                EventType.ERROR_OCCURRED,
                 EventType.SESSION_MIGRATED,
             ]
             for et in _ws_event_types:
@@ -438,7 +451,8 @@ class EventBridge:
 
         logger.info(
             "EventBridge: 连接完成 %d/%d 成功，事件总线已启动",
-            _wired_count, _total_connections,
+            _wired_count,
+            _total_connections,
         )
 
     async def _periodic_cleanup(self):
@@ -450,6 +464,7 @@ class EventBridge:
                 # 清理过期命令结果
                 try:
                     from core.command_router import get_command_router
+
                     router = get_command_router()
                     await router.cleanup(max_age_seconds=3600)
                 except Exception as exc:
@@ -458,6 +473,7 @@ class EventBridge:
                 # 清理事件历史
                 try:
                     from integration.event_bus import event_bus
+
                     history = event_bus.get_event_history()
                     if len(history) > 800:
                         event_bus.clear_history()
@@ -480,6 +496,7 @@ class EventBridge:
 
         try:
             from integration.event_bus import event_bus
+
             await event_bus.stop()
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)

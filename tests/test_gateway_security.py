@@ -13,14 +13,15 @@ Covers:
 """
 
 import os
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-
 # ---------------------------------------------------------------------------
 # Helpers — build a minimal app that wires the security middleware
 # ---------------------------------------------------------------------------
+
 
 def _make_app() -> FastAPI:
     """Minimal FastAPI app with BearerAuthMiddleware and test routes."""
@@ -44,25 +45,30 @@ def _make_app() -> FastAPI:
 # Tests: is_auth_enabled
 # ---------------------------------------------------------------------------
 
+
 class TestIsAuthEnabled:
     def test_disabled_by_default(self, monkeypatch):
         monkeypatch.delenv("GALAXY_AUTH_ENABLED", raising=False)
         from core.auth import is_auth_enabled
+
         assert is_auth_enabled() is False
 
     def test_enabled_with_true(self, monkeypatch):
         monkeypatch.setenv("GALAXY_AUTH_ENABLED", "true")
         from core.auth import is_auth_enabled
+
         assert is_auth_enabled() is True
 
     def test_enabled_with_1(self, monkeypatch):
         monkeypatch.setenv("GALAXY_AUTH_ENABLED", "1")
         from core.auth import is_auth_enabled
+
         assert is_auth_enabled() is True
 
     def test_disabled_with_false(self, monkeypatch):
         monkeypatch.setenv("GALAXY_AUTH_ENABLED", "false")
         from core.auth import is_auth_enabled
+
         assert is_auth_enabled() is False
 
 
@@ -70,21 +76,24 @@ class TestIsAuthEnabled:
 # Tests: require_auth FastAPI dependency
 # ---------------------------------------------------------------------------
 
+
 class TestRequireAuth:
     def test_passes_through_when_auth_disabled(self, monkeypatch):
         """require_auth is a no-op when GALAXY_AUTH_ENABLED is false."""
         import asyncio
+
         monkeypatch.delenv("GALAXY_AUTH_ENABLED", raising=False)
         from core.auth import require_auth
+
         result = asyncio.new_event_loop().run_until_complete(require_auth())
         assert result["authenticated"] is True
         assert result["auth_enabled"] is False
 
     def test_raises_401_when_enabled_no_token(self, monkeypatch):
         """When auth is enabled, missing Authorization header returns 401."""
-        from fastapi import FastAPI
+        from fastapi import Depends, FastAPI
         from fastapi.testclient import TestClient
-        from fastapi import Depends
+
         from core.auth import require_auth
 
         monkeypatch.setenv("GALAXY_AUTH_ENABLED", "true")
@@ -102,8 +111,9 @@ class TestRequireAuth:
 
     def test_passes_with_valid_token(self, monkeypatch):
         """require_auth returns auth dict when Bearer token is correct."""
-        from fastapi import FastAPI, Depends
+        from fastapi import Depends, FastAPI
         from fastapi.testclient import TestClient
+
         from core.auth import require_auth
 
         monkeypatch.setenv("GALAXY_AUTH_ENABLED", "true")
@@ -124,6 +134,7 @@ class TestRequireAuth:
 # ---------------------------------------------------------------------------
 # Tests: BearerAuthMiddleware — auth disabled (default)
 # ---------------------------------------------------------------------------
+
 
 class TestMiddlewareAuthDisabled:
     """When GALAXY_AUTH_ENABLED is unset/false, all requests pass through."""
@@ -148,6 +159,7 @@ class TestMiddlewareAuthDisabled:
 # ---------------------------------------------------------------------------
 # Tests: BearerAuthMiddleware — auth enabled
 # ---------------------------------------------------------------------------
+
 
 class TestMiddlewareAuthEnabled:
     """When GALAXY_AUTH_ENABLED=true and GALAXY_API_TOKEN is set."""
@@ -211,6 +223,7 @@ class TestMiddlewareAuthEnabled:
 # Tests: TURN / STUN / Tailscale metadata
 # ---------------------------------------------------------------------------
 
+
 class TestWebRTCEndpointMetadata:
     """get_webrtc_endpoint_info returns TURN/STUN/Tailscale when configured."""
 
@@ -218,6 +231,7 @@ class TestWebRTCEndpointMetadata:
         monkeypatch.delenv("GALAXY_STUN_URLS", raising=False)
         monkeypatch.delenv("GALAXY_TURN_URLS", raising=False)
         from galaxy_gateway.webrtc_proxy import get_webrtc_endpoint_info
+
         info = get_webrtc_endpoint_info()
         assert "ice_servers" not in info
 
@@ -225,6 +239,7 @@ class TestWebRTCEndpointMetadata:
         monkeypatch.setenv("GALAXY_STUN_URLS", "stun:stun.l.google.com:19302")
         monkeypatch.delenv("GALAXY_TURN_URLS", raising=False)
         from galaxy_gateway.webrtc_proxy import get_webrtc_endpoint_info
+
         info = get_webrtc_endpoint_info()
         assert "ice_servers" in info
         urls = [u for entry in info["ice_servers"] for u in entry["urls"]]
@@ -236,6 +251,7 @@ class TestWebRTCEndpointMetadata:
         monkeypatch.setenv("GALAXY_TURN_CREDENTIAL", "pass1")
         monkeypatch.delenv("GALAXY_STUN_URLS", raising=False)
         from galaxy_gateway.webrtc_proxy import get_webrtc_endpoint_info
+
         info = get_webrtc_endpoint_info()
         assert "ice_servers" in info
         turn_entries = [e for e in info["ice_servers"] if any("turn:" in u for u in e["urls"])]
@@ -249,12 +265,14 @@ class TestWebRTCEndpointMetadata:
         monkeypatch.setenv("GALAXY_TURN_USERNAME", "u")
         monkeypatch.setenv("GALAXY_TURN_CREDENTIAL", "p")
         from galaxy_gateway.webrtc_proxy import get_webrtc_endpoint_info
+
         info = get_webrtc_endpoint_info()
         assert len(info["ice_servers"]) == 2  # STUN entry + TURN entry
 
     def test_no_tailscale_when_disabled(self, monkeypatch):
         monkeypatch.setenv("GALAXY_TAILSCALE_ENABLED", "false")
         from galaxy_gateway.webrtc_proxy import get_webrtc_endpoint_info
+
         info = get_webrtc_endpoint_info()
         assert "tailscale" not in info
 
@@ -263,6 +281,7 @@ class TestWebRTCEndpointMetadata:
         monkeypatch.setenv("GALAXY_TAILSCALE_HOST", "gw.example.ts.net")
         monkeypatch.setenv("GALAXY_TAILSCALE_TAG", "tag:gateway")
         from galaxy_gateway.webrtc_proxy import get_webrtc_endpoint_info
+
         info = get_webrtc_endpoint_info()
         assert "tailscale" in info
         ts = info["tailscale"]
@@ -275,6 +294,7 @@ class TestWebRTCEndpointMetadata:
         monkeypatch.delenv("GALAXY_TAILSCALE_HOST", raising=False)
         monkeypatch.delenv("GALAXY_TAILSCALE_TAG", raising=False)
         from galaxy_gateway.webrtc_proxy import get_webrtc_endpoint_info
+
         info = get_webrtc_endpoint_info()
         ts = info.get("tailscale", {})
         assert ts.get("enabled") is True
@@ -287,6 +307,7 @@ class TestWebRTCEndpointMetadata:
         monkeypatch.delenv("GALAXY_TURN_URLS", raising=False)
         monkeypatch.delenv("GALAXY_TAILSCALE_ENABLED", raising=False)
         from galaxy_gateway.webrtc_proxy import get_webrtc_endpoint_info
+
         info = get_webrtc_endpoint_info()
         for key in ("node95_url", "ws_signaling_path", "gateway_ws_url", "gateway_ws_path"):
             assert key in info
@@ -296,6 +317,7 @@ class TestWebRTCEndpointMetadata:
 # Tests: TLS startup log (unit — does not actually start uvicorn)
 # ---------------------------------------------------------------------------
 
+
 class TestTLSStartupLog:
     def test_tls_disabled_when_cert_missing(self, monkeypatch):
         """When TLS env vars are absent, main() calls uvicorn without ssl args."""
@@ -303,6 +325,7 @@ class TestTLSStartupLog:
         monkeypatch.delenv("GALAXY_TLS_KEY", raising=False)
 
         import uvicorn
+
         import galaxy_gateway.app as gw_app
 
         called_with = {}
@@ -325,6 +348,7 @@ class TestTLSStartupLog:
         monkeypatch.setenv("GALAXY_TLS_KEY", "/fake/key.pem")
 
         import uvicorn
+
         import galaxy_gateway.app as gw_app
 
         called_with = {}
@@ -348,6 +372,7 @@ class TestTLSStartupLog:
         monkeypatch.delenv("GALAXY_TLS_KEY", raising=False)
 
         import uvicorn
+
         import galaxy_gateway.app as gw_app
 
         called_with = {}
@@ -369,6 +394,7 @@ class TestTLSStartupLog:
 # Tests: Key Rotation — core.auth helpers (PR12)
 # ---------------------------------------------------------------------------
 
+
 class TestGetActiveTokens:
     """Unit tests for the multi-key get_active_tokens() helper."""
 
@@ -378,6 +404,7 @@ class TestGetActiveTokens:
         monkeypatch.delenv("GALAXY_REVOKED_TOKENS", raising=False)
         monkeypatch.delenv("GALAXY_API_TOKEN_EXPIRY", raising=False)
         from core.auth import get_active_tokens
+
         assert get_active_tokens() == ["tok-single"]
 
     def test_multi_tokens_returned(self, monkeypatch):
@@ -386,6 +413,7 @@ class TestGetActiveTokens:
         monkeypatch.delenv("GALAXY_REVOKED_TOKENS", raising=False)
         monkeypatch.delenv("GALAXY_API_TOKEN_EXPIRY", raising=False)
         from core.auth import get_active_tokens
+
         assert get_active_tokens() == ["tok-a", "tok-b", "tok-c"]
 
     def test_single_and_multi_tokens_combined(self, monkeypatch):
@@ -394,6 +422,7 @@ class TestGetActiveTokens:
         monkeypatch.delenv("GALAXY_REVOKED_TOKENS", raising=False)
         monkeypatch.delenv("GALAXY_API_TOKEN_EXPIRY", raising=False)
         from core.auth import get_active_tokens
+
         tokens = get_active_tokens()
         assert "tok-legacy" in tokens
         assert "tok-new" in tokens
@@ -404,6 +433,7 @@ class TestGetActiveTokens:
         monkeypatch.setenv("GALAXY_REVOKED_TOKENS", "tok-bad")
         monkeypatch.delenv("GALAXY_API_TOKEN_EXPIRY", raising=False)
         from core.auth import get_active_tokens
+
         tokens = get_active_tokens()
         assert "tok-good" in tokens
         assert "tok-bad" not in tokens
@@ -414,6 +444,7 @@ class TestGetActiveTokens:
         monkeypatch.delenv("GALAXY_API_TOKENS", raising=False)
         monkeypatch.delenv("GALAXY_REVOKED_TOKENS", raising=False)
         from core.auth import get_active_tokens
+
         tokens = get_active_tokens()
         assert "tok-old" not in tokens
         assert tokens == []
@@ -424,6 +455,7 @@ class TestGetActiveTokens:
         monkeypatch.delenv("GALAXY_API_TOKENS", raising=False)
         monkeypatch.delenv("GALAXY_REVOKED_TOKENS", raising=False)
         from core.auth import get_active_tokens
+
         assert "tok-future" in get_active_tokens()
 
     def test_duplicate_tokens_deduplicated(self, monkeypatch):
@@ -432,6 +464,7 @@ class TestGetActiveTokens:
         monkeypatch.delenv("GALAXY_REVOKED_TOKENS", raising=False)
         monkeypatch.delenv("GALAXY_API_TOKEN_EXPIRY", raising=False)
         from core.auth import get_active_tokens
+
         tokens = get_active_tokens()
         assert tokens.count("tok-dup") == 1
 
@@ -441,6 +474,7 @@ class TestGetActiveTokens:
         monkeypatch.delenv("GALAXY_REVOKED_TOKENS", raising=False)
         monkeypatch.delenv("GALAXY_API_TOKEN_EXPIRY", raising=False)
         from core.auth import get_active_tokens
+
         assert get_active_tokens() == []
 
     def test_invalid_expiry_treated_as_not_expired(self, monkeypatch):
@@ -449,6 +483,7 @@ class TestGetActiveTokens:
         monkeypatch.delenv("GALAXY_API_TOKENS", raising=False)
         monkeypatch.delenv("GALAXY_REVOKED_TOKENS", raising=False)
         from core.auth import get_active_tokens
+
         # Unparseable expiry is ignored; token remains active
         assert "tok-ok" in get_active_tokens()
 

@@ -51,12 +51,12 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from .execution_policy import ExecutionPolicy, DEFAULT_CONSERVATIVE_POLICY
+from .execution_policy import DEFAULT_CONSERVATIVE_POLICY, ExecutionPolicy
 from .policy_decision import PolicyDecision, PolicyOutcome, _make_allowed
 from .policy_guardrails import (
-    check_side_effectful_execution,
     check_cross_device_expansion,
     check_executor_level,
+    check_side_effectful_execution,
     filter_executor_levels,
 )
 
@@ -137,9 +137,7 @@ def enforce_execution_intent(
 
     try:
         # ── 1. Side-effectful execution gate ──────────────────────────────
-        side_effect_decision = check_side_effectful_execution(
-            effective_policy, is_side_effectful=is_side_effectful
-        )
+        side_effect_decision = check_side_effectful_execution(effective_policy, is_side_effectful=is_side_effectful)
         if not side_effect_decision.is_allowed:
             emit_policy_decision(side_effect_decision, context=ctx)
             return side_effect_decision
@@ -162,18 +160,13 @@ def enforce_execution_intent(
         # All checks passed
         allowed_decision = _make_allowed(
             effective_policy,
-            reason=(
-                f"execution intent cleared all policy checks "
-                f"(band={effective_policy.policy_band.value})"
-            ),
+            reason=(f"execution intent cleared all policy checks " f"(band={effective_policy.policy_band.value})"),
         )
         emit_policy_decision(allowed_decision, context=ctx)
         return allowed_decision
 
     except Exception as exc:  # pragma: no cover
-        logger.warning(
-            "enforce_execution_intent: unexpected error, returning conservative block: %s", exc
-        )
+        logger.warning("enforce_execution_intent: unexpected error, returning conservative block: %s", exc)
         return PolicyDecision(
             outcome=PolicyOutcome.BLOCKED_BY_POLICY,
             policy=effective_policy,
@@ -266,10 +259,7 @@ def enforce_executor_levels(
         )
     else:
         outcome_str = PolicyOutcome.ALLOWED.value
-        reason = (
-            f"all executor levels permitted "
-            f"(band={effective_policy.policy_band.value})"
-        )
+        reason = f"all executor levels permitted " f"(band={effective_policy.policy_band.value})"
         _log_decision(
             outcome=outcome_str,
             policy=effective_policy,
@@ -364,9 +354,7 @@ def _log_decision(
         extra["downgraded_to"] = downgraded_to
     extra.update(context)
 
-    msg = (
-        "policy_enforcement | %s | band=%s | %s"
-    )
+    msg = "policy_enforcement | %s | band=%s | %s"
     args = (outcome, policy.policy_band.value, reason)
 
     if level == "info":

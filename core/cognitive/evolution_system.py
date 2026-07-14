@@ -93,9 +93,7 @@ def shutdown_cognitive_evolution() -> None:
     if _maintenance_task is not None and not _maintenance_task.done():
         _maintenance_task.cancel()
         try:
-            asyncio.get_event_loop().run_until_complete(
-                asyncio.wait_for(_maintenance_task, timeout=2.0)
-            )
+            asyncio.get_event_loop().run_until_complete(asyncio.wait_for(_maintenance_task, timeout=2.0))
         except (asyncio.CancelledError, asyncio.TimeoutError):
             pass
 
@@ -119,6 +117,7 @@ def get_cognitive_health() -> Dict[str, Any]:
     # ReflectionEngine stats
     try:
         from core.cognitive.reflection_engine import get_reflection_engine
+
         engine = get_reflection_engine()
         reflections = engine.to_dict_list()
         health["reflections"] = {
@@ -137,13 +136,12 @@ def get_cognitive_health() -> Dict[str, Any]:
     # PatternMiner stats
     try:
         from core.cognitive.pattern_miner import get_pattern_miner
+
         miner = get_pattern_miner()
         patterns = miner.to_dict_list()
         health["patterns"] = {
             "count": len(patterns),
-            "avg_activation": round(
-                sum(p.get("activation_score", 0) for p in patterns) / max(len(patterns), 1), 4
-            ),
+            "avg_activation": round(sum(p.get("activation_score", 0) for p in patterns) / max(len(patterns), 1), 4),
             "by_type": {},
         }
         for p in patterns:
@@ -155,6 +153,7 @@ def get_cognitive_health() -> Dict[str, Any]:
     # AdaptivePredictor stats
     try:
         from core.cognitive.adaptive_predictor import get_adaptive_predictor
+
         predictor = get_adaptive_predictor()
         health["predictor"] = predictor.get_calibration_stats()
     except Exception as exc:
@@ -173,6 +172,7 @@ def _do_init() -> None:
     # 1. Initialize ReflectionEngine (auto-subscribes to event bus)
     try:
         from core.cognitive.reflection_engine import get_reflection_engine
+
         get_reflection_engine()
         logger.debug("ReflectionEngine initialized")
     except Exception as exc:
@@ -181,6 +181,7 @@ def _do_init() -> None:
     # 2. Initialize PatternMiner (auto-subscribes to event bus)
     try:
         from core.cognitive.pattern_miner import get_pattern_miner
+
         get_pattern_miner()
         logger.debug("PatternMiner initialized")
     except Exception as exc:
@@ -189,6 +190,7 @@ def _do_init() -> None:
     # 3. Initialize AdaptivePredictor
     try:
         from core.cognitive.adaptive_predictor import get_adaptive_predictor
+
         get_adaptive_predictor()
         logger.debug("AdaptivePredictor initialized")
     except Exception as exc:
@@ -240,6 +242,7 @@ async def _maintenance_loop() -> None:
         # Decay reflections
         try:
             from core.cognitive.reflection_engine import get_reflection_engine
+
             engine = get_reflection_engine()
             engine.decay_all(days=1.0)
             logger.debug("ReflectionEngine decay cycle completed")
@@ -249,6 +252,7 @@ async def _maintenance_loop() -> None:
         # Decay patterns
         try:
             from core.cognitive.pattern_miner import get_pattern_miner
+
             miner = get_pattern_miner()
             pruned = miner.decay_all(days=1.0)
             if pruned > 0:

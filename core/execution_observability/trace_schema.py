@@ -61,8 +61,9 @@ class TraceCorrelation:
     # ------------------------------------------------------------------
 
     @classmethod
-    def new(cls, *, runtime_session_id: str = "", task_id: Optional[str] = None,
-            action_id: Optional[str] = None) -> "TraceCorrelation":
+    def new(
+        cls, *, runtime_session_id: str = "", task_id: Optional[str] = None, action_id: Optional[str] = None
+    ) -> "TraceCorrelation":
         """Create a fresh :class:`TraceCorrelation` with a generated trace_id."""
         return cls(
             trace_id=uuid.uuid4().hex,

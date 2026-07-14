@@ -62,21 +62,19 @@ class LiminalDynamics:
         volatility_penalty: Optional[float] = None,
     ) -> None:
         cfg = self._read_config()
-        self._min_dwell_s = min_dwell_s if min_dwell_s is not None else float(
-            cfg.get("cognitive_liminal_min_dwell_s", 1.5)
+        self._min_dwell_s = (
+            min_dwell_s if min_dwell_s is not None else float(cfg.get("cognitive_liminal_min_dwell_s", 1.5))
         )
-        self._volatility_window = volatility_window or int(
-            cfg.get("cognitive_liminal_volatility_window", 5)
-        )
-        self._volatility_penalty = volatility_penalty if volatility_penalty is not None else float(
-            cfg.get("cognitive_liminal_volatility_penalty", 0.10)
+        self._volatility_window = volatility_window or int(cfg.get("cognitive_liminal_volatility_window", 5))
+        self._volatility_penalty = (
+            volatility_penalty
+            if volatility_penalty is not None
+            else float(cfg.get("cognitive_liminal_volatility_penalty", 0.10))
         )
 
         self._liminal_entered_at: Optional[float] = None
         # Deque of (from_region, to_region, timestamp) transition records
-        self._transition_history: Deque[Tuple[str, str, float]] = deque(
-            maxlen=self._volatility_window * 2
-        )
+        self._transition_history: Deque[Tuple[str, str, float]] = deque(maxlen=self._volatility_window * 2)
         self._lock = threading.Lock()
 
     # ------------------------------------------------------------------
@@ -156,7 +154,7 @@ class LiminalDynamics:
         with self._lock:
             if not self._transition_history:
                 return 0.0
-            recent = list(self._transition_history)[-self._volatility_window:]
+            recent = list(self._transition_history)[-self._volatility_window :]
 
         if len(recent) < 2:
             return 0.0
@@ -166,11 +164,7 @@ class LiminalDynamics:
         if len(non_zero) < 2:
             return 0.0
 
-        reversals = sum(
-            1
-            for i in range(1, len(non_zero))
-            if non_zero[i] != non_zero[i - 1]
-        )
+        reversals = sum(1 for i in range(1, len(non_zero)) if non_zero[i] != non_zero[i - 1])
         return min(1.0, reversals / max(1, len(non_zero) - 1))
 
     def manifest_threshold_adjustment(self) -> float:
@@ -211,9 +205,7 @@ class LiminalDynamics:
             import json
             import pathlib
 
-            return json.loads(
-                (pathlib.Path(__file__).parents[2] / "config.json").read_text()
-            )
+            return json.loads((pathlib.Path(__file__).parents[2] / "config.json").read_text())
         except Exception:
             return {}
 

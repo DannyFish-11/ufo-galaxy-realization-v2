@@ -80,28 +80,25 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 _MODULE_AVAILABLE = False
 try:
-    from core.offline_operational_contract import (
-        # Authority / policy sentinels
+    from core.offline_operational_contract import (  # Authority / policy sentinels; Enumerations; Data classes; Functions
+        DEFERRED_SYNC_MUST_NOT_CLAIM_ONLINE_OPERATIONAL_POLICY,
+        EVIDENCE_ABSENCE_DEFAULTS_TO_UNAVAILABLE_POLICY,
         OFFLINE_OPERATIONAL_CONTRACT_AUTHORITY,
         OFFLINE_OPERATIONAL_CONTRACT_PR10_SENTINEL,
         OPERATIONAL_TAXONOMY_IS_FIRST_CLASS_DIMENSION_POLICY,
-        DEFERRED_SYNC_MUST_NOT_CLAIM_ONLINE_OPERATIONAL_POLICY,
-        RECONNECT_EXPECTED_IS_NOT_ONLINE_OPERATIONAL_POLICY,
-        EVIDENCE_ABSENCE_DEFAULTS_TO_UNAVAILABLE_POLICY,
         RECONCILIATION_INCOMPLETE_BLOCKS_ONLINE_OPERATIONAL_POLICY,
+        RECONNECT_EXPECTED_IS_NOT_ONLINE_OPERATIONAL_POLICY,
         STALE_EVIDENCE_MUST_DOWNGRADE_CLASS_POLICY,
-        # Enumerations
-        OfflineOperationalClass,
         ConnectivityState,
-        SyncMode,
-        # Data classes
+        OfflineOperationalClass,
         OfflineOperationalEvidence,
         OfflineOperationalVerdict,
-        # Functions
-        classify_offline_operational,
-        build_offline_operational_verdict,
+        SyncMode,
         build_baseline_offline_operational_verdict,
+        build_offline_operational_verdict,
+        classify_offline_operational,
     )
+
     _MODULE_AVAILABLE = True
 except ImportError as _imp_err:
     print(f"SKIP: core.offline_operational_contract unavailable: {_imp_err}")
@@ -109,10 +106,12 @@ except ImportError as _imp_err:
 
 def _skip_if_unavailable(test_fn):
     """Decorator: skip test if the module is not available."""
+
     def wrapper(self):
         if not _MODULE_AVAILABLE:
             self.skipTest("core.offline_operational_contract not available")
         return test_fn(self)
+
     wrapper.__name__ = test_fn.__name__
     return wrapper
 
@@ -121,12 +120,11 @@ def _skip_if_unavailable(test_fn):
 # Helper: build evidence with named overrides
 # ---------------------------------------------------------------------------
 
+
 def _ev(**kwargs) -> "OfflineOperationalEvidence":
     """Build an OfflineOperationalEvidence with default-conservative values."""
     return OfflineOperationalEvidence(
-        connectivity_state=kwargs.get(
-            "connectivity_state", ConnectivityState.unknown
-        ),
+        connectivity_state=kwargs.get("connectivity_state", ConnectivityState.unknown),
         evidence_fresh=kwargs.get("evidence_fresh", False),
         reconnect_expected=kwargs.get("reconnect_expected", False),
         inflight_tracking_active=kwargs.get("inflight_tracking_active", False),
@@ -768,9 +766,7 @@ class TestOfflineOperationalContract(unittest.TestCase):
 
     @_skip_if_unavailable
     def test_Q03_evidence_from_dict_bad_connectivity_state_defaults_to_unknown(self):
-        ev = OfflineOperationalEvidence.from_dict(
-            {"connectivity_state": "not_a_real_state"}
-        )
+        ev = OfflineOperationalEvidence.from_dict({"connectivity_state": "not_a_real_state"})
         self.assertEqual(ev.connectivity_state, ConnectivityState.unknown)
 
     # -----------------------------------------------------------------------
@@ -796,16 +792,12 @@ class TestOfflineOperationalContract(unittest.TestCase):
         verdict = classify_offline_operational(evidence)
         d = verdict.to_dict()
         v2 = OfflineOperationalVerdict.from_dict(d)
-        self.assertEqual(
-            v2.operational_class, OfflineOperationalClass.offline_deferred_sync
-        )
+        self.assertEqual(v2.operational_class, OfflineOperationalClass.offline_deferred_sync)
         self.assertTrue(v2.is_deferred)
 
     @_skip_if_unavailable
     def test_R03_verdict_from_dict_bad_class_defaults_to_unavailable(self):
-        v = OfflineOperationalVerdict.from_dict(
-            {"operational_class": "not_real", "rationale": "test"}
-        )
+        v = OfflineOperationalVerdict.from_dict({"operational_class": "not_real", "rationale": "test"})
         self.assertEqual(v.operational_class, OfflineOperationalClass.unavailable)
 
     @_skip_if_unavailable
@@ -835,9 +827,7 @@ class TestOfflineOperationalContract(unittest.TestCase):
 
     @_skip_if_unavailable
     def test_S01_only_online_operational_class_sets_is_online_operational_true(self):
-        online_ev = _ev(
-            connectivity_state=ConnectivityState.connected, evidence_fresh=True
-        )
+        online_ev = _ev(connectivity_state=ConnectivityState.connected, evidence_fresh=True)
         online_verdict = classify_offline_operational(online_ev)
         self.assertTrue(online_verdict.is_online_operational)
 
@@ -893,9 +883,7 @@ class TestOfflineOperationalContract(unittest.TestCase):
 
     @_skip_if_unavailable
     def test_T04_pending_reconciliation_not_resumable(self):
-        evidence = _ev(
-            reconciliation_in_progress=True, reconciliation_complete=False
-        )
+        evidence = _ev(reconciliation_in_progress=True, reconciliation_complete=False)
         verdict = classify_offline_operational(evidence)
         self.assertFalse(verdict.is_resumable)
 
@@ -920,9 +908,7 @@ class TestOfflineOperationalContract(unittest.TestCase):
 
     @_skip_if_unavailable
     def test_U02_pending_reconciliation_is_deferred_true(self):
-        evidence = _ev(
-            reconciliation_in_progress=True, reconciliation_complete=False
-        )
+        evidence = _ev(reconciliation_in_progress=True, reconciliation_complete=False)
         verdict = classify_offline_operational(evidence)
         self.assertTrue(verdict.is_deferred)
 
@@ -983,9 +969,7 @@ class TestOfflineOperationalContract(unittest.TestCase):
     @_skip_if_unavailable
     def test_W01_baseline_verdict_is_unavailable(self):
         verdict = build_baseline_offline_operational_verdict()
-        self.assertEqual(
-            verdict.operational_class, OfflineOperationalClass.unavailable
-        )
+        self.assertEqual(verdict.operational_class, OfflineOperationalClass.unavailable)
 
     @_skip_if_unavailable
     def test_W02_baseline_verdict_not_online_operational(self):
@@ -1014,8 +998,8 @@ class TestOfflineOperationalContract(unittest.TestCase):
     def test_X01_system_evaluator_includes_offline_operational_dimension(self):
         try:
             from core.system_final_acceptance_verdict import (
-                get_system_acceptance_evaluator,
                 AcceptanceDimensionId,
+                get_system_acceptance_evaluator,
             )
         except ImportError as exc:
             self.skipTest(f"system_final_acceptance_verdict unavailable: {exc}")
@@ -1027,17 +1011,15 @@ class TestOfflineOperationalContract(unittest.TestCase):
     def test_X02_offline_operational_probe_not_optimistic_with_zero_evidence(self):
         try:
             from core.system_final_acceptance_verdict import (
-                get_system_acceptance_evaluator,
                 AcceptanceDimensionId,
                 DimensionStatus,
+                get_system_acceptance_evaluator,
             )
         except ImportError as exc:
             self.skipTest(f"system_final_acceptance_verdict unavailable: {exc}")
 
         report = get_system_acceptance_evaluator().evaluate()
-        item = report.checklist.get(
-            AcceptanceDimensionId.offline_operational.value
-        )
+        item = report.checklist.get(AcceptanceDimensionId.offline_operational.value)
         self.assertIsNotNone(item)
         # Must be pending or unresolved — never accepted without live evidence
         self.assertIn(
@@ -1064,9 +1046,7 @@ class TestOfflineOperationalContract(unittest.TestCase):
         except ImportError as exc:
             self.skipTest(f"system_final_acceptance_verdict unavailable: {exc}")
 
-        self.assertEqual(
-            AcceptanceDimensionId.offline_operational.value, "offline_operational"
-        )
+        self.assertEqual(AcceptanceDimensionId.offline_operational.value, "offline_operational")
 
     # -----------------------------------------------------------------------
     # Group Z — AcceptanceDimensionId.offline_operational probe returns pending
@@ -1075,9 +1055,9 @@ class TestOfflineOperationalContract(unittest.TestCase):
     def test_Z01_offline_operational_probe_returns_pending_in_baseline(self):
         try:
             from core.system_final_acceptance_verdict import (
-                get_system_acceptance_evaluator,
                 AcceptanceDimensionId,
                 DimensionStatus,
+                get_system_acceptance_evaluator,
             )
         except ImportError as exc:
             self.skipTest(f"system_final_acceptance_verdict unavailable: {exc}")
@@ -1085,9 +1065,7 @@ class TestOfflineOperationalContract(unittest.TestCase):
             self.skipTest("core.offline_operational_contract unavailable")
 
         report = get_system_acceptance_evaluator().evaluate()
-        item = report.checklist.get(
-            AcceptanceDimensionId.offline_operational.value
-        )
+        item = report.checklist.get(AcceptanceDimensionId.offline_operational.value)
         self.assertIsNotNone(item)
         # Structural availability → pending (wired, no live evidence)
         self.assertEqual(item.status, DimensionStatus.pending)
@@ -1095,8 +1073,8 @@ class TestOfflineOperationalContract(unittest.TestCase):
     def test_Z02_offline_operational_probe_signal_source_correct(self):
         try:
             from core.system_final_acceptance_verdict import (
-                get_system_acceptance_evaluator,
                 AcceptanceDimensionId,
+                get_system_acceptance_evaluator,
             )
         except ImportError as exc:
             self.skipTest(f"system_final_acceptance_verdict unavailable: {exc}")
@@ -1104,9 +1082,7 @@ class TestOfflineOperationalContract(unittest.TestCase):
             self.skipTest("core.offline_operational_contract unavailable")
 
         report = get_system_acceptance_evaluator().evaluate()
-        item = report.checklist.get(
-            AcceptanceDimensionId.offline_operational.value
-        )
+        item = report.checklist.get(AcceptanceDimensionId.offline_operational.value)
         self.assertIsNotNone(item)
         self.assertIn("offline_operational_contract", item.signal_source)
 
@@ -1117,12 +1093,12 @@ class TestOfflineOperationalContract(unittest.TestCase):
     def test_AA01_probe_unresolved_if_baseline_returns_online_operational(self):
         """If somehow the baseline returned online_operational, probe → unresolved."""
         try:
+            import core.system_final_acceptance_verdict as sfav
             from core.system_final_acceptance_verdict import (
-                SystemFinalAcceptanceEvaluator,
                 AcceptanceDimensionId,
                 DimensionStatus,
+                SystemFinalAcceptanceEvaluator,
             )
-            import core.system_final_acceptance_verdict as sfav
         except ImportError as exc:
             self.skipTest(f"system_final_acceptance_verdict unavailable: {exc}")
         if not _MODULE_AVAILABLE:
@@ -1130,9 +1106,10 @@ class TestOfflineOperationalContract(unittest.TestCase):
 
         # Patch the baseline builder to return online_operational verdict
         from core.offline_operational_contract import (
-            OfflineOperationalVerdict,
             OfflineOperationalClass,
+            OfflineOperationalVerdict,
         )
+
         fake_verdict = OfflineOperationalVerdict(
             operational_class=OfflineOperationalClass.online_operational,
             rationale="FAKE — misconfiguration test",

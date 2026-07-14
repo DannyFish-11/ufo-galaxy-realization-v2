@@ -81,9 +81,7 @@ class SurfaceSelector:
         resolved_mode = self._resolve_mode(interaction_envelope, fallback=mode)
         surface_type = _MODE_TO_SURFACE.get(resolved_mode)
         if surface_type is None:
-            logger.debug(
-                "SurfaceSelector: unknown mode %r, falling back to chat_panel", resolved_mode
-            )
+            logger.debug("SurfaceSelector: unknown mode %r, falling back to chat_panel", resolved_mode)
             surface_type = SurfaceType.CHAT_PANEL
         meta = get_surface_meta(surface_type)
         return SurfaceSpec(

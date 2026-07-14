@@ -137,8 +137,8 @@ try:
     from core.android_runtime_transition_reducer import (
         AndroidRuntimeSignalInput,
         reduce_android_runtime_signal,
-        reduce_takeover_response as _reduce_takeover_response,
     )
+    from core.android_runtime_transition_reducer import reduce_takeover_response as _reduce_takeover_response
 
     _REDUCER_AVAILABLE: bool = True
 except ImportError:  # pragma: no cover
@@ -150,8 +150,8 @@ except ImportError:  # pragma: no cover
 try:
     from core.takeover_tracking import (
         adjudicate_takeover_ownership_convergence as _adjudicate_takeover_ownership_convergence,
-        record_takeover_response as _record_takeover_tracking,
     )
+    from core.takeover_tracking import record_takeover_response as _record_takeover_tracking
 
     _TAKEOVER_TRACKING_AVAILABLE: bool = True
 except ImportError:  # pragma: no cover
@@ -160,9 +160,9 @@ except ImportError:  # pragma: no cover
     _record_takeover_tracking = None  # type: ignore[assignment]
 
 try:
+    from core.android_originated_authority_boundary import AndroidParticipationKind as _AndroidParticipationKind
+    from core.android_originated_authority_boundary import AndroidSignalPermissionLevel as _AndroidSignalPermissionLevel
     from core.android_originated_authority_boundary import (
-        AndroidParticipationKind as _AndroidParticipationKind,
-        AndroidSignalPermissionLevel as _AndroidSignalPermissionLevel,
         classify_android_participation as _classify_android_participation,
     )
 
@@ -184,9 +184,7 @@ except ImportError:  # pragma: no cover
     _classify_ownership_transfer_proof_quality = None  # type: ignore[assignment]
 
 try:
-    from core.android_participant_truth_ingress import (
-        ingest_android_participant_truth_message as _ingest_truth,
-    )
+    from core.android_participant_truth_ingress import ingest_android_participant_truth_message as _ingest_truth
 
     _TRUTH_INGRESS_AVAILABLE: bool = True
 except ImportError:  # pragma: no cover
@@ -194,9 +192,7 @@ except ImportError:  # pragma: no cover
     _ingest_truth = None  # type: ignore[assignment]
 
 try:
-    from core.android_delegated_signal_ingress import (
-        ingest_delegated_execution_signal as _ingest_execution_signal,
-    )
+    from core.android_delegated_signal_ingress import ingest_delegated_execution_signal as _ingest_execution_signal
 
     _EXECUTION_SIGNAL_AVAILABLE: bool = True
 except ImportError:  # pragma: no cover
@@ -204,11 +200,9 @@ except ImportError:  # pragma: no cover
     _ingest_execution_signal = None  # type: ignore[assignment]
 
 try:
-    from core.android_delegated_runtime_audit import (
-        record_reconciliation_signal as _audit_reconciliation_signal,
-        record_takeover_request as _audit_takeover_request,
-        record_takeover_response as _audit_takeover_response,
-    )
+    from core.android_delegated_runtime_audit import record_reconciliation_signal as _audit_reconciliation_signal
+    from core.android_delegated_runtime_audit import record_takeover_request as _audit_takeover_request
+    from core.android_delegated_runtime_audit import record_takeover_response as _audit_takeover_response
 
     _AUDIT_AVAILABLE: bool = True
 except ImportError:  # pragma: no cover
@@ -220,9 +214,7 @@ except ImportError:  # pragma: no cover
 # PR-5A: Android behavioral result stable consumer — the SourceDispatchOrchestrator
 # is the canonical consumer of result-kind delegated execution signals.
 try:
-    from core.runtime.source_dispatch_orchestrator import (
-        SourceDispatchOrchestrator as _SourceDispatchOrchestrator,
-    )
+    from core.runtime.source_dispatch_orchestrator import SourceDispatchOrchestrator as _SourceDispatchOrchestrator
 
     _android_result_consumer = _SourceDispatchOrchestrator()
     _RESULT_CONSUMER_AVAILABLE: bool = True
@@ -352,15 +344,11 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
         return "resume"
 
     @staticmethod
-    def _build_takeover_session_axis(
-        *, session_id: str, metadata: Dict[str, Any]
-    ) -> Dict[str, str]:
+    def _build_takeover_session_axis(*, session_id: str, metadata: Dict[str, Any]) -> Dict[str, str]:
         """Build explicit session-axis identities for takeover correlation."""
         return {
             "runtime_session_id": session_id or "",
-            "runtime_attachment_session_id": str(
-                metadata.get("runtime_attachment_session_id") or ""
-            ),
+            "runtime_attachment_session_id": str(metadata.get("runtime_attachment_session_id") or ""),
             "durable_session_id": str(metadata.get("durable_session_id") or ""),
             "rebind_recovery_id": str(metadata.get("recovery_id") or ""),
             "takeover_correlation_id": str(metadata.get("takeover_id") or ""),
@@ -425,9 +413,7 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
             phase_before = rec.phase.value
 
             # Advance to handoff_dispatched
-            rec = advance_participant_session(
-                rec, AndroidParticipantSessionSignal.handoff_dispatched
-            )
+            rec = advance_participant_session(rec, AndroidParticipantSessionSignal.handoff_dispatched)
             record_participant_session(rec)
 
             return AndroidLifecycleCoordinatorOutcome(
@@ -438,8 +424,7 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
                 phase_after=rec.phase.value,
                 was_transitioned=rec.phase.value != phase_before,
                 description=(
-                    f"handoff dispatched: session={session_id!r} "
-                    f"contract={contract_id!r} device={device_id!r}"
+                    f"handoff dispatched: session={session_id!r} " f"contract={contract_id!r} device={device_id!r}"
                 ),
             )
         except Exception as exc:  # noqa: BLE001
@@ -523,8 +508,7 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
                 phase_after=phase_after,
                 was_transitioned=was_transitioned,
                 description=(
-                    f"takeover requested: session={session_id!r} "
-                    f"takeover_id={takeover_id!r} device={device_id!r}"
+                    f"takeover requested: session={session_id!r} " f"takeover_id={takeover_id!r} device={device_id!r}"
                 ),
             )
         except Exception as exc:  # noqa: BLE001
@@ -594,18 +578,13 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
                 metadata_dict["metadata_takeover_id"] = metadata_takeover_id
             metadata_dict["takeover_id"] = takeover_id or metadata_takeover_id
 
-            continuity_semantics = self._resolve_takeover_continuity_semantics(
-                metadata_dict
-            )
+            continuity_semantics = self._resolve_takeover_continuity_semantics(metadata_dict)
             session_axis = self._build_takeover_session_axis(
                 session_id=session_id,
                 metadata=metadata_dict,
             )
             proof_input_class = str(metadata_dict.get("proof_input_class") or "complete")
-            is_stale = bool(
-                metadata_dict.get("is_stale")
-                or continuity_semantics == "stale_result"
-            )
+            is_stale = bool(metadata_dict.get("is_stale") or continuity_semantics == "stale_result")
             is_replay = bool(
                 metadata_dict.get("is_replay")
                 or metadata_dict.get("is_duplicate_delivery")
@@ -615,7 +594,8 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
                 metadata_dict.get("is_recovery_assisted")
                 or metadata_dict.get("is_restart_recovery")
                 or metadata_dict.get("is_reattach")
-                or continuity_semantics in {
+                or continuity_semantics
+                in {
                     "restart",
                     "reattach",
                     "partially_recovered_continuation",
@@ -642,8 +622,7 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
                     )
                     authority_boundary = authority_cls.to_dict()
                     takeover_authority_permits = (
-                        authority_cls.permission_level
-                        == _AndroidSignalPermissionLevel.takeover_eligible
+                        authority_cls.permission_level == _AndroidSignalPermissionLevel.takeover_eligible
                     )
                 except Exception as _authority_error:  # noqa: BLE001
                     logger.debug(
@@ -678,10 +657,7 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
                         device_id=device_id,
                     )
                     ownership_convergence = verdict.to_dict()
-                    if (
-                        _OWNERSHIP_PROOF_QUALITY_AVAILABLE
-                        and _classify_ownership_transfer_proof_quality is not None
-                    ):
+                    if _OWNERSHIP_PROOF_QUALITY_AVAILABLE and _classify_ownership_transfer_proof_quality is not None:
                         ownership_proof = _classify_ownership_transfer_proof_quality(verdict)
                         ownership_proof_quality = ownership_proof.to_dict()
                 except Exception as _oe:  # noqa: BLE001
@@ -722,9 +698,7 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
                 "replay",
             }:
                 accepted_effective = False
-                takeover_gate_reasons.append(
-                    f"continuity_semantics_requires_revalidation:{continuity_semantics}"
-                )
+                takeover_gate_reasons.append(f"continuity_semantics_requires_revalidation:{continuity_semantics}")
 
             # Step 2: reduce session state
             if _SESSION_STATE_AVAILABLE and _REDUCER_AVAILABLE:
@@ -955,11 +929,19 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
             if _EXECUTION_SIGNAL_AVAILABLE and _ingest_execution_signal is not None:
                 try:
                     _raw_ingress_outcome = _ingest_execution_signal(message)
-                    was_updated = _raw_ingress_outcome.was_updated if hasattr(_raw_ingress_outcome, "was_updated") else False
-                    reject_reason = _raw_ingress_outcome.reject_reason if hasattr(_raw_ingress_outcome, "reject_reason") else ""
+                    was_updated = (
+                        _raw_ingress_outcome.was_updated if hasattr(_raw_ingress_outcome, "was_updated") else False
+                    )
+                    reject_reason = (
+                        _raw_ingress_outcome.reject_reason if hasattr(_raw_ingress_outcome, "reject_reason") else ""
+                    )
                     env = _raw_ingress_outcome.envelope if hasattr(_raw_ingress_outcome, "envelope") else None
                     if env:
-                        signal_kind = env.signal_kind.value if hasattr(env.signal_kind, "value") else str(getattr(env, "signal_kind", ""))
+                        signal_kind = (
+                            env.signal_kind.value
+                            if hasattr(env.signal_kind, "value")
+                            else str(getattr(env, "signal_kind", ""))
+                        )
                         _session_id = _session_id or (env.session_id or "")
                 except Exception as _ie:  # noqa: BLE001
                     logger.debug("on_execution_signal: ingress failed (non-fatal): %s", _ie)
@@ -1014,8 +996,7 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
                 phase_after=phase_after,
                 was_transitioned=was_transitioned,
                 description=(
-                    f"execution_signal: kind={signal_kind!r} "
-                    f"updated={was_updated} session={_session_id!r}"
+                    f"execution_signal: kind={signal_kind!r} " f"updated={was_updated} session={_session_id!r}"
                 ),
                 extra={
                     "signal_kind": signal_kind,

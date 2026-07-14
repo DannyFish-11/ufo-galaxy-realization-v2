@@ -50,8 +50,8 @@ def test_registry_restart_restores_entries_and_body_score(tmp_path):
 
 
 def test_singleton_registry_restores_from_persisted_store(tmp_path, monkeypatch):
-    from core.mesh.body_mesh_registry import get_body_mesh_registry, reset_body_mesh_registry
     from core.mesh.body_mesh_persistence import reset_body_mesh_persistence_store
+    from core.mesh.body_mesh_registry import get_body_mesh_registry, reset_body_mesh_registry
 
     store = _make_store(tmp_path)
     seeded = {

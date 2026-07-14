@@ -184,8 +184,7 @@ MULTI_SUBJECT_CLOSURE_MACHINE_AUTHORITY: str = (
 )
 
 MULTI_SUBJECT_CLOSURE_MACHINE_PR8_SENTINEL: str = (
-    "PR-8::MULTI_SUBJECT_CLOSURE_MACHINE_V1: "
-    "统一 multi-subject closure / reconciliation / degraded completion 主链."
+    "PR-8::MULTI_SUBJECT_CLOSURE_MACHINE_V1: " "统一 multi-subject closure / reconciliation / degraded completion 主链."
 )
 
 V2_IS_SOLE_CANONICAL_CLOSURE_AUTHORITY_POLICY: str = (
@@ -574,9 +573,7 @@ def _classify_terminal_kind(
         # Check whether this is actually a recovery_completion scenario:
         # recovery_completion applies when at least one participant with
         # is_recovery=True is in the success ('ready') state.
-        recovery_succeeded = any(
-            p.is_recovery and p.state == "ready" for p in participants
-        )
+        recovery_succeeded = any(p.is_recovery and p.state == "ready" for p in participants)
         if recovery_succeeded:
             return ClosureTerminalKind.recovery_completion
         return ClosureTerminalKind.partial_success
@@ -610,9 +607,7 @@ def _compute_reconcile_triggers(
         triggers.append(ReconcileRequiredTrigger.participant_lost_no_takeover.value)
 
     # Trigger 2: conflicting signals for same participant
-    if _detect_conflicting_signals(participants) or (
-        explicit_conflict_class in _EXPLICIT_RECONCILE_CONFLICT_CLASSES
-    ):
+    if _detect_conflicting_signals(participants) or (explicit_conflict_class in _EXPLICIT_RECONCILE_CONFLICT_CLASSES):
         triggers.append(ReconcileRequiredTrigger.conflicting_participant_signals.value)
 
     # Trigger 3: formation declared members but closure machine sees zero participants
@@ -684,8 +679,7 @@ class MultiSubjectClosureMachine:
         """
         if not isinstance(bridge_snapshot, dict):
             logger.warning(
-                "MultiSubjectClosureMachine.apply: bridge_snapshot is not a dict; "
-                "returning in_progress candidate."
+                "MultiSubjectClosureMachine.apply: bridge_snapshot is not a dict; " "returning in_progress candidate."
             )
             return ClosureCandidate()
 

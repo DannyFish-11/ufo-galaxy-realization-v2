@@ -56,7 +56,7 @@ import random
 import time
 from typing import Any, Dict, List, Optional
 
-from core.continuum.config import ContinuumConfig, DEFAULT_CONTINUUM_CONFIG
+from core.continuum.config import DEFAULT_CONTINUUM_CONFIG, ContinuumConfig
 from core.continuum.decision_gate import DecisionGate
 from core.continuum.expression_engine import ExpressionEngine
 from core.continuum.human_field import HumanFieldInferrer, InteractionRhythm
@@ -192,8 +192,7 @@ class ContinuumOrchestrator:
         effective_trace_id = runtime_session_id or trace_id
         if runtime_session_id:
             logger.debug(
-                "ContinuumOrchestrator.run driven by DesktopPresenceRuntime | "
-                "runtime_session_id=%s",
+                "ContinuumOrchestrator.run driven by DesktopPresenceRuntime | " "runtime_session_id=%s",
                 runtime_session_id,
             )
         if not self._effective_cfg.flags.enabled:
@@ -340,7 +339,9 @@ class ContinuumOrchestrator:
         if debug:
             logger.debug(
                 "Continuum stage perception | trace=%s skipped=%s elapsed_ms=%.2f",
-                trace_id, not flags.enable_perception, _stage_ms,
+                trace_id,
+                not flags.enable_perception,
+                _stage_ms,
             )
 
         # Stage 2 – Human Field: infer HumanFieldState from perception.
@@ -354,8 +355,11 @@ class ContinuumOrchestrator:
         if debug:
             logger.debug(
                 "Continuum stage human_field | trace=%s skipped=%s attention=%.3f intent=%.3f elapsed_ms=%.2f",
-                trace_id, not flags.enable_human_field,
-                human_state.attention, human_state.intent_probability, _stage_ms,
+                trace_id,
+                not flags.enable_human_field,
+                human_state.attention,
+                human_state.intent_probability,
+                _stage_ms,
             )
 
         # Stage 3 – State Fusion: merge human state + world context + history.
@@ -371,8 +375,10 @@ class ContinuumOrchestrator:
         if debug:
             logger.debug(
                 "Continuum stage state_fusion | trace=%s phase_candidate=%s confidence=%.3f elapsed_ms=%.2f",
-                trace_id, unified_state.phase_candidate.value,
-                unified_state.candidate_confidence, _stage_ms,
+                trace_id,
+                unified_state.phase_candidate.value,
+                unified_state.candidate_confidence,
+                _stage_ms,
             )
 
         # Stage 4 – Liminal Field: compute metrics and enrich unified state.
@@ -385,7 +391,9 @@ class ContinuumOrchestrator:
         if debug:
             logger.debug(
                 "Continuum stage liminal_field | trace=%s skipped=%s elapsed_ms=%.2f",
-                trace_id, not flags.enable_liminal_field, _stage_ms,
+                trace_id,
+                not flags.enable_liminal_field,
+                _stage_ms,
             )
 
         # Stage 5 – Temporal Engine: produce stable ContinuumState.
@@ -396,8 +404,10 @@ class ContinuumOrchestrator:
         if debug:
             logger.debug(
                 "Continuum stage temporal_engine | trace=%s phase=%s intensity=%.3f elapsed_ms=%.2f",
-                trace_id, continuum_state.phase.value,
-                continuum_state.presence_intensity, _stage_ms,
+                trace_id,
+                continuum_state.phase.value,
+                continuum_state.presence_intensity,
+                _stage_ms,
             )
 
         # Stage 6 – Decision Gate: evaluate whether / how strongly to act.
@@ -411,12 +421,13 @@ class ContinuumOrchestrator:
         if debug:
             logger.debug(
                 "Continuum stage decision_gate | trace=%s skipped=%s action=%s score=%.3f elapsed_ms=%.2f",
-                trace_id, not flags.enable_decision_gate,
-                decision_state.action_level.value, decision_state.should_act_score, _stage_ms,
+                trace_id,
+                not flags.enable_decision_gate,
+                decision_state.action_level.value,
+                decision_state.should_act_score,
+                _stage_ms,
             )
-        continuum_state = continuum_state.model_copy(
-            update={"decision": decision_state}
-        )
+        continuum_state = continuum_state.model_copy(update={"decision": decision_state})
 
         # Stage 7 – Expression Engine: derive abstract expression parameters.
         _t = time.monotonic()
@@ -426,12 +437,12 @@ class ContinuumOrchestrator:
         if debug:
             logger.debug(
                 "Continuum stage expression_engine | trace=%s form=%s spatial=%s elapsed_ms=%.2f",
-                trace_id, expression_state.form_signature.value,
-                expression_state.spatial_presence.value, _stage_ms,
+                trace_id,
+                expression_state.form_signature.value,
+                expression_state.spatial_presence.value,
+                _stage_ms,
             )
-        continuum_state = continuum_state.model_copy(
-            update={"expression": expression_state}
-        )
+        continuum_state = continuum_state.model_copy(update={"expression": expression_state})
 
         # Stage 8 – Return Engine: decide whether to retreat toward formless.
         _t = time.monotonic()
@@ -451,24 +462,18 @@ class ContinuumOrchestrator:
                     return_result.next_phase.value,
                     _stage_ms,
                 )
-            continuum_state = continuum_state.model_copy(
-                update={"phase": return_result.next_phase}
-            )
+            continuum_state = continuum_state.model_copy(update={"phase": return_result.next_phase})
 
         # Attach the caller-supplied trace_id (overrides the auto-generated one).
         if trace_id:
-            continuum_state = continuum_state.model_copy(
-                update={"trace_id": trace_id}
-            )
+            continuum_state = continuum_state.model_copy(update={"trace_id": trace_id})
 
         # PR-WALLCLOCK: Explicitly set wallclock_timestamp for cross-system
         # temporal alignment. This ensures all downstream consumers (UDM,
         # observability sinks, cross-repo contracts) see a consistent
         # wall-clock reference, independent of monotonic clock usage
         # elsewhere in the pipeline.
-        continuum_state = continuum_state.model_copy(
-            update={"wallclock_timestamp": time.time()}
-        )
+        continuum_state = continuum_state.model_copy(update={"wallclock_timestamp": time.time()})
 
         # Update rolling history.
         self._history.append(unified_state)
@@ -494,6 +499,7 @@ class ContinuumOrchestrator:
 
         try:
             from core.multimodal.perception_frame import PerceptionFrame
+
             return PerceptionFrame()
         except Exception:
             # If the perception_frame module is not available (e.g. minimal
@@ -530,4 +536,5 @@ class _MinimalFrame:
 
     def __init__(self) -> None:
         import time as _t
+
         self.wall_clock = _t.time()

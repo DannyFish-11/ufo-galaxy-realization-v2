@@ -34,7 +34,7 @@ import logging
 import os
 import time
 import uuid
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from typing import Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.CostTracker")
@@ -53,6 +53,7 @@ DEFAULT_COST_TABLE: Dict[str, Dict[str, float]] = {
 @dataclass
 class CostRecord:
     """单次 LLM 调用成本记录"""
+
     record_id: str = field(default_factory=lambda: str(uuid.uuid4())[:12])
     timestamp: float = field(default_factory=time.time)
     provider: str = ""
@@ -78,9 +79,7 @@ class CostTracker:
     """
 
     def __init__(self, data_dir: str = None):
-        self._data_dir = data_dir or os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "data"
-        )
+        self._data_dir = data_dir or os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
         os.makedirs(self._data_dir, exist_ok=True)
         self._log_file = os.path.join(self._data_dir, "cost_records.jsonl")
         # 最近 500 条保存在内存中供快速查询
@@ -156,9 +155,7 @@ class CostTracker:
     ) -> List[Dict]:
         """获取最近 N 条成本记录，支持按 provider/model 过滤"""
         records = [
-            r for r in self._records
-            if (not provider or r.provider == provider)
-            and (not model or r.model == model)
+            r for r in self._records if (not provider or r.provider == provider) and (not model or r.model == model)
         ]
         return [r.to_dict() for r in records[-limit:]]
 
@@ -237,9 +234,7 @@ class CostTracker:
             _fields = list(CostRecord.__dataclass_fields__.keys())
             for line in lines[-limit:]:
                 data = json.loads(line)
-                self._records.append(CostRecord(**{
-                    k: data[k] for k in _fields if k in data
-                }))
+                self._records.append(CostRecord(**{k: data[k] for k in _fields if k in data}))
             logger.info(f"Loaded {len(self._records)} cost records from file")
         except Exception as e:
             logger.warning(f"Cost record load failed: {e}")

@@ -24,11 +24,11 @@ from core.ascii_art import Colors, ansi_supported
 
 # ── 状态词汇（唯一一套）：name -> (glyph, color) ──
 _STATUS: dict = {
-    "ok":    ("✓", Colors.GREEN),
+    "ok": ("✓", Colors.GREEN),
     "doing": ("◐", Colors.CYAN),
-    "warn":  ("⚠", Colors.YELLOW),
-    "fail":  ("✗", Colors.RED),
-    "info":  ("·", Colors.BLUE),
+    "warn": ("⚠", Colors.YELLOW),
+    "fail": ("✗", Colors.RED),
+    "info": ("·", Colors.BLUE),
 }
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
@@ -124,16 +124,14 @@ def summary_card(
     head = f"就绪 · {state_ok} 正常"
     if state_degraded:
         head += f" · {state_degraded} 降级"
-    print(f"  {_c('✓', Colors.GREEN)} {_c(head, Colors.BOLD + Colors.GREEN)}"
-          f"   {_c(title, Colors.DIM)}")
+    print(f"  {_c('✓', Colors.GREEN)} {_c(head, Colors.BOLD + Colors.GREEN)}" f"   {_c(title, Colors.DIM)}")
     print()
     for k, v in rows:
         print(f"    {_c(pad_display(k, key_w), Colors.CYAN)}   {v}")
     if degraded:
         parts = [f"{name} → {hint}" if hint else name for name, hint in degraded]
         joined = "  ·  ".join(parts)
-        print(f"    {_c(pad_display('降级', key_w), Colors.YELLOW)}   "
-              f"{_c(joined, Colors.DIM)}")
+        print(f"    {_c(pad_display('降级', key_w), Colors.YELLOW)}   " f"{_c(joined, Colors.DIM)}")
     if hints:
         print()
         for k, v in hints:

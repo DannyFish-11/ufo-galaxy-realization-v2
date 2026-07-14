@@ -148,45 +148,45 @@ core/device_formation/ — PR-17 device-formation (sibling package).
 from __future__ import annotations
 
 from .agent_role import (
-    AgentRole,
     AGENT_ROLE_PRECEDENCE,
-    agent_role_description,
     ROLE_CAN_INITIATE_HANDOFF,
     ROLE_CAN_RECEIVE_HANDOFF,
+    AgentRole,
+    agent_role_description,
+)
+from .dispatch_summary import (
+    IDLE_DISPATCH_SUMMARY,
+    DispatchSummary,
+    attach_dispatch_summary_to_handoff_result,
+    attach_dispatch_summary_to_projection,
+    attach_dispatch_summary_to_result,
+    build_dispatch_summary,
+    resolve_dispatch_summary,
+)
+from .handoff_policy import (
+    DEFAULT_HANDOFF_POLICY,
+    OBSERVER_HANDOFF_POLICY,
+    RECOVERY_HANDOFF_POLICY,
+    HandoffPolicy,
+    get_policy_for_role,
+)
+from .ownership_summary import (
+    IDLE_OWNERSHIP_SUMMARY,
+    OwnershipSummary,
+    attach_ownership_to_projection,
+    build_ownership_summary,
+    get_ownership_hints,
+    make_ownership_summary,
 )
 from .responsibility_graph import (
     HANDOFF_GRAPH,
-    is_valid_handoff,
     OwnershipRecord,
     OwnershipTransferResult,
     apply_ownership_transfer,
     can_role_initiate_handoff,
     can_role_receive_handoff,
     describe_handoff_edge,
-)
-from .handoff_policy import (
-    HandoffPolicy,
-    DEFAULT_HANDOFF_POLICY,
-    RECOVERY_HANDOFF_POLICY,
-    OBSERVER_HANDOFF_POLICY,
-    get_policy_for_role,
-)
-from .ownership_summary import (
-    OwnershipSummary,
-    IDLE_OWNERSHIP_SUMMARY,
-    build_ownership_summary,
-    attach_ownership_to_projection,
-    get_ownership_hints,
-    make_ownership_summary,
-)
-from .dispatch_summary import (
-    DispatchSummary,
-    IDLE_DISPATCH_SUMMARY,
-    build_dispatch_summary,
-    resolve_dispatch_summary,
-    attach_dispatch_summary_to_result,
-    attach_dispatch_summary_to_handoff_result,
-    attach_dispatch_summary_to_projection,
+    is_valid_handoff,
 )
 
 __all__ = [

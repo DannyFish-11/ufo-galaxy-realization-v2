@@ -15,10 +15,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict
 
-
 # ---------------------------------------------------------------------------
 # PersonaState
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class PersonaState:
@@ -49,9 +49,7 @@ class PersonaState:
     urgency: float = 0.1
     trust_level: float = 0.5
     expression_mode: str = "quiet_luminous"
-    updated_at: datetime = field(
-        default_factory=lambda: datetime.now(tz=timezone.utc)
-    )
+    updated_at: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
 
     # ------------------------------------------------------------------
     # Serialisation
@@ -80,6 +78,7 @@ class PersonaState:
 # ---------------------------------------------------------------------------
 # Numeric-field clipping helper
 # ---------------------------------------------------------------------------
+
 
 def _clip(value: float, lo: float = 0.0, hi: float = 1.0) -> float:
     """Clamp *value* into [lo, hi]."""

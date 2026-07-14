@@ -41,10 +41,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from core.continuum.config import ContinuumConfig, DEFAULT_CONTINUUM_CONFIG
+from core.continuum.config import DEFAULT_CONTINUUM_CONFIG, ContinuumConfig
 from core.continuum.types import HumanFieldState
 from core.multimodal.perception_frame import PerceptionFrame
-
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -101,9 +100,7 @@ class HumanFieldInferrer:
             :data:`~core.continuum.config.DEFAULT_CONTINUUM_CONFIG`.
     """
 
-    def __init__(
-        self, config: ContinuumConfig = DEFAULT_CONTINUUM_CONFIG
-    ) -> None:
+    def __init__(self, config: ContinuumConfig = DEFAULT_CONTINUUM_CONFIG) -> None:
         self._cfg = config
 
     # ------------------------------------------------------------------
@@ -141,16 +138,10 @@ class HumanFieldInferrer:
         input_rhythm: float = self._derive_input_rhythm(system, rhythm)
 
         attention = self._derive_attention(audio, video, system, speaking)
-        focus_level = self._derive_focus_level(
-            audio, video, system, rhythm, speaking, motion_level
-        )
+        focus_level = self._derive_focus_level(audio, video, system, rhythm, speaking, motion_level)
         fatigue = self._derive_fatigue(audio, system, rhythm, input_rhythm)
-        intent_probability = self._derive_intent_probability(
-            audio, system, rhythm, speaking, input_rhythm
-        )
-        interruption_sensitivity = self._derive_interruption_sensitivity(
-            focus_level, speaking, fatigue
-        )
+        intent_probability = self._derive_intent_probability(audio, system, rhythm, speaking, input_rhythm)
+        interruption_sensitivity = self._derive_interruption_sensitivity(focus_level, speaking, fatigue)
 
         return HumanFieldState(
             attention=attention,
@@ -168,9 +159,7 @@ class HumanFieldInferrer:
     # Per-signal derivation
     # ------------------------------------------------------------------
 
-    def _derive_attention(
-        self, audio, video, system, speaking: bool
-    ) -> float:
+    def _derive_attention(self, audio, video, system, speaking: bool) -> float:
         """Attention = human focus directed at the system.
 
         Combines voice activity, face presence, and screen engagement.
@@ -181,22 +170,14 @@ class HumanFieldInferrer:
 
         if audio is not None:
             # Speaking and high energy both indicate directed attention.
-            audio_score = (
-                0.5 * float(speaking)
-                + 0.3 * _clamp(audio.energy)
-                + 0.2 * _clamp(audio.speaking_ratio)
-            )
+            audio_score = 0.5 * float(speaking) + 0.3 * _clamp(audio.energy) + 0.2 * _clamp(audio.speaking_ratio)
             scores.append(_clamp(audio_score))
             weights.append(1.0)
 
         if video is not None:
             # Face presence contributes positively; rapid motion suggests
             # the human is physically disengaged.
-            face = (
-                video.face_presence
-                if video.face_presence is not None
-                else 0.5
-            )
+            face = video.face_presence if video.face_presence is not None else 0.5
             video_score = _clamp(face - 0.3 * _clamp(video.motion_level) + 0.1)
             scores.append(_clamp(video_score))
             weights.append(0.8)
@@ -209,13 +190,9 @@ class HumanFieldInferrer:
             return 0.5  # neutral default when all modalities absent
 
         total_w = sum(weights)
-        return _clamp(
-            sum(s * w for s, w in zip(scores, weights)) / total_w
-        )
+        return _clamp(sum(s * w for s, w in zip(scores, weights)) / total_w)
 
-    def _derive_focus_level(
-        self, audio, video, system, rhythm, speaking: bool, motion_level: float
-    ) -> float:
+    def _derive_focus_level(self, audio, video, system, rhythm, speaking: bool, motion_level: float) -> float:
         """Focus = sustained cognitive engagement on the current task.
 
         Derived from speaking consistency, screen activity, input rhythm,
@@ -225,9 +202,7 @@ class HumanFieldInferrer:
 
         if audio is not None:
             # Sustained speaking with few pauses indicates focused discourse.
-            audio_focus = _clamp(
-                audio.speaking_ratio * (1.0 - audio.pause_density)
-            )
+            audio_focus = _clamp(audio.speaking_ratio * (1.0 - audio.pause_density))
             factors.append(audio_focus)
 
         if system is not None:
@@ -252,9 +227,7 @@ class HumanFieldInferrer:
 
         return _clamp(sum(factors) / len(factors))
 
-    def _derive_fatigue(
-        self, audio, system, rhythm, input_rhythm: float
-    ) -> float:
+    def _derive_fatigue(self, audio, system, rhythm, input_rhythm: float) -> float:
         """Fatigue proxy: low activity sustained over time.
 
         Uses session age, idle duration, low input rhythm, and quiet
@@ -276,9 +249,7 @@ class HumanFieldInferrer:
         # Consistently low input rhythm is a weak fatigue indicator, but only
         # when there is a real context source (not just a 0.0 default from
         # having no modalities at all).
-        if input_rhythm < 0.1 and (
-            rhythm is not None or audio is not None or system is not None
-        ):
+        if input_rhythm < 0.1 and (rhythm is not None or audio is not None or system is not None):
             signals.append(0.2)
 
         if audio is not None:
@@ -290,9 +261,7 @@ class HumanFieldInferrer:
 
         return _clamp(sum(signals) / len(signals))
 
-    def _derive_intent_probability(
-        self, audio, system, rhythm, speaking: bool, input_rhythm: float
-    ) -> float:
+    def _derive_intent_probability(self, audio, system, rhythm, speaking: bool, input_rhythm: float) -> float:
         """Intent probability = likelihood an actionable intent is forming.
 
         Active speech is the strongest single indicator; input bursts and
@@ -301,9 +270,7 @@ class HumanFieldInferrer:
         signals = []
 
         if audio is not None:
-            voice_intent = _clamp(
-                0.7 * float(speaking) + 0.3 * _clamp(audio.energy)
-            )
+            voice_intent = _clamp(0.7 * float(speaking) + 0.3 * _clamp(audio.energy))
             signals.append(voice_intent)
 
         if rhythm is not None and rhythm.recent_burst:
@@ -323,9 +290,7 @@ class HumanFieldInferrer:
         mean_sig = sum(signals) / len(signals)
         return _clamp(0.6 * max_sig + 0.4 * mean_sig)
 
-    def _derive_interruption_sensitivity(
-        self, focus_level: float, speaking: bool, fatigue: float
-    ) -> float:
+    def _derive_interruption_sensitivity(self, focus_level: float, speaking: bool, fatigue: float) -> float:
         """How disruptive an interruption would be right now.
 
         High focus and active speech both raise sensitivity.  High fatigue

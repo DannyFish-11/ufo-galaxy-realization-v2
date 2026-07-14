@@ -286,9 +286,7 @@ class EvidenceStrength(str, Enum):
     STRONGLY_ESTABLISHED = "STRONGLY_ESTABLISHED"
     RUNTIME_EVIDENCED_CLOSED = "RUNTIME_EVIDENCED_CLOSED"
     PARTIALLY_ESTABLISHED = "PARTIALLY_ESTABLISHED"
-    INFRASTRUCTURE_PRESENT_NOT_YET_E2E_PROVEN = (
-        "INFRASTRUCTURE_PRESENT_NOT_YET_E2E_PROVEN"
-    )
+    INFRASTRUCTURE_PRESENT_NOT_YET_E2E_PROVEN = "INFRASTRUCTURE_PRESENT_NOT_YET_E2E_PROVEN"
     SURFACE_ALIGNMENT_ONLY = "SURFACE_ALIGNMENT_ONLY"
     MISSING_RUNTIME_EVIDENCE = "MISSING_RUNTIME_EVIDENCE"
     NOT_YET_IMPLEMENTED = "NOT_YET_IMPLEMENTED"
@@ -478,9 +476,7 @@ class DomainImplementationEntry:
             "current_code_anchors": [a.to_dict() for a in self.current_code_anchors],
             "android_anchors": [a.to_dict() for a in self.android_anchors],
             "overclaiming_guard": self.overclaiming_guard,
-            "follow_up_pr_spec": (
-                self.follow_up_pr_spec.to_dict() if self.follow_up_pr_spec else None
-            ),
+            "follow_up_pr_spec": (self.follow_up_pr_spec.to_dict() if self.follow_up_pr_spec else None),
         }
 
 
@@ -538,13 +534,9 @@ class ImplementationReviewPackage:
             "verdict_zh": self.verdict_zh,
             "domain_entries": [e.to_dict() for e in self.domain_entries],
             "system_maturity_summary": self.system_maturity_summary,
-            "follow_up_pr_sequence": [
-                s.to_dict() for s in self.follow_up_pr_sequence
-            ],
+            "follow_up_pr_sequence": [s.to_dict() for s in self.follow_up_pr_sequence],
             "overclaiming_guards_summary": self.overclaiming_guards_summary,
-            "domains_at_partially_established_or_below": (
-                self.domains_at_partially_established_or_below
-            ),
+            "domains_at_partially_established_or_below": (self.domains_at_partially_established_or_below),
         }
 
     def to_json(self, indent: int = 2) -> str:
@@ -635,88 +627,79 @@ def _review_unified_panel_aggregation() -> DomainImplementationEntry:
 
     # OperatorSurface — core structural authority
     os_ok = _try_import("core.operator_surface")
-    anchors.append(CodeAnchor(
-        module_path="core.operator_surface",
-        description="OperatorSurface authority: project-only principle, aggregates "
-                    "task/device/capability/flow state into OperatorSnapshot",
-        confirmed_importable=os_ok,
-        key_attribute="OPERATOR_SURFACE_PROJECTION_POLICY",
-    ))
-    if os_ok:
-        established.append(
-            "core.operator_surface importable — OperatorSnapshot aggregation structure present"
+    anchors.append(
+        CodeAnchor(
+            module_path="core.operator_surface",
+            description="OperatorSurface authority: project-only principle, aggregates "
+            "task/device/capability/flow state into OperatorSnapshot",
+            confirmed_importable=os_ok,
+            key_attribute="OPERATOR_SURFACE_PROJECTION_POLICY",
         )
+    )
+    if os_ok:
+        established.append("core.operator_surface importable — OperatorSnapshot aggregation structure present")
 
     # Operator routes
     or_ok = _try_import("core.routes.operator")
-    anchors.append(CodeAnchor(
-        module_path="core.routes.operator",
-        description="HTTP routes for /api/v1/operator/* (snapshot, flows, "
-                    "devices/ecosystem, devices/execution-events, inspect/*)",
-        confirmed_importable=or_ok,
-        key_attribute="OPERATOR_ROUTES_AUTHORITY",
-    ))
-    if or_ok:
-        established.append(
-            "core.routes.operator importable — /api/v1/operator/* routes registered"
+    anchors.append(
+        CodeAnchor(
+            module_path="core.routes.operator",
+            description="HTTP routes for /api/v1/operator/* (snapshot, flows, "
+            "devices/ecosystem, devices/execution-events, inspect/*)",
+            confirmed_importable=or_ok,
+            key_attribute="OPERATOR_ROUTES_AUTHORITY",
         )
+    )
+    if or_ok:
+        established.append("core.routes.operator importable — /api/v1/operator/* routes registered")
 
     # FlowLevelOperatorSurface
     fl_ok = _try_import("core.flow_level_operator_surface")
-    anchors.append(CodeAnchor(
-        module_path="core.flow_level_operator_surface",
-        description="Per-flow operator projection: FlowOperatorProjection with "
-                    "authority metadata, active_flow_count, to_dict()",
-        confirmed_importable=fl_ok,
-        key_attribute="FlowOperatorProjection",
-    ))
-    if fl_ok:
-        established.append(
-            "core.flow_level_operator_surface importable — FlowOperatorProjection present"
+    anchors.append(
+        CodeAnchor(
+            module_path="core.flow_level_operator_surface",
+            description="Per-flow operator projection: FlowOperatorProjection with "
+            "authority metadata, active_flow_count, to_dict()",
+            confirmed_importable=fl_ok,
+            key_attribute="FlowOperatorProjection",
         )
+    )
+    if fl_ok:
+        established.append("core.flow_level_operator_surface importable — FlowOperatorProjection present")
 
     # Projection routes (/api/v1/projection/runtime)
     pr_ok = _try_import("core.routes.projection")
-    anchors.append(CodeAnchor(
-        module_path="core.routes.projection",
-        description="/api/v1/projection/runtime — RuntimeProjection from ContinuumState "
-                    "and topology; partial three-state coverage",
-        confirmed_importable=pr_ok,
-    ))
-    if pr_ok:
-        established.append(
-            "core.routes.projection importable — /api/v1/projection/runtime present"
+    anchors.append(
+        CodeAnchor(
+            module_path="core.routes.projection",
+            description="/api/v1/projection/runtime — RuntimeProjection from ContinuumState "
+            "and topology; partial three-state coverage",
+            confirmed_importable=pr_ok,
         )
+    )
+    if pr_ok:
+        established.append("core.routes.projection importable — /api/v1/projection/runtime present")
 
     # Specific operator sub-endpoints
     if or_ok:
         if _source_contains("core.routes.operator", "/api/v1/operator/devices/ecosystem"):
-            established.append(
-                "/api/v1/operator/devices/ecosystem endpoint confirmed in source"
-            )
+            established.append("/api/v1/operator/devices/ecosystem endpoint confirmed in source")
         else:
-            partial.append(
-                "/api/v1/operator/devices/ecosystem not found in operator routes source"
-            )
+            partial.append("/api/v1/operator/devices/ecosystem not found in operator routes source")
 
         if _source_contains("core.routes.operator", "/api/v1/operator/flows"):
             established.append("/api/v1/operator/flows endpoint confirmed in source")
 
         if _source_contains("core.routes.operator", "execution-events"):
-            established.append(
-                "/api/v1/operator/devices/execution-events endpoint confirmed"
-            )
+            established.append("/api/v1/operator/devices/execution-events endpoint confirmed")
 
     # Android ecosystem aggregation in OperatorSnapshot
     if _source_contains("core.operator_surface", "android_ecosystem"):
         established.append(
-            "OperatorSnapshot.android_ecosystem field present — Android ecosystem "
-            "integrated into operator snapshot"
+            "OperatorSnapshot.android_ecosystem field present — Android ecosystem " "integrated into operator snapshot"
         )
     else:
-        partial.append(
-            "android_ecosystem field not confirmed in operator_surface source"
-        )
+        partial.append("android_ecosystem field not confirmed in operator_surface source")
 
     # CRITICAL GAP: No single unified panel-state aggregation endpoint.
     # 注：core.routes.panel（桌面面板 UI feed）不是"把三态+Android生态+flow态+UI衣着态+
@@ -756,8 +739,7 @@ def _review_unified_panel_aggregation() -> DomainImplementationEntry:
             "core/routes/operator.py — add new route or extract to core/routes/panel.py",
             "core/operator_surface.py — extend operator_snapshot() or add "
             "unified_panel_snapshot() method combining all state families",
-            "core/desktop_presence_runtime.py — expose tri-state lifecycle as "
-            "panel-fillable projection",
+            "core/desktop_presence_runtime.py — expose tri-state lifecycle as " "panel-fillable projection",
             "system_integration/state_machine_ui_integration.py — expose "
             "DORMANT/ISLAND/SIDESHEET/FULLAGENT as panel-fillable state",
         ],
@@ -810,7 +792,7 @@ def _review_unified_panel_aggregation() -> DomainImplementationEntry:
                 android_package="com.ufo.galaxy.runtime",
                 v2_evidence_ref="core.android_device_state_store",
                 description="Android runtime state absorbed into V2 DeviceStateSnapshot, "
-                            "then projected into OperatorSnapshot.android_ecosystem",
+                "then projected into OperatorSnapshot.android_ecosystem",
                 confirmed_via_v2=_try_import("core.android_device_state_store"),
             ),
         ],
@@ -839,72 +821,66 @@ def _review_desktop_three_state_existence_surface() -> DomainImplementationEntry
 
     # State family 1: Subject tri-state lifecycle (SILENT/LIMINAL/MANIFEST)
     dpr_ok = _try_import("core.desktop_presence_runtime")
-    anchors.append(CodeAnchor(
-        module_path="core.desktop_presence_runtime",
-        description="DesktopPresenceRuntime — tri-state subject lifecycle "
-                    "SILENT/LIMINAL/MANIFEST; single NL entry point handle_request()",
-        confirmed_importable=dpr_ok,
-        key_attribute="DesktopPresenceRuntime",
-    ))
+    anchors.append(
+        CodeAnchor(
+            module_path="core.desktop_presence_runtime",
+            description="DesktopPresenceRuntime — tri-state subject lifecycle "
+            "SILENT/LIMINAL/MANIFEST; single NL entry point handle_request()",
+            confirmed_importable=dpr_ok,
+            key_attribute="DesktopPresenceRuntime",
+        )
+    )
     if dpr_ok:
         established.append("core.desktop_presence_runtime importable — tri-state DPR present")
 
     if _source_contains("core.desktop_presence_runtime", "SILENT") and _source_contains(
         "core.desktop_presence_runtime", "LIMINAL"
     ):
-        established.append(
-            "SILENT/LIMINAL/MANIFEST tri-state lifecycle confirmed in "
-            "DesktopPresenceRuntime source"
-        )
+        established.append("SILENT/LIMINAL/MANIFEST tri-state lifecycle confirmed in " "DesktopPresenceRuntime source")
 
     if _test_file_exists("tests.test_pr1_desktop_presence_runtime"):
         established.append("DPR test suite present — tri-state lifecycle has test coverage")
 
     # State family 2: UI clothing states (DORMANT/ISLAND/SIDESHEET/FULLAGENT)
     smui_ok = _try_import("system_integration.state_machine_ui_integration")
-    anchors.append(CodeAnchor(
-        module_path="system_integration.state_machine_ui_integration",
-        description="UI clothing states DORMANT/ISLAND/SIDESHEET/FULLAGENT — "
-                    "desktop-visible UI state machine for shell presentation",
-        confirmed_importable=smui_ok,
-        key_attribute="DORMANT",
-    ))
+    anchors.append(
+        CodeAnchor(
+            module_path="system_integration.state_machine_ui_integration",
+            description="UI clothing states DORMANT/ISLAND/SIDESHEET/FULLAGENT — "
+            "desktop-visible UI state machine for shell presentation",
+            confirmed_importable=smui_ok,
+            key_attribute="DORMANT",
+        )
+    )
     if smui_ok:
-        established.append(
-            "system_integration.state_machine_ui_integration importable — "
-            "UI clothing states present"
-        )
+        established.append("system_integration.state_machine_ui_integration importable — " "UI clothing states present")
 
-    if smui_ok and _source_contains(
-        "system_integration.state_machine_ui_integration", "DORMANT"
-    ) and _source_contains(
-        "system_integration.state_machine_ui_integration", "FULLAGENT"
+    if (
+        smui_ok
+        and _source_contains("system_integration.state_machine_ui_integration", "DORMANT")
+        and _source_contains("system_integration.state_machine_ui_integration", "FULLAGENT")
     ):
-        established.append(
-            "DORMANT/ISLAND/SIDESHEET/FULLAGENT UI clothing states confirmed in source"
-        )
+        established.append("DORMANT/ISLAND/SIDESHEET/FULLAGENT UI clothing states confirmed in source")
 
     if _test_file_exists("tests.test_ui_shell_state_vocabulary_unification"):
         established.append("UI shell state vocabulary unification test present")
 
     # State family 3: Continuum posture (OpenClawd tri_state_phase)
     oc_ok = _try_import("core.openclawd")
-    anchors.append(CodeAnchor(
-        module_path="core.openclawd",
-        description="OpenClawd LLM function-calling subject core — carries continuum "
-                    "posture (tri_state_phase + runtime_domain)",
-        confirmed_importable=oc_ok,
-        key_attribute="OpenClawd",
-    ))
+    anchors.append(
+        CodeAnchor(
+            module_path="core.openclawd",
+            description="OpenClawd LLM function-calling subject core — carries continuum "
+            "posture (tri_state_phase + runtime_domain)",
+            confirmed_importable=oc_ok,
+            key_attribute="OpenClawd",
+        )
+    )
     if oc_ok:
         established.append("core.openclawd importable — continuum posture host present")
 
-    if _source_contains("core.openclawd", "tri_state_phase") or _source_contains(
-        "core.openclawd", "tristate"
-    ):
-        established.append(
-            "tri_state_phase / continuum posture confirmed in OpenClawd source"
-        )
+    if _source_contains("core.openclawd", "tri_state_phase") or _source_contains("core.openclawd", "tristate"):
+        established.append("tri_state_phase / continuum posture confirmed in OpenClawd source")
     else:
         partial.append(
             "tri_state_phase not confirmed in OpenClawd source via text scan — "
@@ -913,20 +889,24 @@ def _review_desktop_three_state_existence_surface() -> DomainImplementationEntry
 
     # PresenceDirector and PresenceProjection
     pd_ok = _try_import("core.presence.presence_director")
-    anchors.append(CodeAnchor(
-        module_path="core.presence.presence_director",
-        description="PresenceDirector — coordinates desktop-facing presence state",
-        confirmed_importable=pd_ok,
-    ))
+    anchors.append(
+        CodeAnchor(
+            module_path="core.presence.presence_director",
+            description="PresenceDirector — coordinates desktop-facing presence state",
+            confirmed_importable=pd_ok,
+        )
+    )
     if pd_ok:
         established.append("core.presence.presence_director importable")
 
     pp_ok = _try_import("core.presence.presence_projection")
-    anchors.append(CodeAnchor(
-        module_path="core.presence.presence_projection",
-        description="PresenceProjection — projects presence state for consumers",
-        confirmed_importable=pp_ok,
-    ))
+    anchors.append(
+        CodeAnchor(
+            module_path="core.presence.presence_projection",
+            description="PresenceProjection — projects presence state for consumers",
+            confirmed_importable=pp_ok,
+        )
+    )
     if pp_ok:
         established.append("core.presence.presence_projection importable")
 
@@ -937,8 +917,7 @@ def _review_desktop_three_state_existence_surface() -> DomainImplementationEntry
     # Session identity stamping (ingress_carrier_context)
     if _source_contains("core.desktop_presence_runtime", "ingress_carrier_context"):
         established.append(
-            "ingress_carrier_context stamped on handle_request() — session identity "
-            "present in e2e path"
+            "ingress_carrier_context stamped on handle_request() — session identity " "present in e2e path"
         )
 
     # e2e path session identity (control_session_id, runtime_attachment_session_id)
@@ -978,16 +957,11 @@ def _review_desktop_three_state_existence_surface() -> DomainImplementationEntry
         )
 
     # Is there any route that covers all three together?
-    if _source_contains("core.routes.projection", "SILENT") or _source_contains(
-        "core.routes.projection", "tri_state"
-    ):
-        established.append(
-            "/api/v1/projection/runtime exposes some tri-state lifecycle state"
-        )
+    if _source_contains("core.routes.projection", "SILENT") or _source_contains("core.routes.projection", "tri_state"):
+        established.append("/api/v1/projection/runtime exposes some tri-state lifecycle state")
     else:
         partial.append(
-            "/api/v1/projection/runtime may not expose subject tri-state lifecycle "
-            "directly — partial coverage only"
+            "/api/v1/projection/runtime may not expose subject tri-state lifecycle " "directly — partial coverage only"
         )
 
     follow_up = FollowUpPRSpec(
@@ -1002,8 +976,7 @@ def _review_desktop_three_state_existence_surface() -> DomainImplementationEntry
             "state as a projection-friendly snapshot method",
             "system_integration/state_machine_ui_integration.py — expose "
             "current UI clothing state as a read-only snapshot",
-            "core/openclawd.py — expose continuum posture (tri_state_phase) as a "
-            "read-only snapshot method",
+            "core/openclawd.py — expose continuum posture (tri_state_phase) as a " "read-only snapshot method",
             "core/routes/projection.py — extend /api/v1/projection/runtime to "
             "include all three state families, or add new endpoint",
         ],
@@ -1027,8 +1000,7 @@ def _review_desktop_three_state_existence_surface() -> DomainImplementationEntry
             "Prerequisite for meaningful operator actionability on desktop state."
         ),
         estimated_scope=(
-            "1 new module (desktop_existence_surface.py) + changes to 3 existing "
-            "modules + 1 test file"
+            "1 new module (desktop_existence_surface.py) + changes to 3 existing " "modules + 1 test file"
         ),
         invariant_that_would_close=(
             "assert_five_domain_invariants(): "
@@ -1060,11 +1032,10 @@ def _review_desktop_three_state_existence_surface() -> DomainImplementationEntry
             AndroidCodeAnchor(
                 android_package="com.ufo.galaxy.service",
                 v2_evidence_ref=(
-                    "galaxy_gateway.android.handlers.vision — Android vision "
-                    "uplink contributes to presence signal"
+                    "galaxy_gateway.android.handlers.vision — Android vision " "uplink contributes to presence signal"
                 ),
                 description="Android service layer contributes runtime carrier-side "
-                            "presence signal via vision uplink to V2",
+                "presence signal via vision uplink to V2",
                 confirmed_via_v2=_try_import("galaxy_gateway.android.handlers.vision"),
             ),
         ],
@@ -1095,25 +1066,26 @@ def _review_operator_actionability() -> DomainImplementationEntry:
 
     # Operator surface — confirmed read-only
     os_ok = _try_import("core.operator_surface")
-    anchors.append(CodeAnchor(
-        module_path="core.operator_surface",
-        description="OperatorSurface — read-only projection surface; "
-                    "enforces projection-only principle",
-        confirmed_importable=os_ok,
-        key_attribute="OPERATOR_SURFACE_PROJECTION_POLICY",
-    ))
-    if os_ok:
-        established.append(
-            "core.operator_surface importable — read-only projection principle confirmed"
+    anchors.append(
+        CodeAnchor(
+            module_path="core.operator_surface",
+            description="OperatorSurface — read-only projection surface; " "enforces projection-only principle",
+            confirmed_importable=os_ok,
+            key_attribute="OPERATOR_SURFACE_PROJECTION_POLICY",
         )
+    )
+    if os_ok:
+        established.append("core.operator_surface importable — read-only projection principle confirmed")
 
     # Operator routes
     or_ok = _try_import("core.routes.operator")
-    anchors.append(CodeAnchor(
-        module_path="core.routes.operator",
-        description="HTTP routes for /api/v1/operator/* — all GET, no POST action endpoints",
-        confirmed_importable=or_ok,
-    ))
+    anchors.append(
+        CodeAnchor(
+            module_path="core.routes.operator",
+            description="HTTP routes for /api/v1/operator/* — all GET, no POST action endpoints",
+            confirmed_importable=or_ok,
+        )
+    )
     if or_ok:
         established.append("core.routes.operator importable")
 
@@ -1124,8 +1096,7 @@ def _review_operator_actionability() -> DomainImplementationEntry:
         or _source_contains("core.operator_surface", "projection-only")
     ):
         established.append(
-            "OperatorSurface explicitly documented as read-only / projection-only "
-            "in source — this is by design"
+            "OperatorSurface explicitly documented as read-only / projection-only " "in source — this is by design"
         )
 
     # Confirm no *panel-level* action endpoints in operator routes.
@@ -1151,13 +1122,15 @@ def _review_operator_actionability() -> DomainImplementationEntry:
 
     # Action-capable surfaces (not operator panel)
     chat_ok = _try_import("core.routes.chat")
-    anchors.append(CodeAnchor(
-        module_path="core.routes.chat",
-        description="/api/v1/chat — action-capable NL entry point; POST triggers "
-                    "full execution via DesktopPresenceRuntime",
-        confirmed_importable=chat_ok,
-        key_attribute="CHAT_ROUTES_AUTHORITY",
-    ))
+    anchors.append(
+        CodeAnchor(
+            module_path="core.routes.chat",
+            description="/api/v1/chat — action-capable NL entry point; POST triggers "
+            "full execution via DesktopPresenceRuntime",
+            confirmed_importable=chat_ok,
+            key_attribute="CHAT_ROUTES_AUTHORITY",
+        )
+    )
     if chat_ok:
         established.append(
             "core.routes.chat importable — /api/v1/chat is the action-capable surface "
@@ -1174,46 +1147,47 @@ def _review_operator_actionability() -> DomainImplementationEntry:
 
     # SourceDispatchOrchestrator — canonical dispatch
     sdo_ok = _try_import("core.runtime.source_dispatch_orchestrator")
-    anchors.append(CodeAnchor(
-        module_path="core.runtime.source_dispatch_orchestrator",
-        description="SourceDispatchOrchestrator — canonical orchestration dispatch; "
-                    "_score_candidate() consumes Android truth for routing",
-        confirmed_importable=sdo_ok,
-        key_attribute="_score_candidate",
-    ))
+    anchors.append(
+        CodeAnchor(
+            module_path="core.runtime.source_dispatch_orchestrator",
+            description="SourceDispatchOrchestrator — canonical orchestration dispatch; "
+            "_score_candidate() consumes Android truth for routing",
+            confirmed_importable=sdo_ok,
+            key_attribute="_score_candidate",
+        )
+    )
     if sdo_ok:
         established.append(
-            "core.runtime.source_dispatch_orchestrator importable — "
-            "canonical orchestration dispatch present"
+            "core.runtime.source_dispatch_orchestrator importable — " "canonical orchestration dispatch present"
         )
 
     # DeviceRouter — gateway action routing
     dr_ok = _try_import("galaxy_gateway.device_router")
-    anchors.append(CodeAnchor(
-        module_path="galaxy_gateway.device_router",
-        description="DeviceRouter — gateway routing authority; routes dispatch to "
-                    "Android execution targets",
-        confirmed_importable=dr_ok,
-        key_attribute="DeviceRouter",
-    ))
-    if dr_ok:
-        established.append(
-            "galaxy_gateway.device_router importable — gateway routing authority present"
+    anchors.append(
+        CodeAnchor(
+            module_path="galaxy_gateway.device_router",
+            description="DeviceRouter — gateway routing authority; routes dispatch to " "Android execution targets",
+            confirmed_importable=dr_ok,
+            key_attribute="DeviceRouter",
         )
+    )
+    if dr_ok:
+        established.append("galaxy_gateway.device_router importable — gateway routing authority present")
 
     # CapabilityRegistry — write authority (action-capable for registration)
     cr_ok = _try_import_with_attr("core.agent.capability_registry", "CapabilityRegistry")
-    anchors.append(CodeAnchor(
-        module_path="core.agent.capability_registry",
-        description="CapabilityRegistry — canonical capability write authority; "
-                    "CapabilityResolver — canonical read path for routing decisions",
-        confirmed_importable=cr_ok,
-        key_attribute="CapabilityRegistry",
-    ))
+    anchors.append(
+        CodeAnchor(
+            module_path="core.agent.capability_registry",
+            description="CapabilityRegistry — canonical capability write authority; "
+            "CapabilityResolver — canonical read path for routing decisions",
+            confirmed_importable=cr_ok,
+            key_attribute="CapabilityRegistry",
+        )
+    )
     if cr_ok:
         established.append(
-            "core.agent.capability_registry — CapabilityRegistry (write) + "
-            "CapabilityResolver (read) both present"
+            "core.agent.capability_registry — CapabilityRegistry (write) + " "CapabilityResolver (read) both present"
         )
 
     # CRITICAL GAP: operator panel cannot trigger actions directly
@@ -1258,8 +1232,7 @@ def _review_operator_actionability() -> DomainImplementationEntry:
             "Prerequisite for meaningful operator-driven automation."
         ),
         estimated_scope=(
-            "1 new contract dataclass + changes to operator routes + "
-            "operator_surface extension + 1 test file"
+            "1 new contract dataclass + changes to operator routes + " "operator_surface extension + 1 test file"
         ),
         invariant_that_would_close=(
             "assert_five_domain_invariants(): "
@@ -1292,10 +1265,8 @@ def _review_operator_actionability() -> DomainImplementationEntry:
                 android_package="com.ufo.galaxy.runtime",
                 v2_evidence_ref="tests.test_orchestration_consumes_android_truth",
                 description="Android runtime truth consumed by V2 orchestration routing "
-                            "(_score_candidate) — decision-consumed path confirmed",
-                confirmed_via_v2=_test_file_exists(
-                    "tests.test_orchestration_consumes_android_truth"
-                ),
+                "(_score_candidate) — decision-consumed path confirmed",
+                confirmed_via_v2=_test_file_exists("tests.test_orchestration_consumes_android_truth"),
             ),
         ],
         overclaiming_guard=(
@@ -1325,33 +1296,33 @@ def _review_natural_language_canonical_path() -> DomainImplementationEntry:
 
     # NL ingress: /api/v1/chat → DesktopPresenceRuntime
     chat_ok = _try_import("core.routes.chat")
-    anchors.append(CodeAnchor(
-        module_path="core.routes.chat",
-        description="/api/v1/chat — NL ingress surface; POST routes to "
-                    "DesktopPresenceRuntime.handle_request()",
-        confirmed_importable=chat_ok,
-        key_attribute="CHAT_ROUTES_AUTHORITY",
-    ))
-    if chat_ok:
-        established.append(
-            "core.routes.chat importable — /api/v1/chat NL ingress surface present"
+    anchors.append(
+        CodeAnchor(
+            module_path="core.routes.chat",
+            description="/api/v1/chat — NL ingress surface; POST routes to " "DesktopPresenceRuntime.handle_request()",
+            confirmed_importable=chat_ok,
+            key_attribute="CHAT_ROUTES_AUTHORITY",
         )
+    )
+    if chat_ok:
+        established.append("core.routes.chat importable — /api/v1/chat NL ingress surface present")
 
     if chat_ok and _source_contains("core.routes.chat", "DesktopPresenceRuntime"):
         established.append(
-            "chat route confirmed to delegate to DesktopPresenceRuntime — "
-            "NL chain entry point wired correctly"
+            "chat route confirmed to delegate to DesktopPresenceRuntime — " "NL chain entry point wired correctly"
         )
 
     # DesktopPresenceRuntime — canonical NL shell
     dpr_ok = _try_import("core.desktop_presence_runtime")
-    anchors.append(CodeAnchor(
-        module_path="core.desktop_presence_runtime",
-        description="DesktopPresenceRuntime — tri-state lifecycle shell for all NL "
-                    "adapter surfaces; handle_request() is the canonical NL entry",
-        confirmed_importable=dpr_ok,
-        key_attribute="handle_request",
-    ))
+    anchors.append(
+        CodeAnchor(
+            module_path="core.desktop_presence_runtime",
+            description="DesktopPresenceRuntime — tri-state lifecycle shell for all NL "
+            "adapter surfaces; handle_request() is the canonical NL entry",
+            confirmed_importable=dpr_ok,
+            key_attribute="handle_request",
+        )
+    )
     if dpr_ok:
         established.append("core.desktop_presence_runtime importable")
 
@@ -1370,64 +1341,58 @@ def _review_natural_language_canonical_path() -> DomainImplementationEntry:
 
     if dpr_ok and _source_contains("core.desktop_presence_runtime", "control_session_id"):
         established.append(
-            "control_session_id threaded through _handle_via_e2e — "
-            "session identity present in NL canonical path"
+            "control_session_id threaded through _handle_via_e2e — " "session identity present in NL canonical path"
         )
 
     # OpenClawd — LLM function-calling decision core
     oc_ok = _try_import("core.openclawd")
-    anchors.append(CodeAnchor(
-        module_path="core.openclawd",
-        description="OpenClawd — LLM function-calling subject core; process() drives "
-                    "decision-making from NL input via LLM",
-        confirmed_importable=oc_ok,
-        key_attribute="process",
-    ))
+    anchors.append(
+        CodeAnchor(
+            module_path="core.openclawd",
+            description="OpenClawd — LLM function-calling subject core; process() drives "
+            "decision-making from NL input via LLM",
+            confirmed_importable=oc_ok,
+            key_attribute="process",
+        )
+    )
     if oc_ok:
         established.append("core.openclawd importable — LLM function-calling core present")
 
     if oc_ok and _source_contains("core.openclawd", "process"):
-        established.append(
-            "OpenClawd.process() confirmed — LLM-driven NL decision method present"
-        )
+        established.append("OpenClawd.process() confirmed — LLM-driven NL decision method present")
 
     if oc_ok and (
-        _source_contains("core.openclawd", "function calling")
-        or _source_contains("core.openclawd", "function_call")
+        _source_contains("core.openclawd", "function calling") or _source_contains("core.openclawd", "function_call")
     ):
-        established.append(
-            "OpenClawd uses LLM function calling — NL-to-tool orchestration confirmed"
-        )
+        established.append("OpenClawd uses LLM function calling — NL-to-tool orchestration confirmed")
 
     # AI intent classification
     ai_ok = _try_import("core.ai_intent")
-    anchors.append(CodeAnchor(
-        module_path="core.ai_intent",
-        description="core.ai_intent — task intent classification from NL input",
-        confirmed_importable=ai_ok,
-    ))
+    anchors.append(
+        CodeAnchor(
+            module_path="core.ai_intent",
+            description="core.ai_intent — task intent classification from NL input",
+            confirmed_importable=ai_ok,
+        )
+    )
     if ai_ok:
         established.append("core.ai_intent importable — NL intent classification present")
 
     # Multi-LLM router
-    llm_router_ok = _try_import("core.multi_llm_router") or _try_import(
-        "core.unified.llm_router"
-    )
+    llm_router_ok = _try_import("core.multi_llm_router") or _try_import("core.unified.llm_router")
     if llm_router_ok:
-        established.append(
-            "LLM router importable — multi-LLM backend routing present for NL processing"
+        established.append("LLM router importable — multi-LLM backend routing present for NL processing")
+        anchors.append(
+            CodeAnchor(
+                module_path="core.multi_llm_router",
+                description="Multi-LLM router — routes NL input to configured LLM backends",
+                confirmed_importable=True,
+            )
         )
-        anchors.append(CodeAnchor(
-            module_path="core.multi_llm_router",
-            description="Multi-LLM router — routes NL input to configured LLM backends",
-            confirmed_importable=True,
-        ))
 
     # Android vision ingress (NL-adjacent: vision → NL chain)
     vision_ok = _try_import("galaxy_gateway.android.handlers.vision")
-    if vision_ok and _source_contains(
-        "galaxy_gateway.android.handlers.vision", "DesktopPresenceRuntime"
-    ):
+    if vision_ok and _source_contains("galaxy_gateway.android.handlers.vision", "DesktopPresenceRuntime"):
         established.append(
             "Android vision handler confirmed to delegate to DesktopPresenceRuntime — "
             "all carrier paths (android_vision, vision_sampler, compat_ws_chat) "
@@ -1436,16 +1401,17 @@ def _review_natural_language_canonical_path() -> DomainImplementationEntry:
 
     # Source dispatch orchestrator — downstream execution
     sdo_ok = _try_import("core.runtime.source_dispatch_orchestrator")
-    anchors.append(CodeAnchor(
-        module_path="core.runtime.source_dispatch_orchestrator",
-        description="SourceDispatchOrchestrator — NL decision output dispatched here; "
-                    "_score_candidate() routes to Android or local execution",
-        confirmed_importable=sdo_ok,
-    ))
+    anchors.append(
+        CodeAnchor(
+            module_path="core.runtime.source_dispatch_orchestrator",
+            description="SourceDispatchOrchestrator — NL decision output dispatched here; "
+            "_score_candidate() routes to Android or local execution",
+            confirmed_importable=sdo_ok,
+        )
+    )
     if sdo_ok:
         established.append(
-            "core.runtime.source_dispatch_orchestrator importable — "
-            "NL dispatch chain downstream confirmed"
+            "core.runtime.source_dispatch_orchestrator importable — " "NL dispatch chain downstream confirmed"
         )
 
     # CRITICAL GAP: No CI test proves real LLM backend end-to-end processing
@@ -1493,8 +1459,7 @@ def _review_natural_language_canonical_path() -> DomainImplementationEntry:
             "LLM stub → action dispatch → result feedback",
             "core/desktop_presence_runtime.py — ensure ingress_carrier_context "
             "is assertable in test (may already be present)",
-            "core/openclawd.py — expose or stub process() for contract testing "
-            "without real LLM API key",
+            "core/openclawd.py — expose or stub process() for contract testing " "without real LLM API key",
         ],
         primary_modification_zones=[
             "tests/integration/ — new NL e2e test module",
@@ -1502,8 +1467,7 @@ def _review_natural_language_canonical_path() -> DomainImplementationEntry:
             "conftest.py or tests/integration/conftest.py — LLM contract stub fixture",
         ],
         new_modules_to_create=[
-            "tests/integration/test_nl_e2e_canonical_path.py — "
-            "canonical NL path CI proof",
+            "tests/integration/test_nl_e2e_canonical_path.py — " "canonical NL path CI proof",
             "tests/integration/stubs/llm_contract_stub.py — minimal LLM contract "
             "stub that returns typed function-call responses without real API",
         ],
@@ -1515,10 +1479,7 @@ def _review_natural_language_canonical_path() -> DomainImplementationEntry:
             "Prerequisite for multimodal e2e proof (NL path must be proven before "
             "multimodal additions are layered on top)."
         ),
-        estimated_scope=(
-            "1 new integration test file + LLM stub fixture + "
-            "minor audit trail additions to DPR"
-        ),
+        estimated_scope=("1 new integration test file + LLM stub fixture + " "minor audit trail additions to DPR"),
         invariant_that_would_close=(
             "assert_five_domain_invariants(): "
             "NATURAL_LANGUAGE_CANONICAL_PATH domain would upgrade from "
@@ -1532,8 +1493,7 @@ def _review_natural_language_canonical_path() -> DomainImplementationEntry:
         "tristate, runtime_session_id, and panel-aggregation integration all "
         "machine-verified."
         if nl_e2e_found
-        else "Gap: no CI test exercises a real or contract-verified LLM backend "
-             "end-to-end roundtrip."
+        else "Gap: no CI test exercises a real or contract-verified LLM backend " "end-to-end roundtrip."
     )
     _overclaiming_guard = (
         "NL canonical path is CI-proven end-to-end via "
@@ -1559,9 +1519,7 @@ def _review_natural_language_canonical_path() -> DomainImplementationEntry:
     return DomainImplementationEntry(
         domain=ReviewDomain.NATURAL_LANGUAGE_CANONICAL_PATH,
         evidence_strength=(
-            EvidenceStrength.RUNTIME_EVIDENCED_CLOSED
-            if nl_e2e_found
-            else EvidenceStrength.PARTIALLY_ESTABLISHED
+            EvidenceStrength.RUNTIME_EVIDENCED_CLOSED if nl_e2e_found else EvidenceStrength.PARTIALLY_ESTABLISHED
         ),
         canonical_path_summary=(
             "Canonical NL path confirmed in real code: "
@@ -1573,8 +1531,7 @@ def _review_natural_language_canonical_path() -> DomainImplementationEntry:
             "All modules importable; structural chain is correct and non-trivial. "
             "All carrier paths (android_vision, vision_sampler, compat_ws_chat) "
             "converge at DesktopPresenceRuntime.handle_request(). "
-            "Session identity (ingress_carrier_context, control_session_id) present. "
-            + _ci_suffix
+            "Session identity (ingress_carrier_context, control_session_id) present. " + _ci_suffix
         ),
         established_items=established,
         partial_or_fragmented_items=partial,
@@ -1585,7 +1542,7 @@ def _review_natural_language_canonical_path() -> DomainImplementationEntry:
                 android_package="com.ufo.galaxy.nlp",
                 v2_evidence_ref="galaxy_gateway.android.handlers.vision",
                 description="Android NLP/vision processing; results uplinked to V2 "
-                            "galaxy_gateway which routes to DesktopPresenceRuntime",
+                "galaxy_gateway which routes to DesktopPresenceRuntime",
                 confirmed_via_v2=_try_import("galaxy_gateway.android.handlers.vision"),
             ),
         ],
@@ -1608,46 +1565,51 @@ def _review_multimodal_canonical_path() -> DomainImplementationEntry:
 
     # Continuous host ingress bus (ambient perception)
     ingest_ok = _try_import("core.multimodal.ingest_runtime")
-    anchors.append(CodeAnchor(
-        module_path="core.multimodal.ingest_runtime",
-        description="MultimodalIngestRuntime — continuous host perception bus; "
-                    "config-gated (disabled by SAFE_DEFAULT)",
-        confirmed_importable=ingest_ok,
-    ))
+    anchors.append(
+        CodeAnchor(
+            module_path="core.multimodal.ingest_runtime",
+            description="MultimodalIngestRuntime — continuous host perception bus; "
+            "config-gated (disabled by SAFE_DEFAULT)",
+            confirmed_importable=ingest_ok,
+        )
+    )
     if ingest_ok:
         established.append(
-            "core.multimodal.ingest_runtime importable — continuous host perception "
-            "bus infrastructure present"
+            "core.multimodal.ingest_runtime importable — continuous host perception " "bus infrastructure present"
         )
 
     ingress_ok = _try_import("core.multimodal.ingress_bus")
-    anchors.append(CodeAnchor(
-        module_path="core.multimodal.ingress_bus",
-        description="MultimodalIngressBus — ambient multimodal signal ingress bus",
-        confirmed_importable=ingress_ok,
-        key_attribute="MultimodalIngressBus",
-    ))
-    if ingress_ok:
-        established.append(
-            "core.multimodal.ingress_bus importable — MultimodalIngressBus present"
+    anchors.append(
+        CodeAnchor(
+            module_path="core.multimodal.ingress_bus",
+            description="MultimodalIngressBus — ambient multimodal signal ingress bus",
+            confirmed_importable=ingress_ok,
+            key_attribute="MultimodalIngressBus",
         )
+    )
+    if ingress_ok:
+        established.append("core.multimodal.ingress_bus importable — MultimodalIngressBus present")
 
     # Perception frame and source registry
     pf_ok = _try_import("core.multimodal.perception_frame")
-    anchors.append(CodeAnchor(
-        module_path="core.multimodal.perception_frame",
-        description="PerceptionFrame — typed multimodal perception signal carrier",
-        confirmed_importable=pf_ok,
-    ))
+    anchors.append(
+        CodeAnchor(
+            module_path="core.multimodal.perception_frame",
+            description="PerceptionFrame — typed multimodal perception signal carrier",
+            confirmed_importable=pf_ok,
+        )
+    )
     if pf_ok:
         established.append("core.multimodal.perception_frame importable")
 
     psr_ok = _try_import("core.multimodal.perception_source_registry")
-    anchors.append(CodeAnchor(
-        module_path="core.multimodal.perception_source_registry",
-        description="PerceptionSourceRegistry — registry of active perception sources",
-        confirmed_importable=psr_ok,
-    ))
+    anchors.append(
+        CodeAnchor(
+            module_path="core.multimodal.perception_source_registry",
+            description="PerceptionSourceRegistry — registry of active perception sources",
+            confirmed_importable=psr_ok,
+        )
+    )
     if psr_ok:
         established.append("core.multimodal.perception_source_registry importable")
 
@@ -1658,46 +1620,48 @@ def _review_multimodal_canonical_path() -> DomainImplementationEntry:
             "OpenClawd.process() accepts multimodal_context — request-bound "
             "multimodal payload fusion path confirmed in source"
         )
-        anchors.append(CodeAnchor(
-            module_path="core.openclawd",
-            description="OpenClawd — accepts multimodal_context for request-bound "
-                        "multimodal signal fusion; path to LLM decision",
-            confirmed_importable=oc_ok,
-            key_attribute="multimodal_context",
-        ))
+        anchors.append(
+            CodeAnchor(
+                module_path="core.openclawd",
+                description="OpenClawd — accepts multimodal_context for request-bound "
+                "multimodal signal fusion; path to LLM decision",
+                confirmed_importable=oc_ok,
+                key_attribute="multimodal_context",
+            )
+        )
 
     if oc_ok and (
-        _source_contains("core.openclawd", "MultimodalBus")
-        or _source_contains("core.openclawd", "multimodal_bus")
+        _source_contains("core.openclawd", "MultimodalBus") or _source_contains("core.openclawd", "multimodal_bus")
     ):
         established.append(
-            "OpenClawd references MultimodalBus for ingest fusion — "
-            "multimodal signal can influence LLM processing"
+            "OpenClawd references MultimodalBus for ingest fusion — " "multimodal signal can influence LLM processing"
         )
 
     # Vision pipeline
     vp_ok = _try_import("core.vision_pipeline")
-    anchors.append(CodeAnchor(
-        module_path="core.vision_pipeline",
-        description="VisionPipeline — visual processing / grounding pipeline",
-        confirmed_importable=vp_ok,
-    ))
+    anchors.append(
+        CodeAnchor(
+            module_path="core.vision_pipeline",
+            description="VisionPipeline — visual processing / grounding pipeline",
+            confirmed_importable=vp_ok,
+        )
+    )
     if vp_ok:
         established.append("core.vision_pipeline importable — visual processing present")
 
     # Multimodal runtime profile (SAFE_DEFAULT — disabled by default)
     mrp_ok = _try_import("core.multimodal_runtime_profile")
-    anchors.append(CodeAnchor(
-        module_path="core.multimodal_runtime_profile",
-        description="MultimodalRuntimeProfile — SAFE_DEFAULT disables continuous "
-                    "host perception ingest; config-gated activation",
-        confirmed_importable=mrp_ok,
-        key_attribute="SAFE_DEFAULT",
-    ))
-    if mrp_ok:
-        established.append(
-            "core.multimodal_runtime_profile importable — SAFE_DEFAULT profile present"
+    anchors.append(
+        CodeAnchor(
+            module_path="core.multimodal_runtime_profile",
+            description="MultimodalRuntimeProfile — SAFE_DEFAULT disables continuous "
+            "host perception ingest; config-gated activation",
+            confirmed_importable=mrp_ok,
+            key_attribute="SAFE_DEFAULT",
         )
+    )
+    if mrp_ok:
+        established.append("core.multimodal_runtime_profile importable — SAFE_DEFAULT profile present")
 
     if mrp_ok and _source_contains("core.multimodal_runtime_profile", "SAFE_DEFAULT"):
         established.append(
@@ -1714,16 +1678,17 @@ def _review_multimodal_canonical_path() -> DomainImplementationEntry:
 
     # Android vision uplink
     vision_handler_ok = _try_import("galaxy_gateway.android.handlers.vision")
-    anchors.append(CodeAnchor(
-        module_path="galaxy_gateway.android.handlers.vision",
-        description="Android vision uplink handler — receives Android vision frames "
-                    "and routes them into V2 multimodal pipeline",
-        confirmed_importable=vision_handler_ok,
-    ))
+    anchors.append(
+        CodeAnchor(
+            module_path="galaxy_gateway.android.handlers.vision",
+            description="Android vision uplink handler — receives Android vision frames "
+            "and routes them into V2 multimodal pipeline",
+            confirmed_importable=vision_handler_ok,
+        )
+    )
     if vision_handler_ok:
         established.append(
-            "galaxy_gateway.android.handlers.vision importable — Android vision "
-            "uplink handler present"
+            "galaxy_gateway.android.handlers.vision importable — Android vision " "uplink handler present"
         )
 
     # MobileVLM and SeeClick presence in DeviceStateSnapshot
@@ -1738,9 +1703,7 @@ def _review_multimodal_canonical_path() -> DomainImplementationEntry:
             "model presence confirmed on Android side"
         )
     if _source_contains("core.android_device_state_store", "mobilevlm_checksum_ok"):
-        established.append(
-            "mobilevlm_checksum_ok field confirmed — model integrity tracking present"
-        )
+        established.append("mobilevlm_checksum_ok field confirmed — model integrity tracking present")
 
     # CRITICAL GAP: Continuous ingest disabled by default + no e2e CI test
     mm_e2e_test_candidates = [
@@ -1793,8 +1756,7 @@ def _review_multimodal_canonical_path() -> DomainImplementationEntry:
             "core/openclawd.py — multimodal_context test path",
         ],
         new_modules_to_create=[
-            "tests/integration/test_multimodal_canonical_path.py — "
-            "canonical multimodal path CI proof",
+            "tests/integration/test_multimodal_canonical_path.py — " "canonical multimodal path CI proof",
             "tests/integration/stubs/multimodal_perception_stub.py — "
             "minimal perception stub for multimodal_context injection",
         ],
@@ -1838,8 +1800,7 @@ def _review_multimodal_canonical_path() -> DomainImplementationEntry:
             "vision.py); mobilevlm_present / seeclick_present tracked in "
             "DeviceStateSnapshot. "
             + (
-                "Request-bound path is CI-proven end-to-end via "
-                "tests/integration/test_multimodal_canonical_path.py."
+                "Request-bound path is CI-proven end-to-end via " "tests/integration/test_multimodal_canonical_path.py."
                 if mm_e2e_found
                 else "Neither path is CI-proven end-to-end."
             )
@@ -1853,25 +1814,21 @@ def _review_multimodal_canonical_path() -> DomainImplementationEntry:
                 android_package="com.ufo.galaxy.inference",
                 v2_evidence_ref="core.android_device_state_store (mobilevlm_present)",
                 description="Android MobileVLM inference engine — presence tracked "
-                            "in V2 DeviceStateSnapshot.mobilevlm_present field",
-                confirmed_via_v2=_source_contains(
-                    "core.android_device_state_store", "mobilevlm_present"
-                ),
+                "in V2 DeviceStateSnapshot.mobilevlm_present field",
+                confirmed_via_v2=_source_contains("core.android_device_state_store", "mobilevlm_present"),
             ),
             AndroidCodeAnchor(
                 android_package="com.ufo.galaxy.grounding",
                 v2_evidence_ref="core.android_device_state_store (seeclick_present)",
                 description="Android SeeClick grounding model — presence tracked "
-                            "in V2 DeviceStateSnapshot.seeclick_present field",
-                confirmed_via_v2=_source_contains(
-                    "core.android_device_state_store", "seeclick_present"
-                ),
+                "in V2 DeviceStateSnapshot.seeclick_present field",
+                confirmed_via_v2=_source_contains("core.android_device_state_store", "seeclick_present"),
             ),
             AndroidCodeAnchor(
                 android_package="com.ufo.galaxy.network (vision uplink)",
                 v2_evidence_ref="galaxy_gateway.android.handlers.vision",
                 description="Android vision frame uplink handler in V2 galaxy_gateway; "
-                            "routes Android vision frames into V2 multimodal pipeline",
+                "routes Android vision frames into V2 multimodal pipeline",
                 confirmed_via_v2=_try_import("galaxy_gateway.android.handlers.vision"),
             ),
         ],
@@ -1923,11 +1880,7 @@ def build_five_domain_review() -> ImplementationReviewPackage:
         _review_multimodal_canonical_path(),
     ]
 
-    follow_up_sequence = [
-        entry.follow_up_pr_spec
-        for entry in domain_entries
-        if entry.follow_up_pr_spec is not None
-    ]
+    follow_up_sequence = [entry.follow_up_pr_spec for entry in domain_entries if entry.follow_up_pr_spec is not None]
 
     below_threshold = _compute_domains_below_threshold(domain_entries)
 
@@ -2047,9 +2000,7 @@ def assert_five_domain_invariants(
         package = get_five_domain_review()
 
     # INV-1: Must have exactly 5 domain entries
-    assert len(package.domain_entries) == 5, (
-        f"INV-1 FAIL: Expected 5 domain entries; got {len(package.domain_entries)}"
-    )
+    assert len(package.domain_entries) == 5, f"INV-1 FAIL: Expected 5 domain entries; got {len(package.domain_entries)}"
 
     # INV-2: All ReviewDomain values must be covered
     covered = {e.domain for e in package.domain_entries}
@@ -2058,49 +2009,39 @@ def assert_five_domain_invariants(
 
     # INV-3: Each domain entry must have at least 1 code anchor
     for entry in package.domain_entries:
-        assert len(entry.current_code_anchors) >= 1, (
-            f"INV-3 FAIL: Domain {entry.domain} has no code anchors"
-        )
+        assert len(entry.current_code_anchors) >= 1, f"INV-3 FAIL: Domain {entry.domain} has no code anchors"
 
     # INV-4: Each domain entry must have a non-empty overclaiming guard
     for entry in package.domain_entries:
-        assert len(entry.overclaiming_guard) > 0, (
-            f"INV-4 FAIL: Domain {entry.domain} has empty overclaiming_guard"
-        )
+        assert len(entry.overclaiming_guard) > 0, f"INV-4 FAIL: Domain {entry.domain} has empty overclaiming_guard"
 
     # INV-5: Each domain entry must have a follow-up PR spec
     for entry in package.domain_entries:
-        assert entry.follow_up_pr_spec is not None, (
-            f"INV-5 FAIL: Domain {entry.domain} has no follow_up_pr_spec"
-        )
+        assert entry.follow_up_pr_spec is not None, f"INV-5 FAIL: Domain {entry.domain} has no follow_up_pr_spec"
 
     # INV-6: Each FollowUpPRSpec must have non-empty cut points
     for entry in package.domain_entries:
         spec = entry.follow_up_pr_spec
         assert spec is not None  # already checked in INV-5
-        assert len(spec.implementation_cut_points) >= 1, (
-            f"INV-6 FAIL: Domain {entry.domain} follow-up PR has no cut points"
-        )
+        assert (
+            len(spec.implementation_cut_points) >= 1
+        ), f"INV-6 FAIL: Domain {entry.domain} follow-up PR has no cut points"
 
     # INV-7: Each FollowUpPRSpec must have non-empty maturity_level_unlocked
     for entry in package.domain_entries:
         spec = entry.follow_up_pr_spec
         assert spec is not None
-        assert len(spec.maturity_level_unlocked) > 0, (
-            f"INV-7 FAIL: Domain {entry.domain} follow-up PR has empty maturity unlock"
-        )
+        assert (
+            len(spec.maturity_level_unlocked) > 0
+        ), f"INV-7 FAIL: Domain {entry.domain} follow-up PR has empty maturity unlock"
 
     # INV-8: follow_up_pr_sequence must have exactly 5 entries
     assert len(package.follow_up_pr_sequence) == 5, (
-        f"INV-8 FAIL: Expected 5 follow-up PRs in sequence; "
-        f"got {len(package.follow_up_pr_sequence)}"
+        f"INV-8 FAIL: Expected 5 follow-up PRs in sequence; " f"got {len(package.follow_up_pr_sequence)}"
     )
 
     # INV-9: MULTIMODAL domain must be <= PARTIALLY_ESTABLISHED
-    multimodal_entry = next(
-        e for e in package.domain_entries
-        if e.domain == ReviewDomain.MULTIMODAL_CANONICAL_PATH
-    )
+    multimodal_entry = next(e for e in package.domain_entries if e.domain == ReviewDomain.MULTIMODAL_CANONICAL_PATH)
     strong_labels = {
         EvidenceStrength.STRONGLY_ESTABLISHED,
         EvidenceStrength.RUNTIME_EVIDENCED_CLOSED,
@@ -2112,23 +2053,15 @@ def assert_five_domain_invariants(
     )
 
     # INV-10: OPERATOR_ACTIONABILITY must be <= PARTIALLY_ESTABLISHED
-    operator_entry = next(
-        e for e in package.domain_entries
-        if e.domain == ReviewDomain.OPERATOR_ACTIONABILITY
-    )
+    operator_entry = next(e for e in package.domain_entries if e.domain == ReviewDomain.OPERATOR_ACTIONABILITY)
     assert operator_entry.evidence_strength not in strong_labels, (
-        f"INV-10 FAIL: OPERATOR_ACTIONABILITY must NOT be overclaimed; "
-        f"got {operator_entry.evidence_strength}"
+        f"INV-10 FAIL: OPERATOR_ACTIONABILITY must NOT be overclaimed; " f"got {operator_entry.evidence_strength}"
     )
 
     # INV-11: UNIFIED_PANEL_AGGREGATION must be <= PARTIALLY_ESTABLISHED
-    panel_entry = next(
-        e for e in package.domain_entries
-        if e.domain == ReviewDomain.UNIFIED_PANEL_AGGREGATION
-    )
+    panel_entry = next(e for e in package.domain_entries if e.domain == ReviewDomain.UNIFIED_PANEL_AGGREGATION)
     assert panel_entry.evidence_strength not in strong_labels, (
-        f"INV-11 FAIL: UNIFIED_PANEL_AGGREGATION must NOT be overclaimed; "
-        f"got {panel_entry.evidence_strength}"
+        f"INV-11 FAIL: UNIFIED_PANEL_AGGREGATION must NOT be overclaimed; " f"got {panel_entry.evidence_strength}"
     )
 
     # INV-12: domains_at_partially_established_or_below must be consistent with entries
@@ -2140,28 +2073,22 @@ def assert_five_domain_invariants(
     )
 
     # INV-13: authority sentinel must contain canonical token
-    assert "FIVE_DOMAIN_IMPLEMENTATION_REVIEW_AUTHORITY" in package.authority, (
-        "INV-13 FAIL: authority sentinel missing canonical token"
-    )
+    assert (
+        "FIVE_DOMAIN_IMPLEMENTATION_REVIEW_AUTHORITY" in package.authority
+    ), "INV-13 FAIL: authority sentinel missing canonical token"
 
     # INV-14: verdict_zh must mention all five domain keywords
     verdict = package.verdict_zh
     zh_keywords = ["面板", "三态", "可操作", "自然语言", "多模态"]
     for kw in zh_keywords:
-        assert kw in verdict, (
-            f"INV-14 FAIL: verdict_zh missing keyword '{kw}'"
-        )
+        assert kw in verdict, f"INV-14 FAIL: verdict_zh missing keyword '{kw}'"
 
     # INV-15: JSON round-trip must succeed
     try:
         j = package.to_json()
         reconstructed = json.loads(j)
-        assert reconstructed["authority"] == package.authority, (
-            "INV-15 FAIL: JSON round-trip mismatch on authority"
-        )
-        assert len(reconstructed["domain_entries"]) == 5, (
-            "INV-15 FAIL: JSON round-trip domain_entries count mismatch"
-        )
+        assert reconstructed["authority"] == package.authority, "INV-15 FAIL: JSON round-trip mismatch on authority"
+        assert len(reconstructed["domain_entries"]) == 5, "INV-15 FAIL: JSON round-trip domain_entries count mismatch"
     except Exception as exc:
         raise AssertionError(f"INV-15 FAIL: JSON round-trip failed: {exc}") from exc
 
@@ -2175,15 +2102,13 @@ def assert_five_domain_invariants(
         "MULTIMODAL",
     ]
     for label in domain_labels:
-        assert label in summary, (
-            f"INV-16 FAIL: system_maturity_summary missing '{label}'"
-        )
+        assert label in summary, f"INV-16 FAIL: system_maturity_summary missing '{label}'"
 
     # INV-17: Each domain entry must have a non-empty canonical_path_summary
     for entry in package.domain_entries:
-        assert len(entry.canonical_path_summary) > 0, (
-            f"INV-17 FAIL: Domain {entry.domain} has empty canonical_path_summary"
-        )
+        assert (
+            len(entry.canonical_path_summary) > 0
+        ), f"INV-17 FAIL: Domain {entry.domain} has empty canonical_path_summary"
 
     # INV-18: Each domain must have gap_items or partial_or_fragmented_items
     # (no domain can claim zero gaps — this is a strict anti-overclaiming check)

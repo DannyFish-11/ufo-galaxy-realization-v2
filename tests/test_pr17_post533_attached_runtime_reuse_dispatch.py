@@ -67,35 +67,35 @@ from typing import Any, Optional
 
 import pytest
 
-from core.attached_runtime_reuse_dispatch import (
-    ATTACHED_RUNTIME_REUSE_DISPATCH_AUTHORITY,
-    ATTACHED_RUNTIME_REUSE_DISPATCH_PR17_SENTINEL,
-    REUSE_DISPATCH_LOOKUP_PRECEDES_DISPATCH_POLICY,
-    REUSE_DISPATCH_ELIGIBILITY_GATE_IS_MANDATORY_POLICY,
-    REUSE_DISPATCH_ELIGIBLE_SURFACE_IS_REUSED_POLICY,
-    REUSE_DISPATCH_INELIGIBLE_BINDING_IS_REJECTED_POLICY,
-    REUSE_DISPATCH_NO_BINDING_ALLOWS_NEW_DISPATCH_POLICY,
-    REUSE_DISPATCH_WRITE_BACK_IS_MANDATORY_POLICY,
-    REUSE_DISPATCH_INVALIDATION_HARD_STOP_POLICY,
-    REUSE_DISPATCH_SESSION_LOOKUP_PRECEDES_DEVICE_LOOKUP_POLICY,
-    REUSE_DISPATCH_LIVE_SESSION_CROSS_CHECK_IS_OPTIONAL_POLICY,
-    REUSE_DISPATCH_RESOLUTION_IS_IMMUTABLE_POLICY,
-    REUSE_DISPATCH_DETACH_TRIGGERS_INELIGIBLE_RESOLUTION_POLICY,
-    ReuseDispatchResolutionKind,
-    ReuseDispatchResolution,
-    resolve_reuse_dispatch_surface,
-    write_back_dispatch_binding_id,
-    dispatch_with_reuse_binding,
+from core.android_runtime_dispatch_binding import (
+    AndroidRuntimeDispatchBindingRuntime,
 )
 from core.attached_runtime_reuse_binding import (
     AttachedRuntimeReuseBindingRuntime,
-    establish_reuse_binding,
-    invalidate_reuse_binding,
-    get_reuse_binding,
     ReuseEligibilityStatus,
+    establish_reuse_binding,
+    get_reuse_binding,
+    invalidate_reuse_binding,
 )
-from core.android_runtime_dispatch_binding import (
-    AndroidRuntimeDispatchBindingRuntime,
+from core.attached_runtime_reuse_dispatch import (
+    ATTACHED_RUNTIME_REUSE_DISPATCH_AUTHORITY,
+    ATTACHED_RUNTIME_REUSE_DISPATCH_PR17_SENTINEL,
+    REUSE_DISPATCH_DETACH_TRIGGERS_INELIGIBLE_RESOLUTION_POLICY,
+    REUSE_DISPATCH_ELIGIBILITY_GATE_IS_MANDATORY_POLICY,
+    REUSE_DISPATCH_ELIGIBLE_SURFACE_IS_REUSED_POLICY,
+    REUSE_DISPATCH_INELIGIBLE_BINDING_IS_REJECTED_POLICY,
+    REUSE_DISPATCH_INVALIDATION_HARD_STOP_POLICY,
+    REUSE_DISPATCH_LIVE_SESSION_CROSS_CHECK_IS_OPTIONAL_POLICY,
+    REUSE_DISPATCH_LOOKUP_PRECEDES_DISPATCH_POLICY,
+    REUSE_DISPATCH_NO_BINDING_ALLOWS_NEW_DISPATCH_POLICY,
+    REUSE_DISPATCH_RESOLUTION_IS_IMMUTABLE_POLICY,
+    REUSE_DISPATCH_SESSION_LOOKUP_PRECEDES_DEVICE_LOOKUP_POLICY,
+    REUSE_DISPATCH_WRITE_BACK_IS_MANDATORY_POLICY,
+    ReuseDispatchResolution,
+    ReuseDispatchResolutionKind,
+    dispatch_with_reuse_binding,
+    resolve_reuse_dispatch_surface,
+    write_back_dispatch_binding_id,
 )
 
 # ---------------------------------------------------------------------------
@@ -534,9 +534,7 @@ class TestGroupJKL_LiveSessionCrossCheck:
             attachment_state=_AttachState("attached"),
             source_runtime_posture="join_runtime",
         )
-        result = resolve_reuse_dispatch_surface(
-            "sess-J", "dev-J", attached_session=live_session, reuse_runtime=rt
-        )
+        result = resolve_reuse_dispatch_surface("sess-J", "dev-J", attached_session=live_session, reuse_runtime=rt)
         assert result.resolution_kind == ReuseDispatchResolutionKind.reused
 
     def test_K01_detached_session_returns_rejected(self):
@@ -548,9 +546,7 @@ class TestGroupJKL_LiveSessionCrossCheck:
             attachment_state=_AttachState("detached"),
             source_runtime_posture="join_runtime",
         )
-        result = resolve_reuse_dispatch_surface(
-            "sess-K", "dev-K", attached_session=live_session, reuse_runtime=rt
-        )
+        result = resolve_reuse_dispatch_surface("sess-K", "dev-K", attached_session=live_session, reuse_runtime=rt)
         assert result.resolution_kind == ReuseDispatchResolutionKind.rejected
 
     def test_L01_wrong_posture_returns_rejected(self):
@@ -562,9 +558,7 @@ class TestGroupJKL_LiveSessionCrossCheck:
             attachment_state=_AttachState("attached"),
             source_runtime_posture="control_only",
         )
-        result = resolve_reuse_dispatch_surface(
-            "sess-L", "dev-L", attached_session=live_session, reuse_runtime=rt
-        )
+        result = resolve_reuse_dispatch_surface("sess-L", "dev-L", attached_session=live_session, reuse_runtime=rt)
         assert result.resolution_kind == ReuseDispatchResolutionKind.rejected
 
 
@@ -585,7 +579,8 @@ class TestGroupN_Metadata:
         drt = _fresh_dispatch_rt()
         meta = {"caller": "dispatch_test"}
         result = dispatch_with_reuse_binding(
-            "x", "y",
+            "x",
+            "y",
             _StubSession(session_id="x", device_id="y"),
             _StubContract(),
             _StubTracker(),
@@ -695,9 +690,13 @@ class TestGroupTUVWX_DispatchWithReuseBinding:
         _make_eligible_binding(session_id="sess-T", device_id="dev-T", runtime=rt)
         session = _StubSession(session_id="sess-T", device_id="dev-T")
         result = dispatch_with_reuse_binding(
-            "sess-T", "dev-T",
-            session, _StubContract(), _StubTracker(),
-            reuse_runtime=rt, dispatch_runtime=drt,
+            "sess-T",
+            "dev-T",
+            session,
+            _StubContract(),
+            _StubTracker(),
+            reuse_runtime=rt,
+            dispatch_runtime=drt,
         )
         assert result.resolution_kind == ReuseDispatchResolutionKind.reused
 
@@ -707,9 +706,13 @@ class TestGroupTUVWX_DispatchWithReuseBinding:
         _make_eligible_binding(session_id="sess-AL", device_id="dev-AL", runtime=rt)
         session = _StubSession(session_id="sess-AL", device_id="dev-AL")
         result = dispatch_with_reuse_binding(
-            "sess-AL", "dev-AL",
-            session, _StubContract(), _StubTracker(),
-            reuse_runtime=rt, dispatch_runtime=drt,
+            "sess-AL",
+            "dev-AL",
+            session,
+            _StubContract(),
+            _StubTracker(),
+            reuse_runtime=rt,
+            dispatch_runtime=drt,
         )
         assert result.dispatch_binding is None
 
@@ -718,9 +721,13 @@ class TestGroupTUVWX_DispatchWithReuseBinding:
         drt = _fresh_dispatch_rt()
         session = _StubSession(session_id="sess-U", device_id="dev-U")
         result = dispatch_with_reuse_binding(
-            "sess-U", "dev-U",
-            session, _StubContract(), _StubTracker(),
-            reuse_runtime=rt, dispatch_runtime=drt,
+            "sess-U",
+            "dev-U",
+            session,
+            _StubContract(),
+            _StubTracker(),
+            reuse_runtime=rt,
+            dispatch_runtime=drt,
         )
         assert result.resolution_kind == ReuseDispatchResolutionKind.new_binding
 
@@ -729,9 +736,13 @@ class TestGroupTUVWX_DispatchWithReuseBinding:
         drt = _fresh_dispatch_rt()
         session = _StubSession(session_id="sess-V", device_id="dev-V")
         result = dispatch_with_reuse_binding(
-            "sess-V", "dev-V",
-            session, _StubContract(), _StubTracker(),
-            reuse_runtime=rt, dispatch_runtime=drt,
+            "sess-V",
+            "dev-V",
+            session,
+            _StubContract(),
+            _StubTracker(),
+            reuse_runtime=rt,
+            dispatch_runtime=drt,
         )
         assert result.dispatch_binding is not None
 
@@ -740,9 +751,13 @@ class TestGroupTUVWX_DispatchWithReuseBinding:
         drt = _fresh_dispatch_rt()
         session = _StubSession(session_id="sess-AM", device_id="dev-AM")
         result = dispatch_with_reuse_binding(
-            "sess-AM", "dev-AM",
-            session, _StubContract(), _StubTracker(),
-            reuse_runtime=rt, dispatch_runtime=drt,
+            "sess-AM",
+            "dev-AM",
+            session,
+            _StubContract(),
+            _StubTracker(),
+            reuse_runtime=rt,
+            dispatch_runtime=drt,
         )
         assert result.is_new_binding()
         assert result.dispatch_binding is not None
@@ -754,9 +769,13 @@ class TestGroupTUVWX_DispatchWithReuseBinding:
         invalidate_reuse_binding(binding, lifecycle_signal="detach", runtime=rt)
         session = _StubSession(session_id="sess-W", device_id="dev-W")
         result = dispatch_with_reuse_binding(
-            "sess-W", "dev-W",
-            session, _StubContract(), _StubTracker(),
-            reuse_runtime=rt, dispatch_runtime=drt,
+            "sess-W",
+            "dev-W",
+            session,
+            _StubContract(),
+            _StubTracker(),
+            reuse_runtime=rt,
+            dispatch_runtime=drt,
         )
         assert result.resolution_kind == ReuseDispatchResolutionKind.rejected
         assert result.dispatch_binding is None
@@ -766,9 +785,13 @@ class TestGroupTUVWX_DispatchWithReuseBinding:
         drt = _fresh_dispatch_rt()
         session = _StubSession(session_id="sess-X", device_id="dev-X")
         result = dispatch_with_reuse_binding(
-            "sess-X", "dev-X",
-            session, _StubContract(), _StubTracker(),
-            reuse_runtime=rt, dispatch_runtime=drt,
+            "sess-X",
+            "dev-X",
+            session,
+            _StubContract(),
+            _StubTracker(),
+            reuse_runtime=rt,
+            dispatch_runtime=drt,
         )
         # The dispatch binding's binding_id should be written back to the reuse binding
         if result.reuse_binding is not None:
@@ -781,9 +804,13 @@ class TestGroupTUVWX_DispatchWithReuseBinding:
         drt = _fresh_dispatch_rt()
         session = _StubSession(session_id="sess-AH", device_id="dev-AH")
         result = dispatch_with_reuse_binding(
-            "sess-AH", "dev-AH",
-            session, _StubContract(), _StubTracker(),
-            reuse_runtime=rt, dispatch_runtime=drt,
+            "sess-AH",
+            "dev-AH",
+            session,
+            _StubContract(),
+            _StubTracker(),
+            reuse_runtime=rt,
+            dispatch_runtime=drt,
         )
         assert result.resolution_kind == ReuseDispatchResolutionKind.new_binding
         assert result.dispatch_binding is not None
@@ -795,9 +822,13 @@ class TestGroupTUVWX_DispatchWithReuseBinding:
         _make_eligible_binding(session_id="sess-AV", device_id="dev-AV", runtime=rt)
         session = _StubSession(session_id="sess-AV", device_id="dev-AV")
         result = dispatch_with_reuse_binding(
-            "sess-AV", "dev-AV",
-            session, _StubContract(), _StubTracker(),
-            reuse_runtime=rt, dispatch_runtime=drt,
+            "sess-AV",
+            "dev-AV",
+            session,
+            _StubContract(),
+            _StubTracker(),
+            reuse_runtime=rt,
+            dispatch_runtime=drt,
         )
         assert isinstance(result.resolution_id, str)
         uuid.UUID(result.resolution_id)
@@ -814,9 +845,13 @@ class TestGroupY_SameSessionMultiDispatchReuse:
         drt = _fresh_dispatch_rt()
         session = _StubSession(session_id="sess-Y", device_id="dev-Y")
         r1 = dispatch_with_reuse_binding(
-            "sess-Y", "dev-Y",
-            session, _StubContract(), _StubTracker(),
-            reuse_runtime=rt, dispatch_runtime=drt,
+            "sess-Y",
+            "dev-Y",
+            session,
+            _StubContract(),
+            _StubTracker(),
+            reuse_runtime=rt,
+            dispatch_runtime=drt,
         )
         assert r1.resolution_kind == ReuseDispatchResolutionKind.new_binding
 
@@ -848,7 +883,10 @@ class TestGroupZ_InvalidatedBindingRejection:
     def test_Z01_invalidated_binding_is_rejected(self):
         rt = _fresh_reuse_rt()
         binding = _make_eligible_binding(session_id="sess-Z", device_id="dev-Z", runtime=rt)
-        assert resolve_reuse_dispatch_surface("sess-Z", "dev-Z", reuse_runtime=rt).resolution_kind == ReuseDispatchResolutionKind.reused
+        assert (
+            resolve_reuse_dispatch_surface("sess-Z", "dev-Z", reuse_runtime=rt).resolution_kind
+            == ReuseDispatchResolutionKind.reused
+        )
         # Invalidate
         invalidate_reuse_binding(binding, lifecycle_signal="invalidate", runtime=rt)
         r = resolve_reuse_dispatch_surface("sess-Z", "dev-Z", reuse_runtime=rt)
@@ -861,9 +899,13 @@ class TestGroupZ_InvalidatedBindingRejection:
         invalidate_reuse_binding(binding, lifecycle_signal="detach", runtime=rt)
         session = _StubSession(session_id="sess-Z2", device_id="dev-Z2")
         r = dispatch_with_reuse_binding(
-            "sess-Z2", "dev-Z2",
-            session, _StubContract(), _StubTracker(),
-            reuse_runtime=rt, dispatch_runtime=drt,
+            "sess-Z2",
+            "dev-Z2",
+            session,
+            _StubContract(),
+            _StubTracker(),
+            reuse_runtime=rt,
+            dispatch_runtime=drt,
         )
         assert r.is_rejected()
 
@@ -916,7 +958,8 @@ class TestGroupAAB_DetachDisconnectNoReuse:
             source_runtime_posture="join_runtime",
         )
         r = resolve_reuse_dispatch_surface(
-            "sess-AA2", "dev-AA2",
+            "sess-AA2",
+            "dev-AA2",
             attached_session=live_session,
             reuse_runtime=rt,
         )
@@ -932,7 +975,8 @@ class TestGroupAAB_DetachDisconnectNoReuse:
             source_runtime_posture="join_runtime",
         )
         r = resolve_reuse_dispatch_surface(
-            "sess-AB2", "dev-AB2",
+            "sess-AB2",
+            "dev-AB2",
             attached_session=live_session,
             reuse_runtime=rt,
         )
@@ -955,7 +999,8 @@ class TestGroupAC_ReestablishAfterReattach:
 
         # Re-attach: establish a new reuse binding for same session
         establish_reuse_binding(
-            session_id="sess-AC", device_id="dev-AC",
+            session_id="sess-AC",
+            device_id="dev-AC",
             source_runtime_posture="join_runtime",
             runtime=rt,
         )
@@ -970,7 +1015,8 @@ class TestGroupAC_ReestablishAfterReattach:
 
         # New session (reattach with new session_id)
         establish_reuse_binding(
-            session_id="sess-AC-new", device_id="dev-AC2",
+            session_id="sess-AC-new",
+            device_id="dev-AC2",
             source_runtime_posture="join_runtime",
             runtime=rt,
         )
@@ -983,7 +1029,8 @@ class TestGroupAC_ReestablishAfterReattach:
 
         # First attach + dispatch
         establish_reuse_binding(
-            session_id="sess-lifecycle", device_id="dev-lifecycle",
+            session_id="sess-lifecycle",
+            device_id="dev-lifecycle",
             source_runtime_posture="join_runtime",
             runtime=rt,
         )
@@ -997,7 +1044,8 @@ class TestGroupAC_ReestablishAfterReattach:
 
         # Reattach with new session
         establish_reuse_binding(
-            session_id="sess-lifecycle-v2", device_id="dev-lifecycle",
+            session_id="sess-lifecycle-v2",
+            device_id="dev-lifecycle",
             source_runtime_posture="join_runtime",
             runtime=rt,
         )
@@ -1015,23 +1063,24 @@ class TestGroupAD_CoreRuntimeReExports:
         from core.runtime import (  # noqa: PLC0415
             ATTACHED_RUNTIME_REUSE_DISPATCH_AUTHORITY,
             ATTACHED_RUNTIME_REUSE_DISPATCH_PR17_SENTINEL,
-            REUSE_DISPATCH_LOOKUP_PRECEDES_DISPATCH_POLICY,
+            REUSE_DISPATCH_DETACH_TRIGGERS_INELIGIBLE_RESOLUTION_POLICY,
             REUSE_DISPATCH_ELIGIBILITY_GATE_IS_MANDATORY_POLICY,
             REUSE_DISPATCH_ELIGIBLE_SURFACE_IS_REUSED_POLICY,
             REUSE_DISPATCH_INELIGIBLE_BINDING_IS_REJECTED_POLICY,
-            REUSE_DISPATCH_NO_BINDING_ALLOWS_NEW_DISPATCH_POLICY,
-            REUSE_DISPATCH_WRITE_BACK_IS_MANDATORY_POLICY,
             REUSE_DISPATCH_INVALIDATION_HARD_STOP_POLICY,
-            REUSE_DISPATCH_SESSION_LOOKUP_PRECEDES_DEVICE_LOOKUP_POLICY,
             REUSE_DISPATCH_LIVE_SESSION_CROSS_CHECK_IS_OPTIONAL_POLICY,
+            REUSE_DISPATCH_LOOKUP_PRECEDES_DISPATCH_POLICY,
+            REUSE_DISPATCH_NO_BINDING_ALLOWS_NEW_DISPATCH_POLICY,
             REUSE_DISPATCH_RESOLUTION_IS_IMMUTABLE_POLICY,
-            REUSE_DISPATCH_DETACH_TRIGGERS_INELIGIBLE_RESOLUTION_POLICY,
-            ReuseDispatchResolutionKind,
+            REUSE_DISPATCH_SESSION_LOOKUP_PRECEDES_DEVICE_LOOKUP_POLICY,
+            REUSE_DISPATCH_WRITE_BACK_IS_MANDATORY_POLICY,
             ReuseDispatchResolution,
+            ReuseDispatchResolutionKind,
+            dispatch_with_reuse_binding,
             resolve_reuse_dispatch_surface,
             write_back_dispatch_binding_id,
-            dispatch_with_reuse_binding,
         )
+
         assert ATTACHED_RUNTIME_REUSE_DISPATCH_PR17_SENTINEL
         assert ReuseDispatchResolutionKind.reused.value == "reused"
 
@@ -1046,6 +1095,7 @@ class TestGroupAE_ProjectionSentinel:
         from core.routes.projection import (  # noqa: PLC0415
             ATTACHED_RUNTIME_REUSE_DISPATCH_ALIGNED_PR17,
         )
+
         assert ATTACHED_RUNTIME_REUSE_DISPATCH_ALIGNED_PR17
         assert "UNAVAILABLE" not in ATTACHED_RUNTIME_REUSE_DISPATCH_ALIGNED_PR17
         assert "PR17" in ATTACHED_RUNTIME_REUSE_DISPATCH_ALIGNED_PR17

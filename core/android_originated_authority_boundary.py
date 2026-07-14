@@ -350,9 +350,7 @@ def classify_android_participation(
             if is_recovery_assisted:
                 degradation_reasons.append("recovery-assisted evidence")
             if proof_non_passing:
-                degradation_reasons.append(
-                    f"proof_input_class={proof_input_class!r} (non-passing)"
-                )
+                degradation_reasons.append(f"proof_input_class={proof_input_class!r} (non-passing)")
             reason = (
                 "Takeover participation downgraded to suggestion_only: "
                 + ", ".join(degradation_reasons)
@@ -379,9 +377,7 @@ def classify_android_participation(
             if is_recovery_assisted:
                 degradation_reasons.append("recovery-assisted evidence")
             if proof_non_passing:
-                degradation_reasons.append(
-                    f"proof_input_class={proof_input_class!r} (non-passing)"
-                )
+                degradation_reasons.append(f"proof_input_class={proof_input_class!r} (non-passing)")
             reason = (
                 "Downgraded from reconciliation_eligible to suggestion_only: "
                 + ", ".join(degradation_reasons)
@@ -433,9 +429,7 @@ def get_android_participation_permission(
     This is the table-lookup variant without evidence quality adjustments.
     Use :func:`classify_android_participation` for context-aware classification.
     """
-    return _PERMISSION_TABLE.get(
-        participation_kind, AndroidSignalPermissionLevel.observation_only
-    )
+    return _PERMISSION_TABLE.get(participation_kind, AndroidSignalPermissionLevel.observation_only)
 
 
 def is_android_main_chain_eligible(

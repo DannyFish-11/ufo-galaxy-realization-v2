@@ -42,7 +42,6 @@ from unittest.mock import patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -79,7 +78,7 @@ def _make_pydantic_unit(
     role: str = "source",
 ) -> Any:
     """Return a real RuntimeResultUnit pydantic instance."""
-    from contracts.cross_runtime_result_merge import RuntimeResultUnit, RuntimeResultStatus, RuntimeResultRole
+    from contracts.cross_runtime_result_merge import RuntimeResultRole, RuntimeResultStatus, RuntimeResultUnit
 
     meta: Dict[str, Any] = {}
     if source_runtime_posture is not None:
@@ -106,6 +105,7 @@ def _make_pydantic_unit(
 def reset_runtime():
     """Reset the canonical session truth runtime before/after each test."""
     from core.canonical_session_truth import reset_canonical_session_truth_runtime
+
     reset_canonical_session_truth_runtime()
     yield
     reset_canonical_session_truth_runtime()
@@ -115,34 +115,41 @@ def reset_runtime():
 # Group A — Authority / policy sentinels
 # ===========================================================================
 
+
 class TestGroupA_Sentinels:
     def test_A01_canonical_session_truth_authority_non_empty(self):
         from core.canonical_session_truth import CANONICAL_SESSION_TRUTH_AUTHORITY
+
         assert isinstance(CANONICAL_SESSION_TRUTH_AUTHORITY, str)
         assert len(CANONICAL_SESSION_TRUTH_AUTHORITY) > 20
 
     def test_A02_control_only_excluded_policy_non_empty(self):
         from core.canonical_session_truth import CONTROL_ONLY_EXCLUDED_FROM_MERGE_POLICY
+
         assert isinstance(CONTROL_ONLY_EXCLUDED_FROM_MERGE_POLICY, str)
         assert "control_only" in CONTROL_ONLY_EXCLUDED_FROM_MERGE_POLICY
 
     def test_A03_posture_aware_filter_policy_non_empty(self):
         from core.canonical_session_truth import POSTURE_AWARE_RESULT_FILTER_POLICY
+
         assert isinstance(POSTURE_AWARE_RESULT_FILTER_POLICY, str)
         assert len(POSTURE_AWARE_RESULT_FILTER_POLICY) > 20
 
     def test_A04_join_runtime_included_policy_non_empty(self):
         from core.canonical_session_truth import JOIN_RUNTIME_INCLUDED_IN_MERGE_POLICY
+
         assert isinstance(JOIN_RUNTIME_INCLUDED_IN_MERGE_POLICY, str)
         assert "join_runtime" in JOIN_RUNTIME_INCLUDED_IN_MERGE_POLICY
 
     def test_A05_pr4_sentinel_non_empty(self):
         from core.canonical_session_truth import CANONICAL_SESSION_TRUTH_PR4_SENTINEL
+
         assert isinstance(CANONICAL_SESSION_TRUTH_PR4_SENTINEL, str)
         assert "PR-4" in CANONICAL_SESSION_TRUTH_PR4_SENTINEL
 
     def test_A06_sentinel_references_pr4_track(self):
         from core.canonical_session_truth import CANONICAL_SESSION_TRUTH_AUTHORITY
+
         assert "post-533" in CANONICAL_SESSION_TRUTH_AUTHORITY
         assert "PR-4" in CANONICAL_SESSION_TRUTH_AUTHORITY
 
@@ -151,9 +158,11 @@ class TestGroupA_Sentinels:
 # Group B — SessionTruthSource enum
 # ===========================================================================
 
+
 class TestGroupB_SessionTruthSource:
     def test_B01_all_values_present(self):
         from core.canonical_session_truth import SessionTruthSource
+
         values = {s.value for s in SessionTruthSource}
         assert "local" in values
         assert "remote_handoff" in values
@@ -164,12 +173,15 @@ class TestGroupB_SessionTruthSource:
 
     def test_B02_str_compatible(self):
         from core.canonical_session_truth import SessionTruthSource
+
         assert SessionTruthSource.local == "local"
         assert SessionTruthSource.takeover == "takeover"
 
     def test_B03_json_serialisable(self):
         import json
+
         from core.canonical_session_truth import SessionTruthSource
+
         for v in SessionTruthSource:
             assert json.dumps(v)  # must not raise
 
@@ -178,9 +190,11 @@ class TestGroupB_SessionTruthSource:
 # Group C — CanonicalSessionTruthRecord
 # ===========================================================================
 
+
 class TestGroupC_CanonicalSessionTruthRecord:
     def test_C01_construction_defaults(self):
         from core.canonical_session_truth import CanonicalSessionTruthRecord
+
         rec = CanonicalSessionTruthRecord()
         assert rec.source_runtime_posture == "control_only"
         assert rec.source_eligible is False
@@ -192,6 +206,7 @@ class TestGroupC_CanonicalSessionTruthRecord:
 
     def test_C02_construction_with_values(self):
         from core.canonical_session_truth import CanonicalSessionTruthRecord
+
         rec = CanonicalSessionTruthRecord(
             session_id="sess_001",
             task_id="task_001",
@@ -210,9 +225,10 @@ class TestGroupC_CanonicalSessionTruthRecord:
 
     def test_C03_to_dict_includes_authority(self):
         from core.canonical_session_truth import (
-            CanonicalSessionTruthRecord,
             CANONICAL_SESSION_TRUTH_AUTHORITY,
+            CanonicalSessionTruthRecord,
         )
+
         rec = CanonicalSessionTruthRecord(session_id="s1")
         d = rec.to_dict()
         assert d["authority"] == CANONICAL_SESSION_TRUTH_AUTHORITY
@@ -221,6 +237,7 @@ class TestGroupC_CanonicalSessionTruthRecord:
 
     def test_C04_to_dict_round_trip(self):
         from core.canonical_session_truth import CanonicalSessionTruthRecord
+
         rec = CanonicalSessionTruthRecord(
             session_id="sess_rt",
             source_runtime_posture="join_runtime",
@@ -235,6 +252,7 @@ class TestGroupC_CanonicalSessionTruthRecord:
 
     def test_C05_unique_record_ids(self):
         from core.canonical_session_truth import CanonicalSessionTruthRecord
+
         ids = {CanonicalSessionTruthRecord().record_id for _ in range(10)}
         assert len(ids) == 10
 
@@ -243,9 +261,11 @@ class TestGroupC_CanonicalSessionTruthRecord:
 # Group D — CanonicalSessionTruthSnapshot
 # ===========================================================================
 
+
 class TestGroupD_CanonicalSessionTruthSnapshot:
     def test_D01_construction_defaults(self):
         from core.canonical_session_truth import CanonicalSessionTruthSnapshot
+
         snap = CanonicalSessionTruthSnapshot()
         assert snap.total_records == 0
         assert snap.recent_records == []
@@ -256,9 +276,10 @@ class TestGroupD_CanonicalSessionTruthSnapshot:
 
     def test_D02_to_dict_includes_authority(self):
         from core.canonical_session_truth import (
-            CanonicalSessionTruthSnapshot,
             CANONICAL_SESSION_TRUTH_AUTHORITY,
+            CanonicalSessionTruthSnapshot,
         )
+
         snap = CanonicalSessionTruthSnapshot(total_records=5, successful_merge_count=3)
         d = snap.to_dict()
         assert d["authority"] == CANONICAL_SESSION_TRUTH_AUTHORITY
@@ -267,6 +288,7 @@ class TestGroupD_CanonicalSessionTruthSnapshot:
 
     def test_D03_unique_snapshot_ids(self):
         from core.canonical_session_truth import CanonicalSessionTruthSnapshot
+
         ids = {CanonicalSessionTruthSnapshot().snapshot_id for _ in range(10)}
         assert len(ids) == 10
 
@@ -275,12 +297,14 @@ class TestGroupD_CanonicalSessionTruthSnapshot:
 # Group E — CanonicalSessionTruthRuntime
 # ===========================================================================
 
+
 class TestGroupE_CanonicalSessionTruthRuntime:
     def test_E01_record_increments_total(self):
         from core.canonical_session_truth import (
             CanonicalSessionTruthRecord,
             CanonicalSessionTruthRuntime,
         )
+
         rt = CanonicalSessionTruthRuntime()
         rt.record(CanonicalSessionTruthRecord(session_id="s1"))
         rt.record(CanonicalSessionTruthRecord(session_id="s2"))
@@ -292,6 +316,7 @@ class TestGroupE_CanonicalSessionTruthRuntime:
             CanonicalSessionTruthRecord,
             CanonicalSessionTruthRuntime,
         )
+
         rt = CanonicalSessionTruthRuntime()
         rt.record(CanonicalSessionTruthRecord(source_runtime_posture="control_only"))
         rt.record(CanonicalSessionTruthRecord(source_runtime_posture="control_only"))
@@ -304,6 +329,7 @@ class TestGroupE_CanonicalSessionTruthRuntime:
             CanonicalSessionTruthRecord,
             CanonicalSessionTruthRuntime,
         )
+
         rt = CanonicalSessionTruthRuntime()
         rt.record(CanonicalSessionTruthRecord(source_runtime_posture="join_runtime"))
         snap = rt.snapshot()
@@ -315,6 +341,7 @@ class TestGroupE_CanonicalSessionTruthRuntime:
             CanonicalSessionTruthRecord,
             CanonicalSessionTruthRuntime,
         )
+
         rt = CanonicalSessionTruthRuntime()
         rt.record(CanonicalSessionTruthRecord(merge_success=True))
         rt.record(CanonicalSessionTruthRecord(merge_success=False))
@@ -326,6 +353,7 @@ class TestGroupE_CanonicalSessionTruthRuntime:
             CanonicalSessionTruthRecord,
             CanonicalSessionTruthRuntime,
         )
+
         rt = CanonicalSessionTruthRuntime(max_size=5)
         for i in range(10):
             rt.record(CanonicalSessionTruthRecord(session_id=f"s{i}"))
@@ -339,6 +367,7 @@ class TestGroupE_CanonicalSessionTruthRuntime:
             CanonicalSessionTruthRecord,
             CanonicalSessionTruthRuntime,
         )
+
         rt = CanonicalSessionTruthRuntime()
         rt.record(CanonicalSessionTruthRecord(session_id="s1"))
         snap = rt.snapshot(max_recent=5)
@@ -349,9 +378,11 @@ class TestGroupE_CanonicalSessionTruthRuntime:
 # Group F — get/reset singleton
 # ===========================================================================
 
+
 class TestGroupF_Singleton:
     def test_F01_get_returns_same_instance(self):
         from core.canonical_session_truth import get_canonical_session_truth_runtime
+
         rt1 = get_canonical_session_truth_runtime()
         rt2 = get_canonical_session_truth_runtime()
         assert rt1 is rt2
@@ -361,6 +392,7 @@ class TestGroupF_Singleton:
             get_canonical_session_truth_runtime,
             reset_canonical_session_truth_runtime,
         )
+
         rt1 = get_canonical_session_truth_runtime()
         reset_canonical_session_truth_runtime()
         rt2 = get_canonical_session_truth_runtime()
@@ -372,6 +404,7 @@ class TestGroupF_Singleton:
             get_canonical_session_truth_runtime,
             reset_canonical_session_truth_runtime,
         )
+
         rt = get_canonical_session_truth_runtime()
         rt.record(CanonicalSessionTruthRecord())
         reset_canonical_session_truth_runtime()
@@ -383,9 +416,11 @@ class TestGroupF_Singleton:
 # Group G — filter_result_units_by_posture: control_only excluded
 # ===========================================================================
 
+
 class TestGroupG_FilterControlOnly:
     def test_G01_control_only_unit_excluded(self):
         from core.canonical_session_truth import filter_result_units_by_posture
+
         unit = _make_result_unit(source_runtime_posture="control_only")
         kept, excluded = filter_result_units_by_posture([unit])
         assert kept == []
@@ -394,6 +429,7 @@ class TestGroupG_FilterControlOnly:
 
     def test_G02_multiple_control_only_all_excluded(self):
         from core.canonical_session_truth import filter_result_units_by_posture
+
         units = [
             _make_result_unit(source_runtime_posture="control_only"),
             _make_result_unit(source_runtime_posture="control_only"),
@@ -404,6 +440,7 @@ class TestGroupG_FilterControlOnly:
 
     def test_G03_excluded_ids_match_unit_ids(self):
         from core.canonical_session_truth import filter_result_units_by_posture
+
         uid = str(uuid.uuid4())
         unit = _make_result_unit(result_unit_id=uid, source_runtime_posture="control_only")
         _, excluded = filter_result_units_by_posture([unit])
@@ -414,9 +451,11 @@ class TestGroupG_FilterControlOnly:
 # Group H — filter_result_units_by_posture: join_runtime / no-posture kept
 # ===========================================================================
 
+
 class TestGroupH_FilterJoinRuntime:
     def test_H01_join_runtime_unit_kept(self):
         from core.canonical_session_truth import filter_result_units_by_posture
+
         unit = _make_result_unit(source_runtime_posture="join_runtime")
         kept, excluded = filter_result_units_by_posture([unit])
         assert len(kept) == 1
@@ -424,6 +463,7 @@ class TestGroupH_FilterJoinRuntime:
 
     def test_H02_no_posture_metadata_unit_kept(self):
         from core.canonical_session_truth import filter_result_units_by_posture
+
         unit = _make_result_unit()  # no source_runtime_posture in metadata
         kept, excluded = filter_result_units_by_posture([unit])
         assert len(kept) == 1
@@ -431,6 +471,7 @@ class TestGroupH_FilterJoinRuntime:
 
     def test_H03_mixed_units_correct_split(self):
         from core.canonical_session_truth import filter_result_units_by_posture
+
         u_co = _make_result_unit(source_runtime_posture="control_only")
         u_jr = _make_result_unit(source_runtime_posture="join_runtime")
         u_no = _make_result_unit()
@@ -444,21 +485,25 @@ class TestGroupH_FilterJoinRuntime:
 # Group I — filter_result_units_by_posture: None / empty input
 # ===========================================================================
 
+
 class TestGroupI_FilterEmpty:
     def test_I01_none_input(self):
         from core.canonical_session_truth import filter_result_units_by_posture
+
         kept, excluded = filter_result_units_by_posture(None)
         assert kept == []
         assert excluded == []
 
     def test_I02_empty_list(self):
         from core.canonical_session_truth import filter_result_units_by_posture
+
         kept, excluded = filter_result_units_by_posture([])
         assert kept == []
         assert excluded == []
 
     def test_I03_never_raises(self):
         from core.canonical_session_truth import filter_result_units_by_posture
+
         # Should not raise for any input
         kept, excluded = filter_result_units_by_posture(None, source_runtime_posture=None)
         assert isinstance(kept, list)
@@ -469,18 +514,19 @@ class TestGroupI_FilterEmpty:
 # Group J — filter_result_units_by_posture: allow_control_only_as_observer
 # ===========================================================================
 
+
 class TestGroupJ_AllowControlOnlyObserver:
     def test_J01_control_only_kept_when_observer_allowed(self):
         from core.canonical_session_truth import filter_result_units_by_posture
+
         unit = _make_result_unit(source_runtime_posture="control_only")
-        kept, excluded = filter_result_units_by_posture(
-            [unit], allow_control_only_as_observer=True
-        )
+        kept, excluded = filter_result_units_by_posture([unit], allow_control_only_as_observer=True)
         assert len(kept) == 1
         assert excluded == []
 
     def test_J02_default_is_exclusion(self):
         from core.canonical_session_truth import filter_result_units_by_posture
+
         unit = _make_result_unit(source_runtime_posture="control_only")
         kept, excluded = filter_result_units_by_posture([unit])
         assert kept == []
@@ -491,9 +537,11 @@ class TestGroupJ_AllowControlOnlyObserver:
 # Group K — filter_result_units_by_posture: dict and object unit shapes
 # ===========================================================================
 
+
 class TestGroupK_UnitShapes:
     def test_K01_dict_unit_excluded_by_posture(self):
         from core.canonical_session_truth import filter_result_units_by_posture
+
         unit = _make_result_unit(source_runtime_posture="control_only")
         assert isinstance(unit, dict)
         kept, excluded = filter_result_units_by_posture([unit])
@@ -501,6 +549,7 @@ class TestGroupK_UnitShapes:
 
     def test_K02_pydantic_unit_excluded_by_posture(self):
         from core.canonical_session_truth import filter_result_units_by_posture
+
         unit = _make_pydantic_unit(source_runtime_posture="control_only")
         kept, excluded = filter_result_units_by_posture([unit])
         assert kept == []
@@ -508,6 +557,7 @@ class TestGroupK_UnitShapes:
 
     def test_K03_pydantic_unit_kept_when_join_runtime(self):
         from core.canonical_session_truth import filter_result_units_by_posture
+
         unit = _make_pydantic_unit(source_runtime_posture="join_runtime")
         kept, excluded = filter_result_units_by_posture([unit])
         assert len(kept) == 1
@@ -515,12 +565,14 @@ class TestGroupK_UnitShapes:
 
     def test_K04_pydantic_unit_kept_when_no_posture(self):
         from core.canonical_session_truth import filter_result_units_by_posture
+
         unit = _make_pydantic_unit()  # no posture metadata
         kept, excluded = filter_result_units_by_posture([unit])
         assert len(kept) == 1
 
     def test_K05_unknown_posture_value_treated_as_none(self):
         from core.canonical_session_truth import filter_result_units_by_posture
+
         unit = _make_result_unit()
         unit["metadata"]["source_runtime_posture"] = "totally_unknown_value"
         # Unknown posture → treated as None (not control_only), so kept
@@ -532,9 +584,11 @@ class TestGroupK_UnitShapes:
 # Group L — merge_session_truth: control_only source
 # ===========================================================================
 
+
 class TestGroupL_MergeSessionTruthControlOnly:
     def test_L01_control_only_source_units_excluded_from_merge(self):
         from core.canonical_session_truth import merge_session_truth
+
         # Two units: one from control_only source, one remote target (no posture)
         co_unit = _make_result_unit(source_runtime_posture="control_only")
         remote_unit = _make_result_unit()
@@ -551,6 +605,7 @@ class TestGroupL_MergeSessionTruthControlOnly:
 
     def test_L02_all_control_only_merge_empty(self):
         from core.canonical_session_truth import merge_session_truth
+
         co_unit = _make_result_unit(source_runtime_posture="control_only")
         result = merge_session_truth(
             [co_unit],
@@ -563,6 +618,7 @@ class TestGroupL_MergeSessionTruthControlOnly:
 
     def test_L03_posture_propagated_in_metadata(self):
         from core.canonical_session_truth import merge_session_truth
+
         result = merge_session_truth(
             [_make_result_unit()],
             session_id="sess_meta",
@@ -572,9 +628,10 @@ class TestGroupL_MergeSessionTruthControlOnly:
 
     def test_L04_pr4_sentinel_in_metadata(self):
         from core.canonical_session_truth import (
-            merge_session_truth,
             CANONICAL_SESSION_TRUTH_PR4_SENTINEL,
+            merge_session_truth,
         )
+
         result = merge_session_truth(
             [_make_result_unit()],
             session_id="sess_sentinel",
@@ -586,9 +643,11 @@ class TestGroupL_MergeSessionTruthControlOnly:
 # Group M — merge_session_truth: join_runtime source
 # ===========================================================================
 
+
 class TestGroupM_MergeSessionTruthJoinRuntime:
     def test_M01_join_runtime_all_units_eligible(self):
         from core.canonical_session_truth import merge_session_truth
+
         units = [_make_result_unit(), _make_result_unit(), _make_result_unit()]
         result = merge_session_truth(
             units,
@@ -601,6 +660,7 @@ class TestGroupM_MergeSessionTruthJoinRuntime:
 
     def test_M02_join_runtime_posture_in_metadata(self):
         from core.canonical_session_truth import merge_session_truth
+
         result = merge_session_truth(
             [_make_result_unit()],
             session_id="sess_jr_meta",
@@ -613,9 +673,11 @@ class TestGroupM_MergeSessionTruthJoinRuntime:
 # Group N — merge_session_truth: mixed units
 # ===========================================================================
 
+
 class TestGroupN_MergeSessionTruthMixed:
     def test_N01_only_non_control_only_in_result(self):
         from core.canonical_session_truth import merge_session_truth
+
         co = _make_result_unit(source_runtime_posture="control_only")
         jr = _make_result_unit(source_runtime_posture="join_runtime")
         remote = _make_result_unit()
@@ -630,6 +692,7 @@ class TestGroupN_MergeSessionTruthMixed:
 
     def test_N02_result_units_contains_only_kept(self):
         from core.canonical_session_truth import merge_session_truth
+
         co_id = str(uuid.uuid4())
         jr_id = str(uuid.uuid4())
         co = _make_result_unit(result_unit_id=co_id, source_runtime_posture="control_only")
@@ -644,19 +707,23 @@ class TestGroupN_MergeSessionTruthMixed:
 # Group O — merge_session_truth: never raises
 # ===========================================================================
 
+
 class TestGroupO_MergeNeverRaises:
     def test_O01_none_units(self):
         from core.canonical_session_truth import merge_session_truth
+
         result = merge_session_truth(None, session_id="s")
         assert result is not None
 
     def test_O02_empty_units(self):
         from core.canonical_session_truth import merge_session_truth
+
         result = merge_session_truth([], session_id="s")
         assert result is not None
 
     def test_O03_unknown_merge_policy_falls_back(self):
         from core.canonical_session_truth import merge_session_truth
+
         result = merge_session_truth(
             [_make_result_unit()],
             session_id="s",
@@ -666,6 +733,7 @@ class TestGroupO_MergeNeverRaises:
 
     def test_O04_none_session_id(self):
         from core.canonical_session_truth import merge_session_truth
+
         result = merge_session_truth([_make_result_unit()])
         assert result is not None
 
@@ -674,9 +742,11 @@ class TestGroupO_MergeNeverRaises:
 # Group P — merge_session_truth: merge_policy forwarded
 # ===========================================================================
 
+
 class TestGroupP_MergePolicy:
     def test_P01_primary_wins_policy(self):
         from core.canonical_session_truth import merge_session_truth
+
         units = [_make_result_unit(), _make_result_unit()]
         result = merge_session_truth(units, session_id="s", merge_policy="primary_wins")
         assert result is not None
@@ -685,6 +755,7 @@ class TestGroupP_MergePolicy:
 
     def test_P02_best_effort_policy(self):
         from core.canonical_session_truth import merge_session_truth
+
         units = [
             _make_result_unit(status="succeeded"),
             _make_result_unit(status="failed"),
@@ -694,6 +765,7 @@ class TestGroupP_MergePolicy:
 
     def test_P03_all_required_policy_all_success(self):
         from core.canonical_session_truth import merge_session_truth
+
         units = [_make_result_unit(status="succeeded"), _make_result_unit(status="succeeded")]
         result = merge_session_truth(units, session_id="s", merge_policy="all_required")
         assert result is not None
@@ -701,6 +773,7 @@ class TestGroupP_MergePolicy:
 
     def test_P04_all_required_policy_one_failure(self):
         from core.canonical_session_truth import merge_session_truth
+
         units = [
             _make_result_unit(status="succeeded"),
             _make_result_unit(status="failed"),
@@ -714,21 +787,24 @@ class TestGroupP_MergePolicy:
 # Group Q — record_session_truth: ring-buffer storage
 # ===========================================================================
 
+
 class TestGroupQ_RecordSessionTruth:
     def test_Q01_record_stored_in_runtime(self):
         from core.canonical_session_truth import (
-            record_session_truth,
             build_canonical_session_truth_snapshot,
+            record_session_truth,
         )
+
         record_session_truth(session_id="sess_q01")
         snap = build_canonical_session_truth_snapshot()
         assert snap.total_records == 1
 
     def test_Q02_multiple_records(self):
         from core.canonical_session_truth import (
-            record_session_truth,
             build_canonical_session_truth_snapshot,
+            record_session_truth,
         )
+
         record_session_truth(session_id="s1")
         record_session_truth(session_id="s2")
         record_session_truth(session_id="s3")
@@ -737,20 +813,23 @@ class TestGroupQ_RecordSessionTruth:
 
     def test_Q03_returns_canonical_session_truth_record(self):
         from core.canonical_session_truth import (
-            record_session_truth,
             CanonicalSessionTruthRecord,
+            record_session_truth,
         )
+
         rec = record_session_truth(session_id="sess_q03")
         assert isinstance(rec, CanonicalSessionTruthRecord)
 
     def test_Q04_record_has_correct_session_id(self):
         from core.canonical_session_truth import record_session_truth
+
         rec = record_session_truth(session_id="sess_q04", task_id="task_q04")
         assert rec.session_id == "sess_q04"
         assert rec.task_id == "task_q04"
 
     def test_Q05_record_merge_id_set(self):
         from core.canonical_session_truth import record_session_truth
+
         unit = _make_result_unit(status="succeeded")
         rec = record_session_truth(
             session_id="sess_q05",
@@ -763,12 +842,14 @@ class TestGroupQ_RecordSessionTruth:
 # Group R — record_session_truth: posture count separation
 # ===========================================================================
 
+
 class TestGroupR_PostureCountSeparation:
     def test_R01_control_only_increments_control_count(self):
         from core.canonical_session_truth import (
-            record_session_truth,
             build_canonical_session_truth_snapshot,
+            record_session_truth,
         )
+
         record_session_truth(session_id="s1", source_runtime_posture="control_only")
         record_session_truth(session_id="s2", source_runtime_posture="control_only")
         snap = build_canonical_session_truth_snapshot()
@@ -777,9 +858,10 @@ class TestGroupR_PostureCountSeparation:
 
     def test_R02_join_runtime_increments_join_count(self):
         from core.canonical_session_truth import (
-            record_session_truth,
             build_canonical_session_truth_snapshot,
+            record_session_truth,
         )
+
         record_session_truth(session_id="s1", source_runtime_posture="join_runtime")
         snap = build_canonical_session_truth_snapshot()
         assert snap.join_runtime_session_count == 1
@@ -787,9 +869,10 @@ class TestGroupR_PostureCountSeparation:
 
     def test_R03_mixed_postures_correct_counts(self):
         from core.canonical_session_truth import (
-            record_session_truth,
             build_canonical_session_truth_snapshot,
+            record_session_truth,
         )
+
         record_session_truth(session_id="s1", source_runtime_posture="control_only")
         record_session_truth(session_id="s2", source_runtime_posture="join_runtime")
         record_session_truth(session_id="s3", source_runtime_posture="control_only")
@@ -799,9 +882,10 @@ class TestGroupR_PostureCountSeparation:
 
     def test_R04_unknown_posture_defaults_to_control_only(self):
         from core.canonical_session_truth import (
-            record_session_truth,
             build_canonical_session_truth_snapshot,
+            record_session_truth,
         )
+
         record_session_truth(session_id="s1", source_runtime_posture=None)
         snap = build_canonical_session_truth_snapshot()
         assert snap.control_only_session_count == 1
@@ -811,12 +895,14 @@ class TestGroupR_PostureCountSeparation:
 # Group S — record_session_truth: merge_success propagation
 # ===========================================================================
 
+
 class TestGroupS_MergeSuccessPropagation:
     def test_S01_successful_merge_increments_count(self):
         from core.canonical_session_truth import (
-            record_session_truth,
             build_canonical_session_truth_snapshot,
+            record_session_truth,
         )
+
         unit = _make_result_unit(status="succeeded")
         record_session_truth(
             session_id="s1",
@@ -828,9 +914,10 @@ class TestGroupS_MergeSuccessPropagation:
 
     def test_S02_failed_merge_does_not_increment(self):
         from core.canonical_session_truth import (
-            record_session_truth,
             build_canonical_session_truth_snapshot,
+            record_session_truth,
         )
+
         # No units → merge will fail
         record_session_truth(session_id="s1", result_units=[])
         snap = build_canonical_session_truth_snapshot()
@@ -838,6 +925,7 @@ class TestGroupS_MergeSuccessPropagation:
 
     def test_S03_record_merge_success_field(self):
         from core.canonical_session_truth import record_session_truth
+
         unit = _make_result_unit(status="succeeded")
         rec = record_session_truth(
             session_id="s",
@@ -848,6 +936,7 @@ class TestGroupS_MergeSuccessPropagation:
 
     def test_S04_record_merge_failure_field(self):
         from core.canonical_session_truth import record_session_truth
+
         rec = record_session_truth(session_id="s", result_units=[])
         assert rec.merge_success is False
 
@@ -856,12 +945,14 @@ class TestGroupS_MergeSuccessPropagation:
 # Group T — record_session_truth: truth_source inference
 # ===========================================================================
 
+
 class TestGroupT_TruthSourceInference:
     def test_T01_explicit_truth_source_preserved(self):
         from core.canonical_session_truth import (
-            record_session_truth,
             SessionTruthSource,
+            record_session_truth,
         )
+
         rec = record_session_truth(
             session_id="s",
             truth_source=SessionTruthSource.takeover.value,
@@ -870,17 +961,19 @@ class TestGroupT_TruthSourceInference:
 
     def test_T02_default_truth_source_is_unknown(self):
         from core.canonical_session_truth import (
-            record_session_truth,
             SessionTruthSource,
+            record_session_truth,
         )
+
         rec = record_session_truth(session_id="s")
         assert rec.truth_source == SessionTruthSource.unknown.value
 
     def test_T03_truth_source_from_primary_unit_metadata(self):
         from core.canonical_session_truth import (
-            record_session_truth,
             SessionTruthSource,
+            record_session_truth,
         )
+
         uid = str(uuid.uuid4())
         unit = _make_result_unit(result_unit_id=uid, status="succeeded")
         unit["metadata"]["truth_source"] = SessionTruthSource.remote_handoff.value
@@ -897,23 +990,23 @@ class TestGroupT_TruthSourceInference:
 
     def test_T04_non_canonical_truth_source_downgraded_to_unknown(self):
         from core.canonical_session_truth import (
-            record_session_truth,
             SessionTruthSource,
+            record_session_truth,
         )
+
         rec = record_session_truth(
             session_id="s",
             truth_source="non_canonical_source_label",
         )
         assert rec.truth_source == SessionTruthSource.unknown.value
-        assert rec.metadata.get("truth_source_downgrade_reason", "").startswith(
-            "downgraded_non_canonical_label:"
-        )
+        assert rec.metadata.get("truth_source_downgrade_reason", "").startswith("downgraded_non_canonical_label:")
 
     def test_T05_projection_truth_source_is_explicitly_downgraded(self):
         from core.canonical_session_truth import (
-            record_session_truth,
             SessionTruthSource,
+            record_session_truth,
         )
+
         rec = record_session_truth(
             session_id="s",
             truth_source="projection_surface",
@@ -927,18 +1020,21 @@ class TestGroupT_TruthSourceInference:
 # Group U — build_canonical_session_truth_snapshot
 # ===========================================================================
 
+
 class TestGroupU_BuildSnapshot:
     def test_U01_empty_runtime_snapshot(self):
         from core.canonical_session_truth import build_canonical_session_truth_snapshot
+
         snap = build_canonical_session_truth_snapshot()
         assert snap.total_records == 0
         assert snap.recent_records == []
 
     def test_U02_snapshot_after_records(self):
         from core.canonical_session_truth import (
-            record_session_truth,
             build_canonical_session_truth_snapshot,
+            record_session_truth,
         )
+
         record_session_truth(session_id="s1", source_runtime_posture="control_only")
         record_session_truth(session_id="s2", source_runtime_posture="join_runtime")
         snap = build_canonical_session_truth_snapshot()
@@ -948,9 +1044,10 @@ class TestGroupU_BuildSnapshot:
 
     def test_U03_max_recent_parameter(self):
         from core.canonical_session_truth import (
-            record_session_truth,
             build_canonical_session_truth_snapshot,
+            record_session_truth,
         )
+
         for i in range(10):
             record_session_truth(session_id=f"s{i}")
         snap = build_canonical_session_truth_snapshot(max_recent=3)
@@ -958,7 +1055,9 @@ class TestGroupU_BuildSnapshot:
 
     def test_U04_to_dict_is_json_serialisable(self):
         import json
+
         from core.canonical_session_truth import build_canonical_session_truth_snapshot
+
         snap = build_canonical_session_truth_snapshot()
         assert json.dumps(snap.to_dict())  # must not raise
 
@@ -967,71 +1066,86 @@ class TestGroupU_BuildSnapshot:
 # Group V — core.runtime re-exports
 # ===========================================================================
 
+
 class TestGroupV_CoreRuntimeReexports:
     def test_V01_canonical_session_truth_authority_accessible(self):
         from core.runtime import CANONICAL_SESSION_TRUTH_AUTHORITY
+
         assert isinstance(CANONICAL_SESSION_TRUTH_AUTHORITY, str)
 
     def test_V02_control_only_excluded_policy_accessible(self):
         from core.runtime import CONTROL_ONLY_EXCLUDED_FROM_MERGE_POLICY
+
         assert isinstance(CONTROL_ONLY_EXCLUDED_FROM_MERGE_POLICY, str)
 
     def test_V03_posture_aware_filter_policy_accessible(self):
         from core.runtime import POSTURE_AWARE_RESULT_FILTER_POLICY
+
         assert isinstance(POSTURE_AWARE_RESULT_FILTER_POLICY, str)
 
     def test_V04_join_runtime_included_policy_accessible(self):
         from core.runtime import JOIN_RUNTIME_INCLUDED_IN_MERGE_POLICY
+
         assert isinstance(JOIN_RUNTIME_INCLUDED_IN_MERGE_POLICY, str)
 
     def test_V05_pr4_sentinel_accessible(self):
         from core.runtime import CANONICAL_SESSION_TRUTH_PR4_SENTINEL
+
         assert isinstance(CANONICAL_SESSION_TRUTH_PR4_SENTINEL, str)
 
     def test_V06_session_truth_source_accessible(self):
         from core.runtime import SessionTruthSource
+
         assert SessionTruthSource.local == "local"
 
     def test_V07_canonical_session_truth_record_accessible(self):
         from core.runtime import CanonicalSessionTruthRecord
+
         rec = CanonicalSessionTruthRecord()
         assert rec.record_id.startswith("cst_")
 
     def test_V08_canonical_session_truth_snapshot_accessible(self):
         from core.runtime import CanonicalSessionTruthSnapshot
+
         snap = CanonicalSessionTruthSnapshot()
         assert snap.total_records == 0
 
     def test_V09_filter_result_units_by_posture_accessible(self):
         from core.runtime import filter_result_units_by_posture
+
         kept, excluded = filter_result_units_by_posture([])
         assert kept == []
 
     def test_V10_merge_session_truth_accessible(self):
         from core.runtime import merge_session_truth
+
         result = merge_session_truth(session_id="test")
         assert result is not None
 
     def test_V11_record_session_truth_accessible(self):
-        from core.runtime import record_session_truth, CanonicalSessionTruthRecord
+        from core.runtime import CanonicalSessionTruthRecord, record_session_truth
+
         rec = record_session_truth(session_id="test")
         assert isinstance(rec, CanonicalSessionTruthRecord)
 
     def test_V12_build_snapshot_accessible(self):
         from core.runtime import build_canonical_session_truth_snapshot
+
         snap = build_canonical_session_truth_snapshot()
         assert snap is not None
 
     def test_V13_get_runtime_accessible(self):
         from core.runtime import (
-            get_canonical_session_truth_runtime,
             CanonicalSessionTruthRuntime,
+            get_canonical_session_truth_runtime,
         )
+
         rt = get_canonical_session_truth_runtime()
         assert isinstance(rt, CanonicalSessionTruthRuntime)
 
     def test_V14_reset_runtime_accessible(self):
         from core.runtime import reset_canonical_session_truth_runtime
+
         reset_canonical_session_truth_runtime()  # should not raise
 
 
@@ -1039,15 +1153,18 @@ class TestGroupV_CoreRuntimeReexports:
 # Group W — RuntimeSessionSnapshot: source_runtime_posture field
 # ===========================================================================
 
+
 class TestGroupW_RuntimeSessionSnapshot:
     def test_W01_source_runtime_posture_field_exists_with_default(self):
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshot
+
         snap = RuntimeSessionSnapshot(session_id="sess_w01")
         assert hasattr(snap, "source_runtime_posture")
         assert snap.source_runtime_posture == "control_only"
 
     def test_W02_source_runtime_posture_can_be_set_to_join_runtime(self):
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshot
+
         snap = RuntimeSessionSnapshot(
             session_id="sess_w02",
             source_runtime_posture="join_runtime",
@@ -1056,6 +1173,7 @@ class TestGroupW_RuntimeSessionSnapshot:
 
     def test_W03_to_dict_includes_source_runtime_posture(self):
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshot
+
         snap = RuntimeSessionSnapshot(
             session_id="sess_w03",
             source_runtime_posture="join_runtime",
@@ -1065,6 +1183,7 @@ class TestGroupW_RuntimeSessionSnapshot:
 
     def test_W04_from_dict_round_trip(self):
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshot
+
         d = {
             "session_id": "sess_w04",
             "source_runtime_posture": "join_runtime",
@@ -1074,6 +1193,7 @@ class TestGroupW_RuntimeSessionSnapshot:
 
     def test_W05_default_posture_is_control_only(self):
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshot
+
         snap = RuntimeSessionSnapshot(session_id="sess_w05")
         assert snap.source_runtime_posture == "control_only"
 
@@ -1082,15 +1202,18 @@ class TestGroupW_RuntimeSessionSnapshot:
 # Group X — RuntimeSessionSnapshotIdentity: source_runtime_posture field
 # ===========================================================================
 
+
 class TestGroupX_RuntimeSessionSnapshotIdentity:
     def test_X01_source_runtime_posture_field_exists(self):
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshotIdentity
+
         identity = RuntimeSessionSnapshotIdentity(session_id="sess_x01")
         assert hasattr(identity, "source_runtime_posture")
         assert identity.source_runtime_posture == "control_only"
 
     def test_X02_join_runtime_can_be_set(self):
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshotIdentity
+
         identity = RuntimeSessionSnapshotIdentity(
             session_id="sess_x02",
             source_runtime_posture="join_runtime",
@@ -1099,6 +1222,7 @@ class TestGroupX_RuntimeSessionSnapshotIdentity:
 
     def test_X03_to_dict_includes_field(self):
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshotIdentity
+
         identity = RuntimeSessionSnapshotIdentity(
             session_id="sess_x03",
             source_runtime_posture="join_runtime",
@@ -1109,6 +1233,7 @@ class TestGroupX_RuntimeSessionSnapshotIdentity:
 
     def test_X04_from_dict_round_trip(self):
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshotIdentity
+
         d = {"session_id": "sess_x04", "source_runtime_posture": "join_runtime"}
         identity = RuntimeSessionSnapshotIdentity.from_dict(d)
         assert identity.source_runtime_posture == "join_runtime"
@@ -1118,20 +1243,24 @@ class TestGroupX_RuntimeSessionSnapshotIdentity:
 # Group Y — RuntimeSessionSnapshotDispatchState: source_runtime_posture field
 # ===========================================================================
 
+
 class TestGroupY_RuntimeSessionSnapshotDispatchState:
     def test_Y01_source_runtime_posture_field_exists(self):
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshotDispatchState
+
         state = RuntimeSessionSnapshotDispatchState()
         assert hasattr(state, "source_runtime_posture")
         assert state.source_runtime_posture == "control_only"
 
     def test_Y02_join_runtime_can_be_set(self):
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshotDispatchState
+
         state = RuntimeSessionSnapshotDispatchState(source_runtime_posture="join_runtime")
         assert state.source_runtime_posture == "join_runtime"
 
     def test_Y03_to_dict_includes_field(self):
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshotDispatchState
+
         state = RuntimeSessionSnapshotDispatchState(source_runtime_posture="join_runtime")
         d = state.to_dict()
         assert "source_runtime_posture" in d
@@ -1139,6 +1268,7 @@ class TestGroupY_RuntimeSessionSnapshotDispatchState:
 
     def test_Y04_from_dict_round_trip(self):
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshotDispatchState
+
         d = {"source_runtime_posture": "join_runtime"}
         state = RuntimeSessionSnapshotDispatchState.from_dict(d)
         assert state.source_runtime_posture == "join_runtime"
@@ -1148,21 +1278,25 @@ class TestGroupY_RuntimeSessionSnapshotDispatchState:
 # Group Z — RuntimeSessionSnapshotResultState: new PR-4 fields
 # ===========================================================================
 
+
 class TestGroupZ_RuntimeSessionSnapshotResultState:
     def test_Z01_source_runtime_posture_field_exists(self):
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshotResultState
+
         state = RuntimeSessionSnapshotResultState()
         assert hasattr(state, "source_runtime_posture")
         assert state.source_runtime_posture == "control_only"
 
     def test_Z02_excluded_unit_ids_field_exists(self):
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshotResultState
+
         state = RuntimeSessionSnapshotResultState()
         assert hasattr(state, "excluded_unit_ids")
         assert state.excluded_unit_ids == []
 
     def test_Z03_excluded_unit_ids_can_be_populated(self):
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshotResultState
+
         state = RuntimeSessionSnapshotResultState(
             excluded_unit_ids=["uid-001", "uid-002"],
             source_runtime_posture="control_only",
@@ -1172,6 +1306,7 @@ class TestGroupZ_RuntimeSessionSnapshotResultState:
 
     def test_Z04_to_dict_includes_pr4_fields(self):
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshotResultState
+
         state = RuntimeSessionSnapshotResultState(
             source_runtime_posture="join_runtime",
             excluded_unit_ids=["uid-001"],
@@ -1184,6 +1319,7 @@ class TestGroupZ_RuntimeSessionSnapshotResultState:
 
     def test_Z05_from_dict_round_trip(self):
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshotResultState
+
         d = {
             "source_runtime_posture": "join_runtime",
             "excluded_unit_ids": ["uid-001"],
@@ -1194,6 +1330,7 @@ class TestGroupZ_RuntimeSessionSnapshotResultState:
 
     def test_Z06_join_runtime_posture_can_be_set(self):
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshotResultState
+
         state = RuntimeSessionSnapshotResultState(source_runtime_posture="join_runtime")
         assert state.source_runtime_posture == "join_runtime"
 
@@ -1202,32 +1339,38 @@ class TestGroupZ_RuntimeSessionSnapshotResultState:
 # Group AA — RuntimeResultUnit: source_runtime_posture + coordination_role
 # ===========================================================================
 
+
 class TestGroupAA_RuntimeResultUnitPostureFields:
     """RuntimeResultUnit now carries first-class source_runtime_posture and
     coordination_role fields (PR-4 contract alignment)."""
 
     def test_AA01_default_source_runtime_posture_is_control_only(self):
         from contracts.cross_runtime_result_merge import RuntimeResultUnit
+
         unit = RuntimeResultUnit()
         assert unit.source_runtime_posture == "control_only"
 
     def test_AA02_source_runtime_posture_can_be_set_to_join_runtime(self):
         from contracts.cross_runtime_result_merge import RuntimeResultUnit
+
         unit = RuntimeResultUnit(source_runtime_posture="join_runtime")
         assert unit.source_runtime_posture == "join_runtime"
 
     def test_AA03_default_coordination_role_is_empty(self):
         from contracts.cross_runtime_result_merge import RuntimeResultUnit
+
         unit = RuntimeResultUnit()
         assert unit.coordination_role == ""
 
     def test_AA04_coordination_role_can_be_set(self):
         from contracts.cross_runtime_result_merge import RuntimeResultUnit
+
         unit = RuntimeResultUnit(coordination_role="joined_runtime_participant")
         assert unit.coordination_role == "joined_runtime_participant"
 
     def test_AA05_to_dict_includes_posture_and_role_fields(self):
         from contracts.cross_runtime_result_merge import RuntimeResultUnit
+
         unit = RuntimeResultUnit(
             source_runtime_posture="join_runtime",
             coordination_role="source_controller",
@@ -1238,6 +1381,7 @@ class TestGroupAA_RuntimeResultUnitPostureFields:
 
     def test_AA06_from_dict_round_trip_posture_and_role(self):
         from contracts.cross_runtime_result_merge import RuntimeResultUnit
+
         d = {
             "source_runtime_posture": "join_runtime",
             "coordination_role": "target_only_executor",
@@ -1248,6 +1392,7 @@ class TestGroupAA_RuntimeResultUnitPostureFields:
 
     def test_AA07_pr4_sentinel_present_and_non_empty(self):
         from contracts.cross_runtime_result_merge import CROSS_RUNTIME_RESULT_MERGE_PR4_POSTURE_SENTINEL
+
         assert CROSS_RUNTIME_RESULT_MERGE_PR4_POSTURE_SENTINEL
         assert "PR4" in CROSS_RUNTIME_RESULT_MERGE_PR4_POSTURE_SENTINEL
 
@@ -1256,17 +1401,20 @@ class TestGroupAA_RuntimeResultUnitPostureFields:
 # Group BB — MergedRuntimeResult: source_runtime_posture + coordination_role
 # ===========================================================================
 
+
 class TestGroupBB_MergedRuntimeResultPostureFields:
     """MergedRuntimeResult now carries source_runtime_posture and
     coordination_role fields propagated from the merge context (PR-4)."""
 
     def test_BB01_default_source_runtime_posture_is_control_only(self):
         from contracts.cross_runtime_result_merge import MergedRuntimeResult
+
         result = MergedRuntimeResult()
         assert result.source_runtime_posture == "control_only"
 
     def test_BB02_source_runtime_posture_propagated_by_merge_runtime_results(self):
-        from contracts.cross_runtime_result_merge import merge_runtime_results, RuntimeResultUnit, RuntimeResultStatus
+        from contracts.cross_runtime_result_merge import RuntimeResultStatus, RuntimeResultUnit, merge_runtime_results
+
         unit = RuntimeResultUnit(status=RuntimeResultStatus.succeeded, output={"x": 1})
         result = merge_runtime_results(
             [unit],
@@ -1275,7 +1423,8 @@ class TestGroupBB_MergedRuntimeResultPostureFields:
         assert result.source_runtime_posture == "join_runtime"
 
     def test_BB03_coordination_role_propagated_by_merge_runtime_results(self):
-        from contracts.cross_runtime_result_merge import merge_runtime_results, RuntimeResultUnit, RuntimeResultStatus
+        from contracts.cross_runtime_result_merge import RuntimeResultStatus, RuntimeResultUnit, merge_runtime_results
+
         unit = RuntimeResultUnit(status=RuntimeResultStatus.succeeded)
         result = merge_runtime_results(
             [unit],
@@ -1285,6 +1434,7 @@ class TestGroupBB_MergedRuntimeResultPostureFields:
 
     def test_BB04_to_dict_includes_posture_and_role(self):
         from contracts.cross_runtime_result_merge import MergedRuntimeResult
+
         result = MergedRuntimeResult(
             source_runtime_posture="join_runtime",
             coordination_role="joined_runtime_participant",
@@ -1295,6 +1445,7 @@ class TestGroupBB_MergedRuntimeResultPostureFields:
 
     def test_BB05_empty_merge_preserves_posture_and_role(self):
         from contracts.cross_runtime_result_merge import merge_runtime_results
+
         result = merge_runtime_results(
             [],
             source_runtime_posture="join_runtime",
@@ -1304,8 +1455,9 @@ class TestGroupBB_MergedRuntimeResultPostureFields:
         assert result.coordination_role == "source_controller"
 
     def test_BB06_merge_session_truth_propagates_posture_and_role_to_merged_result(self):
+        from contracts.cross_runtime_result_merge import RuntimeResultStatus, RuntimeResultUnit
         from core.canonical_session_truth import merge_session_truth
-        from contracts.cross_runtime_result_merge import RuntimeResultUnit, RuntimeResultStatus
+
         unit = RuntimeResultUnit(status=RuntimeResultStatus.succeeded, output={"r": 1})
         result = merge_session_truth(
             [unit],
@@ -1320,11 +1472,13 @@ class TestGroupBB_MergedRuntimeResultPostureFields:
 # Group CC — filter_result_units_by_posture: coordination_role semantics
 # ===========================================================================
 
+
 class TestGroupCC_FilterByCoordinationRole:
     """observer_only coordination role is excluded (PR-4 / PR-6)."""
 
     def test_CC01_observer_only_unit_excluded_via_metadata(self):
         from core.canonical_session_truth import filter_result_units_by_posture
+
         unit = {
             "result_unit_id": "u001",
             "metadata": {"coordination_role": "observer_only"},
@@ -1334,8 +1488,9 @@ class TestGroupCC_FilterByCoordinationRole:
         assert "u001" in excluded
 
     def test_CC02_observer_only_unit_excluded_via_direct_field(self):
+        from contracts.cross_runtime_result_merge import RuntimeResultStatus, RuntimeResultUnit
         from core.canonical_session_truth import filter_result_units_by_posture
-        from contracts.cross_runtime_result_merge import RuntimeResultUnit, RuntimeResultStatus
+
         unit = RuntimeResultUnit(
             status=RuntimeResultStatus.succeeded,
             coordination_role="observer_only",
@@ -1346,6 +1501,7 @@ class TestGroupCC_FilterByCoordinationRole:
 
     def test_CC03_joined_runtime_participant_is_kept(self):
         from core.canonical_session_truth import filter_result_units_by_posture
+
         unit = {
             "result_unit_id": "u001",
             "metadata": {"coordination_role": "joined_runtime_participant"},
@@ -1356,6 +1512,7 @@ class TestGroupCC_FilterByCoordinationRole:
 
     def test_CC04_source_controller_is_kept(self):
         from core.canonical_session_truth import filter_result_units_by_posture
+
         unit = {
             "result_unit_id": "u001",
             "metadata": {"coordination_role": "source_controller"},
@@ -1366,6 +1523,7 @@ class TestGroupCC_FilterByCoordinationRole:
 
     def test_CC05_target_only_executor_is_kept(self):
         from core.canonical_session_truth import filter_result_units_by_posture
+
         unit = {
             "result_unit_id": "u001",
             "metadata": {"coordination_role": "target_only_executor"},
@@ -1376,18 +1534,18 @@ class TestGroupCC_FilterByCoordinationRole:
 
     def test_CC06_exclude_observer_only_role_false_keeps_observer_units(self):
         from core.canonical_session_truth import filter_result_units_by_posture
+
         unit = {
             "result_unit_id": "u001",
             "metadata": {"coordination_role": "observer_only"},
         }
-        kept, excluded = filter_result_units_by_posture(
-            [unit], exclude_observer_only_role=False
-        )
+        kept, excluded = filter_result_units_by_posture([unit], exclude_observer_only_role=False)
         assert len(kept) == 1
         assert excluded == []
 
     def test_CC07_both_observer_role_and_control_only_posture_excluded(self):
         from core.canonical_session_truth import filter_result_units_by_posture
+
         co_unit = {
             "result_unit_id": "u-co",
             "metadata": {"source_runtime_posture": "control_only"},
@@ -1404,6 +1562,7 @@ class TestGroupCC_FilterByCoordinationRole:
 
     def test_CC08_observer_only_excluded_from_merge_policy_sentinel_non_empty(self):
         from core.canonical_session_truth import OBSERVER_ONLY_ROLE_EXCLUDED_FROM_MERGE_POLICY
+
         assert OBSERVER_ONLY_ROLE_EXCLUDED_FROM_MERGE_POLICY
         assert "observer_only" in OBSERVER_ONLY_ROLE_EXCLUDED_FROM_MERGE_POLICY
 
@@ -1412,10 +1571,12 @@ class TestGroupCC_FilterByCoordinationRole:
 # Group DD — merge_session_truth: coordination_role parameter
 # ===========================================================================
 
+
 class TestGroupDD_MergeSessionTruthCoordinationRole:
 
     def test_DD01_observer_only_units_excluded_when_role_in_metadata(self):
         from core.canonical_session_truth import merge_session_truth
+
         obs_unit = {
             "result_unit_id": "u-obs",
             "status": "succeeded",
@@ -1436,6 +1597,7 @@ class TestGroupDD_MergeSessionTruthCoordinationRole:
 
     def test_DD02_coordination_role_recorded_in_canonical_session_truth_record(self):
         from core.canonical_session_truth import record_session_truth
+
         rec = record_session_truth(
             session_id="sess-dd02",
             source_runtime_posture="join_runtime",
@@ -1445,6 +1607,7 @@ class TestGroupDD_MergeSessionTruthCoordinationRole:
 
     def test_DD03_coordination_role_empty_by_default_in_record(self):
         from core.canonical_session_truth import record_session_truth
+
         rec = record_session_truth(
             session_id="sess-dd03",
             source_runtime_posture="join_runtime",
@@ -1453,6 +1616,7 @@ class TestGroupDD_MergeSessionTruthCoordinationRole:
 
     def test_DD04_coordination_role_in_to_dict(self):
         from core.canonical_session_truth import record_session_truth
+
         rec = record_session_truth(
             session_id="sess-dd04",
             coordination_role="joined_runtime_participant",
@@ -1463,6 +1627,7 @@ class TestGroupDD_MergeSessionTruthCoordinationRole:
     def test_DD05_observer_only_role_source_has_no_units_in_merge(self):
         """Source with observer_only role and observer-tagged units → empty merge."""
         from core.canonical_session_truth import merge_session_truth
+
         unit = {
             "result_unit_id": "u-obs",
             "status": "succeeded",
@@ -1481,15 +1646,18 @@ class TestGroupDD_MergeSessionTruthCoordinationRole:
 # Group EE — RuntimeSessionSnapshotIdentity: coordination_role field
 # ===========================================================================
 
+
 class TestGroupEE_SnapshotIdentityCoordinationRole:
 
     def test_EE01_default_coordination_role_is_empty(self):
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshotIdentity
+
         snap = RuntimeSessionSnapshotIdentity(session_id="s")
         assert snap.coordination_role == ""
 
     def test_EE02_coordination_role_can_be_set(self):
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshotIdentity
+
         snap = RuntimeSessionSnapshotIdentity(
             session_id="s",
             coordination_role="source_controller",
@@ -1498,6 +1666,7 @@ class TestGroupEE_SnapshotIdentityCoordinationRole:
 
     def test_EE03_to_dict_includes_coordination_role(self):
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshotIdentity
+
         snap = RuntimeSessionSnapshotIdentity(
             session_id="s",
             coordination_role="joined_runtime_participant",
@@ -1508,6 +1677,7 @@ class TestGroupEE_SnapshotIdentityCoordinationRole:
 
     def test_EE04_from_dict_round_trip(self):
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshotIdentity
+
         d = {
             "session_id": "s",
             "coordination_role": "source_controller",
@@ -1520,20 +1690,24 @@ class TestGroupEE_SnapshotIdentityCoordinationRole:
 # Group FF — RuntimeSessionSnapshotResultState: coordination_role field
 # ===========================================================================
 
+
 class TestGroupFF_SnapshotResultStateCoordinationRole:
 
     def test_FF01_default_coordination_role_is_empty(self):
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshotResultState
+
         state = RuntimeSessionSnapshotResultState()
         assert state.coordination_role == ""
 
     def test_FF02_coordination_role_can_be_set(self):
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshotResultState
+
         state = RuntimeSessionSnapshotResultState(coordination_role="source_controller")
         assert state.coordination_role == "source_controller"
 
     def test_FF03_to_dict_includes_coordination_role(self):
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshotResultState
+
         state = RuntimeSessionSnapshotResultState(
             source_runtime_posture="join_runtime",
             coordination_role="joined_runtime_participant",
@@ -1544,6 +1718,7 @@ class TestGroupFF_SnapshotResultStateCoordinationRole:
 
     def test_FF04_from_dict_round_trip(self):
         from contracts.runtime_session_snapshot import RuntimeSessionSnapshotResultState
+
         d = {
             "source_runtime_posture": "join_runtime",
             "coordination_role": "joined_runtime_participant",
@@ -1558,18 +1733,22 @@ class TestGroupFF_SnapshotResultStateCoordinationRole:
 # Group GG — Projection route canonical session truth alignment sentinel
 # ===========================================================================
 
+
 class TestGroupGG_ProjectionRouteSentinel:
 
     def test_GG01_canonical_session_truth_aligned_sentinel_importable(self):
         from core.routes.projection import CANONICAL_SESSION_TRUTH_ALIGNED_PR4
+
         assert CANONICAL_SESSION_TRUTH_ALIGNED_PR4
 
     def test_GG02_aligned_sentinel_contains_pr4_marker(self):
         from core.routes.projection import CANONICAL_SESSION_TRUTH_ALIGNED_PR4
+
         assert "PR4" in CANONICAL_SESSION_TRUTH_ALIGNED_PR4
 
     def test_GG03_aligned_sentinel_is_not_unavailable(self):
         from core.routes.projection import CANONICAL_SESSION_TRUTH_ALIGNED_PR4
+
         assert "UNAVAILABLE" not in CANONICAL_SESSION_TRUTH_ALIGNED_PR4
 
 
@@ -1577,14 +1756,17 @@ class TestGroupGG_ProjectionRouteSentinel:
 # Group HH — core.runtime re-export of OBSERVER_ONLY_ROLE_EXCLUDED policy
 # ===========================================================================
 
+
 class TestGroupHH_CoreRuntimeObserverPolicyExport:
 
     def test_HH01_observer_only_policy_accessible_from_core_runtime(self):
         from core.runtime import OBSERVER_ONLY_ROLE_EXCLUDED_FROM_MERGE_POLICY
+
         assert OBSERVER_ONLY_ROLE_EXCLUDED_FROM_MERGE_POLICY
 
     def test_HH02_observer_only_policy_contains_policy_marker(self):
         from core.runtime import OBSERVER_ONLY_ROLE_EXCLUDED_FROM_MERGE_POLICY
+
         assert "observer_only" in OBSERVER_ONLY_ROLE_EXCLUDED_FROM_MERGE_POLICY
 
 
@@ -1592,13 +1774,15 @@ class TestGroupHH_CoreRuntimeObserverPolicyExport:
 # Group II — filter_result_units_by_posture: direct field lookup (PR-4)
 # ===========================================================================
 
+
 class TestGroupII_DirectFieldLookup:
     """Ensure direct field source_runtime_posture / coordination_role on
     RuntimeResultUnit is honoured by the filter when explicitly set."""
 
     def test_II01_explicit_control_only_direct_field_excluded(self):
+        from contracts.cross_runtime_result_merge import RuntimeResultStatus, RuntimeResultUnit
         from core.canonical_session_truth import filter_result_units_by_posture
-        from contracts.cross_runtime_result_merge import RuntimeResultUnit, RuntimeResultStatus
+
         unit = RuntimeResultUnit(
             status=RuntimeResultStatus.succeeded,
             source_runtime_posture="control_only",
@@ -1608,8 +1792,9 @@ class TestGroupII_DirectFieldLookup:
         assert len(excluded) == 1
 
     def test_II02_explicit_join_runtime_direct_field_kept(self):
+        from contracts.cross_runtime_result_merge import RuntimeResultStatus, RuntimeResultUnit
         from core.canonical_session_truth import filter_result_units_by_posture
-        from contracts.cross_runtime_result_merge import RuntimeResultUnit, RuntimeResultStatus
+
         unit = RuntimeResultUnit(
             status=RuntimeResultStatus.succeeded,
             source_runtime_posture="join_runtime",
@@ -1619,8 +1804,9 @@ class TestGroupII_DirectFieldLookup:
         assert excluded == []
 
     def test_II03_explicit_observer_only_direct_coordination_role_excluded(self):
+        from contracts.cross_runtime_result_merge import RuntimeResultStatus, RuntimeResultUnit
         from core.canonical_session_truth import filter_result_units_by_posture
-        from contracts.cross_runtime_result_merge import RuntimeResultUnit, RuntimeResultStatus
+
         unit = RuntimeResultUnit(
             status=RuntimeResultStatus.succeeded,
             coordination_role="observer_only",
@@ -1632,8 +1818,9 @@ class TestGroupII_DirectFieldLookup:
     def test_II04_metadata_posture_takes_priority_over_default_field(self):
         """When metadata has join_runtime but field is default control_only,
         the unit should be kept (metadata priority)."""
+        from contracts.cross_runtime_result_merge import RuntimeResultStatus, RuntimeResultUnit
         from core.canonical_session_truth import filter_result_units_by_posture
-        from contracts.cross_runtime_result_merge import RuntimeResultUnit, RuntimeResultStatus
+
         # field default = control_only; metadata overrides to join_runtime
         unit = RuntimeResultUnit(
             status=RuntimeResultStatus.succeeded,

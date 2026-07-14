@@ -88,9 +88,7 @@ class TestGroupA_ClassifyProofInputDiagnosis:
 
     def test_a2_contract_state_missing_explicit(self) -> None:
         """Explicit contract_state=missing → class=missing."""
-        result = classify_canonical_proof_input_diagnosis(
-            {"android_semantics_contract_state": "missing"}
-        )
+        result = classify_canonical_proof_input_diagnosis({"android_semantics_contract_state": "missing"})
         assert result["proof_input_class"] == "missing"
 
     def test_a3_partial_missing_keys(self) -> None:
@@ -553,9 +551,9 @@ class TestGroupC_DecisionCausalityCarriesProofInputDiagnosis:
         for path_name in [p.value for p in GovernancePath]:
             causality = device["governance_precedence"][path_name]["decision_causality"]
             diag = causality["proof_input_diagnosis"]
-            assert diag["proof_input_class"] == "missing", (
-                f"path={path_name}: expected missing, got {diag['proof_input_class']}"
-            )
+            assert (
+                diag["proof_input_class"] == "missing"
+            ), f"path={path_name}: expected missing, got {diag['proof_input_class']}"
 
     def test_c2_partial_semantics_surfaced_in_causality(self) -> None:
         """Partial semantics → proof_input_diagnosis.proof_input_class=partial."""
@@ -579,9 +577,9 @@ class TestGroupC_DecisionCausalityCarriesProofInputDiagnosis:
         for path_name in [p.value for p in GovernancePath]:
             causality = device["governance_precedence"][path_name]["decision_causality"]
             diag = causality["proof_input_diagnosis"]
-            assert diag["proof_input_class"] == "partial", (
-                f"path={path_name}: expected partial, got {diag['proof_input_class']}"
-            )
+            assert (
+                diag["proof_input_class"] == "partial"
+            ), f"path={path_name}: expected partial, got {diag['proof_input_class']}"
 
     def test_c3_malformed_semantics_surfaced_in_causality(self) -> None:
         """Malformed keys → proof_input_diagnosis.proof_input_class=malformed."""
@@ -605,9 +603,9 @@ class TestGroupC_DecisionCausalityCarriesProofInputDiagnosis:
         for path_name in [p.value for p in GovernancePath]:
             causality = device["governance_precedence"][path_name]["decision_causality"]
             diag = causality["proof_input_diagnosis"]
-            assert diag["proof_input_class"] == "malformed", (
-                f"path={path_name}: expected malformed, got {diag['proof_input_class']}"
-            )
+            assert (
+                diag["proof_input_class"] == "malformed"
+            ), f"path={path_name}: expected malformed, got {diag['proof_input_class']}"
 
     def test_c4_unknown_semantics_surfaced_in_causality(self) -> None:
         """Unknown contract drift → proof_input_diagnosis.proof_input_class=unknown."""
@@ -632,9 +630,9 @@ class TestGroupC_DecisionCausalityCarriesProofInputDiagnosis:
         for path_name in [p.value for p in GovernancePath]:
             causality = device["governance_precedence"][path_name]["decision_causality"]
             diag = causality["proof_input_diagnosis"]
-            assert diag["proof_input_class"] == "unknown", (
-                f"path={path_name}: expected unknown, got {diag['proof_input_class']}"
-            )
+            assert (
+                diag["proof_input_class"] == "unknown"
+            ), f"path={path_name}: expected unknown, got {diag['proof_input_class']}"
 
     def test_c5_downgraded_semantics_surfaced_in_causality(self) -> None:
         """Downgraded Android truth → proof_input_diagnosis.proof_input_class=downgraded."""
@@ -662,9 +660,9 @@ class TestGroupC_DecisionCausalityCarriesProofInputDiagnosis:
         for path_name in [p.value for p in GovernancePath]:
             causality = device["governance_precedence"][path_name]["decision_causality"]
             diag = causality["proof_input_diagnosis"]
-            assert diag["proof_input_class"] == "downgraded", (
-                f"path={path_name}: expected downgraded, got {diag['proof_input_class']}"
-            )
+            assert (
+                diag["proof_input_class"] == "downgraded"
+            ), f"path={path_name}: expected downgraded, got {diag['proof_input_class']}"
 
     def test_c6_stale_semantics_surfaced_in_causality(self) -> None:
         """Stale semantics → proof_input_diagnosis.proof_input_class=stale."""
@@ -689,9 +687,9 @@ class TestGroupC_DecisionCausalityCarriesProofInputDiagnosis:
         for path_name in [p.value for p in GovernancePath]:
             causality = device["governance_precedence"][path_name]["decision_causality"]
             diag = causality["proof_input_diagnosis"]
-            assert diag["proof_input_class"] == "stale", (
-                f"path={path_name}: expected stale, got {diag['proof_input_class']}"
-            )
+            assert (
+                diag["proof_input_class"] == "stale"
+            ), f"path={path_name}: expected stale, got {diag['proof_input_class']}"
 
     def test_c7_conflicting_semantics_surfaced_in_causality(self) -> None:
         """Semantic conflicts → proof_input_diagnosis.proof_input_class=conflicting."""
@@ -715,9 +713,9 @@ class TestGroupC_DecisionCausalityCarriesProofInputDiagnosis:
         for path_name in [p.value for p in GovernancePath]:
             causality = device["governance_precedence"][path_name]["decision_causality"]
             diag = causality["proof_input_diagnosis"]
-            assert diag["proof_input_class"] == "conflicting", (
-                f"path={path_name}: expected conflicting, got {diag['proof_input_class']}"
-            )
+            assert (
+                diag["proof_input_class"] == "conflicting"
+            ), f"path={path_name}: expected conflicting, got {diag['proof_input_class']}"
             assert len(diag["proof_input_conflicts"]) >= 1
 
     def test_c8_complete_semantics_surfaced_in_causality(self) -> None:
@@ -743,9 +741,9 @@ class TestGroupC_DecisionCausalityCarriesProofInputDiagnosis:
         for path_name in [p.value for p in GovernancePath]:
             causality = device["governance_precedence"][path_name]["decision_causality"]
             diag = causality["proof_input_diagnosis"]
-            assert diag["proof_input_class"] == "complete", (
-                f"path={path_name}: expected complete, got {diag['proof_input_class']}"
-            )
+            assert (
+                diag["proof_input_class"] == "complete"
+            ), f"path={path_name}: expected complete, got {diag['proof_input_class']}"
 
     def test_c9_proof_input_diagnosis_dict_has_required_keys(self) -> None:
         """proof_input_diagnosis always has the required structural keys."""
@@ -916,15 +914,18 @@ class TestGroupE_PolicySentinel:
 
     def test_e1_sentinel_is_importable_from_unified_execution_governance(self) -> None:
         from core.unified_execution_governance import CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY as p
+
         assert isinstance(p, str)
         assert "CANONICAL_PROOF_INPUT_DIAGNOSIS" in p
 
     def test_e2_sentinel_is_re_exported_from_unified_governance_semantics(self) -> None:
         from core.unified_governance_semantics import CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY as p
+
         assert isinstance(p, str)
         assert "CANONICAL_PROOF_INPUT_DIAGNOSIS" in p
 
     def test_e3_classify_is_re_exported_from_unified_governance_semantics(self) -> None:
         from core.unified_governance_semantics import classify_canonical_proof_input_diagnosis as fn
+
         result = fn({})
         assert result["proof_input_class"] == "missing"

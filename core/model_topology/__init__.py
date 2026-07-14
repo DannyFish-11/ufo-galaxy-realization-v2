@@ -36,35 +36,6 @@ See ``docs/MODEL_TOPOLOGY_BRIDGE.md`` for the bridge design rationale.
 See ``docs/MODEL_SUPPLY_TOPOLOGY.md`` for the topology core design.
 """
 
-from .config_bridge import ConfigBridge
-from .legacy_dashboard_schema import (
-    LegacyLLMProviderSnapshot,
-    LegacyNodeAPIEntry,
-    LegacyNodeAPIKeySpec,
-    LegacyProviderHealthDetail,
-    LegacyRouterSemantics,
-)
-from .provider_inventory import ProviderInventory, ProviderInventoryEntry
-from .topology_types import (
-    AggregatorKind,
-    AggregatorRouterHint,
-    AvailabilityStatus,
-    ModalityCapability,
-    ModelIdentity,
-    NormalizedTopologyEntry,
-    ProviderCategory,
-    ProviderIdentity,
-    ScoringProfile,
-    TopologyRole,
-)
-
-# --- Topology core (PR-2) ---
-from .model_node import EdgeKind, LocalityHint, ModelNode, node_from_entry
-from .model_supply_graph import GraphEdge, ModelSupplyGraph
-from .model_weight_field import ModelWeightField, apply_weight_fields, compute_weight_field
-from .routing_policy import PolicyConfig
-from .topology_router import TopologyRoutePlan, TopologyRouter
-
 # --- Canonical model supply state (PR-18) ---
 from .canonical_model_supply_state import (
     CanonicalModelSupplyState,
@@ -76,6 +47,26 @@ from .canonical_model_supply_state import (
     build_canonical_model_supply_state,
     build_canonical_model_supply_state_from_router,
 )
+from .config_bridge import ConfigBridge
+
+# --- Config-authority-driven inventory (PR-4) ---
+from .inventory_from_config import (
+    INVENTORY_CONFIG_AUTHORITY,
+    build_candidate_pool,
+    build_inventory_from_config_authority,
+    get_oneapi_candidate_state,
+    merge_config_authority_into_inventory,
+)
+from .legacy_dashboard_schema import (
+    LegacyLLMProviderSnapshot,
+    LegacyNodeAPIEntry,
+    LegacyNodeAPIKeySpec,
+    LegacyProviderHealthDetail,
+    LegacyRouterSemantics,
+)
+
+# --- Topology core (PR-2) ---
+from .model_node import EdgeKind, LocalityHint, ModelNode, node_from_entry
 
 # --- Model selection policy engine (PR-25) ---
 from .model_selection_policy import (
@@ -87,14 +78,22 @@ from .model_selection_policy import (
     SelectionReasonCode,
     build_model_selection_policy_from_perception,
 )
-
-# --- Config-authority-driven inventory (PR-4) ---
-from .inventory_from_config import (
-    INVENTORY_CONFIG_AUTHORITY,
-    build_inventory_from_config_authority,
-    build_candidate_pool,
-    get_oneapi_candidate_state,
-    merge_config_authority_into_inventory,
+from .model_supply_graph import GraphEdge, ModelSupplyGraph
+from .model_weight_field import ModelWeightField, apply_weight_fields, compute_weight_field
+from .provider_inventory import ProviderInventory, ProviderInventoryEntry
+from .routing_policy import PolicyConfig
+from .topology_router import TopologyRoutePlan, TopologyRouter
+from .topology_types import (
+    AggregatorKind,
+    AggregatorRouterHint,
+    AvailabilityStatus,
+    ModalityCapability,
+    ModelIdentity,
+    NormalizedTopologyEntry,
+    ProviderCategory,
+    ProviderIdentity,
+    ScoringProfile,
+    TopologyRole,
 )
 
 __all__ = [

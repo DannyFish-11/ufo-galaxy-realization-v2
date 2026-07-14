@@ -75,6 +75,7 @@ Public API
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
+
 logger = logging.getLogger(__name__)
 
 
@@ -270,9 +271,7 @@ class SimulationSummary:
         UNIX timestamp when this summary was built.
     """
 
-    summary_id: str = dataclasses.field(
-        default_factory=lambda: str(uuid.uuid4())
-    )
+    summary_id: str = dataclasses.field(default_factory=lambda: str(uuid.uuid4()))
     is_active: bool = False
     simulation_kind: str = "none"
     candidate_paths: List[str] = dataclasses.field(default_factory=list)
@@ -334,18 +333,10 @@ class LiminalSpaceMap:
         UNIX timestamp when this map was built.
     """
 
-    map_id: str = dataclasses.field(
-        default_factory=lambda: str(uuid.uuid4())
-    )
-    local_chain: LocalChainView = dataclasses.field(
-        default_factory=LocalChainView
-    )
-    cross_device_chain: CrossDeviceChainView = dataclasses.field(
-        default_factory=CrossDeviceChainView
-    )
-    simulation_summary: SimulationSummary = dataclasses.field(
-        default_factory=SimulationSummary
-    )
+    map_id: str = dataclasses.field(default_factory=lambda: str(uuid.uuid4()))
+    local_chain: LocalChainView = dataclasses.field(default_factory=LocalChainView)
+    cross_device_chain: CrossDeviceChainView = dataclasses.field(default_factory=CrossDeviceChainView)
+    simulation_summary: SimulationSummary = dataclasses.field(default_factory=SimulationSummary)
     timestamp: float = dataclasses.field(default_factory=time.time)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -596,12 +587,14 @@ def get_liminal_space_map(
 
     try:
         from core.local_execution_chain import build_local_chain_snapshot
+
         local_snap_dict = build_local_chain_snapshot().to_dict()
     except Exception as exc:
         logger.debug("Suppressed: %s", exc)
 
     try:
         from core.cross_device_execution_chain import build_cross_device_chain_snapshot
+
         cd_snap_dict = build_cross_device_chain_snapshot().to_dict()
     except Exception as exc:
         logger.debug("Suppressed: %s", exc)

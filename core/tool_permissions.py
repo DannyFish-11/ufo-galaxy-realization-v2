@@ -35,16 +35,19 @@ logger = logging.getLogger("Galaxy.ToolPermissions")
 # 数据模型
 # ============================================================================
 
+
 class ToolRiskLevel(str, Enum):
     """工具风险等级"""
-    SAFE = "safe"              # 只读/查询类：screenshot, get_screen_state, search
-    MODERATE = "moderate"      # 输入类：click, type, scroll, find_and_click
-    DANGEROUS = "dangerous"    # 系统级：press_keys(hotkey), file_delete, process_stop
-    CRITICAL = "critical"      # 破坏性：system_command, file_write(/system/*), 批量操作
+
+    SAFE = "safe"  # 只读/查询类：screenshot, get_screen_state, search
+    MODERATE = "moderate"  # 输入类：click, type, scroll, find_and_click
+    DANGEROUS = "dangerous"  # 系统级：press_keys(hotkey), file_delete, process_stop
+    CRITICAL = "critical"  # 破坏性：system_command, file_write(/system/*), 批量操作
 
 
 class ToolPermissionPolicy(BaseModel):
     """工具权限策略"""
+
     tool_pattern: str = Field(..., description="工具名匹配模式（glob），如 'mcp__*__screenshot'")
     risk_level: ToolRiskLevel = Field(default=ToolRiskLevel.MODERATE)
     requires_confirmation: bool = Field(default=False, description="是否需要用户二次确认")
@@ -53,6 +56,7 @@ class ToolPermissionPolicy(BaseModel):
 
 class PermissionCheckResult(BaseModel):
     """权限检查结果"""
+
     allowed: bool = True
     requires_confirmation: bool = False
     risk_level: str = "safe"
@@ -73,7 +77,6 @@ DEFAULT_POLICIES: List[ToolPermissionPolicy] = [
     ToolPermissionPolicy(tool_pattern="node__*__read", risk_level=ToolRiskLevel.SAFE),
     ToolPermissionPolicy(tool_pattern="node__*__status", risk_level=ToolRiskLevel.SAFE),
     ToolPermissionPolicy(tool_pattern="node__*__info", risk_level=ToolRiskLevel.SAFE),
-
     # MODERATE: 输入操作
     ToolPermissionPolicy(tool_pattern="mcp__*__click", risk_level=ToolRiskLevel.MODERATE),
     ToolPermissionPolicy(tool_pattern="mcp__*__type", risk_level=ToolRiskLevel.MODERATE),
@@ -81,7 +84,6 @@ DEFAULT_POLICIES: List[ToolPermissionPolicy] = [
     ToolPermissionPolicy(tool_pattern="mcp__*__find_and_click", risk_level=ToolRiskLevel.MODERATE),
     ToolPermissionPolicy(tool_pattern="mcp__*__find_and_type", risk_level=ToolRiskLevel.MODERATE),
     ToolPermissionPolicy(tool_pattern="node__*__write", risk_level=ToolRiskLevel.MODERATE),
-
     # DANGEROUS: 系统级，需确认
     ToolPermissionPolicy(
         tool_pattern="mcp__*__press_key",
@@ -107,7 +109,6 @@ DEFAULT_POLICIES: List[ToolPermissionPolicy] = [
         requires_confirmation=True,
         max_calls_per_minute=5,
     ),
-
     # CRITICAL: 破坏性，严格限制
     ToolPermissionPolicy(
         tool_pattern="node__*__system_command",
@@ -127,6 +128,7 @@ DEFAULT_POLICIES: List[ToolPermissionPolicy] = [
 # ============================================================================
 # 权限检查器
 # ============================================================================
+
 
 class ToolPermissionChecker:
     """工具调用权限检查器
@@ -171,10 +173,7 @@ class ToolPermissionChecker:
 
         # 频率检查
         if not self._check_rate_limit(matched_policy):
-            logger.warning(
-                f"工具 {tool_name} 超过频率限制 "
-                f"({matched_policy.max_calls_per_minute}/min)"
-            )
+            logger.warning(f"工具 {tool_name} 超过频率限制 " f"({matched_policy.max_calls_per_minute}/min)")
             return PermissionCheckResult(
                 allowed=False,
                 risk_level=matched_policy.risk_level.value,
@@ -218,9 +217,7 @@ class ToolPermissionChecker:
         key = policy.tool_pattern
 
         # 清理过期记录
-        self._call_counts[key] = [
-            t for t in self._call_counts[key] if now - t < window
-        ]
+        self._call_counts[key] = [t for t in self._call_counts[key] if now - t < window]
 
         return len(self._call_counts[key]) < policy.max_calls_per_minute
 
@@ -253,33 +250,67 @@ def _risk_order(level: ToolRiskLevel) -> int:
 
 DEVICE_CAPABILITY_WHITELIST: Dict[str, List[str]] = {
     "windows_desktop": [
-        "get_screen_state", "click", "type", "press_key", "press_keys",
-        "scroll", "find_and_click", "find_and_type", "screenshot",
-        "execute_script", "send_notification", "display_media",
-        "visual_action", "ui_automation",
+        "get_screen_state",
+        "click",
+        "type",
+        "press_key",
+        "press_keys",
+        "scroll",
+        "find_and_click",
+        "find_and_type",
+        "screenshot",
+        "execute_script",
+        "send_notification",
+        "display_media",
+        "visual_action",
+        "ui_automation",
     ],
     "windows_laptop": [
-        "get_screen_state", "click", "type", "press_key", "press_keys",
-        "scroll", "find_and_click", "find_and_type", "screenshot",
-        "execute_script", "send_notification", "display_media",
-        "visual_action", "ui_automation",
+        "get_screen_state",
+        "click",
+        "type",
+        "press_key",
+        "press_keys",
+        "scroll",
+        "find_and_click",
+        "find_and_type",
+        "screenshot",
+        "execute_script",
+        "send_notification",
+        "display_media",
+        "visual_action",
+        "ui_automation",
     ],
     "android_phone": [
-        "tap", "swipe", "input_text", "screenshot", "install_app",
-        "uninstall_app", "launch_app", "press_key", "shell",
-        "get_ui_tree", "find_element",
+        "tap",
+        "swipe",
+        "input_text",
+        "screenshot",
+        "install_app",
+        "uninstall_app",
+        "launch_app",
+        "press_key",
+        "shell",
+        "get_ui_tree",
+        "find_element",
     ],
     "android_tablet": [
-        "tap", "swipe", "input_text", "screenshot", "install_app",
-        "uninstall_app", "launch_app", "press_key", "shell",
-        "get_ui_tree", "find_element",
+        "tap",
+        "swipe",
+        "input_text",
+        "screenshot",
+        "install_app",
+        "uninstall_app",
+        "launch_app",
+        "press_key",
+        "shell",
+        "get_ui_tree",
+        "find_element",
     ],
 }
 
 
-def validate_device_capabilities(
-    device_type: str, reported_capabilities: List[str]
-) -> List[str]:
+def validate_device_capabilities(device_type: str, reported_capabilities: List[str]) -> List[str]:
     """服务端校验设备声明的能力，过滤非法声明
 
     Args:
@@ -299,9 +330,7 @@ def validate_device_capabilities(
     validated = [cap for cap in reported_capabilities if cap in whitelist]
     filtered = set(reported_capabilities) - set(validated)
     if filtered:
-        logger.warning(
-            f"设备 {device_type} 声明了非法能力，已过滤: {filtered}"
-        )
+        logger.warning(f"设备 {device_type} 声明了非法能力，已过滤: {filtered}")
     return validated
 
 

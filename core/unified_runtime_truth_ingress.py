@@ -40,7 +40,8 @@ This module closes that gap by providing:
    function that routes any Android runtime state message through the correct
    sub-ingress path:
    - Execution signals → :func:`~core.android_delegated_signal_ingress.ingest_delegated_execution_signal`
-   - Participant / session / runtime truth → :func:`~core.android_participant_truth_ingress.ingest_android_participant_truth_message`
+   - Participant / session / runtime truth →
+     :func:`~core.android_participant_truth_ingress.ingest_android_participant_truth_message`
    - Handoff v2 responses → :func:`~core.android_handoff_v2_response_ingress.ingest_android_handoff_response`
 5. :class:`RuntimeTruthIngressOutcome` — typed result of an ingress attempt
    that surfaces which sub-path was used, whether reconciliation succeeded,
@@ -193,27 +194,31 @@ SINGLE_INGRESS_BYPASS_GUARD_POLICY: str = (
 
 _DELEGATED_EXECUTION_SIGNAL_TYPE = "delegated_execution_signal"
 
-_HANDOFF_TYPES = frozenset({
-    "handoff_ack",
-    "handoff_result",
-    "handoff_failure",
-})
+_HANDOFF_TYPES = frozenset(
+    {
+        "handoff_ack",
+        "handoff_result",
+        "handoff_failure",
+    }
+)
 
-_EXECUTION_SIGNAL_TYPES = frozenset({
-    "ack",
-    "progress",
-    "result",
-    "error",
-    "timeout",
-    "cancelled",
-    _DELEGATED_EXECUTION_SIGNAL_TYPE,
-    "execution_ack",
-    "execution_progress",
-    "execution_result",
-    "execution_error",
-    "execution_timeout",
-    "execution_cancelled",
-})
+_EXECUTION_SIGNAL_TYPES = frozenset(
+    {
+        "ack",
+        "progress",
+        "result",
+        "error",
+        "timeout",
+        "cancelled",
+        _DELEGATED_EXECUTION_SIGNAL_TYPE,
+        "execution_ack",
+        "execution_progress",
+        "execution_result",
+        "execution_error",
+        "execution_timeout",
+        "execution_cancelled",
+    }
+)
 
 # ---------------------------------------------------------------------------
 # RuntimeTruthIngressOutcome dataclass
@@ -328,9 +333,7 @@ def _check_runtime_ingress_continuity(
         ctx = ContinuityLegalityContext(
             device_id=str(message.get("device_id") or ""),
             runtime_session_id=str(message.get("runtime_session_id") or ""),
-            runtime_attachment_session_id=str(
-                message.get("runtime_attachment_session_id") or ""
-            ),
+            runtime_attachment_session_id=str(message.get("runtime_attachment_session_id") or ""),
             durable_session_id=str(message.get("durable_session_id") or ""),
             signal_id=str(message.get("signal_id") or ""),
             emission_seq=int(message.get("emission_seq") or 0),
@@ -345,8 +348,7 @@ def _check_runtime_ingress_continuity(
         return verdict, False
     except Exception as _e:
         logger.debug(
-            "unified_runtime_truth_ingress: continuity gate unavailable "
-            "(mode=%s): %s",
+            "unified_runtime_truth_ingress: continuity gate unavailable " "(mode=%s): %s",
             mode,
             _e,
         )
@@ -366,9 +368,7 @@ def _resolve_runtime_truth_continuity_mode(message: Dict[str, Any]) -> str:
         raw = str(message.get(key) or "").strip().lower()
         if raw in {"strict", "compat", "relaxed"}:
             return raw
-    env_mode = str(
-        os.environ.get("GALAXY_RUNTIME_TRUTH_CONTINUITY_MODE", "compat")
-    ).strip().lower()
+    env_mode = str(os.environ.get("GALAXY_RUNTIME_TRUTH_CONTINUITY_MODE", "compat")).strip().lower()
     if env_mode in {"strict", "compat", "relaxed"}:
         return env_mode
     return "compat"
@@ -400,12 +400,7 @@ def _extract_terminal_result_status(
 ) -> Optional[str]:
     """Map an execution signal message to canonical result status when terminal."""
     payload = message.get("payload") if isinstance(message.get("payload"), dict) else {}
-    raw_signal_kind = str(
-        payload.get("signal_kind")
-        or message.get("signal_kind")
-        or msg_type
-        or ""
-    ).lower().strip()
+    raw_signal_kind = str(payload.get("signal_kind") or message.get("signal_kind") or msg_type or "").lower().strip()
 
     if raw_signal_kind in ("ack", "progress", "execution_ack", "execution_progress"):
         return None
@@ -418,13 +413,17 @@ def _extract_terminal_result_status(
         return "failed"
 
     if raw_signal_kind in ("result", "execution_result", _DELEGATED_EXECUTION_SIGNAL_TYPE):
-        raw_status = str(
-            payload.get("status")
-            or message.get("status")
-            or payload.get("result_kind")
-            or message.get("result_kind")
-            or "success"
-        ).lower().strip()
+        raw_status = (
+            str(
+                payload.get("status")
+                or message.get("status")
+                or payload.get("result_kind")
+                or message.get("result_kind")
+                or "success"
+            )
+            .lower()
+            .strip()
+        )
         if raw_status in ("failure", "failed", "error"):
             return "failed"
         if raw_status in ("cancelled", "canceled"):
@@ -526,11 +525,10 @@ def get_session_authority():
     """
     try:
         from core.attached_runtime_session_registry import get_session_registry
+
         return get_session_registry()
     except Exception as exc:
-        logger.warning(
-            "unified_runtime_truth_ingress: get_session_authority unavailable: %s", exc
-        )
+        logger.warning("unified_runtime_truth_ingress: get_session_authority unavailable: %s", exc)
         return None
 
 
@@ -621,9 +619,7 @@ def ingest_android_runtime_state_update(
 
             sub_outcome = ingest_android_handoff_response(message, runtime=runtime)
             was_correlated = getattr(sub_outcome, "was_correlated", False)
-            reject_reason = "" if was_correlated else getattr(
-                sub_outcome, "reject_reason", "handoff_not_correlated"
-            )
+            reject_reason = "" if was_correlated else getattr(sub_outcome, "reject_reason", "handoff_not_correlated")
             return RuntimeTruthIngressOutcome(
                 routed_path="handoff",
                 was_reconciled=was_correlated,
@@ -632,9 +628,7 @@ def ingest_android_runtime_state_update(
                 message_type=msg_type,
             )
         except Exception as exc:
-            logger.warning(
-                "unified_runtime_truth_ingress: handoff sub-ingress error: %s", exc
-            )
+            logger.warning("unified_runtime_truth_ingress: handoff sub-ingress error: %s", exc)
             return RuntimeTruthIngressOutcome(
                 routed_path="degraded",
                 was_reconciled=False,
@@ -657,9 +651,7 @@ def ingest_android_runtime_state_update(
                 kwargs["registry"] = registry
             sub_outcome = ingest_delegated_execution_signal(message, **kwargs)
             was_reconciled = _resolve_execution_signal_reconciled(sub_outcome)
-            reject_reason = "" if was_reconciled else getattr(
-                sub_outcome, "reject_reason", "signal_not_reconciled"
-            )
+            reject_reason = "" if was_reconciled else getattr(sub_outcome, "reject_reason", "signal_not_reconciled")
 
             outcome = RuntimeTruthIngressOutcome(
                 routed_path="execution_signal",
@@ -717,9 +709,7 @@ def ingest_android_runtime_state_update(
                 outcome.truth_ingested_or_accepted = bool(result_outcome.truth_chain_complete)
                 outcome.closure_accepted = bool(result_outcome.is_fully_closed)
                 outcome.final_completion_state = (
-                    "closed"
-                    if outcome.closure_accepted
-                    else "result_returned_but_not_closed"
+                    "closed" if outcome.closure_accepted else "result_returned_but_not_closed"
                 )
             except Exception as exc:
                 logger.warning(
@@ -743,9 +733,7 @@ def ingest_android_runtime_state_update(
 
     # ── Priority 3: Participant / session / runtime truth (default) ───────
     # Reject only if there's no identifiable content at all.
-    if not msg_type and not any(
-        k in message for k in ("device_id", "session_id", "task_id", "payload", "kind")
-    ):
+    if not msg_type and not any(k in message for k in ("device_id", "session_id", "task_id", "payload", "kind")):
         return RuntimeTruthIngressOutcome(
             routed_path="rejected",
             was_reconciled=False,
@@ -765,8 +753,8 @@ def ingest_android_runtime_state_update(
             kwargs_pt["registry"] = registry
         sub_outcome = ingest_android_participant_truth_message(message, **kwargs_pt)
         was_reconciled = getattr(sub_outcome, "was_reconciled", False)
-        reject_reason = "" if was_reconciled else getattr(
-            sub_outcome, "reject_reason", "participant_truth_not_reconciled"
+        reject_reason = (
+            "" if was_reconciled else getattr(sub_outcome, "reject_reason", "participant_truth_not_reconciled")
         )
         return RuntimeTruthIngressOutcome(
             routed_path="participant_truth",

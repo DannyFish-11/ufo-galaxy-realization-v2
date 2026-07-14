@@ -27,10 +27,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_legacy_contract(
     trace_id: str = "trace_001",
@@ -58,6 +58,7 @@ def _make_legacy_contract(
 def _make_real_legacy_contract(**kwargs) -> Any:
     """Return an actual HandoffContract (uses dataclass)."""
     from galaxy_gateway.agent_bridge import HandoffContract
+
     defaults = dict(
         trace_id="trace_real_001",
         task={"tool_name": "open_app", "args": {"app": "Chrome"}},
@@ -76,11 +77,13 @@ def _make_real_legacy_contract(**kwargs) -> Any:
 # 1. Serialisation stability
 # ---------------------------------------------------------------------------
 
+
 class TestSerialisationStability:
     """HandoffEnvelopeV2 serialises and round-trips correctly."""
 
     def test_to_dict_returns_serialisable_dict(self):
         from contracts.handoff_envelope_v2 import HandoffEnvelopeV2
+
         env = HandoffEnvelopeV2(trace_id="t1")
         result = env.to_dict()
         assert isinstance(result, dict)
@@ -90,6 +93,7 @@ class TestSerialisationStability:
 
     def test_to_json_returns_valid_json(self):
         from contracts.handoff_envelope_v2 import HandoffEnvelopeV2
+
         env = HandoffEnvelopeV2(trace_id="t2", source_device_id="phone_001")
         raw = env.to_json()
         parsed = json.loads(raw)
@@ -98,6 +102,7 @@ class TestSerialisationStability:
 
     def test_from_dict_round_trip(self):
         from contracts.handoff_envelope_v2 import HandoffEnvelopeV2
+
         original = HandoffEnvelopeV2(
             trace_id="t3",
             task_id="task_001",
@@ -116,6 +121,7 @@ class TestSerialisationStability:
 
     def test_to_json_then_from_dict_full_round_trip(self):
         from contracts.handoff_envelope_v2 import HandoffEnvelopeV2
+
         env = HandoffEnvelopeV2(
             trace_id="t4",
             session_id="sess_001",
@@ -132,12 +138,14 @@ class TestSerialisationStability:
 
     def test_schema_version_is_v2(self):
         from contracts.handoff_envelope_v2 import HandoffEnvelopeV2
+
         env = HandoffEnvelopeV2(trace_id="t5")
         assert env.schema_version == "v2"
         assert env.to_dict()["schema_version"] == "v2"
 
     def test_handoff_id_auto_generated(self):
         from contracts.handoff_envelope_v2 import HandoffEnvelopeV2
+
         e1 = HandoffEnvelopeV2(trace_id="t6a")
         e2 = HandoffEnvelopeV2(trace_id="t6b")
         assert e1.handoff_id.startswith("hev2_")
@@ -146,7 +154,9 @@ class TestSerialisationStability:
 
     def test_created_at_is_float(self):
         import time
+
         from contracts.handoff_envelope_v2 import HandoffEnvelopeV2
+
         before = time.time()
         env = HandoffEnvelopeV2(trace_id="t7")
         after = time.time()
@@ -156,6 +166,7 @@ class TestSerialisationStability:
 # ---------------------------------------------------------------------------
 # 2. Stable field names
 # ---------------------------------------------------------------------------
+
 
 class TestStableFieldNames:
     """All documented top-level fields present in to_dict output."""
@@ -188,6 +199,7 @@ class TestStableFieldNames:
 
     def test_all_required_fields_present(self):
         from contracts.handoff_envelope_v2 import HandoffEnvelopeV2
+
         env = HandoffEnvelopeV2(trace_id="fields_test")
         result = env.to_dict()
         missing = self.REQUIRED_FIELDS - set(result.keys())
@@ -198,11 +210,13 @@ class TestStableFieldNames:
 # 3. Sub-contract field correctness
 # ---------------------------------------------------------------------------
 
+
 class TestSubContractFields:
     """Sub-contract models serialise with expected fields."""
 
     def test_handoff_source_summary_fields(self):
         from contracts.handoff_envelope_v2 import HandoffSourceSummary
+
         s = HandoffSourceSummary(
             device_id="phone_001",
             runtime_id="rt_abc",
@@ -218,6 +232,7 @@ class TestSubContractFields:
 
     def test_handoff_target_summary_fields(self):
         from contracts.handoff_envelope_v2 import HandoffTargetSummary
+
         t = HandoffTargetSummary(
             device_id="tablet_002",
             handoff_endpoint="http://tablet:9000/handoff",
@@ -228,6 +243,7 @@ class TestSubContractFields:
 
     def test_handoff_agent_spec_fields(self):
         from contracts.handoff_envelope_v2 import HandoffAgentSpec
+
         a = HandoffAgentSpec(
             agent_id="agent_01",
             agent_type="executor",
@@ -241,6 +257,7 @@ class TestSubContractFields:
 
     def test_handoff_task_spec_fields(self):
         from contracts.handoff_envelope_v2 import HandoffTaskSpec
+
         t = HandoffTaskSpec(
             task_id="task_001",
             tool_name="open_app",
@@ -255,6 +272,7 @@ class TestSubContractFields:
 
     def test_handoff_session_context_fields(self):
         from contracts.handoff_envelope_v2 import HandoffSessionContext
+
         sc = HandoffSessionContext(
             session_id="sess_abc",
             turn_id="turn_02",
@@ -267,6 +285,7 @@ class TestSubContractFields:
 
     def test_local_takeover_policy_fields(self):
         from contracts.handoff_envelope_v2 import LocalTakeoverPolicy
+
         p = LocalTakeoverPolicy(
             allow_local_takeover=True,
             require_ack_before_takeover=True,
@@ -281,6 +300,7 @@ class TestSubContractFields:
 
     def test_handoff_return_contract_fields(self):
         from contracts.handoff_envelope_v2 import HandoffReturnContract
+
         rc = HandoffReturnContract(
             callback_channel="nats",
             expect_ack=True,
@@ -294,6 +314,7 @@ class TestSubContractFields:
 
     def test_sub_contracts_in_envelope_to_dict(self):
         from contracts.handoff_envelope_v2 import HandoffEnvelopeV2
+
         env = HandoffEnvelopeV2(trace_id="sub_test")
         d = env.to_dict()
         # All sub-contracts must serialise as dicts
@@ -310,47 +331,55 @@ class TestSubContractFields:
 # 4. from_legacy_handoff_contract adapter
 # ---------------------------------------------------------------------------
 
+
 class TestFromLegacyHandoffContract:
     """from_legacy_handoff_contract maps legacy fields correctly."""
 
     def test_trace_id_preserved(self):
         from contracts.handoff_envelope_v2 import from_legacy_handoff_contract
+
         contract = _make_legacy_contract(trace_id="trace_leg_001")
         env = from_legacy_handoff_contract(contract)
         assert env.trace_id == "trace_leg_001"
 
     def test_capability_preserved(self):
         from contracts.handoff_envelope_v2 import from_legacy_handoff_contract
+
         contract = _make_legacy_contract(capability="camera")
         env = from_legacy_handoff_contract(contract)
         assert env.capability == "camera"
 
     def test_exec_mode_preserved(self):
         from contracts.handoff_envelope_v2 import from_legacy_handoff_contract
+
         contract = _make_legacy_contract(exec_mode="remote")
         env = from_legacy_handoff_contract(contract)
         assert env.exec_mode == "remote"
 
     def test_route_mode_preserved(self):
         from contracts.handoff_envelope_v2 import from_legacy_handoff_contract
+
         contract = _make_legacy_contract(route_mode="broadcast")
         env = from_legacy_handoff_contract(contract)
         assert env.route_mode == "broadcast"
 
     def test_callback_channel_preserved(self):
         from contracts.handoff_envelope_v2 import from_legacy_handoff_contract
+
         contract = _make_legacy_contract(callback_channel="nats")
         env = from_legacy_handoff_contract(contract)
         assert env.callback_channel == "nats"
 
     def test_task_id_preserved(self):
         from contracts.handoff_envelope_v2 import from_legacy_handoff_contract
+
         contract = _make_legacy_contract(task_id="task_abc")
         env = from_legacy_handoff_contract(contract)
         assert env.task_id == "task_abc"
 
     def test_task_dict_projected_to_task_spec(self):
         from contracts.handoff_envelope_v2 import from_legacy_handoff_contract
+
         contract = _make_legacy_contract(
             task={"tool_name": "open_app", "args": {"app": "Chrome"}, "targets": ["tablet_002"]}
         )
@@ -361,9 +390,8 @@ class TestFromLegacyHandoffContract:
 
     def test_session_dict_projected_to_session_context(self):
         from contracts.handoff_envelope_v2 import from_legacy_handoff_contract
-        contract = _make_legacy_contract(
-            session={"session_id": "sess_xyz", "turn_id": "t1", "user_id": "u1"}
-        )
+
+        contract = _make_legacy_contract(session={"session_id": "sess_xyz", "turn_id": "t1", "user_id": "u1"})
         env = from_legacy_handoff_contract(contract)
         assert env.session_context.session_id == "sess_xyz"
         assert env.session_context.turn_id == "t1"
@@ -371,6 +399,7 @@ class TestFromLegacyHandoffContract:
 
     def test_raw_task_preserved_in_task_spec(self):
         from contracts.handoff_envelope_v2 import from_legacy_handoff_contract
+
         raw = {"tool_name": "screenshot", "args": {}, "extra_field": "yes"}
         contract = _make_legacy_contract(task=raw)
         env = from_legacy_handoff_contract(contract)
@@ -378,6 +407,7 @@ class TestFromLegacyHandoffContract:
 
     def test_raw_session_preserved_in_session_context(self):
         from contracts.handoff_envelope_v2 import from_legacy_handoff_contract
+
         raw_sess = {"session_id": "s1", "custom_key": "val"}
         contract = _make_legacy_contract(session=raw_sess)
         env = from_legacy_handoff_contract(contract)
@@ -385,24 +415,28 @@ class TestFromLegacyHandoffContract:
 
     def test_schema_version_is_v2(self):
         from contracts.handoff_envelope_v2 import from_legacy_handoff_contract
+
         contract = _make_legacy_contract()
         env = from_legacy_handoff_contract(contract)
         assert env.schema_version == "v2"
 
     def test_handoff_id_auto_generated(self):
         from contracts.handoff_envelope_v2 import from_legacy_handoff_contract
+
         contract = _make_legacy_contract()
         env = from_legacy_handoff_contract(contract)
         assert env.handoff_id.startswith("hev2_")
 
     def test_return_contract_callback_channel_matches(self):
         from contracts.handoff_envelope_v2 import from_legacy_handoff_contract
+
         contract = _make_legacy_contract(callback_channel="webrtc")
         env = from_legacy_handoff_contract(contract)
         assert env.return_contract.callback_channel == "webrtc"
 
     def test_from_real_handoff_contract(self):
         from contracts.handoff_envelope_v2 import from_legacy_handoff_contract
+
         contract = _make_real_legacy_contract()
         env = from_legacy_handoff_contract(contract)
         assert env.trace_id == "trace_real_001"
@@ -415,11 +449,13 @@ class TestFromLegacyHandoffContract:
 # 5. from_bridge_inputs adapter
 # ---------------------------------------------------------------------------
 
+
 class TestFromBridgeInputs:
     """from_bridge_inputs builds HandoffEnvelopeV2 from raw bridge params."""
 
     def test_basic_fields(self):
         from contracts.handoff_envelope_v2 import from_bridge_inputs
+
         env = from_bridge_inputs(
             trace_id="bridge_t1",
             task={"tool_name": "screenshot"},
@@ -433,6 +469,7 @@ class TestFromBridgeInputs:
 
     def test_device_ids_embedded(self):
         from contracts.handoff_envelope_v2 import from_bridge_inputs
+
         env = from_bridge_inputs(
             trace_id="bridge_t2",
             task={},
@@ -446,6 +483,7 @@ class TestFromBridgeInputs:
 
     def test_runtime_ids_embedded(self):
         from contracts.handoff_envelope_v2 import from_bridge_inputs
+
         env = from_bridge_inputs(
             trace_id="bridge_t3",
             task={},
@@ -459,6 +497,7 @@ class TestFromBridgeInputs:
 
     def test_session_projected(self):
         from contracts.handoff_envelope_v2 import from_bridge_inputs
+
         env = from_bridge_inputs(
             trace_id="bridge_t4",
             task={},
@@ -469,25 +508,27 @@ class TestFromBridgeInputs:
 
     def test_task_id_forwarded(self):
         from contracts.handoff_envelope_v2 import from_bridge_inputs
+
         env = from_bridge_inputs(trace_id="bridge_t5", task={}, task_id="task_q1")
         assert env.task_id == "task_q1"
         assert env.task_spec.task_id == "task_q1"
 
     def test_handoff_policy_embedded(self):
         from contracts.handoff_envelope_v2 import from_bridge_inputs
+
         policy = {"ack_required": True, "max_handoff_depth": 3}
         env = from_bridge_inputs(trace_id="bridge_t6", task={}, handoff_policy=policy)
         assert env.handoff_policy == policy
 
     def test_metadata_embedded(self):
         from contracts.handoff_envelope_v2 import from_bridge_inputs
-        env = from_bridge_inputs(
-            trace_id="bridge_t7", task={}, metadata={"custom": "value"}
-        )
+
+        env = from_bridge_inputs(trace_id="bridge_t7", task={}, metadata={"custom": "value"})
         assert env.metadata["custom"] == "value"
 
     def test_empty_session_defaults(self):
         from contracts.handoff_envelope_v2 import from_bridge_inputs
+
         env = from_bridge_inputs(trace_id="bridge_t8", task={})
         assert env.session_context.session_id is None
         assert env.session_context.raw_session == {}
@@ -497,6 +538,7 @@ class TestFromBridgeInputs:
 # 6. to_legacy_bridge_payload adapter
 # ---------------------------------------------------------------------------
 
+
 class TestToLegacyBridgePayload:
     """to_legacy_bridge_payload produces a legacy-compatible dict."""
 
@@ -504,6 +546,7 @@ class TestToLegacyBridgePayload:
 
     def test_all_legacy_keys_present(self):
         from contracts.handoff_envelope_v2 import HandoffEnvelopeV2, to_legacy_bridge_payload
+
         env = HandoffEnvelopeV2(trace_id="t_leg_1", capability="screen")
         payload = to_legacy_bridge_payload(env)
         missing = self.LEGACY_KEYS - set(payload.keys())
@@ -511,35 +554,43 @@ class TestToLegacyBridgePayload:
 
     def test_trace_id_preserved(self):
         from contracts.handoff_envelope_v2 import HandoffEnvelopeV2, to_legacy_bridge_payload
+
         env = HandoffEnvelopeV2(trace_id="t_leg_2")
         assert to_legacy_bridge_payload(env)["trace_id"] == "t_leg_2"
 
     def test_capability_preserved(self):
         from contracts.handoff_envelope_v2 import HandoffEnvelopeV2, to_legacy_bridge_payload
+
         env = HandoffEnvelopeV2(trace_id="t_leg_3", capability="camera")
         assert to_legacy_bridge_payload(env)["capability"] == "camera"
 
     def test_exec_mode_preserved(self):
         from contracts.handoff_envelope_v2 import HandoffEnvelopeV2, to_legacy_bridge_payload
+
         env = HandoffEnvelopeV2(trace_id="t_leg_4", exec_mode="local")
         assert to_legacy_bridge_payload(env)["exec_mode"] == "local"
 
     def test_task_id_included_when_present(self):
         from contracts.handoff_envelope_v2 import HandoffEnvelopeV2, to_legacy_bridge_payload
+
         env = HandoffEnvelopeV2(trace_id="t_leg_5", task_id="task_001")
         payload = to_legacy_bridge_payload(env)
         assert payload.get("task_id") == "task_001"
 
     def test_task_id_absent_when_none(self):
         from contracts.handoff_envelope_v2 import HandoffEnvelopeV2, to_legacy_bridge_payload
+
         env = HandoffEnvelopeV2(trace_id="t_leg_6")
         payload = to_legacy_bridge_payload(env)
         assert "task_id" not in payload
 
     def test_raw_task_used_when_available(self):
         from contracts.handoff_envelope_v2 import (
-            HandoffEnvelopeV2, HandoffTaskSpec, to_legacy_bridge_payload,
+            HandoffEnvelopeV2,
+            HandoffTaskSpec,
+            to_legacy_bridge_payload,
         )
+
         raw = {"tool_name": "screenshot", "args": {}, "my_extra": True}
         env = HandoffEnvelopeV2(
             trace_id="t_leg_7",
@@ -550,8 +601,11 @@ class TestToLegacyBridgePayload:
 
     def test_session_round_trip_via_raw_session(self):
         from contracts.handoff_envelope_v2 import (
-            HandoffEnvelopeV2, HandoffSessionContext, to_legacy_bridge_payload,
+            HandoffEnvelopeV2,
+            HandoffSessionContext,
+            to_legacy_bridge_payload,
         )
+
         raw_sess = {"session_id": "sess_abc", "user_id": "u1"}
         env = HandoffEnvelopeV2(
             trace_id="t_leg_8",
@@ -563,6 +617,7 @@ class TestToLegacyBridgePayload:
     def test_full_round_trip_via_legacy_adapter(self):
         """from_legacy → v2 → to_legacy should reproduce compatible payload."""
         from contracts.handoff_envelope_v2 import from_legacy_handoff_contract, to_legacy_bridge_payload
+
         contract = _make_real_legacy_contract()
         original_payload = contract.to_dict()
         env = from_legacy_handoff_contract(contract)
@@ -580,11 +635,13 @@ class TestToLegacyBridgePayload:
 # 7. build_handoff_envelope_v2 factory
 # ---------------------------------------------------------------------------
 
+
 class TestBuildHandoffEnvelopeV2:
     """build_handoff_envelope_v2 convenience factory."""
 
     def test_basic_construction(self):
         from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
+
         env = build_handoff_envelope_v2(
             trace_id="build_t1",
             task={"tool_name": "screenshot"},
@@ -596,6 +653,7 @@ class TestBuildHandoffEnvelopeV2:
 
     def test_device_ids(self):
         from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
+
         env = build_handoff_envelope_v2(
             trace_id="build_t2",
             task={},
@@ -607,6 +665,7 @@ class TestBuildHandoffEnvelopeV2:
 
     def test_agent_spec_populated(self):
         from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
+
         env = build_handoff_envelope_v2(
             trace_id="build_t3",
             task={},
@@ -620,12 +679,14 @@ class TestBuildHandoffEnvelopeV2:
 
     def test_takeover_policy_defaults(self):
         from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
+
         env = build_handoff_envelope_v2(trace_id="build_t4", task={})
         assert env.takeover_policy.allow_local_takeover is True
         assert env.takeover_policy.require_ack_before_takeover is False
 
     def test_takeover_policy_overrides(self):
         from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
+
         env = build_handoff_envelope_v2(
             trace_id="build_t5",
             task={},
@@ -637,27 +698,27 @@ class TestBuildHandoffEnvelopeV2:
 
     def test_session_id_forwarded(self):
         from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
+
         env = build_handoff_envelope_v2(trace_id="build_t6", task={}, session_id="sess_42")
         assert env.session_id == "sess_42"
         assert env.session_context.session_id == "sess_42"
 
     def test_return_contract_callback_matches(self):
         from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
-        env = build_handoff_envelope_v2(
-            trace_id="build_t7", task={}, callback_channel="nats"
-        )
+
+        env = build_handoff_envelope_v2(trace_id="build_t7", task={}, callback_channel="nats")
         assert env.return_contract.callback_channel == "nats"
         assert env.callback_channel == "nats"
 
     def test_metadata_embedded(self):
         from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
-        env = build_handoff_envelope_v2(
-            trace_id="build_t8", task={}, metadata={"origin": "test"}
-        )
+
+        env = build_handoff_envelope_v2(trace_id="build_t8", task={}, metadata={"origin": "test"})
         assert env.metadata["origin"] == "test"
 
     def test_result_is_json_serialisable(self):
         from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
+
         env = build_handoff_envelope_v2(
             trace_id="build_t9",
             task={"tool_name": "open_app"},
@@ -670,6 +731,7 @@ class TestBuildHandoffEnvelopeV2:
 # ---------------------------------------------------------------------------
 # 8. to_compact_summary
 # ---------------------------------------------------------------------------
+
 
 class TestToCompactSummary:
     """to_compact_summary returns a projection-safe compact dict."""
@@ -693,6 +755,7 @@ class TestToCompactSummary:
 
     def test_all_expected_keys_present(self):
         from contracts.handoff_envelope_v2 import HandoffEnvelopeV2
+
         env = HandoffEnvelopeV2(trace_id="compact_t1")
         summary = env.to_compact_summary()
         missing = self.COMPACT_KEYS - set(summary.keys())
@@ -700,6 +763,7 @@ class TestToCompactSummary:
 
     def test_no_task_payload_in_summary(self):
         from contracts.handoff_envelope_v2 import HandoffEnvelopeV2, HandoffTaskSpec
+
         env = HandoffEnvelopeV2(
             trace_id="compact_t2",
             task_spec=HandoffTaskSpec(raw_task={"tool_name": "secret_tool"}),
@@ -710,6 +774,7 @@ class TestToCompactSummary:
 
     def test_values_correct(self):
         from contracts.handoff_envelope_v2 import HandoffEnvelopeV2
+
         env = HandoffEnvelopeV2(
             trace_id="compact_t3",
             source_device_id="phone_001",
@@ -724,6 +789,7 @@ class TestToCompactSummary:
 
     def test_is_json_serialisable(self):
         from contracts.handoff_envelope_v2 import HandoffEnvelopeV2
+
         env = HandoffEnvelopeV2(trace_id="compact_t4")
         json.dumps(env.to_compact_summary())
 
@@ -732,11 +798,13 @@ class TestToCompactSummary:
 # 9. Graceful handling of partial / missing data
 # ---------------------------------------------------------------------------
 
+
 class TestGracefulPartialData:
     """Adapters handle missing or partial data without raising."""
 
     def test_from_legacy_with_empty_task(self):
         from contracts.handoff_envelope_v2 import from_legacy_handoff_contract
+
         contract = _make_legacy_contract(task={}, session={})
         env = from_legacy_handoff_contract(contract)
         assert env.task_spec.tool_name is None
@@ -745,6 +813,7 @@ class TestGracefulPartialData:
 
     def test_from_legacy_with_none_task(self):
         from contracts.handoff_envelope_v2 import from_legacy_handoff_contract
+
         contract = MagicMock()
         contract.trace_id = "t_partial"
         contract.task_id = ""
@@ -760,6 +829,7 @@ class TestGracefulPartialData:
 
     def test_from_legacy_with_missing_attributes(self):
         from contracts.handoff_envelope_v2 import from_legacy_handoff_contract
+
         # Minimal object — only trace_id
         contract = MagicMock(spec=[])
         contract.trace_id = "t_minimal"
@@ -768,12 +838,14 @@ class TestGracefulPartialData:
 
     def test_build_with_no_task(self):
         from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
+
         env = build_handoff_envelope_v2(trace_id="partial_build")
         assert env.trace_id == "partial_build"
         assert env.task_spec.tool_name is None
 
     def test_handoff_envelope_defaults_are_valid(self):
         from contracts.handoff_envelope_v2 import HandoffEnvelopeV2
+
         env = HandoffEnvelopeV2()
         d = env.to_dict()
         assert d["trace_id"] == ""
@@ -783,6 +855,7 @@ class TestGracefulPartialData:
 
     def test_sub_contracts_have_safe_defaults(self):
         from contracts.handoff_envelope_v2 import HandoffEnvelopeV2
+
         env = HandoffEnvelopeV2(trace_id="defaults_t")
         assert env.source.device_id is None
         assert env.target.device_id is None
@@ -797,15 +870,27 @@ class TestGracefulPartialData:
 # 10. contracts package root re-exports
 # ---------------------------------------------------------------------------
 
+
 class TestContractsPackageExports:
     """All PR-31 types exported from the contracts package root."""
 
     def test_handoff_envelope_v2_importable(self):
         from contracts import HandoffEnvelopeV2
+
         assert HandoffEnvelopeV2 is not None
 
     def test_sub_contracts_importable(self):
         from contracts import (
+            HandoffAgentSpec,
+            HandoffReturnContract,
+            HandoffSessionContext,
+            HandoffSourceSummary,
+            HandoffTargetSummary,
+            HandoffTaskSpec,
+            LocalTakeoverPolicy,
+        )
+
+        for cls in [
             HandoffSourceSummary,
             HandoffTargetSummary,
             HandoffAgentSpec,
@@ -813,21 +898,23 @@ class TestContractsPackageExports:
             HandoffSessionContext,
             LocalTakeoverPolicy,
             HandoffReturnContract,
-        )
-        for cls in [HandoffSourceSummary, HandoffTargetSummary, HandoffAgentSpec,
-                    HandoffTaskSpec, HandoffSessionContext, LocalTakeoverPolicy,
-                    HandoffReturnContract]:
+        ]:
             assert cls is not None
 
     def test_adapters_importable(self):
         from contracts import (
+            build_handoff_envelope_v2,
+            from_bridge_inputs,
+            from_legacy_handoff_contract,
+            to_legacy_bridge_payload,
+        )
+
+        for fn in [
             from_legacy_handoff_contract,
             from_bridge_inputs,
             to_legacy_bridge_payload,
             build_handoff_envelope_v2,
-        )
-        for fn in [from_legacy_handoff_contract, from_bridge_inputs,
-                   to_legacy_bridge_payload, build_handoff_envelope_v2]:
+        ]:
             assert callable(fn)
 
 
@@ -835,15 +922,27 @@ class TestContractsPackageExports:
 # 11. core.unified package re-exports
 # ---------------------------------------------------------------------------
 
+
 class TestCoreUnifiedExports:
     """All PR-31 types re-exported from core.unified."""
 
     def test_handoff_envelope_v2_importable(self):
         from core.unified import HandoffEnvelopeV2
+
         assert HandoffEnvelopeV2 is not None
 
     def test_sub_contracts_importable(self):
         from core.unified import (
+            HandoffAgentSpec,
+            HandoffReturnContract,
+            HandoffSessionContext,
+            HandoffSourceSummary,
+            HandoffTargetSummary,
+            HandoffTaskSpec,
+            LocalTakeoverPolicy,
+        )
+
+        for cls in [
             HandoffSourceSummary,
             HandoffTargetSummary,
             HandoffAgentSpec,
@@ -851,21 +950,23 @@ class TestCoreUnifiedExports:
             HandoffSessionContext,
             LocalTakeoverPolicy,
             HandoffReturnContract,
-        )
-        for cls in [HandoffSourceSummary, HandoffTargetSummary, HandoffAgentSpec,
-                    HandoffTaskSpec, HandoffSessionContext, LocalTakeoverPolicy,
-                    HandoffReturnContract]:
+        ]:
             assert cls is not None
 
     def test_adapters_importable(self):
         from core.unified import (
+            build_handoff_envelope_v2,
+            from_bridge_inputs,
+            from_legacy_handoff_contract,
+            to_legacy_bridge_payload,
+        )
+
+        for fn in [
             from_legacy_handoff_contract,
             from_bridge_inputs,
             to_legacy_bridge_payload,
             build_handoff_envelope_v2,
-        )
-        for fn in [from_legacy_handoff_contract, from_bridge_inputs,
-                   to_legacy_bridge_payload, build_handoff_envelope_v2]:
+        ]:
             assert callable(fn)
 
 
@@ -873,12 +974,14 @@ class TestCoreUnifiedExports:
 # 12. Bridge integration — result includes handoff_envelope_v2 summary
 # ---------------------------------------------------------------------------
 
+
 class TestBridgeIntegration:
     """AgentBridge.handoff() attaches handoff_envelope_v2 summary to result."""
 
     @pytest.mark.asyncio
     async def test_successful_handoff_includes_v2_summary(self):
         import os
+
         from galaxy_gateway.agent_bridge import AgentBridge, AgentBridgeConfig, HandoffContract
 
         config = AgentBridgeConfig(runtime_url="http://fake:9000", timeout=5.0, enabled=True)
@@ -920,6 +1023,7 @@ class TestBridgeIntegration:
 
         async def _timeout_runtime(c):
             import asyncio
+
             await asyncio.sleep(10)
             return {}
 
@@ -938,12 +1042,13 @@ class TestBridgeIntegration:
 # 13. AgentBridge.build_envelope_v2 helper
 # ---------------------------------------------------------------------------
 
+
 class TestAgentBridgeBuildEnvelopeV2:
     """AgentBridge.build_envelope_v2 returns a populated HandoffEnvelopeV2."""
 
     def test_returns_envelope_from_legacy_contract(self):
-        from galaxy_gateway.agent_bridge import AgentBridge, AgentBridgeConfig, HandoffContract
         from contracts.handoff_envelope_v2 import HandoffEnvelopeV2
+        from galaxy_gateway.agent_bridge import AgentBridge, AgentBridgeConfig, HandoffContract
 
         bridge = AgentBridge(AgentBridgeConfig())
         contract = HandoffContract(
@@ -1005,11 +1110,13 @@ class TestAgentBridgeBuildEnvelopeV2:
 # 14. Legacy compatibility — additional round-trip checks
 # ---------------------------------------------------------------------------
 
+
 class TestLegacyCompatibility:
     """Extended round-trip compatibility checks."""
 
     def test_legacy_to_v2_to_legacy_trace_id(self):
         from contracts.handoff_envelope_v2 import from_legacy_handoff_contract, to_legacy_bridge_payload
+
         contract = _make_real_legacy_contract(trace_id="compat_t1")
         env = from_legacy_handoff_contract(contract)
         payload = to_legacy_bridge_payload(env)
@@ -1017,6 +1124,7 @@ class TestLegacyCompatibility:
 
     def test_legacy_to_v2_to_legacy_no_task_id_dropped(self):
         from contracts.handoff_envelope_v2 import from_legacy_handoff_contract, to_legacy_bridge_payload
+
         contract = _make_legacy_contract(task_id="")
         env = from_legacy_handoff_contract(contract)
         payload = to_legacy_bridge_payload(env)
@@ -1024,6 +1132,7 @@ class TestLegacyCompatibility:
 
     def test_all_exec_modes_preserved(self):
         from contracts.handoff_envelope_v2 import from_legacy_handoff_contract
+
         for mode in ("local", "remote", "both"):
             contract = _make_legacy_contract(exec_mode=mode)
             env = from_legacy_handoff_contract(contract)
@@ -1031,6 +1140,7 @@ class TestLegacyCompatibility:
 
     def test_all_callback_channels_preserved(self):
         from contracts.handoff_envelope_v2 import from_legacy_handoff_contract
+
         for ch in ("ws", "webrtc", "nats", "http"):
             contract = _make_legacy_contract(callback_channel=ch)
             env = from_legacy_handoff_contract(contract)

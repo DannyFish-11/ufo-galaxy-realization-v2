@@ -99,6 +99,7 @@ VALID_PAYLOADS: Dict[str, Dict[str, Any]] = {
 # A) JSON Schema 文件结构校验
 # ===========================================================================
 
+
 class TestSchemaFile:
     """验证 contracts/event_schema.json 文件的结构完整性。"""
 
@@ -151,6 +152,7 @@ class TestSchemaFile:
 # ===========================================================================
 # B) 合法事件示例校验
 # ===========================================================================
+
 
 class TestValidExamples:
     """每种 M2 事件类型都应能通过 validate_m2_event 校验。"""
@@ -209,7 +211,8 @@ class TestValidExamples:
     def test_build_m2_event_custom_event_id(self):
         custom_id = "custom-event-id-123"
         evt = build_m2_event(
-            "agent.state", "dev",
+            "agent.state",
+            "dev",
             {"agent_id": "a", "state": "idle"},
             event_id=custom_id,
         )
@@ -219,6 +222,7 @@ class TestValidExamples:
 # ===========================================================================
 # C) 必填字段缺失 → 校验失败
 # ===========================================================================
+
 
 class TestInvalidEvents:
     """缺少必填字段的事件应该被 validate_m2_event 拒绝。"""
@@ -267,6 +271,7 @@ class TestInvalidEvents:
         # 如果 jsonschema 不可用，基础校验不检查枚举值，跳过
         try:
             import jsonschema
+
             jsonschema_available = True
         except ImportError:
             jsonschema_available = False
@@ -278,6 +283,7 @@ class TestInvalidEvents:
 # ===========================================================================
 # D) publish_m2_event 接口行为
 # ===========================================================================
+
 
 class TestPublishM2Event:
     """publish_m2_event 基本行为测试。"""

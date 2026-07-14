@@ -35,10 +35,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_task(task_id: str = "task-001") -> Dict[str, Any]:
     return {"task_id": task_id, "task_type": "test"}
@@ -48,28 +48,34 @@ def _make_task(task_id: str = "task-001") -> Dict[str, Any]:
 # 1: Sentinels
 # ---------------------------------------------------------------------------
 
+
 class TestSentinels:
     def test_authority_sentinel(self):
         from core.scheduling_truth_harness import SCHEDULING_TRUTH_HARNESS_IS_AUTHORITY
+
         assert isinstance(SCHEDULING_TRUTH_HARNESS_IS_AUTHORITY, str)
         assert "SCHEDULING_TRUTH_HARNESS" in SCHEDULING_TRUTH_HARNESS_IS_AUTHORITY
 
     def test_gap_512_002_closed(self):
         from core.scheduling_truth_harness import GAP_512_002_CLOSED_SENTINEL
+
         assert isinstance(GAP_512_002_CLOSED_SENTINEL, str)
         assert "512-002" in GAP_512_002_CLOSED_SENTINEL or "GAP_512_002" in GAP_512_002_CLOSED_SENTINEL
 
     def test_gap_512_004_addressed(self):
         from core.scheduling_truth_harness import GAP_512_004_ADDRESSED_SENTINEL
+
         assert isinstance(GAP_512_004_ADDRESSED_SENTINEL, str)
         assert "512-004" in GAP_512_004_ADDRESSED_SENTINEL or "GAP_512_004" in GAP_512_004_ADDRESSED_SENTINEL
 
     def test_task_registration_policy(self):
         from core.scheduling_truth_harness import TASK_MUST_BE_REGISTERED_BEFORE_DISPATCH_POLICY
+
         assert isinstance(TASK_MUST_BE_REGISTERED_BEFORE_DISPATCH_POLICY, str)
 
     def test_routing_truth_policy(self):
         from core.scheduling_truth_harness import ROUTING_MUST_CONSULT_CAPABILITY_NETWORK_TRUTH_POLICY
+
         assert isinstance(ROUTING_MUST_CONSULT_CAPABILITY_NETWORK_TRUTH_POLICY, str)
 
 
@@ -77,9 +83,11 @@ class TestSentinels:
 # 2: ConvergenceAssertionResult
 # ---------------------------------------------------------------------------
 
+
 class TestConvergenceAssertionResult:
     def test_construction(self):
         from core.scheduling_truth_harness import ConvergenceAssertionResult
+
         r = ConvergenceAssertionResult(task_id="t1", task_registered=True)
         assert r.task_id == "t1"
         assert r.task_registered is True
@@ -87,6 +95,7 @@ class TestConvergenceAssertionResult:
 
     def test_to_dict(self):
         from core.scheduling_truth_harness import ConvergenceAssertionResult
+
         r = ConvergenceAssertionResult(
             task_id="t2",
             task_registered=True,
@@ -104,9 +113,11 @@ class TestConvergenceAssertionResult:
 # 3–8: SchedulingTruthHarness
 # ---------------------------------------------------------------------------
 
+
 class TestSchedulingTruthHarness:
     def test_ensure_task_registered_no_backing_returns_false(self):
         from core.scheduling_truth_harness import SchedulingTruthHarness
+
         harness = SchedulingTruthHarness()
         # No backing runtime — graceful degradation
         result = harness.ensure_task_registered(_make_task())
@@ -115,6 +126,7 @@ class TestSchedulingTruthHarness:
 
     def test_ensure_task_registered_with_mock_runtime(self):
         from core.scheduling_truth_harness import SchedulingTruthHarness
+
         harness = SchedulingTruthHarness()
         mock_tgr = MagicMock()
         mock_tgr.get_task.return_value = None
@@ -126,6 +138,7 @@ class TestSchedulingTruthHarness:
 
     def test_ensure_task_already_registered(self):
         from core.scheduling_truth_harness import SchedulingTruthHarness
+
         harness = SchedulingTruthHarness()
         mock_tgr = MagicMock()
         mock_tgr.get_task.return_value = {"task_id": "existing"}
@@ -136,12 +149,14 @@ class TestSchedulingTruthHarness:
 
     def test_query_routable_executors_no_policy(self):
         from core.scheduling_truth_harness import SchedulingTruthHarness
+
         harness = SchedulingTruthHarness()
         result = harness.query_routable_executors(_make_task())
         assert isinstance(result, list)
 
     def test_query_routable_executors_with_mock_policy(self):
         from core.scheduling_truth_harness import SchedulingTruthHarness
+
         harness = SchedulingTruthHarness()
         mock_policy = MagicMock()
         mock_policy.query_routable_executors.return_value = ["device-a", "device-b"]
@@ -151,6 +166,7 @@ class TestSchedulingTruthHarness:
 
     def test_assert_convergence_returns_result(self):
         from core.scheduling_truth_harness import SchedulingTruthHarness
+
         harness = SchedulingTruthHarness()
         result = harness.assert_convergence(_make_task())
         assert result is not None
@@ -158,6 +174,7 @@ class TestSchedulingTruthHarness:
 
     def test_assert_convergence_notes_task_unregistered(self):
         from core.scheduling_truth_harness import SchedulingTruthHarness
+
         harness = SchedulingTruthHarness()
         mock_tgr = MagicMock()
         mock_tgr.get_task.return_value = None
@@ -169,6 +186,7 @@ class TestSchedulingTruthHarness:
 
     def test_harness_never_raises(self):
         from core.scheduling_truth_harness import SchedulingTruthHarness
+
         harness = SchedulingTruthHarness()
         # Even with totally invalid input
         try:
@@ -183,12 +201,15 @@ class TestSchedulingTruthHarness:
 # 9–11: Module-level functions
 # ---------------------------------------------------------------------------
 
+
 class TestModuleLevelFunctions:
     def test_ensure_task_registered_fn(self):
         from core.scheduling_truth_harness import (
-            ensure_task_registered, reset_scheduling_truth_harness,
+            ensure_task_registered,
             get_scheduling_truth_harness,
+            reset_scheduling_truth_harness,
         )
+
         reset_scheduling_truth_harness()
         harness = get_scheduling_truth_harness()
         mock_tgr = MagicMock()
@@ -200,16 +221,18 @@ class TestModuleLevelFunctions:
 
     def test_query_routable_executors_for_task_fn(self):
         from core.scheduling_truth_harness import (
-            query_routable_executors_for_task,
             get_scheduling_truth_harness,
+            query_routable_executors_for_task,
             reset_scheduling_truth_harness,
         )
+
         reset_scheduling_truth_harness()
         result = query_routable_executors_for_task(_make_task())
         assert isinstance(result, list)
 
     def test_assert_scheduling_truth_convergence_fn(self):
         from core.scheduling_truth_harness import assert_scheduling_truth_convergence
+
         result = assert_scheduling_truth_convergence(_make_task())
         assert result is not None
 
@@ -218,11 +241,14 @@ class TestModuleLevelFunctions:
 # 12–13: Singleton
 # ---------------------------------------------------------------------------
 
+
 class TestSingleton:
     def test_get_returns_same_instance(self):
         from core.scheduling_truth_harness import (
-            get_scheduling_truth_harness, reset_scheduling_truth_harness,
+            get_scheduling_truth_harness,
+            reset_scheduling_truth_harness,
         )
+
         reset_scheduling_truth_harness()
         h1 = get_scheduling_truth_harness()
         h2 = get_scheduling_truth_harness()
@@ -230,8 +256,10 @@ class TestSingleton:
 
     def test_reset_clears_singleton(self):
         from core.scheduling_truth_harness import (
-            get_scheduling_truth_harness, reset_scheduling_truth_harness,
+            get_scheduling_truth_harness,
+            reset_scheduling_truth_harness,
         )
+
         reset_scheduling_truth_harness()
         h1 = get_scheduling_truth_harness()
         reset_scheduling_truth_harness()
@@ -243,9 +271,11 @@ class TestSingleton:
 # 14–15: ensure_task_registered input variants
 # ---------------------------------------------------------------------------
 
+
 class TestInputVariants:
     def test_dict_task(self):
         from core.scheduling_truth_harness import SchedulingTruthHarness
+
         harness = SchedulingTruthHarness()
         mock_tgr = MagicMock()
         mock_tgr.get_task.return_value = None
@@ -256,6 +286,7 @@ class TestInputVariants:
 
     def test_none_task(self):
         from core.scheduling_truth_harness import SchedulingTruthHarness
+
         harness = SchedulingTruthHarness()
         result = harness.ensure_task_registered(None)
         assert result is False  # graceful
@@ -265,14 +296,17 @@ class TestInputVariants:
 # 16–17: Sentinel content
 # ---------------------------------------------------------------------------
 
+
 class TestSentinelContent:
     def test_gap_002_sentinel_content(self):
         from core.scheduling_truth_harness import GAP_512_002_CLOSED_SENTINEL
+
         # Should mention task graph or TaskGraphRuntime
         assert any(kw in GAP_512_002_CLOSED_SENTINEL for kw in ["TaskGraph", "task_graph", "512-002", "GAP_512_002"])
 
     def test_gap_004_sentinel_content(self):
         from core.scheduling_truth_harness import GAP_512_004_ADDRESSED_SENTINEL
+
         assert any(kw in GAP_512_004_ADDRESSED_SENTINEL for kw in ["executor", "routing", "512-004", "GAP_512_004"])
 
 
@@ -280,9 +314,11 @@ class TestSentinelContent:
 # 18–19: ConvergenceAssertionResult details
 # ---------------------------------------------------------------------------
 
+
 class TestConvergenceDetails:
     def test_is_convergent_true_when_all_available(self):
         from core.scheduling_truth_harness import ConvergenceAssertionResult
+
         r = ConvergenceAssertionResult(
             task_id="t",
             task_registered=True,
@@ -294,6 +330,7 @@ class TestConvergenceDetails:
 
     def test_divergence_notes_populated(self):
         from core.scheduling_truth_harness import ConvergenceAssertionResult
+
         r = ConvergenceAssertionResult(
             task_id="t",
             task_registered=False,

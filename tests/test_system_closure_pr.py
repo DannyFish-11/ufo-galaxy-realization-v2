@@ -139,8 +139,8 @@ class TestCanonicalCompletionIngress:
         mod._singleton = None
         try:
             from core.canonical_completion_ingress import (
-                get_canonical_completion_ingress,
                 CanonicalCompletionIngress,
+                get_canonical_completion_ingress,
             )
 
             a = get_canonical_completion_ingress()
@@ -165,6 +165,7 @@ class TestCapabilityAwareRouting:
         """Import CommandRouter with minimal dependencies."""
         try:
             from core.command_router import CommandRouter
+
             return CommandRouter
         except Exception as exc:
             pytest.skip(f"CommandRouter import failed: {exc}")
@@ -220,12 +221,13 @@ class TestCapabilityAwareRouting:
 
         # The function imports get_capability_assimilation_layer locally,
         # so we patch the canonical module path it comes from.
-        with patch(
-            "core.capability_assimilation.get_capability_assimilation_layer",
-            return_value=mock_layer,
-            create=True,
-        ), patch(
-            "core.capability_graph_selection.score_provider", return_value=mock_score
+        with (
+            patch(
+                "core.capability_assimilation.get_capability_assimilation_layer",
+                return_value=mock_layer,
+                create=True,
+            ),
+            patch("core.capability_graph_selection.score_provider", return_value=mock_score),
         ):
             try:
                 results = select_fallback_providers(
@@ -278,11 +280,14 @@ class TestCapabilityAwareRouting:
         mock_layer = MagicMock()
         mock_layer.list_records.return_value = [primary, fallback]
 
-        with patch(
-            "core.capability_assimilation.get_capability_assimilation_layer",
-            return_value=mock_layer,
-            create=True,
-        ), patch("core.capability_graph_selection.score_provider", return_value=mock_score):
+        with (
+            patch(
+                "core.capability_assimilation.get_capability_assimilation_layer",
+                return_value=mock_layer,
+                create=True,
+            ),
+            patch("core.capability_graph_selection.score_provider", return_value=mock_score),
+        ):
             try:
                 fallbacks = select_fallback_providers(
                     required_capabilities=["screen"],
@@ -344,9 +349,7 @@ class TestUnifiedLLMRouterPrimary:
 
         # Make a fake unified module that raises on import
         fake_unified_mod = types.ModuleType("core.unified.llm_router")
-        fake_unified_mod.get_unified_llm_router = MagicMock(
-            side_effect=RuntimeError("unified unavailable")
-        )
+        fake_unified_mod.get_unified_llm_router = MagicMock(side_effect=RuntimeError("unified unavailable"))
 
         mock_multi_router = MagicMock()
         fake_multi_mod = types.ModuleType("core.multi_llm_router")
@@ -376,8 +379,8 @@ class TestUnifiedLLMRouterPrimary:
     def test_get_router_returns_cached_instance(self):
         """_get_router() returns same instance on subsequent calls."""
         try:
-            from core.unified.llm_router import UnifiedLLMRouter
             from core.openclawd import OpenClawd
+            from core.unified.llm_router import UnifiedLLMRouter
         except Exception as exc:
             pytest.skip(f"Dependencies unavailable: {exc}")
 
@@ -468,11 +471,13 @@ class TestHITLGate:
             "latency_ms": 1.0,
         }
 
-        with patch(
-            "core.command_router._get_gateway_trace_store",
-            return_value=mock_trace_store,
-        ), patch.object(cr, "_emit_audit", return_value=None), patch.object(
-            cr, "_dispatch_to_device", return_value=dispatch_result
+        with (
+            patch(
+                "core.command_router._get_gateway_trace_store",
+                return_value=mock_trace_store,
+            ),
+            patch.object(cr, "_emit_audit", return_value=None),
+            patch.object(cr, "_dispatch_to_device", return_value=dispatch_result),
         ):
             result = await cr._execute_command(
                 device_id="device-001",
@@ -508,11 +513,13 @@ class TestHITLGate:
             "latency_ms": 1.0,
         }
 
-        with patch(
-            "core.command_router._get_gateway_trace_store",
-            return_value=mock_trace_store,
-        ), patch.object(cr, "_emit_audit", return_value=None), patch.object(
-            cr, "_dispatch_to_device", return_value=dispatch_result
+        with (
+            patch(
+                "core.command_router._get_gateway_trace_store",
+                return_value=mock_trace_store,
+            ),
+            patch.object(cr, "_emit_audit", return_value=None),
+            patch.object(cr, "_dispatch_to_device", return_value=dispatch_result),
         ):
             result = await cr._execute_command(
                 device_id="device-001",

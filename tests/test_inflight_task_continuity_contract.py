@@ -46,10 +46,10 @@ from typing import Any, Dict, List, Optional, Set
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _task_id() -> str:
     return f"task_{uuid.uuid4().hex[:12]}"
@@ -78,6 +78,7 @@ def _make_restored_record(
         a random id is generated.  Pass ``auto_task_id=False`` to keep the
         empty string (for testing ambiguous status).
     """
+
     @dataclass
     class _FakeRestoredTaskRecord:
         task_id: str = ""
@@ -116,11 +117,13 @@ def _make_restored_record(
 # A: sentinel importability
 # ---------------------------------------------------------------------------
 
+
 class TestGroupA_Sentinels:
     def test_A01_authority_sentinel(self):
         from core.inflight_task_continuity_contract import (
             INFLIGHT_TASK_CONTINUITY_CONTRACT_IS_AUTHORITY,
         )
+
         assert isinstance(INFLIGHT_TASK_CONTINUITY_CONTRACT_IS_AUTHORITY, str)
         assert len(INFLIGHT_TASK_CONTINUITY_CONTRACT_IS_AUTHORITY) > 20
 
@@ -128,12 +131,14 @@ class TestGroupA_Sentinels:
         from core.inflight_task_continuity_contract import (
             INFLIGHT_TASK_CONTINUITY_CONTRACT_PR_P1_1_SENTINEL,
         )
+
         assert "PR-P1-1" in INFLIGHT_TASK_CONTINUITY_CONTRACT_PR_P1_1_SENTINEL
 
     def test_A03_state_not_continuity_policy(self):
         from core.inflight_task_continuity_contract import (
             STATE_RESTORED_IS_NOT_CONTINUITY_RESTORED_POLICY,
         )
+
         assert "state" in STATE_RESTORED_IS_NOT_CONTINUITY_RESTORED_POLICY.lower()
         assert "continuity" in STATE_RESTORED_IS_NOT_CONTINUITY_RESTORED_POLICY.lower()
 
@@ -141,18 +146,21 @@ class TestGroupA_Sentinels:
         from core.inflight_task_continuity_contract import (
             AMBIGUOUS_CONTINUITY_MUST_NOT_BE_UPGRADED_POLICY,
         )
+
         assert "ambiguous" in AMBIGUOUS_CONTINUITY_MUST_NOT_BE_UPGRADED_POLICY.lower()
 
     def test_A05_interrupted_downgrade_policy(self):
         from core.inflight_task_continuity_contract import (
             INTERRUPTED_TASK_MUST_BE_DOWNGRADED_POLICY,
         )
+
         assert "interrupted" in INTERRUPTED_TASK_MUST_BE_DOWNGRADED_POLICY.lower()
 
     def test_A06_duplicate_reconcile_policy(self):
         from core.inflight_task_continuity_contract import (
             DUPLICATE_RECOVERY_MUST_TRIGGER_RECONCILE_POLICY,
         )
+
         assert "duplicate" in DUPLICATE_RECOVERY_MUST_TRIGGER_RECONCILE_POLICY.lower()
         assert "needs_reconcile" in DUPLICATE_RECOVERY_MUST_TRIGGER_RECONCILE_POLICY.lower()
 
@@ -160,12 +168,14 @@ class TestGroupA_Sentinels:
         from core.inflight_task_continuity_contract import (
             STALE_RECOVERY_MUST_TRIGGER_RECONCILE_POLICY,
         )
+
         assert "stale" in STALE_RECOVERY_MUST_TRIGGER_RECONCILE_POLICY.lower()
 
     def test_A08_consumable_by_acceptance_policy(self):
         from core.inflight_task_continuity_contract import (
             CONTINUITY_REPORT_IS_CONSUMABLE_BY_ACCEPTANCE_POLICY,
         )
+
         assert "acceptance" in CONTINUITY_REPORT_IS_CONSUMABLE_BY_ACCEPTANCE_POLICY.lower()
         assert "continuity_gap_count" in CONTINUITY_REPORT_IS_CONSUMABLE_BY_ACCEPTANCE_POLICY
 
@@ -174,16 +184,18 @@ class TestGroupA_Sentinels:
 # B: TaskContinuityStatus enum
 # ---------------------------------------------------------------------------
 
+
 class TestGroupB_TaskContinuityStatusEnum:
     def test_B01_all_six_values_present(self):
         from core.inflight_task_continuity_contract import TaskContinuityStatus
-        expected = {"resumed", "recoverable", "interrupted", "abandoned",
-                    "needs_reconcile", "ambiguous"}
+
+        expected = {"resumed", "recoverable", "interrupted", "abandoned", "needs_reconcile", "ambiguous"}
         actual = {s.value for s in TaskContinuityStatus}
         assert expected == actual
 
     def test_B02_is_positive_flags(self):
         from core.inflight_task_continuity_contract import TaskContinuityStatus
+
         assert TaskContinuityStatus.resumed.is_positive is True
         assert TaskContinuityStatus.recoverable.is_positive is True
         assert TaskContinuityStatus.interrupted.is_positive is False
@@ -193,6 +205,7 @@ class TestGroupB_TaskContinuityStatusEnum:
 
     def test_B03_requires_action_flags(self):
         from core.inflight_task_continuity_contract import TaskContinuityStatus
+
         assert TaskContinuityStatus.interrupted.requires_action is True
         assert TaskContinuityStatus.needs_reconcile.requires_action is True
         assert TaskContinuityStatus.resumed.requires_action is False
@@ -202,6 +215,7 @@ class TestGroupB_TaskContinuityStatusEnum:
 
     def test_B04_is_terminal_flags(self):
         from core.inflight_task_continuity_contract import TaskContinuityStatus
+
         assert TaskContinuityStatus.abandoned.is_terminal is True
         assert TaskContinuityStatus.ambiguous.is_terminal is True
         assert TaskContinuityStatus.resumed.is_terminal is False
@@ -212,12 +226,14 @@ class TestGroupB_TaskContinuityStatusEnum:
 # C: InFlightTaskContinuityRecord construction
 # ---------------------------------------------------------------------------
 
+
 class TestGroupC_InFlightTaskContinuityRecord:
     def test_C01_default_construction(self):
         from core.inflight_task_continuity_contract import (
             InFlightTaskContinuityRecord,
             TaskContinuityStatus,
         )
+
         rec = InFlightTaskContinuityRecord()
         assert rec.task_id == ""
         assert rec.continuity_status == TaskContinuityStatus.ambiguous
@@ -228,6 +244,7 @@ class TestGroupC_InFlightTaskContinuityRecord:
             InFlightTaskContinuityRecord,
             TaskContinuityStatus,
         )
+
         tid = _task_id()
         rec = InFlightTaskContinuityRecord(
             task_id=tid,
@@ -248,21 +265,31 @@ class TestGroupC_InFlightTaskContinuityRecord:
 # D: InFlightTaskContinuityRecord round-trip
 # ---------------------------------------------------------------------------
 
+
 class TestGroupD_InFlightTaskContinuityRecordRoundTrip:
     def test_D01_to_dict_keys(self):
         from core.inflight_task_continuity_contract import (
             InFlightTaskContinuityRecord,
             TaskContinuityStatus,
         )
+
         rec = InFlightTaskContinuityRecord(
             task_id="tid1",
             continuity_status=TaskContinuityStatus.resumed,
             reason="already live",
         )
         d = rec.to_dict()
-        for key in ("task_id", "trace_id", "disposition", "continuity_status",
-                    "reason", "device_id", "snapshot_age_seconds", "snapshot_id",
-                    "evaluated_at"):
+        for key in (
+            "task_id",
+            "trace_id",
+            "disposition",
+            "continuity_status",
+            "reason",
+            "device_id",
+            "snapshot_age_seconds",
+            "snapshot_id",
+            "evaluated_at",
+        ):
             assert key in d, f"Missing key: {key}"
         assert d["continuity_status"] == "resumed"
 
@@ -271,6 +298,7 @@ class TestGroupD_InFlightTaskContinuityRecordRoundTrip:
             InFlightTaskContinuityRecord,
             TaskContinuityStatus,
         )
+
         original = InFlightTaskContinuityRecord(
             task_id="tid2",
             disposition="replay_only",
@@ -288,6 +316,7 @@ class TestGroupD_InFlightTaskContinuityRecordRoundTrip:
             InFlightTaskContinuityRecord,
             TaskContinuityStatus,
         )
+
         rec = InFlightTaskContinuityRecord.from_dict({"continuity_status": "unknown_value"})
         assert rec.continuity_status == TaskContinuityStatus.ambiguous
 
@@ -296,49 +325,59 @@ class TestGroupD_InFlightTaskContinuityRecordRoundTrip:
 # E: TaskContinuityReport computed properties
 # ---------------------------------------------------------------------------
 
+
 class TestGroupE_TaskContinuityReportProperties:
     def test_E01_state_restored_is_resumed_plus_recoverable(self):
         from core.inflight_task_continuity_contract import TaskContinuityReport
+
         r = TaskContinuityReport(resumed_count=2, recoverable_count=3)
         assert r.state_restored_count == 5
 
     def test_E02_continuity_restored_is_resumed_only(self):
         from core.inflight_task_continuity_contract import TaskContinuityReport
+
         r = TaskContinuityReport(resumed_count=2, recoverable_count=3)
         assert r.continuity_restored_count == 2
 
     def test_E03_continuity_gap_is_recoverable_count(self):
         from core.inflight_task_continuity_contract import TaskContinuityReport
+
         r = TaskContinuityReport(resumed_count=2, recoverable_count=3)
         assert r.continuity_gap_count == 3
 
     def test_E04_has_unrecovered_when_recoverable(self):
         from core.inflight_task_continuity_contract import TaskContinuityReport
+
         r = TaskContinuityReport(recoverable_count=1)
         assert r.has_unrecovered_tasks is True
 
     def test_E05_has_unrecovered_when_interrupted(self):
         from core.inflight_task_continuity_contract import TaskContinuityReport
+
         r = TaskContinuityReport(interrupted_count=1)
         assert r.has_unrecovered_tasks is True
 
     def test_E06_no_unrecovered_when_all_resumed_or_abandoned(self):
         from core.inflight_task_continuity_contract import TaskContinuityReport
+
         r = TaskContinuityReport(resumed_count=2, abandoned_count=1)
         assert r.has_unrecovered_tasks is False
 
     def test_E07_has_ambiguous_when_ambiguous(self):
         from core.inflight_task_continuity_contract import TaskContinuityReport
+
         r = TaskContinuityReport(ambiguous_count=1)
         assert r.has_ambiguous_tasks is True
 
     def test_E08_has_ambiguous_when_needs_reconcile(self):
         from core.inflight_task_continuity_contract import TaskContinuityReport
+
         r = TaskContinuityReport(needs_reconcile_count=1)
         assert r.has_ambiguous_tasks is True
 
     def test_E09_zero_gap_when_only_resumed(self):
         from core.inflight_task_continuity_contract import TaskContinuityReport
+
         r = TaskContinuityReport(resumed_count=3)
         assert r.continuity_gap_count == 0
 
@@ -347,9 +386,11 @@ class TestGroupE_TaskContinuityReportProperties:
 # F: TaskContinuityReport round-trip
 # ---------------------------------------------------------------------------
 
+
 class TestGroupF_TaskContinuityReportRoundTrip:
     def test_F01_to_dict_includes_computed_props(self):
         from core.inflight_task_continuity_contract import TaskContinuityReport
+
         r = TaskContinuityReport(resumed_count=1, recoverable_count=2)
         d = r.to_dict()
         assert d["state_restored_count"] == 3
@@ -360,6 +401,7 @@ class TestGroupF_TaskContinuityReportRoundTrip:
 
     def test_F02_from_dict_round_trip(self):
         from core.inflight_task_continuity_contract import TaskContinuityReport
+
         r1 = TaskContinuityReport(
             resumed_count=2,
             recoverable_count=1,
@@ -380,12 +422,14 @@ class TestGroupF_TaskContinuityReportRoundTrip:
 # G: resumed status (task already in live registry)
 # ---------------------------------------------------------------------------
 
+
 class TestGroupG_ResumedStatus:
     def test_G01_task_in_live_registry_gets_resumed(self):
         from core.inflight_task_continuity_contract import (
             InFlightTaskContinuityContract,
             TaskContinuityStatus,
         )
+
         tid = _task_id()
         rec = _make_restored_record(task_id=tid, disposition="resumable")
         contract = InFlightTaskContinuityContract()
@@ -401,6 +445,7 @@ class TestGroupG_ResumedStatus:
 
     def test_G02_resumed_task_has_zero_continuity_gap(self):
         from core.inflight_task_continuity_contract import InFlightTaskContinuityContract
+
         tids = [_task_id() for _ in range(3)]
         records = [_make_restored_record(task_id=t) for t in tids]
         report = InFlightTaskContinuityContract().evaluate(
@@ -415,12 +460,14 @@ class TestGroupG_ResumedStatus:
 # H: recoverable status (RESUMABLE with dispatch taken)
 # ---------------------------------------------------------------------------
 
+
 class TestGroupH_RecoverableStatusResumable:
     def test_H01_resumable_with_dispatch_taken_is_recoverable(self):
         from core.inflight_task_continuity_contract import (
             InFlightTaskContinuityContract,
             TaskContinuityStatus,
         )
+
         tid = _task_id()
         rec = _make_restored_record(task_id=tid, disposition="resumable")
         report = InFlightTaskContinuityContract().evaluate(
@@ -434,6 +481,7 @@ class TestGroupH_RecoverableStatusResumable:
     def test_H02_state_restored_but_continuity_gap_is_positive(self):
         """Critical: state restored ≠ continuity restored."""
         from core.inflight_task_continuity_contract import InFlightTaskContinuityContract
+
         tid = _task_id()
         rec = _make_restored_record(task_id=tid, disposition="resumable")
         report = InFlightTaskContinuityContract().evaluate(
@@ -451,6 +499,7 @@ class TestGroupH_RecoverableStatusResumable:
             InFlightTaskContinuityContract,
             TaskContinuityStatus,
         )
+
         tid = _task_id()
         rec = _make_restored_record(task_id=tid, disposition="resumable")
         report = InFlightTaskContinuityContract().evaluate(
@@ -467,16 +516,16 @@ class TestGroupH_RecoverableStatusResumable:
 # I: recoverable status (REPLAY_ONLY with dispatch taken)
 # ---------------------------------------------------------------------------
 
+
 class TestGroupI_RecoverableStatusReplayOnly:
     def test_I01_replay_only_with_dispatch_is_recoverable(self):
         from core.inflight_task_continuity_contract import (
             InFlightTaskContinuityContract,
             TaskContinuityStatus,
         )
+
         tid = _task_id()
-        rec = _make_restored_record(
-            task_id=tid, disposition="replay_only", owner="routing"
-        )
+        rec = _make_restored_record(task_id=tid, disposition="replay_only", owner="routing")
         report = InFlightTaskContinuityContract().evaluate(
             [rec],
             dispatched_ids={tid},
@@ -489,22 +538,23 @@ class TestGroupI_RecoverableStatusReplayOnly:
 # J: interrupted status (REISSUABLE)
 # ---------------------------------------------------------------------------
 
+
 class TestGroupJ_InterruptedStatusReissuable:
     def test_J01_reissuable_task_is_interrupted(self):
         from core.inflight_task_continuity_contract import (
             InFlightTaskContinuityContract,
             TaskContinuityStatus,
         )
+
         tid = _task_id()
-        rec = _make_restored_record(
-            task_id=tid, disposition="reissuable", owner="gateway_ingress"
-        )
+        rec = _make_restored_record(task_id=tid, disposition="reissuable", owner="gateway_ingress")
         report = InFlightTaskContinuityContract().evaluate([rec])
         assert report.interrupted_count == 1
         assert report.records[0].continuity_status == TaskContinuityStatus.interrupted
 
     def test_J02_reissuable_is_not_positive(self):
         from core.inflight_task_continuity_contract import TaskContinuityStatus
+
         assert TaskContinuityStatus.interrupted.is_positive is False
 
 
@@ -512,12 +562,14 @@ class TestGroupJ_InterruptedStatusReissuable:
 # K: abandoned status (TERMINAL_ON_INTERRUPT)
 # ---------------------------------------------------------------------------
 
+
 class TestGroupK_AbandonedStatusTerminal:
     def test_K01_terminal_on_interrupt_is_abandoned(self):
         from core.inflight_task_continuity_contract import (
             InFlightTaskContinuityContract,
             TaskContinuityStatus,
         )
+
         tid = _task_id()
         rec = _make_restored_record(
             task_id=tid,
@@ -530,9 +582,8 @@ class TestGroupK_AbandonedStatusTerminal:
 
     def test_K02_abandoned_has_zero_state_restored(self):
         from core.inflight_task_continuity_contract import InFlightTaskContinuityContract
-        rec = _make_restored_record(
-            disposition="terminal_on_interrupt", owner="result_completion"
-        )
+
+        rec = _make_restored_record(disposition="terminal_on_interrupt", owner="result_completion")
         report = InFlightTaskContinuityContract().evaluate([rec])
         # abandoned tasks are not in state_restored
         assert report.state_restored_count == 0
@@ -542,12 +593,14 @@ class TestGroupK_AbandonedStatusTerminal:
 # L: ambiguous status (empty task_id)
 # ---------------------------------------------------------------------------
 
+
 class TestGroupL_AmbiguousEmptyTaskId:
     def test_L01_empty_task_id_is_ambiguous(self):
         from core.inflight_task_continuity_contract import (
             InFlightTaskContinuityContract,
             TaskContinuityStatus,
         )
+
         rec = _make_restored_record(task_id="", disposition="resumable", auto_task_id=False)
         report = InFlightTaskContinuityContract().evaluate([rec])
         assert report.ambiguous_count == 1
@@ -555,6 +608,7 @@ class TestGroupL_AmbiguousEmptyTaskId:
 
     def test_L02_ambiguous_not_included_in_state_restored(self):
         from core.inflight_task_continuity_contract import InFlightTaskContinuityContract
+
         rec = _make_restored_record(task_id="", disposition="resumable", auto_task_id=False)
         report = InFlightTaskContinuityContract().evaluate([rec])
         assert report.state_restored_count == 0
@@ -564,12 +618,14 @@ class TestGroupL_AmbiguousEmptyTaskId:
 # M: needs_reconcile for duplicate task_id
 # ---------------------------------------------------------------------------
 
+
 class TestGroupM_NeedsReconcileDuplicate:
     def test_M01_duplicate_task_id_yields_needs_reconcile(self):
         from core.inflight_task_continuity_contract import (
             InFlightTaskContinuityContract,
             TaskContinuityStatus,
         )
+
         tid = _task_id()
         rec1 = _make_restored_record(task_id=tid, disposition="resumable")
         rec2 = _make_restored_record(task_id=tid, disposition="replay_only")
@@ -580,6 +636,7 @@ class TestGroupM_NeedsReconcileDuplicate:
 
     def test_M02_duplicate_not_in_state_restored(self):
         from core.inflight_task_continuity_contract import InFlightTaskContinuityContract
+
         tid = _task_id()
         recs = [_make_restored_record(task_id=tid) for _ in range(2)]
         report = InFlightTaskContinuityContract().evaluate(recs)
@@ -594,11 +651,10 @@ class TestGroupM_NeedsReconcileDuplicate:
             InFlightTaskContinuityContract,
             TaskContinuityStatus,
         )
+
         tid = _task_id()
         recs = [_make_restored_record(task_id=tid) for _ in range(2)]
-        report = InFlightTaskContinuityContract().evaluate(
-            recs, already_pending_ids={tid}
-        )
+        report = InFlightTaskContinuityContract().evaluate(recs, already_pending_ids={tid})
         # Despite being in live registry, duplicates must be needs_reconcile
         for entry in report.records:
             assert entry.continuity_status == TaskContinuityStatus.needs_reconcile
@@ -608,19 +664,19 @@ class TestGroupM_NeedsReconcileDuplicate:
 # N: needs_reconcile for stale record
 # ---------------------------------------------------------------------------
 
+
 class TestGroupN_NeedsReconcileStale:
     def test_N01_stale_record_yields_needs_reconcile(self):
         from core.inflight_task_continuity_contract import (
+            STALE_SNAPSHOT_THRESHOLD_SECONDS,
             InFlightTaskContinuityContract,
             TaskContinuityStatus,
-            STALE_SNAPSHOT_THRESHOLD_SECONDS,
         )
+
         tid = _task_id()
         # Create record older than threshold
         stale_ts = time.time() - STALE_SNAPSHOT_THRESHOLD_SECONDS - 10
-        rec = _make_restored_record(
-            task_id=tid, disposition="resumable", registered_at=stale_ts
-        )
+        rec = _make_restored_record(task_id=tid, disposition="resumable", registered_at=stale_ts)
         report = InFlightTaskContinuityContract().evaluate(
             [rec],
             already_pending_ids=set(),
@@ -635,6 +691,7 @@ class TestGroupN_NeedsReconcileStale:
             InFlightTaskContinuityContract,
             TaskContinuityStatus,
         )
+
         tid = _task_id()
         rec = _make_restored_record(task_id=tid, disposition="resumable")
         report = InFlightTaskContinuityContract().evaluate(
@@ -649,13 +706,12 @@ class TestGroupN_NeedsReconcileStale:
             InFlightTaskContinuityContract,
             TaskContinuityStatus,
         )
+
         tid = _task_id()
         # Record 5s old with 3s threshold → stale
         old_ts = time.time() - 5.0
         rec = _make_restored_record(task_id=tid, disposition="resumable")
-        report = InFlightTaskContinuityContract(
-            stale_threshold_seconds=3.0
-        ).evaluate(
+        report = InFlightTaskContinuityContract(stale_threshold_seconds=3.0).evaluate(
             [rec],
             snapshot_timestamp=old_ts,
         )
@@ -666,9 +722,11 @@ class TestGroupN_NeedsReconcileStale:
 # O: state_restored ≠ continuity_restored gap
 # ---------------------------------------------------------------------------
 
+
 class TestGroupO_ContinuityGap:
     def test_O01_gap_equals_recoverable_count(self):
         from core.inflight_task_continuity_contract import InFlightTaskContinuityContract
+
         tids = [_task_id() for _ in range(3)]
         # 1 resumed (already live), 2 recoverable (dispatch taken, not live)
         already_pending = {tids[0]}
@@ -691,11 +749,10 @@ class TestGroupO_ContinuityGap:
 
     def test_O02_all_resumed_gives_zero_gap(self):
         from core.inflight_task_continuity_contract import InFlightTaskContinuityContract
+
         tids = [_task_id() for _ in range(3)]
         records = [_make_restored_record(task_id=t) for t in tids]
-        report = InFlightTaskContinuityContract().evaluate(
-            records, already_pending_ids=set(tids)
-        )
+        report = InFlightTaskContinuityContract().evaluate(records, already_pending_ids=set(tids))
         assert report.continuity_gap_count == 0
         assert report.has_unrecovered_tasks is False
 
@@ -704,17 +761,19 @@ class TestGroupO_ContinuityGap:
 # P: ambiguous MUST NOT be upgraded
 # ---------------------------------------------------------------------------
 
+
 class TestGroupP_AmbiguousMustNotBeUpgraded:
     def test_P01_ambiguous_record_cannot_be_resumable(self):
         from core.inflight_task_continuity_contract import (
             InFlightTaskContinuityContract,
             TaskContinuityStatus,
         )
+
         # Empty task_id → ambiguous, even if in already_pending and dispatched
         rec = _make_restored_record(task_id="", disposition="resumable", auto_task_id=False)
         report = InFlightTaskContinuityContract().evaluate(
             [rec],
-            already_pending_ids={""},   # even if somehow "" was pending
+            already_pending_ids={""},  # even if somehow "" was pending
             dispatched_ids={""},
         )
         # Still ambiguous — policy MUST NOT be overridden
@@ -722,6 +781,7 @@ class TestGroupP_AmbiguousMustNotBeUpgraded:
 
     def test_P02_has_ambiguous_tasks_true(self):
         from core.inflight_task_continuity_contract import InFlightTaskContinuityContract
+
         rec = _make_restored_record(task_id="", disposition="resumable", auto_task_id=False)
         report = InFlightTaskContinuityContract().evaluate([rec])
         assert report.has_ambiguous_tasks is True
@@ -731,6 +791,7 @@ class TestGroupP_AmbiguousMustNotBeUpgraded:
 # Q: REISSUABLE is interrupted even when dispatch was taken
 # ---------------------------------------------------------------------------
 
+
 class TestGroupQ_ReissuableAlwaysInterrupted:
     def test_Q01_reissuable_is_interrupted_not_recoverable(self):
         """INTERRUPTED_TASK_MUST_BE_DOWNGRADED_POLICY enforcement."""
@@ -738,15 +799,14 @@ class TestGroupQ_ReissuableAlwaysInterrupted:
             InFlightTaskContinuityContract,
             TaskContinuityStatus,
         )
+
         tid = _task_id()
-        rec = _make_restored_record(
-            task_id=tid, disposition="reissuable", owner="gateway_ingress"
-        )
+        rec = _make_restored_record(task_id=tid, disposition="reissuable", owner="gateway_ingress")
         # Even if dispatch was taken and task was already pending
         report = InFlightTaskContinuityContract().evaluate(
             [rec],
             already_pending_ids={tid},  # in live registry
-            dispatched_ids={tid},        # dispatch action taken
+            dispatched_ids={tid},  # dispatch action taken
         )
         # REISSUABLE with live pending → first hit is `resumed` rule?
         # NO — the already_pending check comes BEFORE the disposition check,
@@ -766,6 +826,7 @@ class TestGroupQ_ReissuableAlwaysInterrupted:
 
     def test_Q02_reissuable_requires_external_action(self):
         from core.inflight_task_continuity_contract import TaskContinuityStatus
+
         assert TaskContinuityStatus.interrupted.requires_action is True
 
 
@@ -773,12 +834,14 @@ class TestGroupQ_ReissuableAlwaysInterrupted:
 # R: unknown disposition yields ambiguous
 # ---------------------------------------------------------------------------
 
+
 class TestGroupR_UnknownDispositionAmbiguous:
     def test_R01_unknown_disposition_string_is_ambiguous(self):
         from core.inflight_task_continuity_contract import (
             InFlightTaskContinuityContract,
             TaskContinuityStatus,
         )
+
         tid = _task_id()
         rec = _make_restored_record(task_id=tid, disposition="future_unknown_value")
         report = InFlightTaskContinuityContract().evaluate([rec])
@@ -790,32 +853,34 @@ class TestGroupR_UnknownDispositionAmbiguous:
 # S: build_continuity_report convenience function
 # ---------------------------------------------------------------------------
 
+
 class TestGroupS_BuildContinuityReportFunction:
     def test_S01_returns_task_continuity_report(self):
         from core.inflight_task_continuity_contract import (
-            build_continuity_report,
             TaskContinuityReport,
+            build_continuity_report,
         )
+
         result = build_continuity_report([])
         assert isinstance(result, TaskContinuityReport)
 
     def test_S02_passes_through_parameters(self):
         from core.inflight_task_continuity_contract import (
-            build_continuity_report,
             TaskContinuityStatus,
+            build_continuity_report,
         )
+
         tid = _task_id()
         rec = _make_restored_record(task_id=tid, disposition="resumable")
-        report = build_continuity_report(
-            [rec], already_pending_ids={tid}
-        )
+        report = build_continuity_report([rec], already_pending_ids={tid})
         assert report.records[0].continuity_status == TaskContinuityStatus.resumed
 
     def test_S03_stale_threshold_override(self):
         from core.inflight_task_continuity_contract import (
-            build_continuity_report,
             TaskContinuityStatus,
+            build_continuity_report,
         )
+
         tid = _task_id()
         old_ts = time.time() - 10.0
         rec = _make_restored_record(task_id=tid, disposition="resumable")
@@ -831,16 +896,19 @@ class TestGroupS_BuildContinuityReportFunction:
 # T: RuntimeRecoveryReport has continuity_report field
 # ---------------------------------------------------------------------------
 
+
 class TestGroupT_RuntimeRecoveryReportHasContinuityReport:
     def test_T01_continuity_report_field_exists(self):
         from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         r = RuntimeRecoveryReport()
         assert hasattr(r, "continuity_report")
         assert r.continuity_report is None
 
     def test_T02_continuity_report_can_be_set(self):
-        from core.runtime_restart_recovery import RuntimeRecoveryReport
         from core.inflight_task_continuity_contract import TaskContinuityReport
+        from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         r = RuntimeRecoveryReport()
         cr = TaskContinuityReport(resumed_count=1)
         r.continuity_report = cr
@@ -851,17 +919,20 @@ class TestGroupT_RuntimeRecoveryReportHasContinuityReport:
 # U: RuntimeRecoveryReport.to_dict includes continuity_report
 # ---------------------------------------------------------------------------
 
+
 class TestGroupU_RuntimeRecoveryReportToDict:
     def test_U01_to_dict_has_continuity_report_key(self):
         from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         r = RuntimeRecoveryReport()
         d = r.to_dict()
         assert "continuity_report" in d
         assert d["continuity_report"] is None
 
     def test_U02_to_dict_serialises_continuity_report(self):
-        from core.runtime_restart_recovery import RuntimeRecoveryReport
         from core.inflight_task_continuity_contract import TaskContinuityReport
+        from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         r = RuntimeRecoveryReport()
         r.continuity_report = TaskContinuityReport(resumed_count=2, total_evaluated=2)
         d = r.to_dict()
@@ -872,6 +943,7 @@ class TestGroupU_RuntimeRecoveryReportToDict:
 # ---------------------------------------------------------------------------
 # V: RecoveryTruthSurface in_flight_continuity returns observed
 # ---------------------------------------------------------------------------
+
 
 class TestGroupV_RecoveryTruthSurface:
     def test_V01_in_flight_continuity_entry_is_partial_with_contract(self):
@@ -884,14 +956,13 @@ class TestGroupV_RecoveryTruthSurface:
         CONTINUITY_RESTORED 原则相悖的退役契约。
         """
         from core.recovery_truth_surface import (
-            build_recovery_truth_report,
             RecoveryTruthDimension,
             RecoveryTruthStatus,
+            build_recovery_truth_report,
         )
+
         report = build_recovery_truth_report()
-        entry = report.get_entry(
-            RecoveryTruthDimension.in_flight_task_continuity_preserved
-        )
+        entry = report.get_entry(RecoveryTruthDimension.in_flight_task_continuity_preserved)
         assert entry is not None
         # With InFlightTaskContinuityContract present but no live recovery
         # event, status caps at partial and the upgrade path is documented.
@@ -900,13 +971,12 @@ class TestGroupV_RecoveryTruthSurface:
 
     def test_V02_inflight_contract_in_supporting_modules(self):
         from core.recovery_truth_surface import (
-            build_recovery_truth_report,
             RecoveryTruthDimension,
+            build_recovery_truth_report,
         )
+
         report = build_recovery_truth_report()
-        entry = report.get_entry(
-            RecoveryTruthDimension.in_flight_task_continuity_preserved
-        )
+        entry = report.get_entry(RecoveryTruthDimension.in_flight_task_continuity_preserved)
         assert entry is not None
         assert "core.inflight_task_continuity_contract" in entry.supporting_modules
 
@@ -915,13 +985,16 @@ class TestGroupV_RecoveryTruthSurface:
 # W: Full restart simulation — RESUMABLE task → recoverable
 # ---------------------------------------------------------------------------
 
+
 class TestGroupW_RestartSimulationResumable:
     def setup_method(self):
         from core.task_lifecycle_persistence import reset_task_lifecycle_store
+
         reset_task_lifecycle_store()
 
     def teardown_method(self):
         from core.task_lifecycle_persistence import reset_task_lifecycle_store
+
         reset_task_lifecycle_store()
 
     def test_W01_resumable_task_yields_continuity_gap_after_restart(self, tmp_path):
@@ -930,18 +1003,17 @@ class TestGroupW_RestartSimulationResumable:
         This test validates that the system does NOT claim continuity restored
         for a task that was interrupted — the continuity_gap_count > 0.
         """
+        from core.inflight_task_continuity_contract import (
+            TaskContinuityStatus,
+            build_continuity_report,
+        )
         from core.task_lifecycle_persistence import (
             TaskLifecyclePersistenceStore,
-            save_task_lifecycle_snapshot,
             restore_inflight_tasks_from_snapshot,
+            save_task_lifecycle_snapshot,
         )
-        from core.inflight_task_continuity_contract import (
-            build_continuity_report,
-            TaskContinuityStatus,
-        )
-        store = TaskLifecyclePersistenceStore(
-            store_path=str(tmp_path / "tl.json")
-        )
+
+        store = TaskLifecyclePersistenceStore(store_path=str(tmp_path / "tl.json"))
         tid = _task_id()
         records = [
             {
@@ -979,34 +1051,42 @@ class TestGroupW_RestartSimulationResumable:
 # X: Full restart simulation — already-live task → resumed
 # ---------------------------------------------------------------------------
 
+
 class TestGroupX_RestartSimulationAlreadyLive:
     def setup_method(self):
         from core.task_lifecycle_persistence import reset_task_lifecycle_store
+
         reset_task_lifecycle_store()
 
     def teardown_method(self):
         from core.task_lifecycle_persistence import reset_task_lifecycle_store
+
         reset_task_lifecycle_store()
 
     def test_X01_already_live_task_gets_resumed(self, tmp_path):
         """Task already in live registry at recovery time → resumed."""
+        from core.inflight_task_continuity_contract import (
+            TaskContinuityStatus,
+            build_continuity_report,
+        )
         from core.task_lifecycle_persistence import (
             TaskLifecyclePersistenceStore,
-            save_task_lifecycle_snapshot,
             restore_inflight_tasks_from_snapshot,
+            save_task_lifecycle_snapshot,
         )
-        from core.inflight_task_continuity_contract import (
-            build_continuity_report,
-            TaskContinuityStatus,
-        )
-        store = TaskLifecyclePersistenceStore(
-            store_path=str(tmp_path / "tl.json")
-        )
+
+        store = TaskLifecyclePersistenceStore(store_path=str(tmp_path / "tl.json"))
         tid = _task_id()
         save_task_lifecycle_snapshot(
-            [{"task_id": tid, "owner": "device_dispatch",
-              "trace_id": _trace_id(), "created_at": time.time(),
-              "updated_at": time.time()}],
+            [
+                {
+                    "task_id": tid,
+                    "owner": "device_dispatch",
+                    "trace_id": _trace_id(),
+                    "created_at": time.time(),
+                    "updated_at": time.time(),
+                }
+            ],
             store=store,
         )
         restored = restore_inflight_tasks_from_snapshot(store=store)
@@ -1028,12 +1108,14 @@ class TestGroupX_RestartSimulationAlreadyLive:
 # Y: Mixed scenario — multiple tasks across all status types
 # ---------------------------------------------------------------------------
 
+
 class TestGroupY_MixedScenario:
     def test_Y01_mixed_statuses_all_classified(self):
         from core.inflight_task_continuity_contract import (
             InFlightTaskContinuityContract,
             TaskContinuityStatus,
         )
+
         t_resumed = _task_id()
         t_recoverable = _task_id()
         t_interrupted = _task_id()
@@ -1071,6 +1153,7 @@ class TestGroupY_MixedScenario:
 
     def test_Y02_mixed_to_dict_is_consistent(self):
         from core.inflight_task_continuity_contract import InFlightTaskContinuityContract
+
         records = [
             _make_restored_record(disposition="resumable"),
             _make_restored_record(disposition="terminal_on_interrupt"),
@@ -1089,12 +1172,14 @@ class TestGroupY_MixedScenario:
 # Z: Empty snapshot
 # ---------------------------------------------------------------------------
 
+
 class TestGroupZ_EmptySnapshot:
     def test_Z01_empty_snapshot_produces_valid_report(self):
         from core.inflight_task_continuity_contract import (
-            build_continuity_report,
             TaskContinuityReport,
+            build_continuity_report,
         )
+
         report = build_continuity_report([])
         assert isinstance(report, TaskContinuityReport)
         assert report.total_evaluated == 0
@@ -1107,7 +1192,9 @@ class TestGroupZ_EmptySnapshot:
 
     def test_Z02_empty_report_to_dict_is_serialisable(self):
         import json
+
         from core.inflight_task_continuity_contract import build_continuity_report
+
         report = build_continuity_report([])
         # Should not raise
         serialised = json.dumps(report.to_dict())

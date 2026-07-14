@@ -1,7 +1,8 @@
 """EventBridge wire() 连接验证和事件类型完整性测试"""
 
-import pytest
 import logging
+
+import pytest
 
 
 class TestEventTypeCompleteness:
@@ -32,7 +33,8 @@ class TestEventTypeCompleteness:
             assert hasattr(EventType, name), f"EventType.{name} missing"
 
     def test_event_bus_singleton(self):
-        from integration.event_bus import event_bus, EventBus
+        from integration.event_bus import EventBus, event_bus
+
         assert isinstance(event_bus, EventBus)
 
 
@@ -43,6 +45,7 @@ class TestEventBridgeWire:
     async def test_wire_idempotent(self):
         """wire() 调用两次不应报错"""
         from core.event_bridge import EventBridge
+
         bridge = EventBridge()
         await bridge.wire()
         await bridge.wire()  # 第二次应为 no-op
@@ -50,6 +53,7 @@ class TestEventBridgeWire:
     async def test_wire_completes_without_error(self):
         """wire() 应在所有服务不可用时仍能完成（graceful degradation）"""
         from core.event_bridge import EventBridge
+
         bridge = EventBridge.__new__(EventBridge)
         bridge._wired = False
         bridge.logger = logging.getLogger("test_bridge")

@@ -74,8 +74,10 @@ logger = logging.getLogger("Galaxy.AcademicRetrieval")
 try:
     from core.rag_memory import get_rag_memory  # noqa: F401 — re-exported for patching
 except ImportError:
+
     def get_rag_memory():  # type: ignore[misc]
         raise ImportError("core.rag_memory is not available")
+
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -93,6 +95,7 @@ _MAX_ABSTRACT_CHARS = 2000
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _build_paper_content(paper: Dict) -> str:
     """Build the text content ingested into the Knowledge Core for one paper."""
@@ -302,15 +305,14 @@ class AcademicRetriever:
             rag = get_rag_memory()
 
             # Run the async query_knowledge via a new event loop if needed
-            chunks = self._run_maybe_async(
-                rag.query_knowledge(query, top_k=top_k * 3)
-            )
+            chunks = self._run_maybe_async(rag.query_knowledge(query, top_k=top_k * 3))
 
             # Filter to academic-origin chunks
             academic_chunks = [
-                c for c in chunks
+                c
+                for c in chunks
                 if getattr(c, "source_type", "") == _ACADEMIC_SOURCE_TYPE
-                   or (getattr(c, "source", "").startswith("academic://"))
+                or (getattr(c, "source", "").startswith("academic://"))
             ][:top_k]
 
             return {
@@ -339,9 +341,7 @@ class AcademicRetriever:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    async def _search_via_node97(
-        self, query: str, source: str, max_results: int
-    ) -> List[Dict]:
+    async def _search_via_node97(self, query: str, source: str, max_results: int) -> List[Dict]:
         """Call Node_97's /search endpoint.  Returns [] on failure."""
         try:
             import httpx
@@ -361,13 +361,12 @@ class AcademicRetriever:
             logger.debug("Node_97 /search unavailable (%s)", exc)
             return []
 
-    async def _search_arxiv_direct(
-        self, query: str, max_results: int
-    ) -> List[Dict]:
+    async def _search_arxiv_direct(self, query: str, max_results: int) -> List[Dict]:
         """Minimal direct arXiv fallback (no external deps beyond stdlib)."""
         try:
-            import httpx
             import xml.etree.ElementTree as ET
+
+            import httpx
 
             params = {
                 "search_query": f"all:{query}",
@@ -377,9 +376,7 @@ class AcademicRetriever:
                 "sortOrder": "descending",
             }
             async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.get(
-                    "http://export.arxiv.org/api/query", params=params
-                )
+                resp = await client.get("http://export.arxiv.org/api/query", params=params)
                 resp.raise_for_status()
 
             ns = {"atom": "http://www.w3.org/2005/Atom"}
@@ -399,14 +396,9 @@ class AcademicRetriever:
                     {
                         "paper_id": pid,
                         "title": (title_el.text or "").strip() if title_el is not None else "",
-                        "authors": [
-                            (a.find("atom:name", ns).text or "")
-                            for a in entry.findall("atom:author", ns)
-                        ],
+                        "authors": [(a.find("atom:name", ns).text or "") for a in entry.findall("atom:author", ns)],
                         "abstract": (summary_el.text or "").strip() if summary_el is not None else "",
-                        "published_date": (published_el.text or "")[:10]
-                        if published_el is not None
-                        else "",
+                        "published_date": (published_el.text or "")[:10] if published_el is not None else "",
                         "url": (entry.find("atom:id", ns).text or ""),
                         "source": "arXiv",
                         "tags": tags,
@@ -422,10 +414,11 @@ class AcademicRetriever:
         """Run *coro* synchronously, regardless of whether there is a running loop."""
         try:
             # Python 3.10+: get_running_loop() raises RuntimeError when not in a loop
-            running_loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
             # We're inside an async context — run in a separate thread to avoid
             # blocking the event loop.
             import concurrent.futures
+
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                 future = pool.submit(asyncio.run, coro)
                 return future.result(timeout=30)

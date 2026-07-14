@@ -398,15 +398,11 @@ class DelegatedHandoffContractIdentity:
         """
         if not isinstance(data, dict):
             raise ValueError(
-                "DelegatedHandoffContractIdentity.from_dict: expected dict, "
-                f"got {type(data).__name__!r}"
+                "DelegatedHandoffContractIdentity.from_dict: expected dict, " f"got {type(data).__name__!r}"
             )
         return cls(
             contract_id=str(data.get("contract_id", "") or str(uuid.uuid4())),
-            session_id=str(
-                data.get("delegation_transfer_session_id")
-                or data.get("session_id", "")
-            ),
+            session_id=str(data.get("delegation_transfer_session_id") or data.get("session_id", "")),
             device_id=str(data.get("device_id", "")),
             trace_id=str(data.get("trace_id", "")),
             dispatch_record_id=str(data.get("dispatch_record_id", "")),
@@ -465,15 +461,10 @@ class DelegatedHandoffContractMeta:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "DelegatedHandoffContractMeta":
         if not isinstance(data, dict):
-            raise ValueError(
-                "DelegatedHandoffContractMeta.from_dict: expected dict, "
-                f"got {type(data).__name__!r}"
-            )
+            raise ValueError("DelegatedHandoffContractMeta.from_dict: expected dict, " f"got {type(data).__name__!r}")
         raw_ver = data.get("contract_version", HandoffContractVersion.v2.value)
         return cls(
-            source_runtime_posture=str(
-                data.get("source_runtime_posture", _POSTURE_CONTROL_ONLY)
-            ),
+            source_runtime_posture=str(data.get("source_runtime_posture", _POSTURE_CONTROL_ONLY)),
             coordination_role=str(data.get("coordination_role", "")),
             android_host_role=str(data.get("android_host_role", "")),
             capability_tier=str(data.get("capability_tier", "unknown")),
@@ -529,8 +520,7 @@ class DelegatedHandoffContractPayload:
     def from_dict(cls, data: Dict[str, Any]) -> "DelegatedHandoffContractPayload":
         if not isinstance(data, dict):
             raise ValueError(
-                "DelegatedHandoffContractPayload.from_dict: expected dict, "
-                f"got {type(data).__name__!r}"
+                "DelegatedHandoffContractPayload.from_dict: expected dict, " f"got {type(data).__name__!r}"
             )
         return cls(
             task_body=dict(data.get("task_body", {})),
@@ -569,15 +559,9 @@ class DelegatedHandoffContractRecord:
         Non-empty string when the contract was rejected at build time.
     """
 
-    identity: DelegatedHandoffContractIdentity = field(
-        default_factory=DelegatedHandoffContractIdentity
-    )
-    meta: DelegatedHandoffContractMeta = field(
-        default_factory=DelegatedHandoffContractMeta
-    )
-    payload: DelegatedHandoffContractPayload = field(
-        default_factory=DelegatedHandoffContractPayload
-    )
+    identity: DelegatedHandoffContractIdentity = field(default_factory=DelegatedHandoffContractIdentity)
+    meta: DelegatedHandoffContractMeta = field(default_factory=DelegatedHandoffContractMeta)
+    payload: DelegatedHandoffContractPayload = field(default_factory=DelegatedHandoffContractPayload)
     status: HandoffContractStatus = HandoffContractStatus.draft
     created_at: float = field(default_factory=time.time)
     sealed_at: float = 0.0
@@ -632,10 +616,7 @@ class DelegatedHandoffContractRecord:
         Unknown or malformed fields fall back to safe defaults.
         """
         if not isinstance(data, dict):
-            raise ValueError(
-                "DelegatedHandoffContractRecord.from_dict: expected dict, "
-                f"got {type(data).__name__!r}"
-            )
+            raise ValueError("DelegatedHandoffContractRecord.from_dict: expected dict, " f"got {type(data).__name__!r}")
         raw_identity = data.get("identity", {})
         raw_meta = data.get("meta", {})
         raw_payload = data.get("payload", {})
@@ -724,9 +705,7 @@ class DelegatedHandoffContractRuntime:
     _CAPACITY: int = _RING_BUFFER_CAPACITY
 
     def __init__(self) -> None:
-        self._buffer: Deque[DelegatedHandoffContractRecord] = deque(
-            maxlen=self._CAPACITY
-        )
+        self._buffer: Deque[DelegatedHandoffContractRecord] = deque(maxlen=self._CAPACITY)
 
     @property
     def capacity(self) -> int:
@@ -747,14 +726,10 @@ class DelegatedHandoffContractRuntime:
     def list_pending(self) -> List[DelegatedHandoffContractRecord]:
         """Return records with status draft or sealed, newest-first."""
         return [
-            r
-            for r in reversed(self._buffer)
-            if r.status in (HandoffContractStatus.draft, HandoffContractStatus.sealed)
+            r for r in reversed(self._buffer) if r.status in (HandoffContractStatus.draft, HandoffContractStatus.sealed)
         ]
 
-    def get_latest_for_session(
-        self, session_id: str
-    ) -> Optional[DelegatedHandoffContractRecord]:
+    def get_latest_for_session(self, session_id: str) -> Optional[DelegatedHandoffContractRecord]:
         """Return the most recent record for *session_id*, or None."""
         for record in reversed(self._buffer):
             if record.identity.session_id == session_id:
@@ -912,9 +887,7 @@ def build_delegated_handoff_contract(
                 metadata=dict(payload_metadata or {}),
             ),
             status=HandoffContractStatus.cancelled,
-            reject_reason=(
-                HANDOFF_CONTRACT_REQUIRES_ATTACHED_SESSION_POLICY[:80] + "..."
-            ),
+            reject_reason=(HANDOFF_CONTRACT_REQUIRES_ATTACHED_SESSION_POLICY[:80] + "..."),
         )
         _runtime.push(rejected)
         return rejected
@@ -947,9 +920,7 @@ def build_delegated_handoff_contract(
                 metadata=dict(payload_metadata or {}),
             ),
             status=HandoffContractStatus.cancelled,
-            reject_reason=(
-                HANDOFF_CONTRACT_REQUIRES_DISPATCH_RECORD_POLICY[:80] + "..."
-            ),
+            reject_reason=(HANDOFF_CONTRACT_REQUIRES_DISPATCH_RECORD_POLICY[:80] + "..."),
         )
         _runtime.push(rejected)
         return rejected
@@ -982,9 +953,7 @@ def build_delegated_handoff_contract(
                 metadata=dict(payload_metadata or {}),
             ),
             status=HandoffContractStatus.cancelled,
-            reject_reason=(
-                HANDOFF_CONTRACT_PAYLOAD_MUST_BE_NON_EMPTY_POLICY[:80] + "..."
-            ),
+            reject_reason=(HANDOFF_CONTRACT_PAYLOAD_MUST_BE_NON_EMPTY_POLICY[:80] + "..."),
         )
         _runtime.push(rejected)
         return rejected
@@ -1131,11 +1100,7 @@ def build_handoff_contract_snapshot(
     """
     _runtime = runtime if runtime is not None else get_handoff_contract_runtime()
     all_records = _runtime.list_all()
-    pending = [
-        r
-        for r in all_records
-        if r.status in (HandoffContractStatus.draft, HandoffContractStatus.sealed)
-    ]
+    pending = [r for r in all_records if r.status in (HandoffContractStatus.draft, HandoffContractStatus.sealed)]
     return DelegatedHandoffContractSnapshot(
         records=all_records,
         pending_count=len(pending),

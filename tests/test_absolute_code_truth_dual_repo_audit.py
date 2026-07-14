@@ -29,6 +29,7 @@ def _read_doc() -> str:
 # 基础：双仓覆盖 + 方法论
 # ---------------------------------------------------------------------------
 
+
 def test_doc_covers_both_repos_with_code_only_methodology() -> None:
     content = _read_doc()
     assert "ufo-galaxy-realization-v2" in content
@@ -50,6 +51,7 @@ def test_doc_explicitly_rejects_inherited_framing() -> None:
 # 认证状态审计（关键安全事实）
 # ---------------------------------------------------------------------------
 
+
 def test_doc_audits_auth_disabled_by_default() -> None:
     """文档必须明确指出认证默认关闭（GALAXY_AUTH_ENABLED=false）。"""
     content = _read_doc()
@@ -68,6 +70,7 @@ def test_doc_identifies_auth_as_false_closure() -> None:
 # ---------------------------------------------------------------------------
 # NATS 真实状态审计
 # ---------------------------------------------------------------------------
+
 
 def test_doc_audits_nats_as_optional_nooop() -> None:
     """文档必须说明 NATS 是可选的，默认不激活，以 no-op 模式运行。"""
@@ -89,6 +92,7 @@ def test_doc_separates_nats_from_ws_transport() -> None:
 # Mesh 真实状态审计
 # ---------------------------------------------------------------------------
 
+
 def test_doc_audits_mesh_as_overlay_not_primary_transport() -> None:
     """文档必须说明 Mesh 是 WS 之上的叠加层，不是独立主干传输。"""
     content = _read_doc()
@@ -107,6 +111,7 @@ def test_doc_audits_p2p_lan_dependency() -> None:
 # Operator Console 真实状态审计
 # ---------------------------------------------------------------------------
 
+
 def test_doc_identifies_operator_console_as_vanilla_js() -> None:
     """文档必须指出 operator console 是原生 JS，不是 TypeScript/React。"""
     content = _read_doc()
@@ -120,6 +125,7 @@ def test_doc_identifies_operator_console_as_vanilla_js() -> None:
 # 三态 UI 外壳现状审计
 # ---------------------------------------------------------------------------
 
+
 def test_doc_audits_tristate_ui_shell_not_implemented() -> None:
     """文档必须指出 DORMANT/ISLAND/SIDESHEET/FULLAGENT 的 UI 渲染层不存在。"""
     content = _read_doc()
@@ -132,6 +138,7 @@ def test_doc_audits_tristate_ui_shell_not_implemented() -> None:
 # ---------------------------------------------------------------------------
 # 本地执行链审计（之前 PR 经常忽略）
 # ---------------------------------------------------------------------------
+
 
 def test_doc_covers_local_execution_chain() -> None:
     """文档必须覆盖本地执行链（Windows 本机执行），不仅仅是跨设备链。"""
@@ -158,6 +165,7 @@ def test_doc_treats_both_chains_as_equal() -> None:
 # Android 角色审计（不能仅仅说"子执行终端"）
 # ---------------------------------------------------------------------------
 
+
 def test_doc_audits_android_local_ai_as_genuine() -> None:
     """文档必须说明 Android 的本地 AI（llama.cpp + NCNN）是真实可用的。"""
     content = _read_doc()
@@ -175,6 +183,7 @@ def test_doc_identifies_android_role_as_context_dependent() -> None:
 # ---------------------------------------------------------------------------
 # V2 角色审计（不能只是"中心调度层"）
 # ---------------------------------------------------------------------------
+
 
 def test_doc_audits_v2_local_execution_capability() -> None:
     """文档必须说明 V2 也有本地执行能力（Windows 本机任务），不只是调度层。"""
@@ -195,6 +204,7 @@ def test_doc_audits_v2_tristate_lifecycle() -> None:
 # ---------------------------------------------------------------------------
 # TypeScript/全栈缺口审计
 # ---------------------------------------------------------------------------
+
 
 def test_doc_identifies_typescript_react_as_completely_absent() -> None:
     """文档必须指出 TypeScript/React 全栈前端完全不存在。"""
@@ -222,6 +232,7 @@ def test_doc_identifies_multimodal_ui_as_missing() -> None:
 # 假闭环识别
 # ---------------------------------------------------------------------------
 
+
 def test_doc_identifies_false_closures() -> None:
     """文档必须明确识别假闭环（不是模糊的"待完善"，而是有具体判断）。"""
     content = _read_doc()
@@ -238,6 +249,7 @@ def test_doc_identifies_fake_closed_auth() -> None:
 # ---------------------------------------------------------------------------
 # 从 clone 到使用的完整体验审计
 # ---------------------------------------------------------------------------
+
 
 def test_doc_covers_clone_to_use_experience() -> None:
     """文档必须描述从 clone 到可用的完整体验（含实际操作摩擦点）。"""
@@ -256,6 +268,7 @@ def test_doc_is_honest_about_non_technical_user_barriers() -> None:
 # ---------------------------------------------------------------------------
 # 完整体验白话描述
 # ---------------------------------------------------------------------------
+
 
 def test_doc_has_plain_language_system_description() -> None:
     """文档必须有无术语的白话描述，说明系统完整成熟后是什么体验。"""
@@ -277,6 +290,7 @@ def test_doc_has_honest_maturity_conclusion() -> None:
 # 优先级分类
 # ---------------------------------------------------------------------------
 
+
 def test_doc_has_prioritized_gap_classification() -> None:
     """文档必须对缺口进行优先级分类（P0/P1/P2 或等效分类）。"""
     content = _read_doc()
@@ -287,6 +301,7 @@ def test_doc_has_prioritized_gap_classification() -> None:
 # ---------------------------------------------------------------------------
 # 代码来源锚点
 # ---------------------------------------------------------------------------
+
 
 def test_doc_has_v2_code_anchors() -> None:
     """文档必须引用 V2 仓库的具体代码文件路径。"""

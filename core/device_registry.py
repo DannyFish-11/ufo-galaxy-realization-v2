@@ -62,9 +62,8 @@ import logging
 import threading
 import time
 import uuid
-
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.DeviceRegistry")
 
@@ -86,6 +85,7 @@ def _get_udm():
     """Lazily return the UnifiedDeviceManager singleton (avoids circular imports)."""
     try:
         from core.unified.device_manager import get_unified_device_manager
+
         return get_unified_device_manager()
     except Exception as _e:
         logger.debug("_get_udm: failed to obtain UDM singleton — %s", _e)
@@ -96,16 +96,14 @@ def _get_udm():
 # 数据模型 — 统一使用 core.schemas.device 中的 Pydantic V2 模型
 # ============================================================================
 
-from core.device_types import DeviceType, DeviceStatus  # noqa: E402 — 单一事实来源
-from core.schemas.device import (  # noqa: E402
-    DeviceModel as Device,
-    DeviceCapabilityModel as DeviceCapability,
-)
-
+from core.device_types import DeviceStatus, DeviceType  # noqa: E402 — 单一事实来源
+from core.schemas.device import DeviceCapabilityModel as DeviceCapability
+from core.schemas.device import DeviceModel as Device  # noqa: E402
 
 # ============================================================================
 # 设备注册管理器
 # ============================================================================
+
 
 class DeviceRegistry:
     """Compatibility / indexing / discovery layer over the UDM canonical authority.
@@ -249,18 +247,19 @@ class DeviceRegistry:
         udm = _get_udm()
         if udm is not None:
             try:
-                udm.register_device_from_dict(device_id, {
-                    "device_name": name or f"{device_type}_{device_id[:8]}",
-                    "device_type": device_type,
-                    "capabilities": capabilities or [],
-                    "source": "device_registry",
-                    **(_metadata or {}),
-                })
+                udm.register_device_from_dict(
+                    device_id,
+                    {
+                        "device_name": name or f"{device_type}_{device_id[:8]}",
+                        "device_type": device_type,
+                        "capabilities": capabilities or [],
+                        "source": "device_registry",
+                        **(_metadata or {}),
+                    },
+                )
                 logger.debug("DeviceRegistry.register: UDM write succeeded for %s", device_id)
             except Exception as _udm_err:
-                logger.warning(
-                    "DeviceRegistry.register: UDM write failed for %s — %s", device_id, _udm_err
-                )
+                logger.warning("DeviceRegistry.register: UDM write failed for %s — %s", device_id, _udm_err)
 
         # ── Local compatibility record ────────────────────────────────────
         # If the device was already registered in the local index, reuse the
@@ -288,12 +287,14 @@ class DeviceRegistry:
                 if capability_details and i < len(capability_details):
                     details = capability_details[i]
 
-                cap_list.append(DeviceCapability(
-                    name=cap_name,
-                    description=details.get("description", ""),
-                    available=details.get("available", True),
-                    params=details.get("params", {}),
-                ))
+                cap_list.append(
+                    DeviceCapability(
+                        name=cap_name,
+                        description=details.get("description", ""),
+                        available=details.get("available", True),
+                        params=details.get("params", {}),
+                    )
+                )
 
         # 创建设备对象（Pydantic V2 模型）
         now = time.time()
@@ -343,9 +344,7 @@ class DeviceRegistry:
                 udm.unregister_device(device_id)
                 logger.debug("DeviceRegistry.unregister: UDM write succeeded for %s", device_id)
             except Exception as _udm_err:
-                logger.warning(
-                    "DeviceRegistry.unregister: UDM write failed for %s — %s", device_id, _udm_err
-                )
+                logger.warning("DeviceRegistry.unregister: UDM write failed for %s — %s", device_id, _udm_err)
 
         device = self.devices.pop(device_id, None)
         if device is None:
@@ -382,14 +381,13 @@ class DeviceRegistry:
                     # Reflect authoritative UDM status into the local record.
                     try:
                         local.status = DeviceStatus(
-                            udm_dev.status.value
-                            if hasattr(udm_dev.status, "value")
-                            else str(udm_dev.status).lower()
+                            udm_dev.status.value if hasattr(udm_dev.status, "value") else str(udm_dev.status).lower()
                         )
                     except ValueError as _ve:
                         logger.debug(
                             "DeviceRegistry.get: unrecognised UDM status for %s — %s",
-                            device_id, _ve,
+                            device_id,
+                            _ve,
                         )
             except Exception as exc:
                 logger.warning("Exception suppressed: %s", exc)
@@ -472,13 +470,16 @@ class DeviceRegistry:
         udm = _get_udm()
         if udm is not None:
             try:
-                udm_ids = {d.device_id for d in udm.list_devices()}
                 # Bring UDM status into the local cache entries
                 for did in list(self.devices.keys()):
                     udm_dev = udm.get_device(did)
                     if udm_dev is not None:
                         try:
-                            self.devices[did].status = DeviceStatus(udm_dev.status.value if hasattr(udm_dev.status, "value") else str(udm_dev.status).lower())
+                            self.devices[did].status = DeviceStatus(
+                                udm_dev.status.value
+                                if hasattr(udm_dev.status, "value")
+                                else str(udm_dev.status).lower()
+                            )
                         except ValueError:
                             pass
             except Exception as exc:
@@ -521,16 +522,17 @@ class DeviceRegistry:
                     udm.heartbeat(device_id)
                 if status is not None:
                     from core.unified.models import UnifiedDeviceStatus
+
                     try:
-                        udm_status = UnifiedDeviceStatus(status.value if hasattr(status, "value") else str(status).lower())
+                        udm_status = UnifiedDeviceStatus(
+                            status.value if hasattr(status, "value") else str(status).lower()
+                        )
                     except ValueError:
                         udm_status = UnifiedDeviceStatus.ONLINE
                     udm.update_device_status(device_id, udm_status)
                 logger.debug("DeviceRegistry.update_status: UDM write succeeded for %s", device_id)
             except Exception as _udm_err:
-                logger.warning(
-                    "DeviceRegistry.update_status: UDM write failed for %s — %s", device_id, _udm_err
-                )
+                logger.warning("DeviceRegistry.update_status: UDM write failed for %s — %s", device_id, _udm_err)
 
         now = time.time()
         device.last_seen = now
@@ -551,10 +553,11 @@ class DeviceRegistry:
                     # Wire device-offline lifecycle event into multi-device runtime harness.
                     try:
                         from core.multi_device_runtime_harness import (
+                            DeviceHealthEvent,
                             on_device_health_changed,
                             on_participant_readiness_changed,
-                            DeviceHealthEvent,
                         )
+
                         on_device_health_changed(
                             DeviceHealthEvent(
                                 device_id=device_id,
@@ -563,9 +566,7 @@ class DeviceRegistry:
                                 event_type="disconnect",
                             )
                         )
-                        on_participant_readiness_changed(
-                            device_id, "lost", reason="disconnect"
-                        )
+                        on_participant_readiness_changed(device_id, "lost", reason="disconnect")
                     except Exception as _harn_exc:
                         logger.debug(
                             "DeviceRegistry.update_status: harness notification failed — %s",
@@ -600,10 +601,11 @@ class DeviceRegistry:
                     # Wire heartbeat-miss lifecycle event into multi-device runtime harness.
                     try:
                         from core.multi_device_runtime_harness import (
+                            DeviceHealthEvent,
                             on_device_health_changed,
                             on_participant_readiness_changed,
-                            DeviceHealthEvent,
                         )
+
                         on_device_health_changed(
                             DeviceHealthEvent(
                                 device_id=device.device_id,
@@ -612,9 +614,7 @@ class DeviceRegistry:
                                 event_type="heartbeat_miss",
                             )
                         )
-                        on_participant_readiness_changed(
-                            device.device_id, "lost", reason="heartbeat_miss"
-                        )
+                        on_participant_readiness_changed(device.device_id, "lost", reason="heartbeat_miss")
                     except Exception as _harn_exc:
                         logger.debug(
                             "DeviceRegistry.check_offline_devices: harness notification failed — %s",
@@ -627,6 +627,7 @@ class DeviceRegistry:
                             get_lifecycle_coordinator,
                             suspend_durable_session,
                         )
+
                         _coord = get_lifecycle_coordinator()
                         _session_ids = _coord.find_sessions_for_device(device.device_id)
                         for _sid in _session_ids:
@@ -637,7 +638,8 @@ class DeviceRegistry:
                             logger.info(
                                 "DeviceRegistry: mesh session suspended for offline device: "
                                 "device_id=%s session_id=%s",
-                                device.device_id, _sid,
+                                device.device_id,
+                                _sid,
                             )
                     except Exception as _mesh_exc:
                         logger.debug(
@@ -648,10 +650,11 @@ class DeviceRegistry:
                     # AttachedSessionRegistry so the registry reflects heartbeat-miss.
                     try:
                         from core.attached_runtime_session_registry import (
-                            lookup_session_by_device,
-                            detach_session,
                             InvalidationReason,
+                            detach_session,
+                            lookup_session_by_device,
                         )
+
                         _entry = lookup_session_by_device(device.device_id)
                         if _entry is not None:
                             detach_session(
@@ -662,7 +665,8 @@ class DeviceRegistry:
                             logger.info(
                                 "DeviceRegistry: attached session detached on heartbeat-miss: "
                                 "device_id=%s runtime_session_id=%s",
-                                device.device_id, _entry.runtime_session_id,
+                                device.device_id,
+                                _entry.runtime_session_id,
                             )
                     except Exception as _asr_exc:
                         logger.debug(
@@ -865,11 +869,13 @@ class DeviceRegistry:
             return None
         try:
             from contracts.registered_runtime_device import from_device_registry_record
+
             return from_device_registry_record(local)
         except Exception as _err:
             logger.warning(
                 "DeviceRegistry.project_to_contract: projection failed for %s — %s",
-                device_id, _err,
+                device_id,
+                _err,
             )
             return None
 
@@ -907,10 +913,10 @@ class DeviceRegistry:
         Used by the duplicate-registration path in ``register()`` to apply
         incremental group / tag additions without replacing the existing record.
         """
-        for g in (new_groups or []):
+        for g in new_groups or []:
             if g not in device.groups:
                 device.groups.append(g)
-        for t in (new_tags or []):
+        for t in new_tags or []:
             if t not in device.tags:
                 device.tags.append(t)
 

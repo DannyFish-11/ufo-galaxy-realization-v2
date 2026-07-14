@@ -47,7 +47,6 @@ from core.operational_registration_path import (
     validate_registration_prerequisites,
 )
 
-
 # =============================================================================
 # Section A — Module import and public symbol sanity
 # =============================================================================
@@ -112,9 +111,7 @@ class TestRegistrationKindCoverage:
     def test_all_registration_kinds_covered(self) -> None:
         kinds_map = self._kinds_map()
         for kind in RegistrationKind:
-            assert kind in kinds_map, (
-                f"RegistrationKind.{kind.name} has no RegistrationKindInfo record."
-            )
+            assert kind in kinds_map, f"RegistrationKind.{kind.name} has no RegistrationKindInfo record."
 
     def test_registration_kind_count_matches_enum(self) -> None:
         path = build_operational_registration_path()
@@ -123,23 +120,17 @@ class TestRegistrationKindCoverage:
     def test_every_kind_has_nonempty_canonical_module(self) -> None:
         path = build_operational_registration_path()
         for rk in path.registration_kinds:
-            assert rk.canonical_module, (
-                f"RegistrationKind.{rk.kind.name} has an empty canonical_module."
-            )
+            assert rk.canonical_module, f"RegistrationKind.{rk.kind.name} has an empty canonical_module."
 
     def test_every_kind_has_nonempty_description(self) -> None:
         path = build_operational_registration_path()
         for rk in path.registration_kinds:
-            assert rk.description, (
-                f"RegistrationKind.{rk.kind.name} has an empty description."
-            )
+            assert rk.description, f"RegistrationKind.{rk.kind.name} has an empty description."
 
     def test_every_kind_has_nonempty_display_name(self) -> None:
         path = build_operational_registration_path()
         for rk in path.registration_kinds:
-            assert rk.display_name, (
-                f"RegistrationKind.{rk.kind.name} has an empty display_name."
-            )
+            assert rk.display_name, f"RegistrationKind.{rk.kind.name} has an empty display_name."
 
 
 # =============================================================================
@@ -157,9 +148,7 @@ class TestOnboardingStepCoverage:
     def test_all_onboarding_steps_covered(self) -> None:
         steps_map = self._steps_map()
         for step_id in OnboardingStepId:
-            assert step_id in steps_map, (
-                f"OnboardingStepId.{step_id.name} has no OnboardingStep record."
-            )
+            assert step_id in steps_map, f"OnboardingStepId.{step_id.name} has no OnboardingStep record."
 
     def test_onboarding_step_count_matches_enum(self) -> None:
         path = build_operational_registration_path()
@@ -168,16 +157,12 @@ class TestOnboardingStepCoverage:
     def test_every_step_has_instructions(self) -> None:
         path = build_operational_registration_path()
         for s in path.onboarding_steps:
-            assert s.instructions, (
-                f"OnboardingStepId.{s.step_id.name} has empty instructions."
-            )
+            assert s.instructions, f"OnboardingStepId.{s.step_id.name} has empty instructions."
 
     def test_every_step_has_verification(self) -> None:
         path = build_operational_registration_path()
         for s in path.onboarding_steps:
-            assert s.verification, (
-                f"OnboardingStepId.{s.step_id.name} has empty verification."
-            )
+            assert s.verification, f"OnboardingStepId.{s.step_id.name} has empty verification."
 
     def test_clone_step_is_blocking(self) -> None:
         steps_map = self._steps_map()
@@ -228,9 +213,7 @@ class TestPrerequisiteValidation:
         the test will fail — that is the intended fail-fast behaviour.
         """
         v = validate_registration_prerequisites()
-        assert len(v.failed_checks) == 0, (
-            f"Unexpected FAIL checks: {[c.name for c in v.failed_checks]}"
-        )
+        assert len(v.failed_checks) == 0, f"Unexpected FAIL checks: {[c.name for c in v.failed_checks]}"
 
     def test_passed_property_reflects_overall_status(self) -> None:
         v = validate_registration_prerequisites()
@@ -330,15 +313,9 @@ class TestTierClassification:
 
     def test_every_kind_in_at_least_one_tier(self) -> None:
         path = build_operational_registration_path()
-        all_tiered = (
-            set(path.main_chain_kinds)
-            | set(path.cross_device_kinds)
-            | set(path.compat_kinds)
-        )
+        all_tiered = set(path.main_chain_kinds) | set(path.cross_device_kinds) | set(path.compat_kinds)
         for rk in path.registration_kinds:
-            assert rk.kind in all_tiered, (
-                f"RegistrationKind.{rk.kind.name} not in any tier bucket."
-            )
+            assert rk.kind in all_tiered, f"RegistrationKind.{rk.kind.name} not in any tier bucket."
 
     def test_main_chain_nonempty(self) -> None:
         path = build_operational_registration_path()
@@ -403,23 +380,17 @@ class TestRequiredKindTiers:
     @pytest.mark.parametrize("kind", REQUIRED_MAIN_CHAIN)
     def test_main_chain_kind_present(self, kind: RegistrationKind) -> None:
         path = build_operational_registration_path()
-        assert kind in path.main_chain_kinds, (
-            f"RegistrationKind.{kind.name} must be in main_chain_kinds."
-        )
+        assert kind in path.main_chain_kinds, f"RegistrationKind.{kind.name} must be in main_chain_kinds."
 
     @pytest.mark.parametrize("kind", REQUIRED_CROSS_DEVICE)
     def test_cross_device_kind_present(self, kind: RegistrationKind) -> None:
         path = build_operational_registration_path()
-        assert kind in path.cross_device_kinds, (
-            f"RegistrationKind.{kind.name} must be in cross_device_kinds."
-        )
+        assert kind in path.cross_device_kinds, f"RegistrationKind.{kind.name} must be in cross_device_kinds."
 
     @pytest.mark.parametrize("kind", REQUIRED_COMPAT)
     def test_compat_kind_present(self, kind: RegistrationKind) -> None:
         path = build_operational_registration_path()
-        assert kind in path.compat_kinds, (
-            f"RegistrationKind.{kind.name} must be in compat_kinds."
-        )
+        assert kind in path.compat_kinds, f"RegistrationKind.{kind.name} must be in compat_kinds."
 
 
 # =============================================================================

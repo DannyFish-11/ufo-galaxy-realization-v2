@@ -33,7 +33,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # AIP v3 message helper
 # ---------------------------------------------------------------------------
@@ -76,9 +75,7 @@ class TestReconnectPath:
         ws2 = _make_ws()
 
         # Register via first connection
-        await bridge.handle_message(
-            ws1, _v3("device_register", device_id, platform="android")
-        )
+        await bridge.handle_message(ws1, _v3("device_register", device_id, platform="android"))
 
         device = bridge.get_device(device_id)
         assert device is not None
@@ -109,9 +106,7 @@ class TestReconnectPath:
         fake_id = f"unknown-{uuid.uuid4().hex[:8]}"
 
         result = await bridge.reconnect_device(fake_id, ws)
-        assert result is False, (
-            "reconnect_device must return False for unknown device_id"
-        )
+        assert result is False, "reconnect_device must return False for unknown device_id"
 
     @pytest.mark.asyncio
     async def test_reconnect_preserves_capability_state(self) -> None:
@@ -125,9 +120,7 @@ class TestReconnectPath:
         caps = ["tap", "swipe", "screenshot"]
 
         # Register + report capabilities
-        await bridge.handle_message(
-            ws1, _v3("device_register", device_id, platform="android")
-        )
+        await bridge.handle_message(ws1, _v3("device_register", device_id, platform="android"))
         await bridge.handle_message(
             ws1,
             _v3("capability_report", device_id, platform="android", supported_actions=caps),
@@ -146,9 +139,9 @@ class TestReconnectPath:
         device = bridge.get_device(device_id)
         assert device is not None
         for cap in caps:
-            assert cap in device.supported_actions, (
-                f"Capability '{cap}' lost after reconnect — capability state regression"
-            )
+            assert (
+                cap in device.supported_actions
+            ), f"Capability '{cap}' lost after reconnect — capability state regression"
 
     @pytest.mark.asyncio
     async def test_reconnect_new_registration_replaces_old(self) -> None:
@@ -165,19 +158,14 @@ class TestReconnectPath:
         ws2 = _make_ws()
 
         # First registration
-        reg1 = await bridge.handle_message(
-            ws1, _v3("device_register", device_id, platform="android", model="Phone v1")
-        )
+        reg1 = await bridge.handle_message(ws1, _v3("device_register", device_id, platform="android", model="Phone v1"))
         assert reg1["type"] == "device_register_ack"
 
         # Second registration (client restart / reconnect via register)
-        reg2 = await bridge.handle_message(
-            ws2, _v3("device_register", device_id, platform="android", model="Phone v1")
-        )
+        reg2 = await bridge.handle_message(ws2, _v3("device_register", device_id, platform="android", model="Phone v1"))
         assert reg2 is not None
         assert reg2["type"] == "device_register_ack", (
-            "Re-registration must be accepted — V2 must not reject a second "
-            "device_register for the same device_id"
+            "Re-registration must be accepted — V2 must not reject a second " "device_register for the same device_id"
         )
 
     def test_reconnect_via_transport_layer(self) -> None:
@@ -203,21 +191,16 @@ class TestReconnectPath:
         with TestClient(app) as client:
             # First connection: register
             with client.websocket_connect(f"/ws/device/{device_id}") as ws1:
-                ws1.send_text(
-                    json.dumps(_v3("device_register", device_id, platform="android"))
-                )
+                ws1.send_text(json.dumps(_v3("device_register", device_id, platform="android")))
                 ack1 = ws1.receive_json()
             assert ack1["type"] == "device_register_ack"
 
             # Second connection (reconnect): register again
             with client.websocket_connect(f"/ws/device/{device_id}") as ws2:
-                ws2.send_text(
-                    json.dumps(_v3("device_register", device_id, platform="android"))
-                )
+                ws2.send_text(json.dumps(_v3("device_register", device_id, platform="android")))
                 ack2 = ws2.receive_json()
             assert ack2["type"] == "device_register_ack", (
-                "Reconnect registration must succeed — V2 must handle device "
-                "reconnects via new WS connections"
+                "Reconnect registration must succeed — V2 must handle device " "reconnects via new WS connections"
             )
 
 
@@ -244,9 +227,7 @@ class TestOfflineQueueReplaySemantics:
         ws = _make_ws()
         unknown_task_id = f"no-waiter-{uuid.uuid4().hex[:8]}"
 
-        await bridge.handle_message(
-            ws, _v3("device_register", device_id, platform="android")
-        )
+        await bridge.handle_message(ws, _v3("device_register", device_id, platform="android"))
 
         # task_result with no matching pending Future — must not raise
         response = await bridge.handle_message(
@@ -277,9 +258,7 @@ class TestOfflineQueueReplaySemantics:
         device_id = f"multi-replay-{uuid.uuid4().hex[:8]}"
         ws = _make_ws()
 
-        await bridge.handle_message(
-            ws, _v3("device_register", device_id, platform="android")
-        )
+        await bridge.handle_message(ws, _v3("device_register", device_id, platform="android"))
 
         for i in range(5):
             task_id = f"queued-task-{i}-{uuid.uuid4().hex[:6]}"
@@ -307,9 +286,7 @@ class TestOfflineQueueReplaySemantics:
         task_id = str(uuid.uuid4())
 
         # Register on first connection and set up a pending future
-        await bridge.handle_message(
-            ws1, _v3("device_register", device_id, platform="android")
-        )
+        await bridge.handle_message(ws1, _v3("device_register", device_id, platform="android"))
         loop = asyncio.get_running_loop()
         future: asyncio.Future = loop.create_future()
         bridge._pending_responses[task_id] = future
@@ -332,9 +309,7 @@ class TestOfflineQueueReplaySemantics:
             ),
         )
 
-        assert future.done(), (
-            "Future must be resolved even when task_result arrives after reconnect"
-        )
+        assert future.done(), "Future must be resolved even when task_result arrives after reconnect"
 
 
 # ===========================================================================
@@ -359,9 +334,7 @@ class TestDuplicateResultDelivery:
         task_id = str(uuid.uuid4())
         ws = _make_ws()
 
-        await bridge.handle_message(
-            ws, _v3("device_register", device_id, platform="android")
-        )
+        await bridge.handle_message(ws, _v3("device_register", device_id, platform="android"))
 
         # Install Future
         loop = asyncio.get_running_loop()
@@ -394,9 +367,7 @@ class TestDuplicateResultDelivery:
         task_id = str(uuid.uuid4())
         ws = _make_ws()
 
-        await bridge.handle_message(
-            ws, _v3("device_register", device_id, platform="android")
-        )
+        await bridge.handle_message(ws, _v3("device_register", device_id, platform="android"))
 
         loop = asyncio.get_running_loop()
         future: asyncio.Future = loop.create_future()
@@ -414,9 +385,7 @@ class TestDuplicateResultDelivery:
         await bridge.handle_message(ws, result_msg)
 
         # First result must be unchanged
-        assert future.result() == first_result, (
-            "Future result must not be overwritten by duplicate task_result"
-        )
+        assert future.result() == first_result, "Future result must not be overwritten by duplicate task_result"
 
     @pytest.mark.asyncio
     async def test_different_task_ids_handled_independently(self) -> None:
@@ -427,9 +396,7 @@ class TestDuplicateResultDelivery:
         device_id = f"multi-task-{uuid.uuid4().hex[:8]}"
         ws = _make_ws()
 
-        await bridge.handle_message(
-            ws, _v3("device_register", device_id, platform="android")
-        )
+        await bridge.handle_message(ws, _v3("device_register", device_id, platform="android"))
 
         loop = asyncio.get_running_loop()
         task_id_a = str(uuid.uuid4())
@@ -442,15 +409,23 @@ class TestDuplicateResultDelivery:
         # Deliver result for B first, then A
         await bridge.handle_message(
             ws,
-            _v3("task_result", device_id, task_id=task_id_b, status="completed",
+            _v3(
+                "task_result",
+                device_id,
+                task_id=task_id_b,
+                status="completed",
                 result={"which": "B"},
-                ),
+            ),
         )
         await bridge.handle_message(
             ws,
-            _v3("task_result", device_id, task_id=task_id_a, status="completed",
+            _v3(
+                "task_result",
+                device_id,
+                task_id=task_id_a,
+                status="completed",
                 result={"which": "A"},
-                ),
+            ),
         )
 
         assert future_a.done(), "Future for task_id_a must be resolved"
@@ -479,9 +454,7 @@ class TestHandoffSignalPath:
         device_id = f"handoff-{uuid.uuid4().hex[:8]}"
         ws = _make_ws()
 
-        await bridge.handle_message(
-            ws, _v3("device_register", device_id, platform="android")
-        )
+        await bridge.handle_message(ws, _v3("device_register", device_id, platform="android"))
 
         # Send a handoff-style envelope (unrecognised type)
         result = await bridge.handle_message(
@@ -505,9 +478,7 @@ class TestHandoffSignalPath:
         task_id = str(uuid.uuid4())
         ws = _make_ws()
 
-        await bridge.handle_message(
-            ws, _v3("device_register", device_id, platform="android")
-        )
+        await bridge.handle_message(ws, _v3("device_register", device_id, platform="android"))
 
         ack = await bridge.handle_message(
             ws,
@@ -520,9 +491,7 @@ class TestHandoffSignalPath:
         )
         # task_end handler must produce a task_end_ack
         assert ack is not None, "task_end must return a response (not dead code)"
-        assert ack.get("type") == "task_end_ack", (
-            f"Expected 'task_end_ack', got {ack.get('type')!r}"
-        )
+        assert ack.get("type") == "task_end_ack", f"Expected 'task_end_ack', got {ack.get('type')!r}"
 
     @pytest.mark.asyncio
     async def test_goal_result_ingress_path_exists(self) -> None:
@@ -537,9 +506,7 @@ class TestHandoffSignalPath:
         device_id = f"goal-result-{uuid.uuid4().hex[:8]}"
         ws = _make_ws()
 
-        await bridge.handle_message(
-            ws, _v3("device_register", device_id, platform="android")
-        )
+        await bridge.handle_message(ws, _v3("device_register", device_id, platform="android"))
 
         result = await bridge.handle_message(
             ws,
@@ -559,8 +526,7 @@ class TestHandoffSignalPath:
         from galaxy_gateway.android.handlers.task_lifecycle import handle_task_result
 
         assert callable(handle_task_result), (
-            "handle_task_result must be a callable — handoff waiter resolution "
-            "path must not be dead code"
+            "handle_task_result must be a callable — handoff waiter resolution " "path must not be dead code"
         )
 
     def test_reconnect_device_method_exists_and_is_callable(self) -> None:
@@ -569,8 +535,7 @@ class TestHandoffSignalPath:
 
         bridge = AndroidBridge()
         assert callable(bridge.reconnect_device), (
-            "AndroidBridge.reconnect_device must be callable — reconnect path "
-            "must not be dead code"
+            "AndroidBridge.reconnect_device must be callable — reconnect path " "must not be dead code"
         )
 
     def test_dispatch_to_websocket_function_is_importable(self) -> None:
@@ -600,9 +565,7 @@ class TestSessionIdentityContinuity:
         device_id = f"session-id-{uuid.uuid4().hex[:8]}"
         ws = _make_ws()
 
-        reg_ack = await bridge.handle_message(
-            ws, _v3("device_register", device_id, platform="android")
-        )
+        reg_ack = await bridge.handle_message(ws, _v3("device_register", device_id, platform="android"))
         cap_ack = await bridge.handle_message(
             ws,
             _v3(
@@ -630,12 +593,8 @@ class TestSessionIdentityContinuity:
         caps_b = ["screenshot", "input_text"]
 
         # Register and report capabilities for both devices
-        await bridge.handle_message(
-            ws_a, _v3("device_register", device_a, platform="android")
-        )
-        await bridge.handle_message(
-            ws_b, _v3("device_register", device_b, platform="android")
-        )
+        await bridge.handle_message(ws_a, _v3("device_register", device_a, platform="android"))
+        await bridge.handle_message(ws_b, _v3("device_register", device_b, platform="android"))
         await bridge.handle_message(
             ws_a,
             _v3("capability_report", device_a, platform="android", supported_actions=caps_a),
@@ -658,9 +617,7 @@ class TestSessionIdentityContinuity:
             assert cap in dev_b_obj.supported_actions
         # No cross-contamination
         for cap in caps_b:
-            assert cap not in dev_a_obj.supported_actions, (
-                f"Device A must not have device B's capability '{cap}'"
-            )
+            assert cap not in dev_a_obj.supported_actions, f"Device A must not have device B's capability '{cap}'"
 
 
 # ===========================================================================
@@ -713,9 +670,10 @@ class TestReconnectContinuitySemantics:
         assert ack1["type"] == "device_register_ack"
         assert ack1["runtime_attachment_session_id"] == attachment_id
         # First registration is always a new attachment (no prior session)
-        assert ack1.get("continuity_outcome") in ("new_attachment", None), (
-            "First registration must be new_attachment or unclassified"
-        )
+        assert ack1.get("continuity_outcome") in (
+            "new_attachment",
+            None,
+        ), "First registration must be new_attachment or unclassified"
 
         # Simulate disconnect so the session is in detached state
         await bridge.disconnect_device(device_id)
@@ -814,9 +772,7 @@ class TestReconnectContinuitySemantics:
         )
         assert isinstance(ack, dict)
         runtime_session_id_before = ack.get("runtime_session_id")
-        assert runtime_session_id_before, (
-            "Expected runtime_session_id in device_register_ack but got None"
-        )
+        assert runtime_session_id_before, "Expected runtime_session_id in device_register_ack but got None"
         # Capture the runtime_session_id after first registration
         entry1 = registry.get_active_for_device(device_id)
         assert entry1 is not None, "Registry must have an entry after registration"
@@ -915,12 +871,12 @@ class TestReconnectContinuitySemantics:
     @pytest.mark.asyncio
     async def test_disconnect_reconnect_restores_context_and_converges_result(self) -> None:
         """Reconnect path must preserve context, resume tracking, and converge the final result."""
+        from core.android_delegated_runtime_lifecycle_coordinator import (
+            get_lifecycle_coordinator,
+        )
         from core.android_participant_session_state import (
             AndroidParticipantSessionPhase,
             get_participant_session,
-        )
-        from core.android_delegated_runtime_lifecycle_coordinator import (
-            get_lifecycle_coordinator,
         )
         from core.delegated_runtime_execution_tracker import (
             DelegatedExecutionPhase,
@@ -1090,9 +1046,9 @@ class TestReconnectContinuitySemantics:
         )
 
         assert "device_register" in DEVICE_REGISTER_IS_CANONICAL_RECONNECT_PATH
-        assert "NOT" in ANDROID_RECONNECT_CANONICAL_PATH_SENTINEL, (
-            "Sentinel must explicitly state that device_reconnect is NOT the canonical path"
-        )
+        assert (
+            "NOT" in ANDROID_RECONNECT_CANONICAL_PATH_SENTINEL
+        ), "Sentinel must explicitly state that device_reconnect is NOT the canonical path"
 
     @pytest.mark.asyncio
     async def test_reregister_without_attachment_id_falls_back_gracefully(
@@ -1123,10 +1079,11 @@ class TestReconnectContinuitySemantics:
             _v3("device_register", device_id, platform="android"),
         )
         assert ack2 is not None
-        assert ack2["type"] == "device_register_ack", (
-            "Re-registration without attachment ID must succeed — backward compat"
-        )
+        assert (
+            ack2["type"] == "device_register_ack"
+        ), "Re-registration without attachment ID must succeed — backward compat"
         # continuity_outcome must be present and must be one of the two valid values
-        assert ack2.get("continuity_outcome") in ("continuity_resume", "new_attachment"), (
-            "continuity_outcome must always be present in device_register_ack"
-        )
+        assert ack2.get("continuity_outcome") in (
+            "continuity_resume",
+            "new_attachment",
+        ), "continuity_outcome must always be present in device_register_ack"

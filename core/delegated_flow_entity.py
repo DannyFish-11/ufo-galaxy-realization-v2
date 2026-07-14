@@ -743,17 +743,13 @@ class DelegatedFlowIdentity:
     def from_dict(cls, data: Dict[str, Any]) -> "DelegatedFlowIdentity":
         """Construct from a dict.  Raises ValueError if *data* is not a dict."""
         if not isinstance(data, dict):
-            raise ValueError(
-                "DelegatedFlowIdentity.from_dict expects a dict"
-            )
+            raise ValueError("DelegatedFlowIdentity.from_dict expects a dict")
         return cls(
             delegated_flow_id=data.get("delegated_flow_id") or str(uuid.uuid4()),
             flow_lineage_id=data.get("flow_lineage_id") or str(uuid.uuid4()),
             flow_segment_id=data.get("flow_segment_id", ""),
             trace_id=data.get("trace_id") or str(uuid.uuid4()),
-            flow_kind=DelegatedFlowKind.from_string(
-                data.get("flow_kind", DelegatedFlowKind.task_assign.value)
-            ),
+            flow_kind=DelegatedFlowKind.from_string(data.get("flow_kind", DelegatedFlowKind.task_assign.value)),
         )
 
 
@@ -796,9 +792,7 @@ class DelegatedFlowOwnership:
         "V2 orchestration layer is the canonical authority for flow identity, "
         "lineage, phase, and object mappings per FLOW_TRUTH_AUTHORITY_IS_SCOPE_SEPARATED_POLICY."
     )
-    execution_owner_rationale: str = (
-        "No execution owner assigned; flow has not been dispatched to Android yet."
-    )
+    execution_owner_rationale: str = "No execution owner assigned; flow has not been dispatched to Android yet."
 
     def to_dict(self) -> Dict[str, Any]:
         """Return a JSON-safe dict representation."""
@@ -838,7 +832,8 @@ class DelegatedFlowOwnership:
             canonical_owner=self.canonical_owner,
             execution_owner=DelegatedFlowOwnerKind.android_execution,
             canonical_owner_rationale=self.canonical_owner_rationale,
-            execution_owner_rationale=rationale or (
+            execution_owner_rationale=rationale
+            or (
                 "Android execution side has acknowledged the delegated flow; "
                 "execution truth transferred per ANDROID_HOLDS_EXECUTION_TRUTH_POLICY."
             ),
@@ -929,6 +924,7 @@ class DelegatedFlowObjectMapping:
         Fields in *self* that are already non-empty are NOT overwritten by an
         empty *other* field; non-empty *other* fields always win.
         """
+
         def _pick(a: str, b: str) -> str:
             return b if b else a
 
@@ -1047,12 +1043,8 @@ class DelegatedFlowEntity:
     identity: DelegatedFlowIdentity = field(default_factory=DelegatedFlowIdentity)
     phase: DelegatedFlowPhase = DelegatedFlowPhase.created
     ownership: DelegatedFlowOwnership = field(default_factory=DelegatedFlowOwnership)
-    object_mapping: DelegatedFlowObjectMapping = field(
-        default_factory=DelegatedFlowObjectMapping
-    )
-    extension_points: DelegatedFlowExtensionPoints = field(
-        default_factory=DelegatedFlowExtensionPoints
-    )
+    object_mapping: DelegatedFlowObjectMapping = field(default_factory=DelegatedFlowObjectMapping)
+    extension_points: DelegatedFlowExtensionPoints = field(default_factory=DelegatedFlowExtensionPoints)
     created_at: float = field(default_factory=time.time)
     last_updated_at: float = field(default_factory=time.time)
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -1119,16 +1111,10 @@ class DelegatedFlowEntity:
             raise ValueError("DelegatedFlowEntity.from_dict expects a dict")
         return cls(
             identity=DelegatedFlowIdentity.from_dict(data.get("identity") or {}),
-            phase=DelegatedFlowPhase.from_string(
-                data.get("phase", DelegatedFlowPhase.created.value)
-            ),
+            phase=DelegatedFlowPhase.from_string(data.get("phase", DelegatedFlowPhase.created.value)),
             ownership=DelegatedFlowOwnership.from_dict(data.get("ownership") or {}),
-            object_mapping=DelegatedFlowObjectMapping.from_dict(
-                data.get("object_mapping") or {}
-            ),
-            extension_points=DelegatedFlowExtensionPoints.from_dict(
-                data.get("extension_points") or {}
-            ),
+            object_mapping=DelegatedFlowObjectMapping.from_dict(data.get("object_mapping") or {}),
+            extension_points=DelegatedFlowExtensionPoints.from_dict(data.get("extension_points") or {}),
             created_at=float(data.get("created_at") or time.time()),
             last_updated_at=float(data.get("last_updated_at") or time.time()),
             metadata=dict(data.get("metadata") or {}),
@@ -1184,9 +1170,7 @@ class DelegatedFlowEntityRecord:
             "phase_after": self.phase_after.value,
             "signal": self.signal,
             "recorded_at": self.recorded_at,
-            "entity_snapshot": (
-                self.entity_snapshot.to_dict() if self.entity_snapshot else None
-            ),
+            "entity_snapshot": (self.entity_snapshot.to_dict() if self.entity_snapshot else None),
         }
 
     def to_json(self) -> str:
@@ -1286,9 +1270,7 @@ class DelegatedFlowEntityRuntime:
     # Reads
     # ------------------------------------------------------------------
 
-    def get_by_flow_id(
-        self, delegated_flow_id: str
-    ) -> Optional[DelegatedFlowEntity]:
+    def get_by_flow_id(self, delegated_flow_id: str) -> Optional[DelegatedFlowEntity]:
         """Return the entity for *delegated_flow_id*, or None."""
         for entity in reversed(self._entries):
             if entity.delegated_flow_id == delegated_flow_id:
@@ -1297,11 +1279,7 @@ class DelegatedFlowEntityRuntime:
 
     def get_by_lineage(self, flow_lineage_id: str) -> List[DelegatedFlowEntity]:
         """Return all entities sharing *flow_lineage_id*, newest-first."""
-        return [
-            e
-            for e in reversed(self._entries)
-            if e.flow_lineage_id == flow_lineage_id
-        ]
+        return [e for e in reversed(self._entries) if e.flow_lineage_id == flow_lineage_id]
 
     def get_by_contract(self, contract_id: str) -> Optional[DelegatedFlowEntity]:
         """Return the most recent entity whose object_mapping.contract_id matches."""

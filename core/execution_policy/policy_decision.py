@@ -42,7 +42,6 @@ from typing import Any, Dict, List, Optional
 
 from .execution_policy import ExecutionPolicy
 
-
 __all__ = ["PolicyOutcome", "PolicyDecision"]
 
 
@@ -175,6 +174,7 @@ class PolicyDecision:
 # ---------------------------------------------------------------------------
 # Pre-built allowed decision (fast path)
 # ---------------------------------------------------------------------------
+
 
 def _make_allowed(policy: ExecutionPolicy, reason: str = "execution permitted by policy") -> PolicyDecision:
     """Return an ALLOWED :class:`PolicyDecision` for *policy*."""

@@ -10,7 +10,6 @@ from core.bounded_subject_platform_boundary import (
 )
 from core.final_acceptance_surface_boundary import build_final_acceptance_surface_boundary
 
-
 OUTPUT_MD_PATH = Path("docs/FORMAL_SYSTEM_BOUNDARY_OUTPUT_V1.md")
 SUMMARY_PATH = Path("docs/FORMAL_SYSTEM_BOUNDARY_SUMMARY_V1.json")
 SCHEMA_PATH = Path("docs/FORMAL_SYSTEM_BOUNDARY_SUMMARY_SCHEMA_V1.json")
@@ -140,7 +139,10 @@ def test_schema_pins_core_const_constraints() -> None:
     assert props["system_definition"]["properties"]["stable_quasi_platform_state"]["const"] is True
     assert props["system_definition"]["properties"]["fully_mature_distributed_platform"]["const"] is False
     canonical = props["canonical_boundary_summary"]["properties"]
-    assert canonical["stable_quasi_platform_state_definition"]["properties"]["fully_mature_distributed_platform"]["const"] is False
+    assert (
+        canonical["stable_quasi_platform_state_definition"]["properties"]["fully_mature_distributed_platform"]["const"]
+        is False
+    )
     projection = props["operator_projection_observability_boundary_summary"]["properties"]
     assert projection["operator_governance_plane_center_defined"]["const"] is True
     assert projection["projection_surface_consumption_only"]["const"] is True

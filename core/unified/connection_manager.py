@@ -67,7 +67,7 @@ class UnifiedConnectionManager:
     # 发送重试参数
     _DEFAULT_RETRIES: int = 3
     _DEFAULT_TIMEOUT: float = 10.0
-    _BACKOFF_BASE: float = 0.5     # 指数退避基数（秒）
+    _BACKOFF_BASE: float = 0.5  # 指数退避基数（秒）
     _MAX_BACKOFF_DELAY: float = 30.0  # 最大退避延迟（秒）
 
     def __new__(cls) -> "UnifiedConnectionManager":
@@ -328,8 +328,10 @@ class UnifiedConnectionManager:
         # 2. 尝试通过 gateway websocket_manager 发送
         try:
             from galaxy_gateway.app import websocket_manager as gw_ws_manager  # type: ignore
+
             if gw_ws_manager and gw_ws_manager.is_device_connected(device_id):
                 from galaxy_gateway.protocol import AIPMessage, MessageType  # type: ignore
+
                 aip_msg = AIPMessage(
                     type=MessageType.COMMAND,
                     device_id=device_id,
@@ -348,6 +350,7 @@ class UnifiedConnectionManager:
         # 3. 尝试通过 device_router 发送（保底）
         try:
             from galaxy_gateway.device_router import device_router  # type: ignore
+
             device = device_router.get_device(device_id)
             if device and getattr(device, "websocket", None):
                 await asyncio.wait_for(
@@ -445,6 +448,7 @@ class UnifiedConnectionManager:
         # 合并 gateway websocket_manager 设备
         try:
             from galaxy_gateway.app import websocket_manager as gw_ws_manager  # type: ignore
+
             if gw_ws_manager:
                 for did in gw_ws_manager.get_connected_devices():
                     if did not in result:
@@ -461,6 +465,7 @@ class UnifiedConnectionManager:
         # 合并 device_router 设备
         try:
             from galaxy_gateway.device_router import device_router  # type: ignore
+
             for did, device in device_router.devices.items():
                 if did not in result:
                     result[did] = device.to_dict()

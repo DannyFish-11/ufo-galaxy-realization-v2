@@ -25,6 +25,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """获取最近 N 条 LLM 调用成本记录，支持按 provider/model 过滤"""
         try:
             from core.cost_tracker import get_cost_tracker
+
             tracker = get_cost_tracker()
             if provider or model:
                 records = tracker.get_recent_filtered(
@@ -43,6 +44,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """获取 LLM 调用成本汇总统计"""
         try:
             from core.cost_tracker import get_cost_tracker
+
             return JSONResponse(get_cost_tracker().get_summary())
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
@@ -52,6 +54,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """获取成本追踪器写入健康状态"""
         try:
             from core.cost_tracker import get_cost_tracker
+
             return JSONResponse(get_cost_tracker().get_write_health())
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))

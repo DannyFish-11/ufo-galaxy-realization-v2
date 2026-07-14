@@ -26,9 +26,10 @@ from pydantic import BaseModel, Field
 
 class ParallelGroupSummary(BaseModel):
     """并行任务组汇总（parallel_goal 执行后附加到响应中）。"""
+
     group_id: str = ""
     device_results: List[Dict[str, Any]] = Field(default_factory=list)
-    summary_status: str = ""     # "success" | "partial" | "failed"
+    summary_status: str = ""  # "success" | "partial" | "failed"
 
 
 class UnifiedChatResponse(BaseModel):
@@ -55,28 +56,29 @@ class UnifiedChatResponse(BaseModel):
                                 执行决策后生成。用于可观测性、诊断和后续
                                 生命周期追踪。旧客户端可安全忽略。
     """
+
     # ── 核心字段（向后兼容，永远序列化） ──────────────────────────────────
     success: bool = True
-    response: str = ""                          # 主要回复文本
-    intent: str = ""                            # 识别的意图 (device_control, chat, task_manage, ...)
-    confidence: float = 0.0                     # 意图置信度 0-1
-    mode: str = "chat"                          # 处理模式: chat / agent_react / fallback
-    suggestions: List[str] = Field(default_factory=list)   # 后续建议
-    data: Dict[str, Any] = Field(default_factory=dict)     # 附加数据 (steps, device info, etc.)
-    error: str = ""                             # 错误信息 (success=False 时)
-    session_id: str = ""                        # 会话 ID
-    model: str = ""                             # 使用的 LLM 模型名称
+    response: str = ""  # 主要回复文本
+    intent: str = ""  # 识别的意图 (device_control, chat, task_manage, ...)
+    confidence: float = 0.0  # 意图置信度 0-1
+    mode: str = "chat"  # 处理模式: chat / agent_react / fallback
+    suggestions: List[str] = Field(default_factory=list)  # 后续建议
+    data: Dict[str, Any] = Field(default_factory=dict)  # 附加数据 (steps, device info, etc.)
+    error: str = ""  # 错误信息 (success=False 时)
+    session_id: str = ""  # 会话 ID
+    model: str = ""  # 使用的 LLM 模型名称
     timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
     parallel_group: Optional[ParallelGroupSummary] = None  # 并行任务组汇总（仅 parallel_goal）
 
     # ── PR-2 执行路径元数据（可选，非破坏性，旧客户端可安全忽略） ───────────
     # 这些字段让调用方能识别真实的执行链路和主权归属，以防止将 /api/v1/chat
     # 误认为系统主权核心。所有字段默认为 None，不改变旧客户端的解析逻辑。
-    runtime_session_id: Optional[str] = None   # DesktopPresenceRuntime 会话 ID
-    entry_surface: Optional[str] = None        # 适配器表面名称 ("chat_adapter")
-    entry_source: Optional[str] = None         # 请求来源协议 ("http_post")
+    runtime_session_id: Optional[str] = None  # DesktopPresenceRuntime 会话 ID
+    entry_surface: Optional[str] = None  # 适配器表面名称 ("chat_adapter")
+    entry_source: Optional[str] = None  # 请求来源协议 ("http_post")
     execution_authority: Optional[str] = None  # 执行主权持有者 ("DesktopPresenceRuntime/OpenClawd")
-    surface_role: Optional[str] = None         # 本表面架构角色 ("compat_adapter")
+    surface_role: Optional[str] = None  # 本表面架构角色 ("compat_adapter")
 
     # ── PR-11 执行计划摘要（可选，非破坏性，旧客户端可安全忽略） ────────────
     # 由 OpenClawd 在执行决策后生成，字段结构与 plan_summary() 返回值一致。

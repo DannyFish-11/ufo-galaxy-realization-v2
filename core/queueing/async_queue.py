@@ -60,20 +60,20 @@ logger = logging.getLogger("Galaxy.Queueing.AsyncTaskQueue")
 # Exceptions
 # ---------------------------------------------------------------------------
 
+
 class QueueFullError(Exception):
     """Raised when the queue is saturated and a new task cannot be accepted."""
 
     def __init__(self, queue_size: int, max_size: int) -> None:
         self.queue_size = queue_size
         self.max_size = max_size
-        super().__init__(
-            f"Queue saturated: {queue_size}/{max_size} items pending"
-        )
+        super().__init__(f"Queue saturated: {queue_size}/{max_size} items pending")
 
 
 # ---------------------------------------------------------------------------
 # Data structures
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class QueueTask:
@@ -123,6 +123,7 @@ class QueueStats:
 # AsyncTaskQueue
 # ---------------------------------------------------------------------------
 
+
 class AsyncTaskQueue:
     """Bounded async task queue with configurable concurrency and backpressure.
 
@@ -170,7 +171,7 @@ class AsyncTaskQueue:
         self._total_completed = 0
         self._total_failed = 0
         self._total_rejected = 0
-        self._latency_samples: List[float] = []   # last N samples (ms)
+        self._latency_samples: List[float] = []  # last N samples (ms)
         self._max_latency_samples = 500
 
         self._started = False
@@ -191,7 +192,8 @@ class AsyncTaskQueue:
             self._workers.append(worker)
         logger.info(
             "AsyncTaskQueue started: max_queue=%d max_concurrent=%d",
-            self._max_queue_size, self._max_concurrent,
+            self._max_queue_size,
+            self._max_concurrent,
         )
 
     async def stop(self, timeout: float = 10.0) -> None:
@@ -272,9 +274,7 @@ class AsyncTaskQueue:
                     try:
                         dropped = self._queue.get_nowait()
                         if dropped is not None:
-                            dropped.future.set_exception(
-                                QueueFullError(current_depth, self._max_queue_size)
-                            )
+                            dropped.future.set_exception(QueueFullError(current_depth, self._max_queue_size))
                         self._total_rejected += 1
                         logger.warning(
                             "Backpressure: dropped oldest task %s",
@@ -327,11 +327,9 @@ class AsyncTaskQueue:
                         task.future.set_result(result)
                     async with self._lock:
                         self._total_completed += 1
-                except asyncio.TimeoutError as exc:
+                except asyncio.TimeoutError:
                     if not task.future.done():
-                        task.future.set_exception(
-                            TimeoutError(f"Task {task.task_id} timed out after {task.timeout}s")
-                        )
+                        task.future.set_exception(TimeoutError(f"Task {task.task_id} timed out after {task.timeout}s"))
                     async with self._lock:
                         self._total_failed += 1
                     logger.warning("Task %s timed out", task.task_id)
@@ -347,7 +345,7 @@ class AsyncTaskQueue:
                         self._running -= 1
                         self._latency_samples.append(elapsed_ms)
                         if len(self._latency_samples) > self._max_latency_samples:
-                            self._latency_samples = self._latency_samples[-self._max_latency_samples:]
+                            self._latency_samples = self._latency_samples[-self._max_latency_samples :]
                     self._queue.task_done()
                     self._emit_queue_metric()
 
@@ -359,11 +357,7 @@ class AsyncTaskQueue:
         """Return a snapshot of current queue metrics."""
         depth = self._queue.qsize()
         fill_ratio = depth / self._max_queue_size
-        avg_latency = (
-            sum(self._latency_samples) / len(self._latency_samples)
-            if self._latency_samples
-            else 0.0
-        )
+        avg_latency = sum(self._latency_samples) / len(self._latency_samples) if self._latency_samples else 0.0
         return QueueStats(
             queue_depth=depth,
             running=self._running,
@@ -383,6 +377,7 @@ class AsyncTaskQueue:
             return
         try:
             from core.control_plane.audit_ledger import EventType, Severity
+
             s = self.stats()
             self._ledger.append(
                 event_type=EventType.QUEUE_METRIC,

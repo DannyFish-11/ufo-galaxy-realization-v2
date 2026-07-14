@@ -12,10 +12,10 @@ import pytest
 
 from core.skill_md_loader import ALLOWED_COMMANDS, SkillMD, SkillMDLoader
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_loader_with_skill(command: str) -> tuple[SkillMDLoader, str]:
     """Return a fresh loader instance pre-loaded with a skill that runs *command*."""
@@ -43,9 +43,9 @@ def test_allowed_commands_contains_expected():
 def test_allowed_commands_excludes_dangerous():
     """Dangerous commands must NOT appear in the allowlist."""
     dangerous = {"rm", "dd", "mkfs", "sudo", "su", "chmod", "chown", "kill"}
-    assert dangerous.isdisjoint(ALLOWED_COMMANDS), (
-        f"Dangerous commands found in allowlist: {dangerous & ALLOWED_COMMANDS}"
-    )
+    assert dangerous.isdisjoint(
+        ALLOWED_COMMANDS
+    ), f"Dangerous commands found in allowlist: {dangerous & ALLOWED_COMMANDS}"
 
 
 # ---------------------------------------------------------------------------

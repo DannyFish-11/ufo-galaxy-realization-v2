@@ -26,6 +26,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     # Rate limiter for channel send endpoint
     try:
         from core.security_middleware import RateLimiter as _RateLimiter
+
         _channel_send_limiter = _RateLimiter(requests_per_minute=60, burst_size=20)
     except Exception as exc:
         logger.debug("Fallback triggered: %s", exc)
@@ -36,6 +37,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """列出已加载的渠道插件"""
         try:
             from core.channel_plugins import get_channel_loader
+
             return JSONResponse({"plugins": get_channel_loader().list_plugins()})
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
@@ -51,6 +53,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             raise HTTPException(status_code=400, detail="plugin_id is required")
         try:
             from core.channel_plugins import get_channel_loader
+
             result = await get_channel_loader().load_plugin(plugin_id, path=path, config=cfg)
             if not result.get("success"):
                 raise HTTPException(status_code=400, detail=result.get("error", "load failed"))
@@ -67,10 +70,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             body = {}
             try:
                 body = await request.json()
-            except Exception as exc:
+            except Exception:
                 logger.debug("channel_auto_load: no JSON body, using defaults")
             plugins_dir = body.get("directory") if body else None
             from core.channel_plugins import get_channel_loader
+
             result = await get_channel_loader().auto_load_plugins(plugins_dir=plugins_dir)
             return JSONResponse(result)
         except Exception as e:
@@ -89,9 +93,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             raise HTTPException(status_code=400, detail="message is required")
         try:
             from core.channel_plugins import get_channel_loader
-            result = await get_channel_loader().send(plugin_id, message, **{
-                k: v for k, v in body.items() if k != "message"
-            })
+
+            result = await get_channel_loader().send(
+                plugin_id, message, **{k: v for k, v in body.items() if k != "message"}
+            )
             return JSONResponse(result)
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
@@ -101,13 +106,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """检查所有已加载渠道插件健康状态"""
         try:
             from core.channel_plugins import get_channel_loader
+
             results = await get_channel_loader().health_check_all()
             if not results:
                 overall = "unknown"
-            elif all(
-                isinstance(v, dict) and v.get("healthy", False)
-                for v in results.values()
-            ):
+            elif all(isinstance(v, dict) and v.get("healthy", False) for v in results.values()):
                 overall = "healthy"
             else:
                 overall = "degraded"
@@ -120,6 +123,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """获取指定渠道插件的配置 schema"""
         try:
             from core.channel_plugins import get_channel_loader
+
             adapter = get_channel_loader().get_adapter(plugin_id)
             if adapter is None:
                 raise HTTPException(status_code=404, detail=f"Plugin '{plugin_id}' not loaded")

@@ -41,6 +41,7 @@ sys.path.insert(0, str(REPO_ROOT))
 # Helpers
 # ===========================================================================
 
+
 def _make_runtime_result(
     *,
     success: bool = True,
@@ -64,19 +65,33 @@ def _make_runtime_result(
 # 1–4: UnifiedChatResponse backward-compat + new fields
 # ===========================================================================
 
+
 class TestUnifiedChatResponseBackwardCompat:
     """Existing fields must be unchanged; new fields must be optional."""
 
     def test_existing_fields_still_present(self):
         from core.unified_response import UnifiedChatResponse
+
         resp = UnifiedChatResponse(success=True, response="hello")
         d = resp.to_json_response()
-        for field in ("success", "response", "intent", "confidence", "mode",
-                      "suggestions", "data", "error", "session_id", "model", "timestamp"):
+        for field in (
+            "success",
+            "response",
+            "intent",
+            "confidence",
+            "mode",
+            "suggestions",
+            "data",
+            "error",
+            "session_id",
+            "model",
+            "timestamp",
+        ):
             assert field in d, f"Backward-compat field '{field}' missing from response"
 
     def test_existing_fields_default_values(self):
         from core.unified_response import UnifiedChatResponse
+
         resp = UnifiedChatResponse(success=True, response="hello")
         d = resp.to_json_response()
         assert d["intent"] == ""
@@ -90,6 +105,7 @@ class TestUnifiedChatResponseBackwardCompat:
 
     def test_new_metadata_fields_exist_on_model(self):
         from core.unified_response import UnifiedChatResponse
+
         resp = UnifiedChatResponse(success=True, response="hello")
         # Fields must exist on the model (default None)
         assert hasattr(resp, "runtime_session_id")
@@ -100,6 +116,7 @@ class TestUnifiedChatResponseBackwardCompat:
 
     def test_new_metadata_fields_default_none(self):
         from core.unified_response import UnifiedChatResponse
+
         resp = UnifiedChatResponse(success=True, response="hello")
         assert resp.runtime_session_id is None
         assert resp.entry_surface is None
@@ -109,6 +126,7 @@ class TestUnifiedChatResponseBackwardCompat:
 
     def test_new_fields_in_json_response_when_set(self):
         from core.unified_response import UnifiedChatResponse
+
         resp = UnifiedChatResponse(
             success=True,
             response="test",
@@ -128,6 +146,7 @@ class TestUnifiedChatResponseBackwardCompat:
     def test_new_fields_in_json_response_when_none(self):
         """New fields must not remove existing keys or cause serialisation errors."""
         from core.unified_response import UnifiedChatResponse
+
         resp = UnifiedChatResponse(success=True, response="test")
         d = resp.to_json_response()
         # None values are serialised as None (exclude_none=False)
@@ -138,6 +157,7 @@ class TestUnifiedChatResponseBackwardCompat:
 
     def test_round_trip_with_new_fields(self):
         from core.unified_response import UnifiedChatResponse
+
         resp = UnifiedChatResponse(
             success=False,
             response="err",
@@ -167,6 +187,7 @@ class TestUnifiedChatResponseBackwardCompat:
 # 5–7: chat.py source-level contract checks
 # ===========================================================================
 
+
 class TestChatModuleContract:
     """Source-level checks that chat.py correctly declares its demoted role."""
 
@@ -181,63 +202,66 @@ class TestChatModuleContract:
 
     def test_module_docstring_declares_adapter_surface(self):
         src = self._read_chat_source()
-        assert "adapter" in src.lower(), \
-            "chat.py module docstring must declare adapter surface role"
+        assert "adapter" in src.lower(), "chat.py module docstring must declare adapter surface role"
 
     def test_module_docstring_says_not_subject_authority(self):
         src = self._read_chat_source()
         src_lower = src.lower()
         # Must contain a negative assertion about subject-core authority
-        assert ("not" in src_lower and "authority" in src_lower) \
-               or "no subject-core" in src_lower \
-               or "does not own" in src_lower \
-               or "no authority" in src_lower, \
-            "chat.py must explicitly state it has no subject-core authority"
+        assert (
+            ("not" in src_lower and "authority" in src_lower)
+            or "no subject-core" in src_lower
+            or "does not own" in src_lower
+            or "no authority" in src_lower
+        ), "chat.py must explicitly state it has no subject-core authority"
 
     def test_module_docstring_names_runtime_shell(self):
         src = self._read_chat_source()
-        assert "DesktopPresenceRuntime" in src, \
-            "chat.py must reference DesktopPresenceRuntime as the runtime shell"
+        assert "DesktopPresenceRuntime" in src, "chat.py must reference DesktopPresenceRuntime as the runtime shell"
 
     def test_module_docstring_names_subject_core(self):
         src = self._read_chat_source()
-        assert "OpenClawd" in src, \
-            "chat.py must reference OpenClawd as the subject core"
+        assert "OpenClawd" in src, "chat.py must reference OpenClawd as the subject core"
 
     def test_module_does_not_instantiate_openclawd_directly(self):
         src = self._read_chat_source()
         # chat.py must never import or instantiate OpenClawd directly;
         # it must go through DesktopPresenceRuntime
-        assert "from core.openclawd import" not in src, \
-            "chat.py must not import OpenClawd directly — use DesktopPresenceRuntime"
-        assert "OpenClawd()" not in src, \
-            "chat.py must not instantiate OpenClawd directly"
+        assert (
+            "from core.openclawd import" not in src
+        ), "chat.py must not import OpenClawd directly — use DesktopPresenceRuntime"
+        assert "OpenClawd()" not in src, "chat.py must not instantiate OpenClawd directly"
 
     def test_route_handler_docstring_declares_role(self):
         src = self._read_chat_source()
         # The handler docstring should mention "adapter" or "compat"
-        assert "compat" in src.lower() or "compatibility" in src.lower(), \
-            "chat() handler docstring should mention compatibility adapter role"
+        assert (
+            "compat" in src.lower() or "compatibility" in src.lower()
+        ), "chat() handler docstring should mention compatibility adapter role"
 
     def test_entry_surface_literal_present(self):
         src = self._read_chat_source()
-        assert self._src_has_kwarg(src, "entry_surface", "chat_adapter"), \
-            "chat.py must set entry_surface='chat_adapter' when building response"
+        assert self._src_has_kwarg(
+            src, "entry_surface", "chat_adapter"
+        ), "chat.py must set entry_surface='chat_adapter' when building response"
 
     def test_execution_authority_literal_present(self):
         src = self._read_chat_source()
-        assert "DesktopPresenceRuntime/OpenClawd" in src, \
-            "chat.py must set execution_authority to 'DesktopPresenceRuntime/OpenClawd'"
+        assert (
+            "DesktopPresenceRuntime/OpenClawd" in src
+        ), "chat.py must set execution_authority to 'DesktopPresenceRuntime/OpenClawd'"
 
     def test_surface_role_literal_present(self):
         src = self._read_chat_source()
-        assert self._src_has_kwarg(src, "surface_role", "compat_adapter"), \
-            "chat.py must set surface_role='compat_adapter' when building response"
+        assert self._src_has_kwarg(
+            src, "surface_role", "compat_adapter"
+        ), "chat.py must set surface_role='compat_adapter' when building response"
 
 
 # ===========================================================================
 # 8–14: create_router() response injection tests (unit, mocked runtime)
 # ===========================================================================
+
 
 class TestChatRouterSurfaceMetadata:
     """Test that the route handler injects surface metadata correctly."""
@@ -245,6 +269,7 @@ class TestChatRouterSurfaceMetadata:
     def _get_router_and_endpoint(self):
         """Return the FastAPI router and the chat async function."""
         from core.routes.chat import create_router
+
         router = create_router()
         # Find the POST /api/v1/chat route
         for route in router.routes:
@@ -268,9 +293,7 @@ class TestChatRouterSurfaceMetadata:
     def _call_endpoint(self, endpoint, req):
         """Run the async endpoint and return the JSONResponse."""
         mock_runtime = MagicMock()
-        mock_runtime.handle_request = AsyncMock(
-            return_value=_make_runtime_result()
-        )
+        mock_runtime.handle_request = AsyncMock(return_value=_make_runtime_result())
         with patch(
             "core.desktop_presence_runtime.get_desktop_presence_runtime",
             return_value=mock_runtime,
@@ -283,15 +306,16 @@ class TestChatRouterSurfaceMetadata:
         resp = self._call_endpoint(endpoint, req)
         body = resp.body
         import json
+
         data = json.loads(body)
-        assert data.get("entry_surface") == "chat_adapter", \
-            "entry_surface must be 'chat_adapter' in response"
+        assert data.get("entry_surface") == "chat_adapter", "entry_surface must be 'chat_adapter' in response"
 
     def test_entry_source_in_response(self):
         _, endpoint = self._get_router_and_endpoint()
         req = self._make_request("test")
         resp = self._call_endpoint(endpoint, req)
         import json
+
         data = json.loads(resp.body)
         assert data.get("entry_source") == "http_post"
 
@@ -300,6 +324,7 @@ class TestChatRouterSurfaceMetadata:
         req = self._make_request("test")
         resp = self._call_endpoint(endpoint, req)
         import json
+
         data = json.loads(resp.body)
         assert data.get("execution_authority") == "DesktopPresenceRuntime/OpenClawd"
 
@@ -308,6 +333,7 @@ class TestChatRouterSurfaceMetadata:
         req = self._make_request("test")
         resp = self._call_endpoint(endpoint, req)
         import json
+
         data = json.loads(resp.body)
         assert data.get("surface_role") == "compat_adapter"
 
@@ -315,15 +341,14 @@ class TestChatRouterSurfaceMetadata:
         _, endpoint = self._get_router_and_endpoint()
         req = self._make_request("test")
         mock_runtime = MagicMock()
-        mock_runtime.handle_request = AsyncMock(
-            return_value=_make_runtime_result(runtime_session_id="rsid-abc-123")
-        )
+        mock_runtime.handle_request = AsyncMock(return_value=_make_runtime_result(runtime_session_id="rsid-abc-123"))
         with patch(
             "core.desktop_presence_runtime.get_desktop_presence_runtime",
             return_value=mock_runtime,
         ):
             resp = asyncio.run(endpoint(req))
         import json
+
         data = json.loads(resp.body)
         assert data.get("runtime_session_id") == "rsid-abc-123"
 
@@ -346,6 +371,7 @@ class TestChatRouterSurfaceMetadata:
         ):
             resp = asyncio.run(endpoint(req))
         import json
+
         data = json.loads(resp.body)
         # Old backward-compat fields
         assert data["success"] is True
@@ -366,6 +392,7 @@ class TestChatRouterSurfaceMetadata:
         ):
             resp = asyncio.run(endpoint(req))
         import json
+
         data = json.loads(resp.body)
         assert data["success"] is False
         assert "error" in data
@@ -380,6 +407,7 @@ class TestChatRouterSurfaceMetadata:
         resp = self._call_endpoint(endpoint, req)
         assert resp is not None
         import json
+
         data = json.loads(resp.body)
         assert isinstance(data, dict)
         assert "success" in data
@@ -389,9 +417,11 @@ class TestChatRouterSurfaceMetadata:
 # 15: UnifiedChatResponse model_dump round-trip with all new fields
 # ===========================================================================
 
+
 class TestUnifiedChatResponseRoundTrip:
     def test_full_round_trip(self):
         from core.unified_response import UnifiedChatResponse
+
         resp = UnifiedChatResponse(
             success=True,
             response="all good",

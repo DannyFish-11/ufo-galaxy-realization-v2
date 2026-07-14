@@ -17,6 +17,7 @@ starting fresh or manually retrying, the model pull always fails".
 This test proves start_local_brain() now runs before background_pull()
 is invoked.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -37,17 +38,21 @@ class TestBrainStartupOrdering:
 
         with patch("unified_launcher.GalaxyUnified.start_local_brain", new=fake_start_local_brain):
             import unified_launcher as ul
-            with patch("core.model_selection.resolve_main_brain", side_effect=lambda interactive: "gemma4:e2b"), \
-                 patch("core.model_selection.background_pull", side_effect=fake_background_pull), \
-                 patch("core.model_selection.get_compute_summary", side_effect=lambda: (0, False, "n/a")), \
-                 patch("core.model_selection.recommend", side_effect=lambda *a, **k: "gemma4:e2b"), \
-                 patch("core.model_selection.list_models", side_effect=lambda: []):
+
+            with (
+                patch("core.model_selection.resolve_main_brain", side_effect=lambda interactive: "gemma4:e2b"),
+                patch("core.model_selection.background_pull", side_effect=fake_background_pull),
+                patch("core.model_selection.get_compute_summary", side_effect=lambda: (0, False, "n/a")),
+                patch("core.model_selection.recommend", side_effect=lambda *a, **k: "gemma4:e2b"),
+                patch("core.model_selection.list_models", side_effect=lambda: []),
+            ):
                 launcher = ul.GalaxyUnified()
                 asyncio.run(launcher.select_and_start_brain())
 
-        assert call_order == ["start_local_brain", "background_pull"], (
-            f"expected start_local_brain before background_pull, got {call_order}"
-        )
+        assert call_order == [
+            "start_local_brain",
+            "background_pull",
+        ], f"expected start_local_brain before background_pull, got {call_order}"
 
     def test_no_model_chosen_still_starts_local_brain(self):
         """If model selection yields nothing, start_local_brain() must still run
@@ -63,8 +68,11 @@ class TestBrainStartupOrdering:
 
         with patch("unified_launcher.GalaxyUnified.start_local_brain", new=fake_start_local_brain):
             import unified_launcher as ul
-            with patch("core.model_selection.resolve_main_brain", side_effect=lambda interactive: ""), \
-                 patch("core.model_selection.background_pull", side_effect=fake_background_pull):
+
+            with (
+                patch("core.model_selection.resolve_main_brain", side_effect=lambda interactive: ""),
+                patch("core.model_selection.background_pull", side_effect=fake_background_pull),
+            ):
                 launcher = ul.GalaxyUnified()
                 asyncio.run(launcher.select_and_start_brain())
 

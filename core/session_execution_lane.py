@@ -36,9 +36,7 @@ class SessionExecutionLaneManager:
         async with self._lock:
             lane = self._lanes.get(conversation_session_id)
             if lane is None:
-                lane = SessionExecutionLane(
-                    conversation_session_id=conversation_session_id
-                )
+                lane = SessionExecutionLane(conversation_session_id=conversation_session_id)
                 self._lanes[conversation_session_id] = lane
             return lane
 

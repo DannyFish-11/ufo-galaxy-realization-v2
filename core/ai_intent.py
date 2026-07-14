@@ -14,16 +14,14 @@ Galaxy - AI 意图理解引擎
   用户说"帮我整理任务" → 系统理解意图 → 自动执行 → 显示结果
 """
 
+import asyncio  # noqa
 import hashlib  # auto: missing import
 import json  # auto: missing import
-import os  # auto: missing import
-
-
-import asyncio  # noqa
 import logging
+import os  # auto: missing import
 import time  # noqa
 from collections import defaultdict  # noqa
-from dataclasses import dataclass, field, asdict  # noqa
+from dataclasses import asdict, dataclass, field  # noqa
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple  # noqa
 
@@ -34,17 +32,19 @@ logger = logging.getLogger("Galaxy.AIIntent")
 # 1. 意图解析器
 # ============================================================================
 
+
 @dataclass
 class ParsedIntent:
     """解析后的意图"""
-    intent: str              # 意图标签: task_manage, device_control, query, chat, etc.
-    command: str             # 映射的命令
-    targets: List[str]       # 目标节点/设备
-    params: Dict[str, Any]   # 命令参数
-    confidence: float        # 置信度 0-1
-    raw_text: str            # 原始文本
-    context_used: bool       # 是否使用了上下文
-    suggestions: List[str]   # 后续建议
+
+    intent: str  # 意图标签: task_manage, device_control, query, chat, etc.
+    command: str  # 映射的命令
+    targets: List[str]  # 目标节点/设备
+    params: Dict[str, Any]  # 命令参数
+    confidence: float  # 置信度 0-1
+    raw_text: str  # 原始文本
+    context_used: bool  # 是否使用了上下文
+    suggestions: List[str]  # 后续建议
 
     def to_dict(self) -> dict:
         return {
@@ -233,6 +233,7 @@ class IntentParser:
         try:
             # 通过统一 LLM 路由器调用（任务类型: REASONING 以获得最佳意图解析）
             from core.multi_llm_router import get_llm_router
+
             router = get_llm_router()
 
             if not router.is_available():
@@ -283,10 +284,12 @@ class IntentParser:
 # 2. 对话记忆系统
 # ============================================================================
 
+
 @dataclass
 class ConversationTurn:
     """对话轮次"""
-    role: str          # user / assistant / system
+
+    role: str  # user / assistant / system
     content: str
     timestamp: float = field(default_factory=time.time)
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -322,6 +325,7 @@ class ConversationMemory:
 
         try:
             from core.session_manager import get_session_manager
+
             sm = get_session_manager()
             await sm.ensure_session(session_id)
             # 相邻重复防护:同一轮可能同时经门面(record_session_turn)与本方法进来
@@ -338,7 +342,7 @@ class ConversationMemory:
             self._sessions[session_id] = []
         self._sessions[session_id].append(ConversationTurn(role=role, content=content, metadata=metadata or {}))
         if len(self._sessions[session_id]) > self.max_turns:
-            self._sessions[session_id] = self._sessions[session_id][-self.max_turns:]
+            self._sessions[session_id] = self._sessions[session_id][-self.max_turns :]
         if self._cache:
             await self._persist_session(session_id)
 
@@ -356,6 +360,7 @@ class ConversationMemory:
         limit = min(max_turns, self.max_turns)
         try:
             from core.session_manager import get_session_manager
+
             sm = get_session_manager()
             if sm.get_session(session_id) is not None:
                 return sm.get_history(session_id, max_turns=limit)
@@ -369,10 +374,12 @@ class ConversationMemory:
 
         context = []
         for turn in turns[-limit:]:
-            context.append({
-                "role": turn.role,
-                "content": turn.content,
-            })
+            context.append(
+                {
+                    "role": turn.role,
+                    "content": turn.content,
+                }
+            )
         return context
 
     async def get_summary(self, session_id: str) -> str:
@@ -380,6 +387,7 @@ class ConversationMemory:
         turns: List[Any] = []
         try:
             from core.session_manager import get_session_manager
+
             sm = get_session_manager()
             if sm.get_session(session_id) is not None:
                 turns = [
@@ -403,11 +411,14 @@ class ConversationMemory:
 
     def get_user_profile(self, session_id: str) -> Dict[str, Any]:
         """获取用户偏好画像"""
-        return self._user_profiles.get(session_id, {
-            "frequent_intents": {},
-            "preferred_model": None,
-            "interaction_count": 0,
-        })
+        return self._user_profiles.get(
+            session_id,
+            {
+                "frequent_intents": {},
+                "preferred_model": None,
+                "interaction_count": 0,
+            },
+        )
 
     async def clear_session(self, session_id: str):
         """清除会话 —— 融合后轮次在唯一属主 SessionManager,必须连它一起清,
@@ -415,6 +426,7 @@ class ConversationMemory:
         self._sessions.pop(session_id, None)
         try:
             from core.session_manager import get_session_manager
+
             get_session_manager().clear_history(session_id)
         except Exception as e:  # noqa: BLE001
             logger.debug(f"ConversationMemory.clear_session SM 清空失败: {e}")
@@ -484,6 +496,7 @@ class ConversationMemory:
 # 3. 智能推荐引擎
 # ============================================================================
 
+
 class SmartRecommender:
     """
     智能推荐引擎
@@ -511,51 +524,58 @@ class SmartRecommender:
             freq_intents = profile.get("frequent_intents", {})
             if freq_intents:
                 top_intent = max(freq_intents, key=freq_intents.get)
-                recommendations.append({
-                    "type": "frequent_action",
-                    "intent": top_intent,
-                    "label": f"常用: {top_intent}",
-                    "confidence": 0.8,
-                })
+                recommendations.append(
+                    {
+                        "type": "frequent_action",
+                        "intent": top_intent,
+                        "label": f"常用: {top_intent}",
+                        "confidence": 0.8,
+                    }
+                )
 
         # 2. 基于时间模式
         hour = datetime.now().hour
         if 9 <= hour <= 11:
-            recommendations.append({
-                "type": "time_based",
-                "intent": "task_manage",
-                "label": "早间任务规划",
-                "confidence": 0.6,
-            })
+            recommendations.append(
+                {
+                    "type": "time_based",
+                    "intent": "task_manage",
+                    "label": "早间任务规划",
+                    "confidence": 0.6,
+                }
+            )
         elif 14 <= hour <= 17:
-            recommendations.append({
-                "type": "time_based",
-                "intent": "system_status",
-                "label": "下午系统巡检",
-                "confidence": 0.5,
-            })
+            recommendations.append(
+                {
+                    "type": "time_based",
+                    "intent": "system_status",
+                    "label": "下午系统巡检",
+                    "confidence": 0.5,
+                }
+            )
 
         # 3. 基于系统状态
         if current_context:
             devices = current_context.get("devices", {})
             if devices:
-                offline_count = sum(
-                    1 for d in devices.values()
-                    if d.get("status") != "online"
-                )
+                offline_count = sum(1 for d in devices.values() if d.get("status") != "online")
                 if offline_count > 0:
-                    recommendations.append({
-                        "type": "system_alert",
-                        "intent": "device_control",
-                        "label": f"{offline_count} 设备离线",
-                        "confidence": 0.9,
-                    })
+                    recommendations.append(
+                        {
+                            "type": "system_alert",
+                            "intent": "device_control",
+                            "label": f"{offline_count} 设备离线",
+                            "confidence": 0.9,
+                        }
+                    )
 
         # 4. 快捷操作
-        recommendations.extend([
-            {"type": "quick_action", "intent": "system_status", "label": "系统状态", "confidence": 0.4},
-            {"type": "quick_action", "intent": "search", "label": "语义搜索", "confidence": 0.4},
-        ])
+        recommendations.extend(
+            [
+                {"type": "quick_action", "intent": "system_status", "label": "系统状态", "confidence": 0.4},
+                {"type": "quick_action", "intent": "search", "label": "语义搜索", "confidence": 0.4},
+            ]
+        )
 
         # 按置信度排序，去重
         seen = set()
@@ -569,11 +589,13 @@ class SmartRecommender:
 
     def record_action(self, session_id: str, intent: str, success: bool):
         """记录用户操作（用于强化学习）"""
-        self._action_history[session_id].append({
-            "intent": intent,
-            "success": success,
-            "timestamp": time.time(),
-        })
+        self._action_history[session_id].append(
+            {
+                "intent": intent,
+                "success": success,
+                "timestamp": time.time(),
+            }
+        )
         # 保留最近 200 条
         if len(self._action_history[session_id]) > 200:
             self._action_history[session_id] = self._action_history[session_id][-100:]
@@ -582,6 +604,7 @@ class SmartRecommender:
 # ============================================================================
 # 4. 语义搜索（轻量版，不依赖外部向量数据库）
 # ============================================================================
+
 
 class SemanticSearch:
     """
@@ -609,6 +632,7 @@ class SemanticSearch:
         if self._vb is None:
             try:
                 from core.vector_backend import create_vector_backend
+
                 self._vb = create_vector_backend(collection_name=self._collection_name)
             except Exception as exc:
                 logger.warning(f"vector_backend 加载失败: {exc}，使用内置本地索引")
@@ -662,7 +686,9 @@ class SemanticSearch:
             "indexed_at": time.time(),
         }
 
-    async def index_document_vector(self, doc_id: str, content: str, vector: List[float], metadata: Optional[Dict] = None):
+    async def index_document_vector(
+        self, doc_id: str, content: str, vector: List[float], metadata: Optional[Dict] = None
+    ):
         """索引文档到 Qdrant（向量模式）"""
         if not self._qdrant_ready or not self._qdrant_client:
             self.index_document(doc_id, content, metadata)
@@ -670,13 +696,16 @@ class SemanticSearch:
 
         try:
             from qdrant_client.models import PointStruct
+
             self._qdrant_client.upsert(
                 collection_name=self._collection_name,
-                points=[PointStruct(
-                    id=hash(doc_id) & 0x7FFFFFFFFFFFFFFF,  # 正整数
-                    vector=vector,
-                    payload={"doc_id": doc_id, "content": content, **(metadata or {})},
-                )],
+                points=[
+                    PointStruct(
+                        id=hash(doc_id) & 0x7FFFFFFFFFFFFFFF,  # 正整数
+                        vector=vector,
+                        payload={"doc_id": doc_id, "content": content, **(metadata or {})},
+                    )
+                ],
             )
         except Exception as e:
             logger.warning(f"Qdrant 索引失败: {e}")
@@ -724,12 +753,14 @@ class SemanticSearch:
             union = query_words | doc["words"]
             score = len(intersection) / max(len(union), 1)
             if score > 0:
-                scores.append({
-                    "doc_id": doc_id,
-                    "content": doc["content"][:200],
-                    "score": round(score, 4),
-                    "metadata": doc["metadata"],
-                })
+                scores.append(
+                    {
+                        "doc_id": doc_id,
+                        "content": doc["content"][:200],
+                        "score": round(score, 4),
+                        "metadata": doc["metadata"],
+                    }
+                )
 
         scores.sort(key=lambda x: x["score"], reverse=True)
         return scores[:top_k]

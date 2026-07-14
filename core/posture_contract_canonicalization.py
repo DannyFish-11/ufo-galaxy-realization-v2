@@ -181,9 +181,7 @@ class PostureBoundaryViolation(ValueError):
 
     def __init__(self, violations: List[str]) -> None:
         self.violations = violations
-        super().__init__(
-            f"Posture boundary violation(s) detected: {'; '.join(violations)}"
-        )
+        super().__init__(f"Posture boundary violation(s) detected: {'; '.join(violations)}")
 
 
 # ---------------------------------------------------------------------------

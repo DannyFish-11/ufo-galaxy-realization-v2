@@ -1,37 +1,39 @@
-import os
-import sys
-import time
 import asyncio
 import logging
-import subprocess
+import os
 import shutil
-from typing import List, Dict, Any, Optional
+import subprocess
+import sys
+import time
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.LocalBrain")
 
 
 class LocalBrainStatus(Enum):
     """本地主脑状态"""
-    HEALTHY = "healthy"       # 正常运行
-    DEGRADED = "degraded"     # 降级运行（模型少/VRAM紧张）
-    STARTING = "starting"     # 正在启动
-    STOPPED = "stopped"       # 已停止
+
+    HEALTHY = "healthy"  # 正常运行
+    DEGRADED = "degraded"  # 降级运行（模型少/VRAM紧张）
+    STARTING = "starting"  # 正在启动
+    STOPPED = "stopped"  # 已停止
     UNAVAILABLE = "unavailable"  # 不可用（Ollama未安装）
 
 
 @dataclass
 class HardwareProfile:
     """硬件画像 — 用于评估本地主脑能力"""
-    vram_mb: int = 0              # 显存大小（MB）
-    vram_used_mb: int = 0         # 已用显存（MB）
-    system_ram_mb: int = 0        # 系统内存（MB）
-    has_gpu: bool = False         # 是否有 GPU
-    gpu_name: str = ""            # GPU 型号
-    gpu_compute: str = ""         # 计算能力（如 8.6）
-    cpu_cores: int = 0            # CPU 核心数
-    quantization: str = "none"    # 当前量化方式
+
+    vram_mb: int = 0  # 显存大小（MB）
+    vram_used_mb: int = 0  # 已用显存（MB）
+    system_ram_mb: int = 0  # 系统内存（MB）
+    has_gpu: bool = False  # 是否有 GPU
+    gpu_name: str = ""  # GPU 型号
+    gpu_compute: str = ""  # 计算能力（如 8.6）
+    cpu_cores: int = 0  # CPU 核心数
+    quantization: str = "none"  # 当前量化方式
 
     def can_fit_model(self, model_size_mb: int) -> bool:
         """判断 VRAM 是否足够加载模型"""
@@ -61,11 +63,11 @@ class LocalBrainManager:
 
     # 推荐的主脑模型（按任务类型）
     RECOMMENDED_MODELS = {
-        "default": "gemma4:12b",          # Google Gemma 4 12B — 文本+视觉+工具调用
-        "coding": "gemma4:12b",           # 代码生成
-        "fast": "gemma4:e4b",             # 4B 快速响应
-        "creative": "gemma4:12b",         # 创意任务
-        "reasoning": "gemma4:12b",        # 推理任务
+        "default": "gemma4:12b",  # Google Gemma 4 12B — 文本+视觉+工具调用
+        "coding": "gemma4:12b",  # 代码生成
+        "fast": "gemma4:e4b",  # 4B 快速响应
+        "creative": "gemma4:12b",  # 创意任务
+        "reasoning": "gemma4:12b",  # 推理任务
         # MiniCPM-o 4.5 全模态(看+听+说) — Ollama 真实 tag 带 openbmb/ 命名空间，
         # 此前误写为 "minicpm-o4.5:9b" 会 pull 失败 → 本地多模态静默不可用。
         "multimodal": "openbmb/minicpm-o4.5",
@@ -112,6 +114,7 @@ class LocalBrainManager:
         """
         # 收口到 core.ollama_endpoint 唯一属主(本方法保留为薄封装:测试与旧调用点仍引用它)。
         from core.ollama_endpoint import normalize_ollama_url
+
         return normalize_ollama_url(raw)
 
     # ollama_url 做成【读时永远归一】的属性:防御性收口——无论 __init__ 之后有没有别的
@@ -124,6 +127,7 @@ class LocalBrainManager:
         raw = getattr(self, "_ollama_url", "") or ""
         try:
             from core.ollama_endpoint import normalize_ollama_url
+
             return normalize_ollama_url(raw)
         except Exception:  # noqa: BLE001
             if raw.startswith(("http://", "https://")):
@@ -169,9 +173,7 @@ class LocalBrainManager:
             if self.backend_name == "auto":
                 # Auto-select the best backend based on hardware
                 self.backend_name = await self._auto_select_backend()
-                logger.info(
-                    "自动选择推理后端: %s", self.backend_name
-                )
+                logger.info("自动选择推理后端: %s", self.backend_name)
 
             from core.local_model_backends import create_backend, detect_best_backend
 
@@ -179,9 +181,7 @@ class LocalBrainManager:
             if self._backend is None:
                 try:
                     if self.backend_name == "ollama":
-                        self._backend = create_backend(
-                            "ollama", base_url=self.ollama_url
-                        )
+                        self._backend = create_backend("ollama", base_url=self.ollama_url)
                     elif self.backend_name == "llama_cpp":
                         self._backend = create_backend("llama_cpp")
                     elif self.backend_name == "transformers":
@@ -191,16 +191,12 @@ class LocalBrainManager:
                     else:
                         # Fallback: try auto-detection
                         best = detect_best_backend(
-                            has_gpu=self._hardware_profile.has_gpu
-                            if self._hardware_profile
-                            else None
+                            has_gpu=self._hardware_profile.has_gpu if self._hardware_profile else None
                         )
                         self._backend = create_backend(best)
                         self.backend_name = best
                 except Exception as exc:
-                    logger.error(
-                        "创建推理后端失败 [%s]: %s", self.backend_name, exc
-                    )
+                    logger.error("创建推理后端失败 [%s]: %s", self.backend_name, exc)
                     self._status = LocalBrainStatus.UNAVAILABLE
                     self._healthy = False
                     return False
@@ -216,11 +212,7 @@ class LocalBrainManager:
                 if loaded:
                     self._healthy = await self._backend.health_check()
                     self.available_models = self._backend.list_models()
-                    self._status = (
-                        LocalBrainStatus.HEALTHY
-                        if self._healthy
-                        else LocalBrainStatus.DEGRADED
-                    )
+                    self._status = LocalBrainStatus.HEALTHY if self._healthy else LocalBrainStatus.DEGRADED
                     logger.info(
                         "本地主脑已就绪 [%s]: 模型=%s, 状态=%s",
                         self.backend_name,
@@ -237,9 +229,7 @@ class LocalBrainManager:
                     )
                     return await self._ensure_ollama_running()
             except Exception as exc:
-                logger.error(
-                    "本地主脑启动失败 [%s]: %s", self.backend_name, exc
-                )
+                logger.error("本地主脑启动失败 [%s]: %s", self.backend_name, exc)
                 # Fallback to Ollama
                 return await self._ensure_ollama_running()
 
@@ -274,16 +264,14 @@ class LocalBrainManager:
             # Check if we have any GGUF models in registry
             try:
                 from core.huggingface_model_manager import (
-                    get_hf_model_manager,
                     ModelFamily,
+                    get_hf_model_manager,
                 )
 
                 hf_mgr = get_hf_model_manager()
                 local_llms = hf_mgr.list_local_models(family=ModelFamily.LLM)
                 if any(m.is_gguf for m in local_llms):
-                    logger.info(
-                        "自动选择 llama_cpp 后端 (GPU + GGUF 模型可用)"
-                    )
+                    logger.info("自动选择 llama_cpp 后端 (GPU + GGUF 模型可用)")
                     return "llama_cpp"
             except Exception as exc:
                 logger.debug("llama_cpp GPU check failed: %s", exc)
@@ -299,9 +287,7 @@ class LocalBrainManager:
                     timeout=3.0,
                 )
                 if resp.status_code == 200:
-                    logger.info(
-                        "自动选择 ollama 后端 (Ollama 正在运行)"
-                    )
+                    logger.info("自动选择 ollama 后端 (Ollama 正在运行)")
                     return "ollama"
             except Exception as exc:
                 logger.debug("Ollama availability check failed: %s", exc)
@@ -314,10 +300,7 @@ class LocalBrainManager:
             # "模型加载失败"。只要 ollama 二进制在,就选 ollama:后续
             # _ensure_ollama_running() 有 ~50s 冷启动等待窗口来正确拉起并就绪。
             if shutil.which("ollama"):
-                logger.info(
-                    "自动选择 ollama 后端 (Ollama 已安装但快速探测未响应,"
-                    "转由冷启动长等待路径处理)"
-                )
+                logger.info("自动选择 ollama 后端 (Ollama 已安装但快速探测未响应," "转由冷启动长等待路径处理)")
                 return "ollama"
 
         # Priority 3: llama_cpp without GPU (still works on CPU)
@@ -353,6 +336,7 @@ class LocalBrainManager:
             return
         try:
             import httpx
+
             base = (self.ollama_url or "http://localhost:11434").rstrip("/")
             async with httpx.AsyncClient(timeout=600.0) as client:
                 # prompt 留空 + keep_alive:Ollama 只加载模型、常驻内存,不真正生成。
@@ -365,8 +349,7 @@ class LocalBrainManager:
                     self._healthy = True
                     logger.info("本地主脑模型已加载进内存并常驻 [ollama]: %s", model)
                 else:
-                    logger.info("主脑模型预载返回 %s(%s);首次对话时会自动加载。",
-                                resp.status_code, model)
+                    logger.info("主脑模型预载返回 %s(%s);首次对话时会自动加载。", resp.status_code, model)
         except Exception as exc:  # noqa: BLE001
             logger.info("主脑模型后台预载未完成(非致命,首次对话会触发加载): %s", exc)
 
@@ -458,10 +441,7 @@ class LocalBrainManager:
                 "可尝试手动运行: ollama serve，或稍后重启 Galaxy。"
             )
         else:
-            logger.warning(
-                "Ollama 不可用（未安装）。"
-                "请安装: https://ollama.com/download"
-            )
+            logger.warning("Ollama 不可用（未安装）。" "请安装: https://ollama.com/download")
         return False
 
     async def stop(self):
@@ -480,10 +460,12 @@ class LocalBrainManager:
         if self.backend_name in ("ollama", "auto"):
             try:
                 import httpx
+
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     await client.delete(
                         f"{self._hardened_base_url('_probe_delete')}/api/delete",
-                        json={"name": ""}, timeout=5.0,
+                        json={"name": ""},
+                        timeout=5.0,
                     )
             except Exception as exc:
                 logger.debug("Ollama cleanup delete failed: %s", exc)
@@ -491,9 +473,17 @@ class LocalBrainManager:
             # 查找并终止 ollama 进程
             try:
                 if sys.platform.startswith("win"):
-                    subprocess.run(["taskkill", "/F", "/IM", "ollama.exe"], capture_output=True, timeout=10, encoding="utf-8", errors="replace")
+                    subprocess.run(
+                        ["taskkill", "/F", "/IM", "ollama.exe"],
+                        capture_output=True,
+                        timeout=10,
+                        encoding="utf-8",
+                        errors="replace",
+                    )
                 else:
-                    subprocess.run(["pkill", "-f", "ollama"], capture_output=True, timeout=10, encoding="utf-8", errors="replace")
+                    subprocess.run(
+                        ["pkill", "-f", "ollama"], capture_output=True, timeout=10, encoding="utf-8", errors="replace"
+                    )
             except Exception as e:
                 logger.debug(f"停止 Ollama 进程时出错: {e}")
 
@@ -526,16 +516,11 @@ class LocalBrainManager:
                 if self.available_models:
                     if (
                         self._hardware_profile
-                        and self._hardware_profile.vram_used_mb
-                        > self._hardware_profile.vram_mb * 0.9
+                        and self._hardware_profile.vram_used_mb > self._hardware_profile.vram_mb * 0.9
                     ):
                         self._status = LocalBrainStatus.DEGRADED
                     else:
-                        self._status = (
-                            LocalBrainStatus.HEALTHY
-                            if self._healthy
-                            else LocalBrainStatus.DEGRADED
-                        )
+                        self._status = LocalBrainStatus.HEALTHY if self._healthy else LocalBrainStatus.DEGRADED
                 else:
                     self._status = LocalBrainStatus.DEGRADED
             except Exception as exc:
@@ -556,11 +541,7 @@ class LocalBrainManager:
         # 评估状态
         if self.available_models:
             self._healthy = True
-            if (
-                self._hardware_profile
-                and self._hardware_profile.vram_used_mb
-                > self._hardware_profile.vram_mb * 0.9
-            ):
+            if self._hardware_profile and self._hardware_profile.vram_used_mb > self._hardware_profile.vram_mb * 0.9:
                 self._status = LocalBrainStatus.DEGRADED
             else:
                 self._status = LocalBrainStatus.HEALTHY
@@ -612,6 +593,7 @@ class LocalBrainManager:
         """
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=60.0) as client:
                 resp = await client.delete(
                     f"{self._hardened_base_url('_delete_model')}/api/delete",
@@ -668,8 +650,7 @@ class LocalBrainManager:
                 if candidate in self.available_models:
                     return candidate
             # fallback：找最小的非多模态模型
-            non_mm = [m for m in self.available_models
-                      if not any(x in m.lower() for x in ["minicpm", "multimodal"])]
+            non_mm = [m for m in self.available_models if not any(x in m.lower() for x in ["minicpm", "multimodal"])]
             if non_mm:
                 return min(non_mm, key=lambda m: self.MODEL_SIZE_ESTIMATE_MB.get(m, float("inf")))
             # 只有多模态模型时，fallback 到默认推荐
@@ -701,19 +682,13 @@ class LocalBrainManager:
         """返回已安装的最小模型（VRAM 占用最小）"""
         if not self.available_models:
             return self.brain_model
-        return min(
-            self.available_models,
-            key=lambda m: self.MODEL_SIZE_ESTIMATE_MB.get(m, float("inf"))
-        )
+        return min(self.available_models, key=lambda m: self.MODEL_SIZE_ESTIMATE_MB.get(m, float("inf")))
 
     def _largest_available_model(self) -> str:
         """返回已安装的最大模型（VRAM 占用最大，能力最强）"""
         if not self.available_models:
             return self.brain_model
-        return max(
-            self.available_models,
-            key=lambda m: self.MODEL_SIZE_ESTIMATE_MB.get(m, 0)
-        )
+        return max(self.available_models, key=lambda m: self.MODEL_SIZE_ESTIMATE_MB.get(m, 0))
 
     # ───────── 内部方法 ─────────
 
@@ -729,6 +704,7 @@ class LocalBrainManager:
             logger.warning("[URL-取证:%s] 读 ollama_url 属性即异常: %r", call_site, exc)
         try:
             from core.ollama_endpoint import normalize_ollama_url
+
             base = normalize_ollama_url(raw)
         except Exception:  # noqa: BLE001
             base = raw if str(raw).startswith(("http://", "https://")) else "http://localhost:11434"
@@ -736,8 +712,11 @@ class LocalBrainManager:
             logger.warning(
                 "[URL-取证:%s] ollama_url 读出异常值 raw=%r(归一后=%r);"
                 "os.environ['OLLAMA_URL']=%r, _ollama_url=%r —— 请把本行日志发回排查。",
-                call_site, raw, base,
-                os.environ.get("OLLAMA_URL"), getattr(self, "_ollama_url", None),
+                call_site,
+                raw,
+                base,
+                os.environ.get("OLLAMA_URL"),
+                getattr(self, "_ollama_url", None),
             )
         return base
 
@@ -745,6 +724,7 @@ class LocalBrainManager:
         """Ping Ollama 服务"""
         try:
             import httpx
+
             base = self._hardened_base_url("_ping_ollama")
             async with httpx.AsyncClient(timeout=3.0) as client:
                 resp = await client.get(f"{base}/api/tags")
@@ -773,6 +753,7 @@ class LocalBrainManager:
 
             import os as _os
             from pathlib import Path as _Path
+
             _log_dir = _Path("logs")
             try:
                 _log_dir.mkdir(exist_ok=True)
@@ -845,7 +826,9 @@ class LocalBrainManager:
                 result = subprocess.run(
                     ["sh", "-c", "curl -fsSL https://ollama.com/install.sh | sh"],
                     capture_output=True,
-                    text=True, encoding="utf-8", errors="replace",
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
                     timeout=300,
                 )
                 return result.returncode == 0
@@ -854,7 +837,9 @@ class LocalBrainManager:
                 result = subprocess.run(
                     ["brew", "install", "ollama"],
                     capture_output=True,
-                    text=True, encoding="utf-8", errors="replace",
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
                     timeout=300,
                 )
                 return result.returncode == 0
@@ -868,13 +853,12 @@ class LocalBrainManager:
         """刷新可用模型列表"""
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=5.0) as client:
                 resp = await client.get(f"{self._hardened_base_url('_list_models')}/api/tags")
                 if resp.status_code == 200:
                     data = resp.json()
-                    self.available_models = [
-                        m["name"] for m in data.get("models", [])
-                    ]
+                    self.available_models = [m["name"] for m in data.get("models", [])]
         except Exception as e:
             logger.debug(f"刷新模型列表失败: {e}")
             self.available_models = []
@@ -883,6 +867,7 @@ class LocalBrainManager:
         """拉取 Ollama 模型"""
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=300.0) as client:
                 resp = await client.post(
                     f"{self._hardened_base_url('_pull_model')}/api/pull",
@@ -904,8 +889,16 @@ class LocalBrainManager:
         try:
             if shutil.which("nvidia-smi"):
                 result = subprocess.run(
-                    ["nvidia-smi", "--query-gpu=name,memory.total,memory.used,memory.free,compute_cap", "--format=csv,noheader,nounits"],
-                    capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10.0
+                    [
+                        "nvidia-smi",
+                        "--query-gpu=name,memory.total,memory.used,memory.free,compute_cap",
+                        "--format=csv,noheader,nounits",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=10.0,
                 )
                 if result.returncode == 0:
                     line = result.stdout.strip().split("\n")[0]
@@ -923,6 +916,7 @@ class LocalBrainManager:
         # 检测 CPU
         try:
             import multiprocessing
+
             profile.cpu_cores = multiprocessing.cpu_count()
         except Exception as exc:
             logger.debug("CPU count detection failed: %s", exc)
@@ -930,6 +924,7 @@ class LocalBrainManager:
         # 检测系统内存
         try:
             import psutil
+
             mem = psutil.virtual_memory()
             profile.system_ram_mb = mem.total // (1024 * 1024)
         except Exception as exc:
@@ -957,14 +952,18 @@ class LocalBrainManager:
             "brain_model": self.brain_model,
             "available_models": self.available_models,
             "model_count": len(self.available_models),
-            "hardware": {
-                "has_gpu": self._hardware_profile.has_gpu if self._hardware_profile else False,
-                "gpu_name": self._hardware_profile.gpu_name if self._hardware_profile else "",
-                "vram_mb": self._hardware_profile.vram_mb if self._hardware_profile else 0,
-                "vram_used_mb": self._hardware_profile.vram_used_mb if self._hardware_profile else 0,
-                "system_ram_mb": self._hardware_profile.system_ram_mb if self._hardware_profile else 0,
-                "cpu_cores": self._hardware_profile.cpu_cores if self._hardware_profile else 0,
-            } if self._hardware_profile else None,
+            "hardware": (
+                {
+                    "has_gpu": self._hardware_profile.has_gpu if self._hardware_profile else False,
+                    "gpu_name": self._hardware_profile.gpu_name if self._hardware_profile else "",
+                    "vram_mb": self._hardware_profile.vram_mb if self._hardware_profile else 0,
+                    "vram_used_mb": self._hardware_profile.vram_used_mb if self._hardware_profile else 0,
+                    "system_ram_mb": self._hardware_profile.system_ram_mb if self._hardware_profile else 0,
+                    "cpu_cores": self._hardware_profile.cpu_cores if self._hardware_profile else 0,
+                }
+                if self._hardware_profile
+                else None
+            ),
         }
 
 
@@ -1037,6 +1036,7 @@ async def check_local_brain() -> Dict[str, Any]:
 # 模型(qwen/llama/…)尺寸仍保留本表作 VRAM 评估兜底。catalog 不反向依赖本模块,无环。
 try:  # noqa: SIM105
     from core import model_catalog as _mc
+
     for _spec in _mc.all_models():
         if _spec.size_mb():
             LocalBrainManager.MODEL_SIZE_ESTIMATE_MB[_spec.tag] = _spec.size_mb()

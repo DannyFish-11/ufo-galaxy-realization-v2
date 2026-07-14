@@ -48,7 +48,6 @@ from core.unified_action_lifecycle_surface import (
     derive_visible_action,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -99,7 +98,9 @@ def _make_mock_normalizer_outcome(
     outcome.committed_terminal_identity = committed_identity
     outcome.source_message_id = "msg-001"
     outcome.handoff_response_outcome = None
-    outcome.participant_truth_outcome = MagicMock() if message_type in {"task_result", "goal_execution_result"} else None
+    outcome.participant_truth_outcome = (
+        MagicMock() if message_type in {"task_result", "goal_execution_result"} else None
+    )
     outcome.signal_reconcile_outcome = None
 
     if with_handoff_response and was_normalized:
@@ -125,15 +126,9 @@ class TestAndroidResultSurfaceIntegration:
         outcome = _make_mock_handoff_outcome(response_kind="result")
         surface = build_from_handoff_response(outcome)
 
-        assert surface.android_result is not None, (
-            "android_result must be set when handoff result arrives"
-        )
-        assert surface.android_result_authority == "android_device", (
-            "authority must name Android device, not V2"
-        )
-        assert surface.is_android_result_first_class(), (
-            "is_android_result_first_class() must return True"
-        )
+        assert surface.android_result is not None, "android_result must be set when handoff result arrives"
+        assert surface.android_result_authority == "android_device", "authority must name Android device, not V2"
+        assert surface.is_android_result_first_class(), "is_android_result_first_class() must return True"
 
     def test_A02_android_result_dict_includes_response_kind(self):
         """android_result dict contains response_kind, handoff_id, task_id, device_id."""
@@ -163,9 +158,7 @@ class TestAndroidResultSurfaceIntegration:
 
     def test_A04_handoff_ack_does_not_set_android_result(self):
         """ACK is acceptance-only — android_result stays None until terminal."""
-        outcome = _make_mock_handoff_outcome(
-            response_kind="ack", is_terminal=False, callback_invoked=False
-        )
+        outcome = _make_mock_handoff_outcome(response_kind="ack", is_terminal=False, callback_invoked=False)
         surface = build_from_handoff_response(outcome)
 
         assert surface.android_result is None
@@ -176,9 +169,7 @@ class TestAndroidResultSurfaceIntegration:
 
     def test_A05_uncorrelated_outcome_has_no_android_result(self):
         """Uncorrelated outcome does not produce a first-class android result."""
-        outcome = _make_mock_handoff_outcome(
-            response_kind="result", was_correlated=False
-        )
+        outcome = _make_mock_handoff_outcome(response_kind="result", was_correlated=False)
         surface = build_from_handoff_response(outcome)
 
         assert surface.android_result is None
@@ -195,9 +186,7 @@ class TestAndroidResultSurfaceIntegration:
 
     def test_A07_normalizer_handoff_result_delegates_to_handoff_surface(self):
         """normalizer with handoff_response_outcome surfaces android_result from it."""
-        outcome = _make_mock_normalizer_outcome(
-            message_type="handoff_result", with_handoff_response=True
-        )
+        outcome = _make_mock_normalizer_outcome(message_type="handoff_result", with_handoff_response=True)
         surface = build_from_normalizer_outcome(outcome)
 
         assert surface.android_result is not None
@@ -302,9 +291,7 @@ class TestBlockerConfirmationSurfaceConvergence:
 
     def test_B07_handoff_ack_sets_handoff_pending_not_closed(self):
         """ACK advances closure to handoff_pending, not yet closed."""
-        outcome = _make_mock_handoff_outcome(
-            response_kind="ack", is_terminal=False, callback_invoked=False
-        )
+        outcome = _make_mock_handoff_outcome(response_kind="ack", is_terminal=False, callback_invoked=False)
         surface = build_from_handoff_response(outcome)
 
         assert surface.closure_state == ClosureState.handoff_pending
@@ -331,25 +318,22 @@ class TestActionLifecycleCompositionDifference:
     def _make_runtime(self):
         """Construct a minimal DesktopPresenceRuntime for composition tests."""
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         return DesktopPresenceRuntime()
 
     def test_C01_handle_request_result_contains_action_lifecycle_surface(self):
         """handle_request() returns action_lifecycle_surface in canonical result."""
         runtime = self._make_runtime()
-        result = asyncio.run(
-            runtime.handle_request("test C01", source="chat")
-        )
+        result = asyncio.run(runtime.handle_request("test C01", source="chat"))
 
-        assert "action_lifecycle_surface" in result, (
-            "action_lifecycle_surface must be present in default handle_request() result"
-        )
+        assert (
+            "action_lifecycle_surface" in result
+        ), "action_lifecycle_surface must be present in default handle_request() result"
 
     def test_C02_action_lifecycle_surface_has_required_keys(self):
         """action_lifecycle_surface dict contains all mandatory canonical keys."""
         runtime = self._make_runtime()
-        result = asyncio.run(
-            runtime.handle_request("test C02", source="chat")
-        )
+        result = asyncio.run(runtime.handle_request("test C02", source="chat"))
 
         surface_dict = result["action_lifecycle_surface"]
         mandatory_keys = {
@@ -389,52 +373,42 @@ class TestActionLifecycleCompositionDifference:
             )
 
         surface_dict = result["action_lifecycle_surface"]
-        assert surface_dict["origin"] == "android_device", (
-            "android_goal_execution carrier must produce android_device origin"
-        )
+        assert (
+            surface_dict["origin"] == "android_device"
+        ), "android_goal_execution carrier must produce android_device origin"
         # Android result should be first-class when execution_result is present
-        assert surface_dict["android_result"] is not None, (
-            "android_result must be populated for android_goal_execution with result"
-        )
+        assert (
+            surface_dict["android_result"] is not None
+        ), "android_result must be populated for android_goal_execution with result"
         assert surface_dict["android_result_authority"] == "android_device"
 
     def test_C04_non_android_carrier_sets_v2_center_origin(self):
         """Desktop carrier (chat) sets origin=v2_center in surface."""
         runtime = self._make_runtime()
-        result = asyncio.run(
-            runtime.handle_request("test C04", source="chat")
-        )
+        result = asyncio.run(runtime.handle_request("test C04", source="chat"))
 
         surface_dict = result["action_lifecycle_surface"]
-        assert surface_dict["origin"] == "v2_center", (
-            "chat carrier must produce v2_center origin"
-        )
+        assert surface_dict["origin"] == "v2_center", "chat carrier must produce v2_center origin"
 
     def test_C05_surface_session_id_matches_result_session_id(self):
         """action_lifecycle_surface.session_id matches result.conversation_session_id."""
         runtime = self._make_runtime()
-        result = asyncio.run(
-            runtime.handle_request("test C05", source="chat")
-        )
+        result = asyncio.run(runtime.handle_request("test C05", source="chat"))
 
         surface_session = result["action_lifecycle_surface"]["session_id"]
         result_session = result.get("conversation_session_id", "")
-        assert surface_session == result_session, (
-            "surface session_id must match result conversation_session_id"
-        )
+        assert surface_session == result_session, "surface session_id must match result conversation_session_id"
 
     def test_C06_surface_action_id_matches_runtime_session_id(self):
         """action_lifecycle_surface.action_id is the runtime_session_id (correlation)."""
         runtime = self._make_runtime()
-        result = asyncio.run(
-            runtime.handle_request("test C06", source="chat")
-        )
+        result = asyncio.run(runtime.handle_request("test C06", source="chat"))
 
         surface_action_id = result["action_lifecycle_surface"]["action_id"]
         runtime_session_id = result.get("runtime_session_id", "")
-        assert surface_action_id == runtime_session_id, (
-            "surface action_id must equal runtime_session_id for stable correlation"
-        )
+        assert (
+            surface_action_id == runtime_session_id
+        ), "surface action_id must equal runtime_session_id for stable correlation"
 
     def test_C07_blocker_in_execution_result_surfaces_in_action_lifecycle(self):
         """When execution_result carries a blocker, action_lifecycle_surface reflects blocked phase."""
@@ -447,14 +421,10 @@ class TestActionLifecycleCompositionDifference:
             }
 
         with patch.object(runtime, "_dispatch", side_effect=_fake_dispatch_blocker):
-            result = asyncio.run(
-                runtime.handle_request("test C07", source="chat")
-            )
+            result = asyncio.run(runtime.handle_request("test C07", source="chat"))
 
         surface_dict = result["action_lifecycle_surface"]
-        assert surface_dict["phase"] == "blocked", (
-            "phase must be 'blocked' when execution_result has a blocker"
-        )
+        assert surface_dict["phase"] == "blocked", "phase must be 'blocked' when execution_result has a blocker"
         assert surface_dict["blocker"] is not None
 
     def test_C08_confirmation_in_execution_result_surfaces_in_action_lifecycle(self):
@@ -468,9 +438,7 @@ class TestActionLifecycleCompositionDifference:
             }
 
         with patch.object(runtime, "_dispatch", side_effect=_fake_dispatch_confirm):
-            result = asyncio.run(
-                runtime.handle_request("test C08", source="chat")
-            )
+            result = asyncio.run(runtime.handle_request("test C08", source="chat"))
 
         surface_dict = result["action_lifecycle_surface"]
         assert surface_dict["confirmation_needed"] is True
@@ -532,9 +500,7 @@ class TestCrossRepoLifecycleMapping:
             "acceptance_report",
         }
         missing = required_events - set(CROSS_REPO_LIFECYCLE_MAP.keys())
-        assert not missing, (
-            f"CROSS_REPO_LIFECYCLE_MAP missing Android events: {missing}"
-        )
+        assert not missing, f"CROSS_REPO_LIFECYCLE_MAP missing Android events: {missing}"
 
     def test_D02_handoff_ack_maps_to_accepted(self):
         """handoff_ack → accepted in canonical lifecycle map."""
@@ -571,9 +537,7 @@ class TestCrossRepoLifecycleMapping:
 
     def test_D08_ack_surface_last_event_is_handoff_ack(self):
         """ACK surface records handoff_ack as last Android event."""
-        outcome = _make_mock_handoff_outcome(
-            response_kind="ack", is_terminal=False, callback_invoked=False
-        )
+        outcome = _make_mock_handoff_outcome(response_kind="ack", is_terminal=False, callback_invoked=False)
         surface = build_from_handoff_response(outcome)
 
         assert surface.last_android_event == "handoff_ack"
@@ -622,12 +586,15 @@ class TestCrossRepoLifecycleMapping:
             _gate_allow = MagicMock()
             _gate_allow.action = "allow"
 
-            with patch(
-                "galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response",
-                return_value=_outcome,
-            ), patch(
-                "contracts.cross_repo_schema_version_gate.evaluate_android_uplink_schema_gate",
-                return_value=_gate_allow,
+            with (
+                patch(
+                    "galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response",
+                    return_value=_outcome,
+                ),
+                patch(
+                    "contracts.cross_repo_schema_version_gate.evaluate_android_uplink_schema_gate",
+                    return_value=_gate_allow,
+                ),
             ):
                 msg = {
                     "version": "3.0",
@@ -646,9 +613,7 @@ class TestCrossRepoLifecycleMapping:
 
         ack = asyncio.run(_run())
         # The ACK must have the surface attached
-        assert "action_lifecycle_surface" in ack, (
-            "handle_handoff_v2_result() ACK must include action_lifecycle_surface"
-        )
+        assert "action_lifecycle_surface" in ack, "handle_handoff_v2_result() ACK must include action_lifecycle_surface"
         surface_dict = ack["action_lifecycle_surface"]
         assert surface_dict["android_result"] is not None
         assert surface_dict["android_result_authority"] == "android_device"
@@ -672,15 +637,19 @@ class TestCrossRepoLifecycleMapping:
             _eval_outcome.canonical_update = "updated"
             _eval_outcome.reject_reason = ""
 
-            with patch(
-                "galaxy_gateway.android.handlers.acceptance_report.ingest_device_acceptance_report",
-                return_value=_record,
-            ), patch(
-                "galaxy_gateway.android.handlers.acceptance_report.ingest_android_evaluator_artifact",
-                return_value=_eval_outcome,
-            ), patch(
-                "galaxy_gateway.android.handlers.acceptance_report._truth_reconciled_flag",
-                return_value=True,
+            with (
+                patch(
+                    "galaxy_gateway.android.handlers.acceptance_report.ingest_device_acceptance_report",
+                    return_value=_record,
+                ),
+                patch(
+                    "galaxy_gateway.android.handlers.acceptance_report.ingest_android_evaluator_artifact",
+                    return_value=_eval_outcome,
+                ),
+                patch(
+                    "galaxy_gateway.android.handlers.acceptance_report._truth_reconciled_flag",
+                    return_value=True,
+                ),
             ):
                 msg = {
                     "type": "device_acceptance_report",
@@ -729,6 +698,7 @@ class TestUnifiedSurfaceUnit:
         from core.unified_action_lifecycle_surface import (
             UNIFIED_ACTION_LIFECYCLE_SURFACE_SENTINEL,
         )
+
         assert "pr-uas" in UNIFIED_ACTION_LIFECYCLE_SURFACE_SENTINEL
         assert "dual-repo" in UNIFIED_ACTION_LIFECYCLE_SURFACE_SENTINEL
 

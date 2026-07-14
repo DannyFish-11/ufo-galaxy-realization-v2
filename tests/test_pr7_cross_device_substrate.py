@@ -38,6 +38,7 @@ All tests are self-contained (no live servers, no real devices).
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 import uuid
 from typing import Any, Dict, Optional
@@ -45,7 +46,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-import os
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
@@ -74,6 +74,7 @@ class TestSubstrateRootUnification:
 
         async def run():
             from core.openclawd import OpenClawd
+
             oc = OpenClawd.__new__(OpenClawd)
             oc._config = {}
             with patch("core.command_router.get_command_router", return_value=mock_cr):
@@ -147,6 +148,7 @@ class TestSubstrateRootUnification:
             return {"success": True, "result": None, "latency_ms": 1.0}
 
         from core.command_router import CommandRouter
+
         cr = CommandRouter.__new__(CommandRouter)
         cr._execute_command = fake_execute_command
         # Minimal attribute init to allow route_envelope to proceed
@@ -177,9 +179,9 @@ class TestSubstrateRootUnification:
                             return result
 
             result = asyncio.new_event_loop().run_until_complete(run())
-            assert result.get("remote_execution_mode") == mode.value, (
-                f"route_envelope did not propagate mode={mode.value} into result"
-            )
+            assert (
+                result.get("remote_execution_mode") == mode.value
+            ), f"route_envelope did not propagate mode={mode.value} into result"
 
 
 # ---------------------------------------------------------------------------
@@ -200,8 +202,7 @@ class TestAgentDispatchUsesRouteEnvelope:
 
         async def capture_envelope(env):
             captured.append(env)
-            return {"success": True, "result": "ok", "latency_ms": 2.0,
-                    "remote_execution_mode": "agent_runtime"}
+            return {"success": True, "result": "ok", "latency_ms": 2.0, "remote_execution_mode": "agent_runtime"}
 
         cr.route_envelope = capture_envelope
 
@@ -231,8 +232,7 @@ class TestAgentDispatchUsesRouteEnvelope:
         cr = CommandRouter.__new__(CommandRouter)
 
         async def fake_route_envelope(env):
-            return {"success": True, "result": "ok", "latency_ms": 3.0,
-                    "remote_execution_mode": "agent_runtime"}
+            return {"success": True, "result": "ok", "latency_ms": 3.0, "remote_execution_mode": "agent_runtime"}
 
         cr.route_envelope = fake_route_envelope
 
@@ -263,8 +263,7 @@ class TestAgentDispatchUsesRouteEnvelope:
 
         async def capture(env):
             captured.append(env)
-            return {"success": True, "result": "ok", "latency_ms": 1.0,
-                    "remote_execution_mode": "agent_runtime"}
+            return {"success": True, "result": "ok", "latency_ms": 1.0, "remote_execution_mode": "agent_runtime"}
 
         cr.route_envelope = capture
 
@@ -295,8 +294,7 @@ class TestAgentDispatchUsesRouteEnvelope:
 
         async def capture(env):
             captured.append(env)
-            return {"success": True, "result": "ok", "latency_ms": 1.0,
-                    "remote_execution_mode": "agent_runtime"}
+            return {"success": True, "result": "ok", "latency_ms": 1.0, "remote_execution_mode": "agent_runtime"}
 
         cr.route_envelope = capture
 
@@ -329,17 +327,18 @@ class TestDeployThenExecuteUsesRouteEnvelope:
 
     def _make_cr(self):
         from core.command_router import CommandRouter
+
         return CommandRouter.__new__(CommandRouter)
 
     def test_step2_envelope_has_agent_runtime(self):
         from core.schemas.remote_execution import RemoteExecutionMode
+
         cr = self._make_cr()
         captured: list = []
 
         async def capture(env):
             captured.append(env)
-            return {"success": True, "result": "ok", "latency_ms": 2.0,
-                    "remote_execution_mode": "agent_runtime"}
+            return {"success": True, "result": "ok", "latency_ms": 2.0, "remote_execution_mode": "agent_runtime"}
 
         cr.route_envelope = capture
 
@@ -378,8 +377,7 @@ class TestDeployThenExecuteUsesRouteEnvelope:
         cr = self._make_cr()
 
         async def fake_route(env):
-            return {"success": True, "result": "done", "latency_ms": 5.0,
-                    "remote_execution_mode": "agent_runtime"}
+            return {"success": True, "result": "done", "latency_ms": 5.0, "remote_execution_mode": "agent_runtime"}
 
         cr.route_envelope = fake_route
 
@@ -423,9 +421,9 @@ class TestModeMetadataPropagation:
     """route_envelope propagates remote_execution_mode into the result."""
 
     def test_agent_runtime_propagated(self):
+        from core.command_router import CommandRouter
         from core.schemas.remote_execution import RemoteExecutionMode
         from core.schemas.task_envelope import TaskEnvelope
-        from core.command_router import CommandRouter
 
         cr = CommandRouter.__new__(CommandRouter)
 
@@ -453,9 +451,9 @@ class TestModeMetadataPropagation:
         assert result.get("remote_execution_mode") == "agent_runtime"
 
     def test_command_only_propagated(self):
+        from core.command_router import CommandRouter
         from core.schemas.remote_execution import RemoteExecutionMode
         from core.schemas.task_envelope import TaskEnvelope
-        from core.command_router import CommandRouter
 
         cr = CommandRouter.__new__(CommandRouter)
 
@@ -484,8 +482,8 @@ class TestModeMetadataPropagation:
 
     def test_no_mode_not_propagated(self):
         """When envelope has no mode, result does not gain a spurious mode key."""
-        from core.schemas.task_envelope import TaskEnvelope
         from core.command_router import CommandRouter
+        from core.schemas.task_envelope import TaskEnvelope
 
         cr = CommandRouter.__new__(CommandRouter)
 
@@ -520,6 +518,7 @@ class TestNATSBusRemoteExecutionModeField:
 
     def test_ensure_trace_fields_adds_mode(self):
         from core.nats_bus import NATSBus
+
         bus = NATSBus.__new__(NATSBus)
         result = bus._ensure_trace_fields(
             {"action": "dispatch"},
@@ -533,6 +532,7 @@ class TestNATSBusRemoteExecutionModeField:
 
     def test_ensure_trace_fields_command_only(self):
         from core.nats_bus import NATSBus
+
         bus = NATSBus.__new__(NATSBus)
         result = bus._ensure_trace_fields(
             {},
@@ -543,6 +543,7 @@ class TestNATSBusRemoteExecutionModeField:
     def test_ensure_trace_fields_no_override(self):
         """Existing remote_execution_mode in data is not overridden."""
         from core.nats_bus import NATSBus
+
         bus = NATSBus.__new__(NATSBus)
         result = bus._ensure_trace_fields(
             {"remote_execution_mode": "agent_runtime"},
@@ -553,6 +554,7 @@ class TestNATSBusRemoteExecutionModeField:
     def test_ensure_trace_fields_empty_mode_not_added(self):
         """When remote_execution_mode is empty string, it is not added."""
         from core.nats_bus import NATSBus
+
         bus = NATSBus.__new__(NATSBus)
         result = bus._ensure_trace_fields({}, remote_execution_mode="")
         assert "remote_execution_mode" not in result
@@ -565,11 +567,13 @@ class TestNATSBusRemoteExecutionModeField:
         captured_calls: list = []
 
         def mock_ensure(data, trace_id="", runtime_session_id="", remote_execution_mode=""):
-            captured_calls.append({
-                "data": data,
-                "trace_id": trace_id,
-                "remote_execution_mode": remote_execution_mode,
-            })
+            captured_calls.append(
+                {
+                    "data": data,
+                    "trace_id": trace_id,
+                    "remote_execution_mode": remote_execution_mode,
+                }
+            )
             return {**data, "remote_execution_mode": remote_execution_mode, "_nats_schema": ""}
 
         bus._ensure_trace_fields = mock_ensure
@@ -598,11 +602,15 @@ class TestGatewayNATSAdapterModePreservation:
 
     def _make_adapter(self):
         from galaxy_gateway.gateway_nats_adapter import GatewayNATSAdapter
+
         adapter = GatewayNATSAdapter.__new__(GatewayNATSAdapter)
         adapter._pending = {}
         adapter._stats = {
-            "dispatched": 0, "succeeded": 0, "failed": 0,
-            "timed_out": 0, "dlq": 0,
+            "dispatched": 0,
+            "succeeded": 0,
+            "failed": 0,
+            "timed_out": 0,
+            "dlq": 0,
         }
         adapter._task_timeout = 30.0
         adapter._max_retries = 0
@@ -641,9 +649,7 @@ class TestGatewayNATSAdapterModePreservation:
 
         asyncio.new_event_loop().run_until_complete(run())
         assert forwarded_mode, "_forward_to_device was not called"
-        assert forwarded_mode[0] == "agent_runtime", (
-            f"Expected agent_runtime, got {forwarded_mode[0]!r}"
-        )
+        assert forwarded_mode[0] == "agent_runtime", f"Expected agent_runtime, got {forwarded_mode[0]!r}"
 
     def test_handles_task_envelope_with_command_only(self):
         """A TaskEnvelope NATS message with command_only passes mode to _forward_to_device."""
@@ -740,6 +746,7 @@ class TestOpenClawdAgentDispatchAlwaysAgentRuntime:
 
         async def run():
             from core.openclawd import OpenClawd
+
             oc = OpenClawd.__new__(OpenClawd)
             oc._config = {}
 
@@ -757,15 +764,12 @@ class TestOpenClawdAgentDispatchAlwaysAgentRuntime:
         asyncio.new_event_loop().run_until_complete(run())
 
         # Find the internal _remote_envelope (from openclawd._dispatch_remote_agent)
-        agent_envelopes = [
-            e for e in captured_envelopes
-            if e.get("source") == "openclawd._dispatch_remote_agent"
-        ]
+        agent_envelopes = [e for e in captured_envelopes if e.get("source") == "openclawd._dispatch_remote_agent"]
         assert agent_envelopes, "Internal envelope from _dispatch_remote_agent not found"
         env_mode = agent_envelopes[0].get("remote_execution_mode")
-        assert env_mode == RemoteExecutionMode.agent_runtime, (
-            f"Expected agent_runtime in internal envelope, got {env_mode!r}"
-        )
+        assert (
+            env_mode == RemoteExecutionMode.agent_runtime
+        ), f"Expected agent_runtime in internal envelope, got {env_mode!r}"
 
     def test_metadata_remote_execution_mode_is_agent_runtime(self):
         """The returned metadata.remote_execution_mode is agent_runtime even when
@@ -782,6 +786,7 @@ class TestOpenClawdAgentDispatchAlwaysAgentRuntime:
 
         async def run():
             from core.openclawd import OpenClawd
+
             oc = OpenClawd.__new__(OpenClawd)
             oc._config = {}
             with patch("core.command_router.get_command_router", return_value=mock_cr):
@@ -811,8 +816,8 @@ class TestBackwardCompatibility:
         # (deny-by-default,有意语义),须放行到执行器。
         from core.canonical_dispatch_slot_authority import (
             CanonicalDispatchSlot,
-            CanonicalDispatchSlotStatus,
             CanonicalDispatchSlotsResult,
+            CanonicalDispatchSlotStatus,
         )
 
         def _approve_all(device_ids, execution_mode, **kwargs):
@@ -845,8 +850,8 @@ class TestBackwardCompatibility:
 
     def test_route_envelope_without_mode_succeeds(self):
         """A TaskEnvelope without remote_execution_mode routes successfully."""
-        from core.schemas.task_envelope import TaskEnvelope
         from core.command_router import CommandRouter
+        from core.schemas.task_envelope import TaskEnvelope
 
         cr = CommandRouter.__new__(CommandRouter)
         env = TaskEnvelope(task_id="t_compat", tool_name="ping", targets=["dev1"])

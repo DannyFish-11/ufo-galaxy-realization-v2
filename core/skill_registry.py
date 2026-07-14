@@ -34,6 +34,7 @@ Usage
     resp = await registry.invoke(SkillRequest(skill_name="echo", inputs={"msg": "hi"}))
     print(resp.outputs)  # {'msg': 'hi'}
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -217,11 +218,11 @@ class SkillRegistry:
         if self._permission_checker is None:
             try:
                 from core.tool_permissions import get_tool_permission_checker
+
                 self._permission_checker = get_tool_permission_checker()
             except Exception as exc:  # pragma: no cover
                 logger.warning(
-                    "SkillRegistry: could not load tool_permissions (%s); "
-                    "permission checks will be skipped",
+                    "SkillRegistry: could not load tool_permissions (%s); " "permission checks will be skipped",
                     exc,
                 )
         return self._permission_checker
@@ -248,8 +249,7 @@ class SkillRegistry:
             )
         except Exception as exc:
             logger.debug(
-                "SkillRegistry: permission check raised an exception (%s); "
-                "allowing by default",
+                "SkillRegistry: permission check raised an exception (%s); " "allowing by default",
                 exc,
             )
             return None
@@ -352,9 +352,7 @@ class SkillRegistry:
             if inspect.iscoroutinefunction(entry.handler):
                 timeout = req.timeout_s
                 if timeout is not None:
-                    raw_result = await asyncio.wait_for(
-                        entry.handler(**req.inputs), timeout=timeout
-                    )
+                    raw_result = await asyncio.wait_for(entry.handler(**req.inputs), timeout=timeout)
                 else:
                     raw_result = await entry.handler(**req.inputs)
             else:
@@ -366,9 +364,7 @@ class SkillRegistry:
                     return entry.handler(**req.inputs)
 
                 if timeout is not None:
-                    raw_result = await asyncio.wait_for(
-                        loop.run_in_executor(None, _call), timeout=timeout
-                    )
+                    raw_result = await asyncio.wait_for(loop.run_in_executor(None, _call), timeout=timeout)
                 else:
                     raw_result = await loop.run_in_executor(None, _call)
 

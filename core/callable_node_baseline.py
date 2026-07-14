@@ -39,6 +39,7 @@ Usage
     for name in get_callable_node_names():
         print(name)
 """
+
 from __future__ import annotations
 
 import logging
@@ -74,6 +75,7 @@ def _build_callable_classes() -> "FrozenSet":
         from core.nodes.node_fabric_registry import (
             _CAPABILITY_SYNC_ELIGIBLE,
         )
+
         # _CAPABILITY_SYNC_ELIGIBLE is the authoritative set defined in
         # node_fabric_registry.py.  We mirror it here so callers can check
         # callability without importing the registry directly.
@@ -96,6 +98,7 @@ CALLABLE_ARCHITECTURAL_CLASSES: "FrozenSet" = _build_callable_classes()
 # Public helpers
 # ---------------------------------------------------------------------------
 
+
 def is_callable_by_openclawd(architectural_class: "object") -> bool:
     """Return ``True`` if *architectural_class* makes a node callable by OpenClawd.
 
@@ -111,11 +114,7 @@ def is_callable_by_openclawd(architectural_class: "object") -> bool:
         ``True`` only when the class is in :data:`CALLABLE_ARCHITECTURAL_CLASSES`.
     """
     # Accept both enum members and raw strings.
-    value = (
-        architectural_class.value
-        if hasattr(architectural_class, "value")
-        else str(architectural_class)
-    )
+    value = architectural_class.value if hasattr(architectural_class, "value") else str(architectural_class)
     return value in CALLABLE_ARCHITECTURAL_CLASSES
 
 
@@ -131,6 +130,7 @@ def get_callable_node_names() -> List[str]:
     """
     try:
         from core.nodes.node_fabric_registry import get_node_fabric_registry
+
         registry = get_node_fabric_registry()
         names: List[str] = []
         for node in registry.list_nodes():

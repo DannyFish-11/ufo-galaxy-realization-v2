@@ -28,20 +28,14 @@ def test_continuity_policy_hooks_cover_key_adjudication_points() -> None:
         should_block=True,
         verdict="require_review",
     )
-    assert (
-        replay_required.classification
-        == ContinuityAdjudicationClassification.replay_reconciliation_required.value
-    )
+    assert replay_required.classification == ContinuityAdjudicationClassification.replay_reconciliation_required.value
 
     reconnect = decide_reconnect_pending_policy(
         continuity_outcome="new_attachment",
         owner="routing",
         is_timed_out=False,
     )
-    assert (
-        reconnect.classification
-        == ContinuityAdjudicationClassification.replay_reconciliation_required.value
-    )
+    assert reconnect.classification == ContinuityAdjudicationClassification.replay_reconciliation_required.value
     assert reconnect.decision == "request_replay_reconciliation"
 
 
@@ -74,10 +68,7 @@ def test_unified_result_ingress_duplicate_decision_uses_policy_hook(monkeypatch)
     )
     outcome = ingress.process(event)
     assert outcome.continuity_adjudication_classification == "duplicate-ignored"
-    assert (
-        outcome.continuity_adjudication_evidence["triggering_reason"]
-        == "test_policy_hook_duplicate_reason"
-    )
+    assert outcome.continuity_adjudication_evidence["triggering_reason"] == "test_policy_hook_duplicate_reason"
 
 
 def test_reconnect_pending_lifecycle_uses_policy_hook_and_exposes_evidence(monkeypatch) -> None:
@@ -125,7 +116,4 @@ def test_reconnect_pending_lifecycle_uses_policy_hook_and_exposes_evidence(monke
     decision = decisions[0]
     assert decision["continuity_adjudication_classification"] == "reconnect-recovery-required"
     assert decision["reason"] == "test_policy_hook_reconnect_reason"
-    assert (
-        decision["continuity_adjudication"]["triggering_reason"]
-        == "test_policy_hook_reconnect_reason"
-    )
+    assert decision["continuity_adjudication"]["triggering_reason"] == "test_policy_hook_reconnect_reason"

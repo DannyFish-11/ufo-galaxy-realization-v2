@@ -6,6 +6,7 @@ Tailscale提供安全的WireGuard隧道，用于广域网设备连接。
 
 PR-AIPV3-TAILSCALE: 持续监控 + AIP v3状态事件 + LAN回退
 """
+
 import asyncio
 import json
 import logging
@@ -18,8 +19,9 @@ logger = logging.getLogger("Galaxy.Tailscale")
 
 # PR-AIPV3: Unified AIP v3 emission
 try:
-    from core.schemas.aip_v3 import StateEventMsg  # noqa: F401
     from core.nats_bus import get_nats_bus  # noqa: F401
+    from core.schemas.aip_v3 import StateEventMsg  # noqa: F401
+
     _AIPV3_AVAILABLE = True
 except ImportError:
     _AIPV3_AVAILABLE = False
@@ -43,9 +45,12 @@ class TailscaleManager:
     # 失败时,流量经"家里桌面"中转而非绕海外 DERP,延迟从几百 ms 降到个位数,零成本私有中继。
     # 跑本启动器的桌面网关默认开;GALAXY_TS_ADVERTISE_RELAY=0 显式关闭。需控制端(官方/较新
     # Headscale)与各端较新 Tailscale 客户端支持 Peer Relay;不支持时静默降级,绝不影响联网。
-    _ADVERTISE_RELAY = os.environ.get(
-        "GALAXY_TS_ADVERTISE_RELAY", "1"
-    ).strip().lower() not in ("0", "false", "no", "off")
+    _ADVERTISE_RELAY = os.environ.get("GALAXY_TS_ADVERTISE_RELAY", "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
     _instance = None
 
     def __new__(cls):
@@ -92,7 +97,11 @@ class TailscaleManager:
             r = await asyncio.to_thread(
                 subprocess.run,
                 ["tailscale", "set", "--advertise-relay"],
-                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=15,
             )
             if r.returncode == 0:
                 logger.info("Tailscale 对等中继已宣告（本机充当私有 relay，手机/手表弱网经此中转）")
@@ -116,7 +125,12 @@ class TailscaleManager:
             return out
         try:
             result = subprocess.run(
-                ["tailscale", "status", "--json"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10,
+                ["tailscale", "status", "--json"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=10,
             )
             if result.returncode == 0:
                 status = json.loads(result.stdout)
@@ -124,11 +138,13 @@ class TailscaleManager:
                 for _k, peer in (status.get("Peer", {}) or {}).items():
                     rel = peer.get("Relay", "")
                     if rel:
-                        out["peers_via_relay"].append({
-                            "hostname": peer.get("HostName", ""),
-                            "relay": rel,
-                            "online": peer.get("Online", False),
-                        })
+                        out["peers_via_relay"].append(
+                            {
+                                "hostname": peer.get("HostName", ""),
+                                "relay": rel,
+                                "online": peer.get("Online", False),
+                            }
+                        )
         except Exception as exc:  # noqa: BLE001
             logger.debug("get_relay_status failed: %s", exc)
         return out
@@ -144,7 +160,11 @@ class TailscaleManager:
         try:
             result = subprocess.run(
                 ["tailscale", "status", "--json"],
-                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=10,
             )
             if result.returncode == 0:
                 status = json.loads(result.stdout)
@@ -319,9 +339,7 @@ class TailscaleManager:
         """Get the control server URL (Headscale or Tailscale official)."""
         return self._HEADSCALE_URL if self._HEADSCALE_URL else None
 
-    def get_device_setup_command(
-        self, hostname: str, ephemeral: bool = True, advertise_relay: bool = False
-    ) -> str:
+    def get_device_setup_command(self, hostname: str, ephemeral: bool = True, advertise_relay: bool = False) -> str:
         """Generate tailscale up command for a new device.
 
         Usage for Wear OS watch via adb:
@@ -368,7 +386,11 @@ class TailscaleManager:
         try:
             result = subprocess.run(
                 ["tailscale", "status", "--json"],
-                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=10,
             )
             if result.returncode == 0:
                 status = json.loads(result.stdout)
@@ -395,19 +417,25 @@ class TailscaleManager:
         try:
             result = subprocess.run(
                 ["tailscale", "status", "--json"],
-                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=10,
             )
             if result.returncode == 0:
                 status = json.loads(result.stdout)
                 peers = status.get("Peer", {})
                 for key, peer in peers.items():
                     ts_ips = peer.get("TailscaleIPs", [])
-                    peers_list.append({
-                        "hostname": peer.get("HostName", key),
-                        "tailscale_ip": ts_ips[0] if ts_ips else None,
-                        "os": peer.get("OS", ""),
-                        "online": peer.get("Online", False),
-                    })
+                    peers_list.append(
+                        {
+                            "hostname": peer.get("HostName", key),
+                            "tailscale_ip": ts_ips[0] if ts_ips else None,
+                            "os": peer.get("OS", ""),
+                            "online": peer.get("Online", False),
+                        }
+                    )
         except Exception as exc:
             logger.debug("Peers list failed: %s", exc)
         return peers_list

@@ -272,15 +272,17 @@ class TestRoleHints:
         assert len(entry.role_hints) == len(set(entry.role_hints))
 
     def test_non_multimodal_non_special_gets_general(self, bridge):
-        snap = LegacyLLMProviderSnapshot.from_dict({
-            "provider": "plain",
-            "model": "plain-model",
-            "models": ["plain-model"],
-            "speed_score": 5,
-            "quality_score": 5,
-            "available": True,
-            "multimodal": False,
-        })
+        snap = LegacyLLMProviderSnapshot.from_dict(
+            {
+                "provider": "plain",
+                "model": "plain-model",
+                "models": ["plain-model"],
+                "speed_score": 5,
+                "quality_score": 5,
+                "available": True,
+                "multimodal": False,
+            }
+        )
         entry = bridge.bridge_provider(snap)
         assert TopologyRole.GENERAL in entry.role_hints
 
@@ -292,53 +294,61 @@ class TestRoleHints:
 
 class TestPartialFields:
     def test_empty_models_list(self, bridge):
-        snap = LegacyLLMProviderSnapshot.from_dict({
-            "provider": "sparse",
-            "model": "sparse-m",
-            "models": [],
-            "speed_score": 5,
-            "quality_score": 5,
-            "available": False,
-        })
+        snap = LegacyLLMProviderSnapshot.from_dict(
+            {
+                "provider": "sparse",
+                "model": "sparse-m",
+                "models": [],
+                "speed_score": 5,
+                "quality_score": 5,
+                "available": False,
+            }
+        )
         entry = bridge.bridge_provider(snap)
         assert entry.model.model_id == "sparse-m"
         assert entry.model.alternatives == []
 
     def test_missing_model_field_defaults_to_provider_default(self, bridge):
-        snap = LegacyLLMProviderSnapshot.from_dict({
-            "provider": "nomodel",
-            "model": "",
-            "models": [],
-            "speed_score": 5,
-            "quality_score": 5,
-            "available": False,
-        })
+        snap = LegacyLLMProviderSnapshot.from_dict(
+            {
+                "provider": "nomodel",
+                "model": "",
+                "models": [],
+                "speed_score": 5,
+                "quality_score": 5,
+                "available": False,
+            }
+        )
         entry = bridge.bridge_provider(snap)
         assert entry.model.model_id == "nomodel-default"
 
     def test_speed_score_clamped_above_10(self, bridge):
-        snap = LegacyLLMProviderSnapshot.from_dict({
-            "provider": "fast",
-            "model": "fast-m",
-            "models": [],
-            "speed_score": 99,
-            "quality_score": 5,
-            "available": True,
-            "multimodal": False,
-        })
+        snap = LegacyLLMProviderSnapshot.from_dict(
+            {
+                "provider": "fast",
+                "model": "fast-m",
+                "models": [],
+                "speed_score": 99,
+                "quality_score": 5,
+                "available": True,
+                "multimodal": False,
+            }
+        )
         entry = bridge.bridge_provider(snap)
         assert entry.scoring.speed_score == 10
 
     def test_speed_score_clamped_below_1(self, bridge):
-        snap = LegacyLLMProviderSnapshot.from_dict({
-            "provider": "slow",
-            "model": "slow-m",
-            "models": [],
-            "speed_score": -5,
-            "quality_score": 5,
-            "available": True,
-            "multimodal": False,
-        })
+        snap = LegacyLLMProviderSnapshot.from_dict(
+            {
+                "provider": "slow",
+                "model": "slow-m",
+                "models": [],
+                "speed_score": -5,
+                "quality_score": 5,
+                "available": True,
+                "multimodal": False,
+            }
+        )
         entry = bridge.bridge_provider(snap)
         assert entry.scoring.speed_score == 1
 
@@ -456,6 +466,7 @@ class TestBuildInventory:
 
     def test_inventory_to_dict_is_serialisable(self, bridge, all_snapshots):
         import json
+
         inventory = bridge.build_inventory(all_snapshots)
         d = inventory.to_dict()
         # Should be JSON-serialisable (no non-serialisable types)
@@ -613,8 +624,14 @@ class TestProviderInventoryEdgeCases:
         inv_entry = ProviderInventoryEntry(entry=entry)
         d = inv_entry.to_dict()
         for key in [
-            "provider_id", "model_id", "category", "available",
-            "native_multimodal", "speed_score", "quality_score", "composite_score",
+            "provider_id",
+            "model_id",
+            "category",
+            "available",
+            "native_multimodal",
+            "speed_score",
+            "quality_score",
+            "composite_score",
         ]:
             assert key in d, f"Missing key: {key}"
 

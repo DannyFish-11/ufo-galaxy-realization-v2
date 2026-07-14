@@ -146,24 +146,24 @@ ANDROID_CAPABILITY_TRUTH_ABSENT_DEGRADES_READINESS_POLICY: str = (
     "'android_capability_truth_degraded:<quality>' for observability."
 )
 
-ANDROID_MODE_GATE_POLICY_PR_SENTINEL: str = (
-    "ANDROID_MODE_GATE_POLICY_PR_SENTINEL::v1 present"
-)
+ANDROID_MODE_GATE_POLICY_PR_SENTINEL: str = "ANDROID_MODE_GATE_POLICY_PR_SENTINEL::v1 present"
 
 # Truth-quality classes that degrade the canonical execution gate decision.
 # Any proof_input_class from classify_canonical_proof_input_diagnosis() that
 # falls in this set will cause resolve_android_execution_gate_decision() to
 # return decision="deny" regardless of other gate inputs.
-_ANDROID_CAPABILITY_TRUTH_DEGRADING_CLASSES: frozenset = frozenset({
-    "missing",
-    "stale",
-    "conflicting",
-    "partial",
-    "malformed",
-    "unknown",
-    "incompatible",
-    "downgraded",
-})
+_ANDROID_CAPABILITY_TRUTH_DEGRADING_CLASSES: frozenset = frozenset(
+    {
+        "missing",
+        "stale",
+        "conflicting",
+        "partial",
+        "malformed",
+        "unknown",
+        "incompatible",
+        "downgraded",
+    }
+)
 
 # ---------------------------------------------------------------------------
 # AndroidDeviceMode
@@ -466,9 +466,7 @@ def resolve_android_execution_gate_decision(
     normalized_truth_quality = str(android_capability_truth_quality or "").strip().lower() or None
     truth_degraded = normalized_truth_quality in _ANDROID_CAPABILITY_TRUTH_DEGRADING_CLASSES
     if truth_degraded:
-        reasons.append(
-            f"android_capability_truth_degraded:{normalized_truth_quality}"
-        )
+        reasons.append(f"android_capability_truth_degraded:{normalized_truth_quality}")
         return AndroidCanonicalExecutionGateDecision(
             decision="deny",
             policy_eligible=bool(policy_eligible),
@@ -571,6 +569,7 @@ def _check_v2_cross_device_switch() -> GateEvalResult:
     """Check whether the V2-side cross-device switch is ON."""
     try:
         from galaxy_gateway.cross_device_switch import is_cross_device_enabled
+
         enabled = is_cross_device_enabled()
         return GateEvalResult(
             gate_name=_V2_CROSS_DEVICE_SWITCH_GATE,
@@ -593,6 +592,7 @@ def _check_session_gate(device_id: str) -> tuple:
     session_id = ""
     try:
         from core.attached_runtime_session_registry import lookup_session_by_device
+
         entry = lookup_session_by_device(device_id)
         if entry is None or not entry.is_active():
             return (
@@ -622,9 +622,7 @@ def _check_session_gate(device_id: str) -> tuple:
         posture_result = GateEvalResult(
             gate_name=_SESSION_POSTURE_GATE,
             passed=posture_ok,
-            reason=(
-                f"Posture is {posture!r} (join_runtime required for cross-device)"
-            ),
+            reason=(f"Posture is {posture!r} (join_runtime required for cross-device)"),
             source="core.attached_runtime_session_registry",
         )
         return active_result, posture_result, session_id
@@ -661,6 +659,7 @@ def _check_snapshot_gates(device_id: str) -> tuple:
             get_device_capability_report_semantics,
             get_device_state_snapshot,
         )
+
         snap = get_device_state_snapshot(device_id)
         semantics = get_device_capability_report_semantics(device_id) or {}
     except Exception as exc:
@@ -669,9 +668,7 @@ def _check_snapshot_gates(device_id: str) -> tuple:
         semantics = {}
 
     if isinstance(semantics, dict) and semantics:
-        semantics_state = str(
-            semantics.get("canonical_gate_metadata_state") or "missing"
-        ).strip().lower()
+        semantics_state = str(semantics.get("canonical_gate_metadata_state") or "missing").strip().lower()
         if semantics_state != "complete":
             diagnosis = semantics.get("canonical_gate_contract_diagnosis")
             reason = (
@@ -708,25 +705,20 @@ def _check_snapshot_gates(device_id: str) -> tuple:
             goal_exec_ok = bool(semantics.get("goal_execution_eligibility") is True)
             parallel_ok = bool(semantics.get("parallel_execution_eligibility") is True)
             cross_reason_prefix = (
-                f"Android capability_report mode_state={reported_mode_state!r} "
-                f"canonical_mode={reported_mode!r}"
+                f"Android capability_report mode_state={reported_mode_state!r} " f"canonical_mode={reported_mode!r}"
             )
         else:
             cross_device_ok = False
             goal_exec_ok = False
             parallel_ok = False
             cross_reason_prefix = (
-                f"Android capability_report canonical_mode={reported_mode!r} "
-                "does not permit cross-device dispatch"
+                f"Android capability_report canonical_mode={reported_mode!r} " "does not permit cross-device dispatch"
             )
 
         local_loop_ok = bool(getattr(snap, "local_loop_ready", None))
         if snap is not None:
             snapshot_age_s = now - (snap.absorbed_at or now)
-            local_loop_reason = (
-                "DeviceStateSnapshot.local_loop_ready="
-                + str(local_loop_ok)
-            )
+            local_loop_reason = "DeviceStateSnapshot.local_loop_ready=" + str(local_loop_ok)
         else:
             local_loop_ok = False
             local_loop_reason = (
@@ -828,7 +820,8 @@ def _check_snapshot_gates(device_id: str) -> tuple:
             "DeviceStateSnapshot.local_loop_config",
         ),
         GateEvalResult(
-            _DEVICE_LOCAL_LOOP_GATE, local_loop_ok,
+            _DEVICE_LOCAL_LOOP_GATE,
+            local_loop_ok,
             "DeviceStateSnapshot.local_loop_ready=" + str(local_loop_ok),
             "DeviceStateSnapshot",
         ),
@@ -871,6 +864,7 @@ def build_mode_state_for_device(
     # ── Session ────────────────────────────────────────────────────────────
     try:
         from core.attached_runtime_session_registry import lookup_session_by_device
+
         entry = lookup_session_by_device(device_id, registry=registry)
         if entry is not None and entry.is_active():
             state.session_active = True
@@ -886,6 +880,7 @@ def build_mode_state_for_device(
             get_device_capability_report_semantics,
             get_device_state_snapshot,
         )
+
         snap = get_device_state_snapshot(device_id)
         semantics = get_device_capability_report_semantics(device_id)
         if isinstance(semantics, dict):
@@ -894,9 +889,7 @@ def build_mode_state_for_device(
                 reported_mode = _reported_mode
         if snap is not None:
             cfg = snap.local_loop_config or {}
-            state.cross_device_enabled = bool(
-                cfg.get("crossDeviceEnabled", cfg.get("cross_device_enabled", False))
-            )
+            state.cross_device_enabled = bool(cfg.get("crossDeviceEnabled", cfg.get("cross_device_enabled", False)))
             state.goal_execution_enabled = bool(
                 cfg.get("goalExecutionEnabled", cfg.get("goal_execution_enabled", False))
             )
@@ -974,7 +967,9 @@ def evaluate_android_mode_readiness(
     except Exception as exc:
         logger.warning(
             "evaluate_android_mode_readiness: internal error for device_id=%r: %s",
-            device_id, exc, exc_info=True,
+            device_id,
+            exc,
+            exc_info=True,
         )
         return AndroidModeReadinessVerdict(
             device_id=device_id,
@@ -1157,7 +1152,11 @@ def apply_mode_switch_to_registry(
     except Exception as exc:
         logger.warning(
             "apply_mode_switch_to_registry: error for device_id=%r %s→%s: %s",
-            device_id, from_mode.value, to_mode.value, exc, exc_info=True,
+            device_id,
+            from_mode.value,
+            to_mode.value,
+            exc,
+            exc_info=True,
         )
         return None
 
@@ -1192,7 +1191,10 @@ def _apply_mode_switch_impl(
             logger.debug(
                 "apply_mode_switch_to_registry: session_id mismatch for "
                 "device_id=%r (provided=%r, stored=%r/%r) — skipping",
-                device_id, session_id, entry.session_id, entry.runtime_session_id,
+                device_id,
+                session_id,
+                entry.session_id,
+                entry.runtime_session_id,
             )
             return None
 
@@ -1243,7 +1245,10 @@ def _apply_mode_switch_impl(
 
     logger.info(
         "apply_mode_switch_to_registry: device_id=%r %s→%s posture=%s",
-        device_id, from_mode.value, to_mode.value, new_posture or entry.posture,
+        device_id,
+        from_mode.value,
+        to_mode.value,
+        new_posture or entry.posture,
     )
     return updated
 
@@ -1270,6 +1275,7 @@ def build_cross_device_readiness_panel_dict(
     if device_ids is None:
         try:
             from core.attached_runtime_session_registry import list_active_sessions
+
             resolved_ids = [e.device_id for e in list_active_sessions()]
         except Exception as exc:
             logger.debug("build_cross_device_readiness_panel_dict: registry unavailable: %s", exc)
@@ -1320,9 +1326,7 @@ def build_cross_device_readiness_panel_dict(
             if verdict.is_takeover_eligible:
                 takeover_eligible += 1
         except Exception as exc:
-            logger.debug(
-                "build_cross_device_readiness_panel_dict: error for %r: %s", did, exc
-            )
+            logger.debug("build_cross_device_readiness_panel_dict: error for %r: %s", did, exc)
 
     return {
         "devices": devices,

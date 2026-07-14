@@ -110,8 +110,7 @@ __all__ = [
 
 #: Module authority marker.
 NETWORK_GRAPH_RUNTIME_AUTHORITY: str = (
-    "core.network_graph_runtime"
-    " — canonical fabric/route topology graph runtime (PR-7)"
+    "core.network_graph_runtime" " — canonical fabric/route topology graph runtime (PR-7)"
 )
 
 #: Layer position within the canonical control-plane stack.
@@ -463,9 +462,7 @@ class NetworkGraphRuntime:
             del self._nodes[node_id]
             # Remove incident edges
             to_remove = [
-                eid
-                for eid, e in self._edges.items()
-                if e.source_node_id == node_id or e.target_node_id == node_id
+                eid for eid, e in self._edges.items() if e.source_node_id == node_id or e.target_node_id == node_id
             ]
             for eid in to_remove:
                 del self._edges[eid]
@@ -575,9 +572,7 @@ class NetworkGraphRuntime:
 
         by_role: Dict[str, int] = {}
         for n in nodes:
-            role_val = (
-                n.role.value if isinstance(n.role, NetworkNodeRole) else str(n.role)
-            )
+            role_val = n.role.value if isinstance(n.role, NetworkNodeRole) else str(n.role)
             by_role[role_val] = by_role.get(role_val, 0) + 1
 
         recent = list(self._log)[-max_records:] if self._log else []
@@ -590,9 +585,7 @@ class NetworkGraphRuntime:
             truth_governance=build_truth_governance(
                 TRUTH_GRADE_PROJECTION,
                 source="core.network_graph_runtime.NetworkGraphRuntime",
-                recovery_status=(
-                    RECOVERY_STATUS_DEGRADED if self._last_recovered_at else RECOVERY_STATUS_LIVE
-                ),
+                recovery_status=(RECOVERY_STATUS_DEGRADED if self._last_recovered_at else RECOVERY_STATUS_LIVE),
                 revalidation_required=bool(self._recovered_node_ids or self._recovered_edge_ids),
                 degraded=bool(self._recovered_node_ids or self._recovered_edge_ids),
                 field_truth_grades={
@@ -600,7 +593,8 @@ class NetworkGraphRuntime:
                     "restored_view": TRUTH_GRADE_RECOVERABLE,
                 },
                 notes=[
-                    "Recovered graph entries are kept as degraded/recoverable view truth until live updates replace them.",
+                    "Recovered graph entries are kept as degraded/recoverable view truth "
+                    "until live updates replace them.",
                 ],
                 extra={
                     "durable_state_path": self._state_path,

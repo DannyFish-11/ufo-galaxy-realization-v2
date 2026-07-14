@@ -61,16 +61,12 @@ REPO_ROOT = Path(__file__).parent.parent
 
 
 def test_cross_repo_protocol_consistency_authority_sentinel():
-    assert CROSS_REPO_PROTOCOL_CONSISTENCY_AUTHORITY.startswith(
-        "CROSS_REPO_PROTOCOL_CONSISTENCY_AUTHORITY::"
-    )
+    assert CROSS_REPO_PROTOCOL_CONSISTENCY_AUTHORITY.startswith("CROSS_REPO_PROTOCOL_CONSISTENCY_AUTHORITY::")
     assert "core.cross_repo_protocol_consistency" in CROSS_REPO_PROTOCOL_CONSISTENCY_AUTHORITY
 
 
 def test_pr4_sentinel_present():
-    assert CROSS_REPO_PROTOCOL_CONSISTENCY_PR4_SENTINEL.startswith(
-        "CROSS_REPO_PROTOCOL_CONSISTENCY_PR4_SENTINEL::"
-    )
+    assert CROSS_REPO_PROTOCOL_CONSISTENCY_PR4_SENTINEL.startswith("CROSS_REPO_PROTOCOL_CONSISTENCY_PR4_SENTINEL::")
     assert "PR4" in CROSS_REPO_PROTOCOL_CONSISTENCY_PR4_SENTINEL
     assert "cross-repo-protocol-consistency-v1" in CROSS_REPO_PROTOCOL_CONSISTENCY_PR4_SENTINEL
 
@@ -161,37 +157,28 @@ def test_all_surfaces_have_non_empty_center_authority():
 def test_transitional_surfaces_have_retirement_pathway():
     for record in get_protocol_surface_catalogue():
         if record.surface_class == ProtocolSurfaceClass.transitional:
-            assert len(record.retirement_pathway) > 0, (
-                f"Transitional surface {record.surface_id!r} has no retirement_pathway"
-            )
+            assert (
+                len(record.retirement_pathway) > 0
+            ), f"Transitional surface {record.surface_id!r} has no retirement_pathway"
 
 
 def test_deprecated_surfaces_have_retirement_pathway():
     for record in get_protocol_surface_catalogue():
         if record.surface_class == ProtocolSurfaceClass.deprecated:
-            assert len(record.retirement_pathway) > 0, (
-                f"Deprecated surface {record.surface_id!r} has no retirement_pathway"
-            )
+            assert (
+                len(record.retirement_pathway) > 0
+            ), f"Deprecated surface {record.surface_id!r} has no retirement_pathway"
 
 
 def test_canonical_surfaces_are_majority():
     catalogue = get_protocol_surface_catalogue()
-    canonical_count = sum(
-        1 for r in catalogue if r.surface_class == ProtocolSurfaceClass.canonical
-    )
-    assert canonical_count > len(catalogue) // 2, (
-        "Canonical surfaces should be the majority of the catalogue"
-    )
+    canonical_count = sum(1 for r in catalogue if r.surface_class == ProtocolSurfaceClass.canonical)
+    assert canonical_count > len(catalogue) // 2, "Canonical surfaces should be the majority of the catalogue"
 
 
 def test_no_unresolved_surfaces_in_catalogue():
-    unresolved = [
-        r for r in get_protocol_surface_catalogue()
-        if r.surface_class == ProtocolSurfaceClass.unresolved
-    ]
-    assert len(unresolved) == 0, (
-        f"Unresolved surfaces found: {[r.surface_id for r in unresolved]}"
-    )
+    unresolved = [r for r in get_protocol_surface_catalogue() if r.surface_class == ProtocolSurfaceClass.unresolved]
+    assert len(unresolved) == 0, f"Unresolved surfaces found: {[r.surface_id for r in unresolved]}"
 
 
 # ---------------------------------------------------------------------------
@@ -322,9 +309,7 @@ def test_timed_out_inconsistency_documented():
 def test_is_fully_consistent_property():
     for record in get_terminal_state_consistency_catalogue():
         expected = (
-            record.present_in_shared_schema
-            and record.present_in_execution_phase
-            and record.present_in_handoff_contract
+            record.present_in_shared_schema and record.present_in_execution_phase and record.present_in_handoff_contract
         )
         assert record.is_fully_consistent == expected
 
@@ -355,17 +340,13 @@ def test_delegated_execution_catalogue_covers_all_phases():
 
 
 def test_delegated_execution_terminal_phases():
-    terminal = [
-        r for r in get_delegated_execution_status_catalogue() if r.is_terminal
-    ]
+    terminal = [r for r in get_delegated_execution_status_catalogue() if r.is_terminal]
     terminal_values = {r.phase_value for r in terminal}
     assert terminal_values == {"completed", "failed", "timed_out", "cancelled"}
 
 
 def test_delegated_execution_non_terminal_phases():
-    non_terminal = [
-        r for r in get_delegated_execution_status_catalogue() if not r.is_terminal
-    ]
+    non_terminal = [r for r in get_delegated_execution_status_catalogue() if not r.is_terminal]
     non_terminal_values = {r.phase_value for r in non_terminal}
     assert non_terminal_values == {"pending_ack", "acknowledged", "in_progress"}
 
@@ -398,29 +379,25 @@ def test_truth_event_types_are_unique():
 
 def test_all_truth_event_types_start_with_ugcp():
     for record in get_truth_event_surface_catalogue():
-        assert record.event_type.startswith("ugcp."), (
-            f"Truth event type {record.event_type!r} does not start with 'ugcp.'"
-        )
+        assert record.event_type.startswith(
+            "ugcp."
+        ), f"Truth event type {record.event_type!r} does not start with 'ugcp.'"
 
 
 def test_all_truth_event_types_have_version_suffix():
     for record in get_truth_event_surface_catalogue():
-        assert ".v1" in record.event_type, (
-            f"Truth event type {record.event_type!r} missing version suffix"
-        )
+        assert ".v1" in record.event_type, f"Truth event type {record.event_type!r} missing version suffix"
 
 
 def test_all_canonical_truth_event_surfaces():
     for record in get_truth_event_surface_catalogue():
-        assert record.surface_class == ProtocolSurfaceClass.canonical, (
-            f"Truth event surface {record.event_type!r} is not canonical"
-        )
+        assert (
+            record.surface_class == ProtocolSurfaceClass.canonical
+        ), f"Truth event surface {record.event_type!r} is not canonical"
 
 
 def test_android_visible_truth_events():
-    android_visible = [
-        r for r in get_truth_event_surface_catalogue() if r.android_visible
-    ]
+    android_visible = [r for r in get_truth_event_surface_catalogue() if r.android_visible]
     assert len(android_visible) >= 3, "Expected at least 3 Android-visible truth events"
 
 
@@ -461,9 +438,7 @@ def test_all_allowances_have_non_empty_fields():
 
 def test_all_allowances_have_retirement_condition():
     for record in get_transitional_allowance_catalogue():
-        assert len(record.retirement_condition) > 0, (
-            f"Allowance {record.allowance_id!r} has no retirement_condition"
-        )
+        assert len(record.retirement_condition) > 0, f"Allowance {record.allowance_id!r} has no retirement_condition"
 
 
 def test_session_id_alias_allowance_present():
@@ -500,18 +475,14 @@ def test_snapshot_protocol_surface_count_matches_catalogue():
 def test_snapshot_canonical_count_matches_catalogue():
     snapshot = build_protocol_consistency_snapshot()
     catalogue = get_protocol_surface_catalogue()
-    expected = sum(
-        1 for r in catalogue if r.surface_class == ProtocolSurfaceClass.canonical
-    )
+    expected = sum(1 for r in catalogue if r.surface_class == ProtocolSurfaceClass.canonical)
     assert snapshot.canonical_surface_count == expected
 
 
 def test_snapshot_transitional_count_matches_catalogue():
     snapshot = build_protocol_consistency_snapshot()
     catalogue = get_protocol_surface_catalogue()
-    expected = sum(
-        1 for r in catalogue if r.surface_class == ProtocolSurfaceClass.transitional
-    )
+    expected = sum(1 for r in catalogue if r.surface_class == ProtocolSurfaceClass.transitional)
     assert snapshot.transitional_surface_count == expected
 
 
@@ -522,9 +493,7 @@ def test_snapshot_terminal_state_count_matches_catalogue():
 
 def test_snapshot_delegated_execution_phase_count_matches():
     snapshot = build_protocol_consistency_snapshot()
-    assert snapshot.delegated_execution_phase_count == len(
-        get_delegated_execution_status_catalogue()
-    )
+    assert snapshot.delegated_execution_phase_count == len(get_delegated_execution_status_catalogue())
 
 
 def test_snapshot_terminal_execution_phase_count():
@@ -539,9 +508,7 @@ def test_snapshot_truth_event_type_count_matches():
 
 def test_snapshot_transitional_allowance_count_matches():
     snapshot = build_protocol_consistency_snapshot()
-    assert snapshot.transitional_allowance_count == len(
-        get_transitional_allowance_catalogue()
-    )
+    assert snapshot.transitional_allowance_count == len(get_transitional_allowance_catalogue())
 
 
 def test_snapshot_has_generated_at():
@@ -595,9 +562,9 @@ def test_projection_alignment_sentinel_is_available():
 
     assert isinstance(CROSS_REPO_PROTOCOL_CONSISTENCY_ALIGNED_PR4, str)
     assert len(CROSS_REPO_PROTOCOL_CONSISTENCY_ALIGNED_PR4) > 0
-    assert "UNAVAILABLE" not in CROSS_REPO_PROTOCOL_CONSISTENCY_ALIGNED_PR4, (
-        "PR-4 projection alignment sentinel shows UNAVAILABLE — import failed"
-    )
+    assert (
+        "UNAVAILABLE" not in CROSS_REPO_PROTOCOL_CONSISTENCY_ALIGNED_PR4
+    ), "PR-4 projection alignment sentinel shows UNAVAILABLE — import failed"
 
 
 def test_projection_sentinel_mentions_pr4():
@@ -614,9 +581,7 @@ def test_projection_fallback_sentinel_format():
     verifies the *constant name* so that callers can reliably detect
     unavailability by checking for the 'UNAVAILABLE' substring.
     """
-    expected_unavailable = (
-        "PROJECTION_ROUTES::CROSS_REPO_PROTOCOL_CONSISTENCY_ALIGNED_PR4_UNAVAILABLE"
-    )
+    expected_unavailable = "PROJECTION_ROUTES::CROSS_REPO_PROTOCOL_CONSISTENCY_ALIGNED_PR4_UNAVAILABLE"
     # Verify the UNAVAILABLE sentinel literal follows the naming convention.
     assert "PROJECTION_ROUTES::" in expected_unavailable
     assert "UNAVAILABLE" in expected_unavailable
@@ -633,30 +598,23 @@ def test_all_consistency_categories_covered():
     covered = {r.category for r in get_protocol_surface_catalogue()}
     all_categories = set(ProtocolConsistencyCategory)
     uncovered = all_categories - covered
-    assert not uncovered, (
-        f"The following categories have no catalogue entries: {uncovered}"
-    )
+    assert not uncovered, f"The following categories have no catalogue entries: {uncovered}"
 
 
 def test_shared_vocabulary_surfaces_exist():
     shared = [
-        r for r in get_protocol_surface_catalogue()
-        if r.category == ProtocolConsistencyCategory.shared_vocabulary
+        r for r in get_protocol_surface_catalogue() if r.category == ProtocolConsistencyCategory.shared_vocabulary
     ]
     assert len(shared) >= 2
 
 
 def test_truth_event_surfaces_exist():
-    truth = [
-        r for r in get_protocol_surface_catalogue()
-        if r.category == ProtocolConsistencyCategory.truth_event
-    ]
+    truth = [r for r in get_protocol_surface_catalogue() if r.category == ProtocolConsistencyCategory.truth_event]
     assert len(truth) >= 2
 
 
 def test_compatibility_alias_surfaces_exist():
     compat = [
-        r for r in get_protocol_surface_catalogue()
-        if r.category == ProtocolConsistencyCategory.compatibility_alias
+        r for r in get_protocol_surface_catalogue() if r.category == ProtocolConsistencyCategory.compatibility_alias
     ]
     assert len(compat) >= 2

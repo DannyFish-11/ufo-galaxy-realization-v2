@@ -111,6 +111,7 @@ TRUTH_CHAIN_OPTIONAL_ENRICHMENT_POLICY: str = (
 # Hardened truth-step exception
 # ---------------------------------------------------------------------------
 
+
 class TruthChainStepError(RuntimeError):
     """Raised when a truth-establishment step (1–3) fails fatally.
 
@@ -154,8 +155,10 @@ class TruthChainStepError(RuntimeError):
 # Step outcome types
 # ---------------------------------------------------------------------------
 
+
 class StepStatus(str):
     """Step run-status string constants."""
+
     COMPLETED = "completed"
     """Step ran and produced a positive outcome."""
     SKIPPED_MODULE_UNAVAILABLE = "skipped_module_unavailable"
@@ -175,6 +178,7 @@ class StepStatus(str):
 # ---------------------------------------------------------------------------
 # TruthChainOutcome
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class TruthChainOutcome:
@@ -298,34 +302,28 @@ except ImportError:
     _ingest_participant_truth = None  # type: ignore[assignment]
 
 try:
-    from core.android_execution_signal_reconciler import (
-        reconcile_inbound_message as _reconcile_inbound_message,
-    )
+    from core.android_execution_signal_reconciler import reconcile_inbound_message as _reconcile_inbound_message
 except ImportError:
     _reconcile_inbound_message = None  # type: ignore[assignment]
 
 try:
     from core.canonical_task import (
         TaskLifecycle,
-        get_canonical_task_runtime as _get_canonical_task_runtime,
     )
+    from core.canonical_task import get_canonical_task_runtime as _get_canonical_task_runtime
 except ImportError:
     TaskLifecycle = None  # type: ignore[assignment]
     _get_canonical_task_runtime = None  # type: ignore[assignment]
 
 try:
-    from core.canonical_completion_ingress import (
-        get_canonical_completion_ingress as _get_canonical_completion_ingress,
-    )
+    from core.canonical_completion_ingress import get_canonical_completion_ingress as _get_canonical_completion_ingress
 except ImportError:
     _get_canonical_completion_ingress = None  # type: ignore[assignment]
 
 try:
-    from core.task_graph_runtime import (
-        GraphNodeState as _GraphNodeState,
-        WorkflowContributorKind as _WorkflowContributorKind,
-        get_task_graph_runtime as _get_task_graph_runtime,
-    )
+    from core.task_graph_runtime import GraphNodeState as _GraphNodeState
+    from core.task_graph_runtime import WorkflowContributorKind as _WorkflowContributorKind
+    from core.task_graph_runtime import get_task_graph_runtime as _get_task_graph_runtime
 except ImportError:
     _GraphNodeState = None  # type: ignore[assignment]
     _WorkflowContributorKind = None  # type: ignore[assignment]
@@ -335,6 +333,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Step helpers
 # ---------------------------------------------------------------------------
+
 
 def _run_truth_ingress(
     message: Dict[str, Any],
@@ -348,9 +347,7 @@ def _run_truth_ingress(
         enriched = dict(message)
         enriched.setdefault("truth_kind", "result")
         result = _ingest_participant_truth(enriched)
-        outcome.truth_ingress_was_reconciled = bool(
-            getattr(result, "was_reconciled", False)
-        )
+        outcome.truth_ingress_was_reconciled = bool(getattr(result, "was_reconciled", False))
         outcome.truth_ingress_status = StepStatus.COMPLETED
     except Exception as exc:
         logger.debug("Fallback triggered: %s", exc)
@@ -372,14 +369,11 @@ def _run_reconcile(
         outcome.reconcile_status = StepStatus.SKIPPED_MODULE_UNAVAILABLE
         return
     payload = message.get("payload") or {}
-    has_key = (
-        bool(message.get("contract_id") or payload.get("contract_id"))
-        or bool(
-            message.get("session_id")
-            or payload.get("session_id")
-            or message.get("runtime_session_id")
-            or payload.get("runtime_session_id")
-        )
+    has_key = bool(message.get("contract_id") or payload.get("contract_id")) or bool(
+        message.get("session_id")
+        or payload.get("session_id")
+        or message.get("runtime_session_id")
+        or payload.get("runtime_session_id")
     )
     if not has_key:
         # No correlation key — record as completed-no-match (not a fatal gap)
@@ -387,9 +381,7 @@ def _run_reconcile(
         return
     try:
         rec_outcome = _reconcile_inbound_message(message)
-        outcome.reconcile_was_updated = bool(
-            getattr(rec_outcome, "was_updated", False)
-        )
+        outcome.reconcile_was_updated = bool(getattr(rec_outcome, "was_updated", False))
         outcome.reconcile_status = StepStatus.COMPLETED
     except Exception as exc:
         logger.debug("Fallback triggered: %s", exc)
@@ -534,6 +526,7 @@ def _run_completion_linkage(
 # Incomplete result ledger — makes is_truth_chain_complete=False observable
 # ---------------------------------------------------------------------------
 
+
 class IncompleteResultLedger:
     """Process-local store for task_result messages where the truth chain did
     not fully close.
@@ -614,6 +607,7 @@ def get_incomplete_result_ledger() -> IncompleteResultLedger:
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
+
 
 def run_task_result_truth_chain(
     message: Dict[str, Any],

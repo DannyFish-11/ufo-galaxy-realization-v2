@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.continuum.config import ContinuumConfig, DEFAULT_CONTINUUM_CONFIG
+from core.continuum.config import DEFAULT_CONTINUUM_CONFIG, ContinuumConfig
 from core.continuum.decision_gate import DecisionGate
 from core.continuum.return_engine import (
     ReturnAction,
@@ -45,7 +45,6 @@ from core.continuum.types import (
     HumanFieldState,
     UnifiedState,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

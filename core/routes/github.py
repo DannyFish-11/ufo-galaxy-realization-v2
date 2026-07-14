@@ -29,20 +29,17 @@ logger = logging.getLogger("Galaxy.API")
 
 # ── Request Models ────────────────────────────────────────────────────────────
 
+
 class GitHubInstallRequest(BaseModel):
     """Request body for POST /api/v1/github/install."""
 
     url: str = Field(..., description="GitHub HTTPS repository URL")
-    ref: Optional[str] = Field(
-        None, description="Branch, tag, or commit SHA (overrides URL /tree/ ref)"
-    )
+    ref: Optional[str] = Field(None, description="Branch, tag, or commit SHA (overrides URL /tree/ ref)")
     type: Optional[str] = Field(
         None,
         description='Addon type: "mcp" | "skill" | "skill_md" | null (auto-detect from manifest)',
     )
-    dry_run: bool = Field(
-        False, description="Validate URL without actually installing"
-    )
+    dry_run: bool = Field(False, description="Validate URL without actually installing")
 
 
 class GitHubUninstallRequest(BaseModel):
@@ -55,24 +52,19 @@ class GitHubIngestRequest(BaseModel):
     """Request body for POST /api/v1/github/ingest."""
 
     url: str = Field(..., description="GitHub HTTPS repository URL")
-    ref: Optional[str] = Field(
-        None, description="Branch, tag, or commit SHA (optional)"
-    )
-    include_code: bool = Field(
-        False, description="Also ingest root-level source code files"
-    )
+    ref: Optional[str] = Field(None, description="Branch, tag, or commit SHA (optional)")
+    include_code: bool = Field(False, description="Also ingest root-level source code files")
 
 
 class GitHubContextRequest(BaseModel):
     """Request body for POST /api/v1/github/context."""
 
     url: str = Field(..., description="GitHub HTTPS repository URL")
-    ref: Optional[str] = Field(
-        None, description="Branch, tag, or commit SHA (optional)"
-    )
+    ref: Optional[str] = Field(None, description="Branch, tag, or commit SHA (optional)")
 
 
 # ── Router Factory ─────────────────────────────────────────────────────────────
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create the GitHub addon routes router."""
@@ -104,9 +96,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             return JSONResponse(result, status_code=status_code)
         except Exception as exc:
             logger.exception("github/install error")
-            return JSONResponse(
-                {"success": False, "error": str(exc)}, status_code=500
-            )
+            return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
 
     # ── POST /api/v1/github/uninstall ───────────────────────────────────────
 
@@ -122,9 +112,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             return JSONResponse(result, status_code=status_code)
         except Exception as exc:
             logger.exception("github/uninstall error")
-            return JSONResponse(
-                {"success": False, "error": str(exc)}, status_code=500
-            )
+            return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
 
     # ── GET /api/v1/github/list ─────────────────────────────────────────────
 
@@ -138,9 +126,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             return JSONResponse(installer.list_installed())
         except Exception as exc:
             logger.warning("github/list error: %s", exc)
-            return JSONResponse(
-                {"success": False, "error": str(exc)}, status_code=500
-            )
+            return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
 
     # ── GET /api/v1/github/status ───────────────────────────────────────────
 
@@ -158,9 +144,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             return JSONResponse(installer.get_status())
         except Exception as exc:
             logger.warning("github/status error: %s", exc)
-            return JSONResponse(
-                {"success": False, "error": str(exc)}, status_code=500
-            )
+            return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
 
     # ── POST /api/v1/github/ingest ──────────────────────────────────────────
 
@@ -190,9 +174,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             return JSONResponse(result, status_code=status_code)
         except Exception as exc:
             logger.exception("github/ingest error")
-            return JSONResponse(
-                {"success": False, "error": str(exc)}, status_code=500
-            )
+            return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
 
     # ── POST /api/v1/github/context ─────────────────────────────────────────
 
@@ -216,8 +198,6 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             return JSONResponse(result, status_code=status_code)
         except Exception as exc:
             logger.exception("github/context error")
-            return JSONResponse(
-                {"success": False, "error": str(exc)}, status_code=500
-            )
+            return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
 
     return router

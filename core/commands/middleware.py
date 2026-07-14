@@ -38,6 +38,7 @@ Usage::
     chain = LoggingMiddleware(NoopMiddleware())
     result = await chain.process(ctx, handler)
 """
+
 from __future__ import annotations
 
 import abc

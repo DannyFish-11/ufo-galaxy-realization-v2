@@ -101,7 +101,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-
 # ---------------------------------------------------------------------------
 # Policy Enums
 # ---------------------------------------------------------------------------
@@ -605,9 +604,7 @@ class LatencyBudgetSummary:
             ingest_window_stats=d.get("ingest_window_stats"),
             recompute_window_stats=d.get("recompute_window_stats"),
             projection_window_stats=d.get("projection_window_stats"),
-            projection_stale_snapshot_suspected=bool(
-                d.get("projection_stale_snapshot_suspected", False)
-            ),
+            projection_stale_snapshot_suspected=bool(d.get("projection_stale_snapshot_suspected", False)),
             projection_stale_snapshot_rate=float(d.get("projection_stale_snapshot_rate", 0.0)),
         )
 
@@ -777,9 +774,7 @@ def assess_text_only_fast_path(
                 active_modalities = [str(m) for m in raw if str(m).lower() != "text"]
 
         requires_native_mm = bool(
-            canonical_perception.get("requires_native_multimodal", False)
-            if canonical_perception
-            else False
+            canonical_perception.get("requires_native_multimodal", False) if canonical_perception else False
         )
 
         if not has_mm_context and not active_modalities and not requires_native_mm:
@@ -846,9 +841,7 @@ def build_latency_budget_summary(
             + int(projection_stats.get("total_suppressed", 0))
         )
         stale_rate = (
-            int(projection_stats.get("total_suppressed", 0)) / projection_total
-            if projection_total > 0
-            else 0.0
+            int(projection_stats.get("total_suppressed", 0)) / projection_total if projection_total > 0 else 0.0
         )
         return LatencyBudgetSummary(
             trace_id=trace_id or "",
@@ -857,21 +850,13 @@ def build_latency_budget_summary(
             recompute_policy=recompute_policy.value,
             projection_refresh_policy=projection_refresh_policy.value,
             provider_selection_budget=(
-                provider_selection_budget.to_dict()
-                if provider_selection_budget is not None
-                else None
+                provider_selection_budget.to_dict() if provider_selection_budget is not None else None
             ),
-            text_only_fast_path=(
-                text_only_fast_path.to_dict()
-                if text_only_fast_path is not None
-                else None
-            ),
+            text_only_fast_path=(text_only_fast_path.to_dict() if text_only_fast_path is not None else None),
             ingest_window_stats=ingest_window_stats,
             recompute_window_stats=recompute_window_stats,
             projection_window_stats=projection_window_stats,
-            projection_stale_snapshot_suspected=(
-                projection_refresh_policy == ProjectionRefreshPolicy.SUPPRESSED
-            ),
+            projection_stale_snapshot_suspected=(projection_refresh_policy == ProjectionRefreshPolicy.SUPPRESSED),
             projection_stale_snapshot_rate=stale_rate,
         )
     except Exception:

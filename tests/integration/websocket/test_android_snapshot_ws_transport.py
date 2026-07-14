@@ -4,13 +4,13 @@ tests/integration/websocket/test_android_snapshot_ws_transport.py
 Android → V2 runtime state snapshot — WebSocket transport-layer evidence.
 
 """
+
 import json
 import time
 import uuid
 from typing import Any, Dict
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Message builder
@@ -81,6 +81,7 @@ def gw_client():
     """
     from fastapi import FastAPI, Query, WebSocket
     from fastapi.testclient import TestClient
+
     from galaxy_gateway.app import _handle_android_ws
 
     minimal_app = FastAPI()
@@ -90,9 +91,7 @@ def gw_client():
         await _handle_android_ws(websocket, device_id)
 
     @minimal_app.websocket("/ws/android")
-    async def ws_android_fallback(
-        websocket: WebSocket, device_id: str = Query(None)
-    ):
+    async def ws_android_fallback(websocket: WebSocket, device_id: str = Query(None)):
         if not device_id:
             device_id = str(uuid.uuid4())
         await _handle_android_ws(websocket, device_id)
@@ -123,9 +122,7 @@ class TestAndroidSnapshotWSTransport:
     TestClient fixture.
     """
 
-    def test_ws_register_then_snapshot_activates_store(
-        self, gw_client: Any
-    ) -> None:
+    def test_ws_register_then_snapshot_activates_store(self, gw_client: Any) -> None:
         """TRANSPORT PATH: WebSocket register + snapshot → store non-empty.
 
         This is the transport-layer complement to
@@ -137,30 +134,33 @@ class TestAndroidSnapshotWSTransport:
             get_device_state_snapshot,
             reset_android_device_state_store,
         )
+
         reset_android_device_state_store()
 
         device_id = f"snap-ws-{uuid.uuid4().hex[:8]}"
 
         with gw_client.websocket_connect(f"/ws/device/{device_id}") as ws:
             # Step 1: register
-            ws.send_text(json.dumps(_v3(
-                "device_register", device_id, platform="android", model="StubPhone"
-            )))
+            ws.send_text(json.dumps(_v3("device_register", device_id, platform="android", model="StubPhone")))
             reg_ack = ws.receive_json()
-            assert reg_ack["type"] == "device_register_ack", (
-                f"Transport registration failed: got {reg_ack.get('type')!r}"
-            )
+            assert (
+                reg_ack["type"] == "device_register_ack"
+            ), f"Transport registration failed: got {reg_ack.get('type')!r}"
 
             # Step 2: send device_state_snapshot
-            ws.send_text(json.dumps(_v3(
-                "device_state_snapshot",
-                device_id,
-                payload=ANDROID_SNAPSHOT_PAYLOAD,
-            )))
-            snap_ack = ws.receive_json()
-            assert snap_ack["type"] == "device_state_snapshot_ack", (
-                f"Transport snapshot failed: got {snap_ack.get('type')!r}"
+            ws.send_text(
+                json.dumps(
+                    _v3(
+                        "device_state_snapshot",
+                        device_id,
+                        payload=ANDROID_SNAPSHOT_PAYLOAD,
+                    )
+                )
             )
+            snap_ack = ws.receive_json()
+            assert (
+                snap_ack["type"] == "device_state_snapshot_ack"
+            ), f"Transport snapshot failed: got {snap_ack.get('type')!r}"
             assert snap_ack.get("status") == "absorbed", (
                 f"Transport snapshot not absorbed: status={snap_ack.get('status')!r}. "
                 "The canonical absorb/store path may have thrown an exception."
@@ -179,9 +179,9 @@ class TestAndroidSnapshotWSTransport:
             f"expected: {ANDROID_SNAPSHOT_PAYLOAD['model_id']!r}. "
             "Android-derived values are not propagating through the transport path."
         )
-        assert stored.model_ready == ANDROID_SNAPSHOT_PAYLOAD["model_ready"], (
-            f"model_ready mismatch: stored={stored.model_ready!r}"
-        )
+        assert (
+            stored.model_ready == ANDROID_SNAPSHOT_PAYLOAD["model_ready"]
+        ), f"model_ready mismatch: stored={stored.model_ready!r}"
 
     def test_ws_snapshot_ack_status_is_absorbed(self, gw_client: Any) -> None:
         """Snapshot ACK status via transport must be 'absorbed'.
@@ -191,22 +191,25 @@ class TestAndroidSnapshotWSTransport:
         the full transport stack.
         """
         from core.android_device_state_store import reset_android_device_state_store
+
         reset_android_device_state_store()
 
         device_id = f"snap-ws-ack-{uuid.uuid4().hex[:8]}"
         snap_ack: Dict[str, Any] = {}
 
         with gw_client.websocket_connect(f"/ws/device/{device_id}") as ws:
-            ws.send_text(json.dumps(_v3(
-                "device_register", device_id, platform="android"
-            )))
+            ws.send_text(json.dumps(_v3("device_register", device_id, platform="android")))
             ws.receive_json()  # consume register ack
 
-            ws.send_text(json.dumps(_v3(
-                "device_state_snapshot",
-                device_id,
-                payload=ANDROID_SNAPSHOT_PAYLOAD,
-            )))
+            ws.send_text(
+                json.dumps(
+                    _v3(
+                        "device_state_snapshot",
+                        device_id,
+                        payload=ANDROID_SNAPSHOT_PAYLOAD,
+                    )
+                )
+            )
             snap_ack = ws.receive_json()
 
         assert snap_ack.get("status") != "error", (
@@ -214,33 +217,32 @@ class TestAndroidSnapshotWSTransport:
             "The canonical absorb path threw an exception.  "
             "Check that core.android_device_state_store is importable and working."
         )
-        assert snap_ack.get("status") == "absorbed", (
-            f"Expected status='absorbed', got {snap_ack.get('status')!r}"
-        )
+        assert snap_ack.get("status") == "absorbed", f"Expected status='absorbed', got {snap_ack.get('status')!r}"
 
-    def test_ws_snapshot_values_are_android_derived(
-        self, gw_client: Any
-    ) -> None:
+    def test_ws_snapshot_values_are_android_derived(self, gw_client: Any) -> None:
         """Transport path stores Android-derived values, not synthetic defaults."""
         from core.android_device_state_store import (
             get_device_state_snapshot,
             reset_android_device_state_store,
         )
+
         reset_android_device_state_store()
 
         device_id = f"snap-ws-vals-{uuid.uuid4().hex[:8]}"
 
         with gw_client.websocket_connect(f"/ws/device/{device_id}") as ws:
-            ws.send_text(json.dumps(_v3(
-                "device_register", device_id, platform="android"
-            )))
+            ws.send_text(json.dumps(_v3("device_register", device_id, platform="android")))
             ws.receive_json()
 
-            ws.send_text(json.dumps(_v3(
-                "device_state_snapshot",
-                device_id,
-                payload=ANDROID_SNAPSHOT_PAYLOAD,
-            )))
+            ws.send_text(
+                json.dumps(
+                    _v3(
+                        "device_state_snapshot",
+                        device_id,
+                        payload=ANDROID_SNAPSHOT_PAYLOAD,
+                    )
+                )
+            )
             ws.receive_json()
 
         stored = get_device_state_snapshot(device_id)

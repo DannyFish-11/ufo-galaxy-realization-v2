@@ -128,7 +128,6 @@ from core.five_domain_implementation_review import (
     reset_five_domain_review,
 )
 
-
 # =============================================================================
 # SECTION 1 — Module import and sentinel sanity
 # =============================================================================
@@ -146,9 +145,11 @@ class TestModuleImport:
 
     def test_authority_excludes_readme_and_pr_prose(self) -> None:
         authority_lower = FIVE_DOMAIN_REVIEW_AUTHORITY.lower()
-        assert "no-readme" in authority_lower or \
-               "no-pr-prose" in authority_lower or \
-               "no-readme-no-pr-prose" in authority_lower
+        assert (
+            "no-readme" in authority_lower
+            or "no-pr-prose" in authority_lower
+            or "no-readme-no-pr-prose" in authority_lower
+        )
 
     def test_methodology_is_non_empty_string(self) -> None:
         assert isinstance(FIVE_DOMAIN_REVIEW_METHODOLOGY, str)
@@ -159,8 +160,7 @@ class TestModuleImport:
         assert "ufo-galaxy-android" in FIVE_DOMAIN_REVIEW_METHODOLOGY
 
     def test_methodology_excludes_prose_evidence(self) -> None:
-        assert "EXCLUDED" in FIVE_DOMAIN_REVIEW_METHODOLOGY or \
-               "excluded" in FIVE_DOMAIN_REVIEW_METHODOLOGY.lower()
+        assert "EXCLUDED" in FIVE_DOMAIN_REVIEW_METHODOLOGY or "excluded" in FIVE_DOMAIN_REVIEW_METHODOLOGY.lower()
 
     def test_methodology_mentions_five_domains(self) -> None:
         m = FIVE_DOMAIN_REVIEW_METHODOLOGY
@@ -232,9 +232,7 @@ class TestBuildPackage:
         assert isinstance(package.package_id, str)
         assert len(package.package_id) > 0
 
-    def test_generated_at_is_positive_float(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_generated_at_is_positive_float(self, package: ImplementationReviewPackage) -> None:
         assert isinstance(package.generated_at, float)
         assert package.generated_at > 0
 
@@ -248,19 +246,13 @@ class TestBuildPackage:
     def test_verdict_zh_non_empty(self, package: ImplementationReviewPackage) -> None:
         assert len(package.verdict_zh) > 0
 
-    def test_system_maturity_summary_non_empty(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_system_maturity_summary_non_empty(self, package: ImplementationReviewPackage) -> None:
         assert len(package.system_maturity_summary) > 0
 
-    def test_overclaiming_guards_summary_non_empty(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_overclaiming_guards_summary_non_empty(self, package: ImplementationReviewPackage) -> None:
         assert len(package.overclaiming_guards_summary) > 0
 
-    def test_domains_at_partially_established_or_below_is_high(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_domains_at_partially_established_or_below_is_high(self, package: ImplementationReviewPackage) -> None:
         # All 5 domains should be below RUNTIME_EVIDENCED_CLOSED in current state
         assert package.domains_at_partially_established_or_below >= 4, (
             f"Expected >= 4 domains below threshold; "
@@ -281,76 +273,47 @@ class TestDomainEntries:
     def package(self) -> ImplementationReviewPackage:
         return build_five_domain_review()
 
-    def test_has_exactly_5_domain_entries(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_has_exactly_5_domain_entries(self, package: ImplementationReviewPackage) -> None:
         assert len(package.domain_entries) == 5, (
-            f"Expected 5; got {len(package.domain_entries)}: "
-            f"{[e.domain.value for e in package.domain_entries]}"
+            f"Expected 5; got {len(package.domain_entries)}: " f"{[e.domain.value for e in package.domain_entries]}"
         )
 
-    def test_all_items_are_domain_implementation_entry(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_all_items_are_domain_implementation_entry(self, package: ImplementationReviewPackage) -> None:
         for entry in package.domain_entries:
             assert isinstance(entry, DomainImplementationEntry)
 
-    def test_all_5_review_domains_covered(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_all_5_review_domains_covered(self, package: ImplementationReviewPackage) -> None:
         covered = {e.domain for e in package.domain_entries}
         for domain in ReviewDomain:
             assert domain in covered, f"Missing domain: {domain}"
 
-    def test_each_domain_has_evidence_strength(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_each_domain_has_evidence_strength(self, package: ImplementationReviewPackage) -> None:
         for entry in package.domain_entries:
-            assert isinstance(entry.evidence_strength, EvidenceStrength), (
-                f"Domain {entry.domain} has invalid evidence_strength"
-            )
+            assert isinstance(
+                entry.evidence_strength, EvidenceStrength
+            ), f"Domain {entry.domain} has invalid evidence_strength"
 
-    def test_each_domain_has_non_empty_canonical_path_summary(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_each_domain_has_non_empty_canonical_path_summary(self, package: ImplementationReviewPackage) -> None:
         for entry in package.domain_entries:
-            assert len(entry.canonical_path_summary) > 0, (
-                f"Domain {entry.domain} has empty canonical_path_summary"
-            )
+            assert len(entry.canonical_path_summary) > 0, f"Domain {entry.domain} has empty canonical_path_summary"
 
-    def test_each_domain_has_at_least_one_code_anchor(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_each_domain_has_at_least_one_code_anchor(self, package: ImplementationReviewPackage) -> None:
         for entry in package.domain_entries:
-            assert len(entry.current_code_anchors) >= 1, (
-                f"Domain {entry.domain} has no code anchors"
-            )
+            assert len(entry.current_code_anchors) >= 1, f"Domain {entry.domain} has no code anchors"
 
-    def test_each_code_anchor_has_non_empty_module_path(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_each_code_anchor_has_non_empty_module_path(self, package: ImplementationReviewPackage) -> None:
         for entry in package.domain_entries:
             for anchor in entry.current_code_anchors:
-                assert len(anchor.module_path) > 0, (
-                    f"Domain {entry.domain} has a code anchor with empty module_path"
-                )
+                assert len(anchor.module_path) > 0, f"Domain {entry.domain} has a code anchor with empty module_path"
 
-    def test_each_code_anchor_has_non_empty_description(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_each_code_anchor_has_non_empty_description(self, package: ImplementationReviewPackage) -> None:
         for entry in package.domain_entries:
             for anchor in entry.current_code_anchors:
-                assert len(anchor.description) > 0, (
-                    f"Domain {entry.domain} has a code anchor with empty description"
-                )
+                assert len(anchor.description) > 0, f"Domain {entry.domain} has a code anchor with empty description"
 
-    def test_each_domain_has_non_empty_overclaiming_guard(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_each_domain_has_non_empty_overclaiming_guard(self, package: ImplementationReviewPackage) -> None:
         for entry in package.domain_entries:
-            assert len(entry.overclaiming_guard) > 0, (
-                f"Domain {entry.domain} has empty overclaiming_guard"
-            )
+            assert len(entry.overclaiming_guard) > 0, f"Domain {entry.domain} has empty overclaiming_guard"
 
     def test_each_domain_overclaiming_guard_contains_overclaiming_keyword(
         self, package: ImplementationReviewPackage
@@ -358,35 +321,23 @@ class TestDomainEntries:
         for entry in package.domain_entries:
             guard = entry.overclaiming_guard.upper()
             assert "OVERCLAIM" in guard or "CANNOT" in guard or "NOT" in guard, (
-                f"Domain {entry.domain} overclaiming_guard does not contain "
-                f"anti-overclaiming language"
+                f"Domain {entry.domain} overclaiming_guard does not contain " f"anti-overclaiming language"
             )
 
-    def test_each_domain_has_follow_up_pr_spec(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_each_domain_has_follow_up_pr_spec(self, package: ImplementationReviewPackage) -> None:
         for entry in package.domain_entries:
-            assert entry.follow_up_pr_spec is not None, (
-                f"Domain {entry.domain} has no follow_up_pr_spec"
-            )
+            assert entry.follow_up_pr_spec is not None, f"Domain {entry.domain} has no follow_up_pr_spec"
 
-    def test_each_domain_has_gaps_or_partial_items(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_each_domain_has_gaps_or_partial_items(self, package: ImplementationReviewPackage) -> None:
         for entry in package.domain_entries:
-            has_issues = (
-                len(entry.gap_items) > 0
-                or len(entry.partial_or_fragmented_items) > 0
-            )
+            has_issues = len(entry.gap_items) > 0 or len(entry.partial_or_fragmented_items) > 0
             assert has_issues, (
                 f"Domain {entry.domain} has neither gap_items nor "
                 f"partial_or_fragmented_items — this would be an overclaim "
                 f"(no domain in current state is gap-free)"
             )
 
-    def test_each_domain_has_at_least_one_established_item(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_each_domain_has_at_least_one_established_item(self, package: ImplementationReviewPackage) -> None:
         for entry in package.domain_entries:
             assert len(entry.established_items) >= 1, (
                 f"Domain {entry.domain} has no established items — "
@@ -406,16 +357,12 @@ class TestFollowUpPRSpecs:
     def package(self) -> ImplementationReviewPackage:
         return build_five_domain_review()
 
-    def test_follow_up_pr_sequence_has_exactly_5_entries(
-        self, package: ImplementationReviewPackage
-    ) -> None:
-        assert len(package.follow_up_pr_sequence) == 5, (
-            f"Expected 5 follow-up PRs; got {len(package.follow_up_pr_sequence)}"
-        )
+    def test_follow_up_pr_sequence_has_exactly_5_entries(self, package: ImplementationReviewPackage) -> None:
+        assert (
+            len(package.follow_up_pr_sequence) == 5
+        ), f"Expected 5 follow-up PRs; got {len(package.follow_up_pr_sequence)}"
 
-    def test_each_follow_up_pr_has_non_empty_pr_title(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_each_follow_up_pr_has_non_empty_pr_title(self, package: ImplementationReviewPackage) -> None:
         for spec in package.follow_up_pr_sequence:
             assert len(spec.pr_title) > 0, "FollowUpPRSpec has empty pr_title"
 
@@ -423,61 +370,50 @@ class TestFollowUpPRSpecs:
         self, package: ImplementationReviewPackage
     ) -> None:
         for spec in package.follow_up_pr_sequence:
-            assert len(spec.implementation_cut_points) >= 1, (
-                f"FollowUpPRSpec '{spec.pr_title}' has no implementation_cut_points"
-            )
+            assert (
+                len(spec.implementation_cut_points) >= 1
+            ), f"FollowUpPRSpec '{spec.pr_title}' has no implementation_cut_points"
 
     def test_each_follow_up_pr_has_non_empty_maturity_level_unlocked(
         self, package: ImplementationReviewPackage
     ) -> None:
         for spec in package.follow_up_pr_sequence:
-            assert len(spec.maturity_level_unlocked) > 0, (
-                f"FollowUpPRSpec '{spec.pr_title}' has empty maturity_level_unlocked"
-            )
+            assert (
+                len(spec.maturity_level_unlocked) > 0
+            ), f"FollowUpPRSpec '{spec.pr_title}' has empty maturity_level_unlocked"
 
     def test_each_follow_up_pr_has_non_empty_invariant_that_would_close(
         self, package: ImplementationReviewPackage
     ) -> None:
         for spec in package.follow_up_pr_sequence:
-            assert len(spec.invariant_that_would_close) > 0, (
-                f"FollowUpPRSpec '{spec.pr_title}' has empty invariant_that_would_close"
-            )
+            assert (
+                len(spec.invariant_that_would_close) > 0
+            ), f"FollowUpPRSpec '{spec.pr_title}' has empty invariant_that_would_close"
 
     def test_each_follow_up_pr_has_non_empty_primary_modification_zones(
         self, package: ImplementationReviewPackage
     ) -> None:
         for spec in package.follow_up_pr_sequence:
-            assert len(spec.primary_modification_zones) >= 1, (
-                f"FollowUpPRSpec '{spec.pr_title}' has no primary_modification_zones"
-            )
+            assert (
+                len(spec.primary_modification_zones) >= 1
+            ), f"FollowUpPRSpec '{spec.pr_title}' has no primary_modification_zones"
 
-    def test_each_follow_up_pr_has_valid_priority(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_each_follow_up_pr_has_valid_priority(self, package: ImplementationReviewPackage) -> None:
         for spec in package.follow_up_pr_sequence:
-            assert isinstance(spec.priority, FollowUpPRPriority), (
-                f"FollowUpPRSpec '{spec.pr_title}' has invalid priority"
-            )
+            assert isinstance(
+                spec.priority, FollowUpPRPriority
+            ), f"FollowUpPRSpec '{spec.pr_title}' has invalid priority"
 
-    def test_each_follow_up_pr_has_non_empty_estimated_scope(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_each_follow_up_pr_has_non_empty_estimated_scope(self, package: ImplementationReviewPackage) -> None:
         for spec in package.follow_up_pr_sequence:
-            assert len(spec.estimated_scope) > 0, (
-                f"FollowUpPRSpec '{spec.pr_title}' has empty estimated_scope"
-            )
+            assert len(spec.estimated_scope) > 0, f"FollowUpPRSpec '{spec.pr_title}' has empty estimated_scope"
 
-    def test_implementation_cut_points_reference_real_paths(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_implementation_cut_points_reference_real_paths(self, package: ImplementationReviewPackage) -> None:
         for spec in package.follow_up_pr_sequence:
             for cut_point in spec.implementation_cut_points:
                 # Each cut point should reference a file/module path
                 has_path = (
-                    "/" in cut_point
-                    or "." in cut_point
-                    or "core" in cut_point.lower()
-                    or "tests" in cut_point.lower()
+                    "/" in cut_point or "." in cut_point or "core" in cut_point.lower() or "tests" in cut_point.lower()
                 )
                 assert has_path, (
                     f"Cut point '{cut_point}' in PR '{spec.pr_title}' does not "
@@ -498,9 +434,7 @@ class TestAntiOverclaimingGuards:
         return build_five_domain_review()
 
     @pytest.fixture(scope="class")
-    def domain_map(
-        self, package: ImplementationReviewPackage
-    ) -> dict:
+    def domain_map(self, package: ImplementationReviewPackage) -> dict:
         return {e.domain: e for e in package.domain_entries}
 
     _OVERCLAIM_LABELS = {
@@ -508,36 +442,25 @@ class TestAntiOverclaimingGuards:
         EvidenceStrength.RUNTIME_EVIDENCED_CLOSED,
     }
 
-    def test_unified_panel_aggregation_not_overclaimed(
-        self, domain_map: dict
-    ) -> None:
+    def test_unified_panel_aggregation_not_overclaimed(self, domain_map: dict) -> None:
         entry = domain_map[ReviewDomain.UNIFIED_PANEL_AGGREGATION]
         assert entry.evidence_strength not in self._OVERCLAIM_LABELS, (
-            f"UNIFIED_PANEL_AGGREGATION must not be overclaimed; "
-            f"got {entry.evidence_strength}"
+            f"UNIFIED_PANEL_AGGREGATION must not be overclaimed; " f"got {entry.evidence_strength}"
         )
 
-    def test_desktop_three_state_not_overclaimed(
-        self, domain_map: dict
-    ) -> None:
+    def test_desktop_three_state_not_overclaimed(self, domain_map: dict) -> None:
         entry = domain_map[ReviewDomain.DESKTOP_THREE_STATE_EXISTENCE_SURFACE]
         assert entry.evidence_strength not in self._OVERCLAIM_LABELS, (
-            f"DESKTOP_THREE_STATE_EXISTENCE_SURFACE must not be overclaimed; "
-            f"got {entry.evidence_strength}"
+            f"DESKTOP_THREE_STATE_EXISTENCE_SURFACE must not be overclaimed; " f"got {entry.evidence_strength}"
         )
 
-    def test_operator_actionability_not_overclaimed(
-        self, domain_map: dict
-    ) -> None:
+    def test_operator_actionability_not_overclaimed(self, domain_map: dict) -> None:
         entry = domain_map[ReviewDomain.OPERATOR_ACTIONABILITY]
         assert entry.evidence_strength not in self._OVERCLAIM_LABELS, (
-            f"OPERATOR_ACTIONABILITY must not be overclaimed; "
-            f"got {entry.evidence_strength}"
+            f"OPERATOR_ACTIONABILITY must not be overclaimed; " f"got {entry.evidence_strength}"
         )
 
-    def test_natural_language_path_evidence_strength_reflects_ci_proof(
-        self, domain_map: dict
-    ) -> None:
+    def test_natural_language_path_evidence_strength_reflects_ci_proof(self, domain_map: dict) -> None:
         """When the NL e2e CI test file exists the domain must be upgraded to
         RUNTIME_EVIDENCED_CLOSED.  When it does not exist it must remain at
         PARTIALLY_ESTABLISHED (not overclaimed).
@@ -547,6 +470,7 @@ class TestAntiOverclaimingGuards:
         whichever state the file is in right now.
         """
         from core.five_domain_implementation_review import _test_file_exists
+
         entry = domain_map[ReviewDomain.NATURAL_LANGUAGE_CANONICAL_PATH]
         nl_e2e_file = "tests.integration.test_nl_e2e_canonical_path"
         if _test_file_exists(nl_e2e_file):
@@ -562,20 +486,15 @@ class TestAntiOverclaimingGuards:
                 f"the CI test is absent; got {entry.evidence_strength}"
             )
 
-    def test_multimodal_path_is_infrastructure_present_or_lower(
-        self, domain_map: dict
-    ) -> None:
+    def test_multimodal_path_is_infrastructure_present_or_lower(self, domain_map: dict) -> None:
         entry = domain_map[ReviewDomain.MULTIMODAL_CANONICAL_PATH]
         # Multimodal must be INFRASTRUCTURE_PRESENT or PARTIALLY_ESTABLISHED
         # (definitely not STRONGLY_ESTABLISHED or RUNTIME_EVIDENCED_CLOSED)
         assert entry.evidence_strength not in self._OVERCLAIM_LABELS, (
-            f"MULTIMODAL_CANONICAL_PATH must not be overclaimed; "
-            f"got {entry.evidence_strength}"
+            f"MULTIMODAL_CANONICAL_PATH must not be overclaimed; " f"got {entry.evidence_strength}"
         )
 
-    def test_multimodal_path_is_at_most_partially_established(
-        self, domain_map: dict
-    ) -> None:
+    def test_multimodal_path_is_at_most_partially_established(self, domain_map: dict) -> None:
         entry = domain_map[ReviewDomain.MULTIMODAL_CANONICAL_PATH]
         allowed = {
             EvidenceStrength.INFRASTRUCTURE_PRESENT_NOT_YET_E2E_PROVEN,
@@ -589,30 +508,28 @@ class TestAntiOverclaimingGuards:
             f"is unexpected — should be at most PARTIALLY_ESTABLISHED"
         )
 
-    def test_unified_panel_aggregation_has_gap_about_no_unified_endpoint(
-        self, domain_map: dict
-    ) -> None:
+    def test_unified_panel_aggregation_has_gap_about_no_unified_endpoint(self, domain_map: dict) -> None:
         entry = domain_map[ReviewDomain.UNIFIED_PANEL_AGGREGATION]
         all_issues = entry.gap_items + entry.partial_or_fragmented_items
         text = " ".join(all_issues).upper()
-        assert "UNIFIED" in text or "AGGREGAT" in text or "PANEL" in text, (
-            "UNIFIED_PANEL_AGGREGATION must document the unified endpoint gap"
-        )
+        assert (
+            "UNIFIED" in text or "AGGREGAT" in text or "PANEL" in text
+        ), "UNIFIED_PANEL_AGGREGATION must document the unified endpoint gap"
 
-    def test_operator_actionability_documents_read_only_gap(
-        self, domain_map: dict
-    ) -> None:
+    def test_operator_actionability_documents_read_only_gap(self, domain_map: dict) -> None:
         entry = domain_map[ReviewDomain.OPERATOR_ACTIONABILITY]
         all_issues = entry.gap_items + entry.partial_or_fragmented_items
         text = " ".join(all_issues).upper()
-        assert "READ-ONLY" in text or "READ_ONLY" in text or "OBSERVATION" in text or \
-               "NO POST" in text or "NO ACTION" in text or "OBSERVATION-ONLY" in text, (
-            "OPERATOR_ACTIONABILITY must document the read-only / no-action-endpoint gap"
-        )
+        assert (
+            "READ-ONLY" in text
+            or "READ_ONLY" in text
+            or "OBSERVATION" in text
+            or "NO POST" in text
+            or "NO ACTION" in text
+            or "OBSERVATION-ONLY" in text
+        ), "OPERATOR_ACTIONABILITY must document the read-only / no-action-endpoint gap"
 
-    def test_nl_path_documents_ci_state(
-        self, domain_map: dict
-    ) -> None:
+    def test_nl_path_documents_ci_state(self, domain_map: dict) -> None:
         """The NL domain must document the CI test state.
 
         - Before PR-5: gap_items must contain a reference to the missing CI test.
@@ -621,6 +538,7 @@ class TestAntiOverclaimingGuards:
           production LLM).
         """
         from core.five_domain_implementation_review import _test_file_exists
+
         entry = domain_map[ReviewDomain.NATURAL_LANGUAGE_CANONICAL_PATH]
         all_issues = entry.gap_items + entry.partial_or_fragmented_items
         text = " ".join(all_issues).upper()
@@ -629,16 +547,13 @@ class TestAntiOverclaimingGuards:
             "(either a missing CI test gap or a stub-only limitation note)"
         )
 
-    def test_multimodal_documents_safe_default_disabled_gap(
-        self, domain_map: dict
-    ) -> None:
+    def test_multimodal_documents_safe_default_disabled_gap(self, domain_map: dict) -> None:
         entry = domain_map[ReviewDomain.MULTIMODAL_CANONICAL_PATH]
         all_issues = entry.gap_items + entry.partial_or_fragmented_items
         text = " ".join(all_issues).upper()
-        assert "DEFAULT" in text or "DISABLED" in text or "SAFE" in text or \
-               "CI" in text, (
-            "MULTIMODAL_CANONICAL_PATH must document the SAFE_DEFAULT disabled gap"
-        )
+        assert (
+            "DEFAULT" in text or "DISABLED" in text or "SAFE" in text or "CI" in text
+        ), "MULTIMODAL_CANONICAL_PATH must document the SAFE_DEFAULT disabled gap"
 
 
 # =============================================================================
@@ -653,53 +568,33 @@ class TestAndroidAnchors:
     def package(self) -> ImplementationReviewPackage:
         return build_five_domain_review()
 
-    def test_at_least_3_domains_have_android_anchors(
-        self, package: ImplementationReviewPackage
-    ) -> None:
-        domains_with_android = sum(
-            1 for e in package.domain_entries if len(e.android_anchors) > 0
-        )
-        assert domains_with_android >= 3, (
-            f"Expected >= 3 domains with Android anchors; got {domains_with_android}"
-        )
+    def test_at_least_3_domains_have_android_anchors(self, package: ImplementationReviewPackage) -> None:
+        domains_with_android = sum(1 for e in package.domain_entries if len(e.android_anchors) > 0)
+        assert domains_with_android >= 3, f"Expected >= 3 domains with Android anchors; got {domains_with_android}"
 
-    def test_each_android_anchor_has_non_empty_android_package(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_each_android_anchor_has_non_empty_android_package(self, package: ImplementationReviewPackage) -> None:
         for entry in package.domain_entries:
             for anchor in entry.android_anchors:
-                assert len(anchor.android_package) > 0, (
-                    f"Domain {entry.domain} has Android anchor with empty android_package"
-                )
+                assert (
+                    len(anchor.android_package) > 0
+                ), f"Domain {entry.domain} has Android anchor with empty android_package"
 
-    def test_each_android_anchor_has_non_empty_v2_evidence_ref(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_each_android_anchor_has_non_empty_v2_evidence_ref(self, package: ImplementationReviewPackage) -> None:
         for entry in package.domain_entries:
             for anchor in entry.android_anchors:
-                assert len(anchor.v2_evidence_ref) > 0, (
-                    f"Domain {entry.domain} has Android anchor with empty v2_evidence_ref"
-                )
+                assert (
+                    len(anchor.v2_evidence_ref) > 0
+                ), f"Domain {entry.domain} has Android anchor with empty v2_evidence_ref"
 
-    def test_each_android_anchor_has_non_empty_description(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_each_android_anchor_has_non_empty_description(self, package: ImplementationReviewPackage) -> None:
         for entry in package.domain_entries:
             for anchor in entry.android_anchors:
-                assert len(anchor.description) > 0, (
-                    f"Domain {entry.domain} has Android anchor with empty description"
-                )
+                assert len(anchor.description) > 0, f"Domain {entry.domain} has Android anchor with empty description"
 
-    def test_multimodal_domain_has_android_anchors(
-        self, package: ImplementationReviewPackage
-    ) -> None:
-        entry = next(
-            e for e in package.domain_entries
-            if e.domain == ReviewDomain.MULTIMODAL_CANONICAL_PATH
-        )
+    def test_multimodal_domain_has_android_anchors(self, package: ImplementationReviewPackage) -> None:
+        entry = next(e for e in package.domain_entries if e.domain == ReviewDomain.MULTIMODAL_CANONICAL_PATH)
         assert len(entry.android_anchors) >= 1, (
-            "MULTIMODAL_CANONICAL_PATH must have at least 1 Android anchor "
-            "(MobileVLM / SeeClick / vision uplink)"
+            "MULTIMODAL_CANONICAL_PATH must have at least 1 Android anchor " "(MobileVLM / SeeClick / vision uplink)"
         )
 
 
@@ -723,9 +618,7 @@ class TestSingletonCacheAndReset:
         reset_five_domain_review()
         second = get_five_domain_review()
         # After reset, a new object is created
-        assert first is not second, (
-            "After reset, get_five_domain_review() must return a new object"
-        )
+        assert first is not second, "After reset, get_five_domain_review() must return a new object"
 
     def test_cache_after_reset_has_correct_structure(self) -> None:
         reset_five_domain_review()
@@ -765,9 +658,7 @@ class TestAssertFiveDomainInvariants:
             system_maturity_summary=pkg.system_maturity_summary,
             follow_up_pr_sequence=pkg.follow_up_pr_sequence,
             overclaiming_guards_summary=pkg.overclaiming_guards_summary,
-            domains_at_partially_established_or_below=(
-                pkg.domains_at_partially_established_or_below
-            ),
+            domains_at_partially_established_or_below=(pkg.domains_at_partially_established_or_below),
         )
         with pytest.raises(AssertionError, match="INV-1"):
             assert_five_domain_invariants(bad_pkg)
@@ -805,9 +696,7 @@ class TestAssertFiveDomainInvariants:
             system_maturity_summary=pkg.system_maturity_summary,
             follow_up_pr_sequence=pkg.follow_up_pr_sequence,
             overclaiming_guards_summary=pkg.overclaiming_guards_summary,
-            domains_at_partially_established_or_below=(
-                pkg.domains_at_partially_established_or_below
-            ),
+            domains_at_partially_established_or_below=(pkg.domains_at_partially_established_or_below),
         )
         with pytest.raises(AssertionError, match="INV-4"):
             assert_five_domain_invariants(bad_pkg)
@@ -843,9 +732,7 @@ class TestAssertFiveDomainInvariants:
             system_maturity_summary=pkg.system_maturity_summary,
             follow_up_pr_sequence=pkg.follow_up_pr_sequence,
             overclaiming_guards_summary=pkg.overclaiming_guards_summary,
-            domains_at_partially_established_or_below=(
-                pkg.domains_at_partially_established_or_below
-            ),
+            domains_at_partially_established_or_below=(pkg.domains_at_partially_established_or_below),
         )
         with pytest.raises(AssertionError, match="INV-5"):
             assert_five_domain_invariants(bad_pkg)
@@ -863,15 +750,11 @@ class TestJsonSerialization:
     def package(self) -> ImplementationReviewPackage:
         return build_five_domain_review()
 
-    def test_to_dict_returns_dict(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_to_dict_returns_dict(self, package: ImplementationReviewPackage) -> None:
         d = package.to_dict()
         assert isinstance(d, dict)
 
-    def test_to_dict_has_all_top_level_keys(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_to_dict_has_all_top_level_keys(self, package: ImplementationReviewPackage) -> None:
         d = package.to_dict()
         required_keys = {
             "package_id",
@@ -888,29 +771,21 @@ class TestJsonSerialization:
         for key in required_keys:
             assert key in d, f"Missing key in to_dict(): '{key}'"
 
-    def test_to_json_produces_valid_json(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_to_json_produces_valid_json(self, package: ImplementationReviewPackage) -> None:
         j = package.to_json()
         assert isinstance(j, str)
         parsed = json.loads(j)
         assert isinstance(parsed, dict)
 
-    def test_json_round_trip_domain_entries_count(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_json_round_trip_domain_entries_count(self, package: ImplementationReviewPackage) -> None:
         parsed = json.loads(package.to_json())
         assert len(parsed["domain_entries"]) == 5
 
-    def test_json_round_trip_authority(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_json_round_trip_authority(self, package: ImplementationReviewPackage) -> None:
         parsed = json.loads(package.to_json())
         assert parsed["authority"] == package.authority
 
-    def test_json_round_trip_follow_up_pr_sequence_count(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_json_round_trip_follow_up_pr_sequence_count(self, package: ImplementationReviewPackage) -> None:
         parsed = json.loads(package.to_json())
         assert len(parsed["follow_up_pr_sequence"]) == 5
 
@@ -933,13 +808,10 @@ class TestJsonSerialization:
             }
             for field in required_fields:
                 assert field in d, (
-                    f"DomainImplementationEntry.to_dict() missing field '{field}' "
-                    f"for domain {entry.domain}"
+                    f"DomainImplementationEntry.to_dict() missing field '{field}' " f"for domain {entry.domain}"
                 )
 
-    def test_follow_up_pr_spec_to_dict_has_required_fields(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_follow_up_pr_spec_to_dict_has_required_fields(self, package: ImplementationReviewPackage) -> None:
         for entry in package.domain_entries:
             spec = entry.follow_up_pr_spec
             assert spec is not None
@@ -955,13 +827,9 @@ class TestJsonSerialization:
                 "invariant_that_would_close",
             }
             for field in required_fields:
-                assert field in d, (
-                    f"FollowUpPRSpec.to_dict() missing field '{field}'"
-                )
+                assert field in d, f"FollowUpPRSpec.to_dict() missing field '{field}'"
 
-    def test_code_anchor_to_dict_has_required_fields(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_code_anchor_to_dict_has_required_fields(self, package: ImplementationReviewPackage) -> None:
         for entry in package.domain_entries:
             for anchor in entry.current_code_anchors:
                 d = anchor.to_dict()
@@ -970,9 +838,7 @@ class TestJsonSerialization:
                 assert "confirmed_importable" in d
                 assert "key_attribute" in d
 
-    def test_android_code_anchor_to_dict_has_required_fields(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_android_code_anchor_to_dict_has_required_fields(self, package: ImplementationReviewPackage) -> None:
         for entry in package.domain_entries:
             for anchor in entry.android_anchors:
                 d = anchor.to_dict()
@@ -991,41 +857,40 @@ class TestVerdictZhContent:
     """verdict_zh must mention all five domain concepts in Chinese."""
 
     def test_verdict_zh_mentions_panel(self) -> None:
-        assert "面板" in FIVE_DOMAIN_REVIEW_VERDICT_ZH, \
-            "verdict_zh must mention 面板 (panel)"
+        assert "面板" in FIVE_DOMAIN_REVIEW_VERDICT_ZH, "verdict_zh must mention 面板 (panel)"
 
     def test_verdict_zh_mentions_three_state(self) -> None:
-        assert "三态" in FIVE_DOMAIN_REVIEW_VERDICT_ZH, \
-            "verdict_zh must mention 三态 (three-state)"
+        assert "三态" in FIVE_DOMAIN_REVIEW_VERDICT_ZH, "verdict_zh must mention 三态 (three-state)"
 
     def test_verdict_zh_mentions_actionability(self) -> None:
-        assert "可操作" in FIVE_DOMAIN_REVIEW_VERDICT_ZH or \
-               "操作性" in FIVE_DOMAIN_REVIEW_VERDICT_ZH, \
-               "verdict_zh must mention actionability concept"
+        assert (
+            "可操作" in FIVE_DOMAIN_REVIEW_VERDICT_ZH or "操作性" in FIVE_DOMAIN_REVIEW_VERDICT_ZH
+        ), "verdict_zh must mention actionability concept"
 
     def test_verdict_zh_mentions_natural_language(self) -> None:
-        assert "自然语言" in FIVE_DOMAIN_REVIEW_VERDICT_ZH, \
-            "verdict_zh must mention 自然语言 (natural language)"
+        assert "自然语言" in FIVE_DOMAIN_REVIEW_VERDICT_ZH, "verdict_zh must mention 自然语言 (natural language)"
 
     def test_verdict_zh_mentions_multimodal(self) -> None:
-        assert "多模态" in FIVE_DOMAIN_REVIEW_VERDICT_ZH, \
-            "verdict_zh must mention 多模态 (multimodal)"
+        assert "多模态" in FIVE_DOMAIN_REVIEW_VERDICT_ZH, "verdict_zh must mention 多模态 (multimodal)"
 
     def test_verdict_zh_mentions_both_repos(self) -> None:
-        assert "V2" in FIVE_DOMAIN_REVIEW_VERDICT_ZH or \
-               "ufo-galaxy" in FIVE_DOMAIN_REVIEW_VERDICT_ZH or \
-               "Android" in FIVE_DOMAIN_REVIEW_VERDICT_ZH, \
-               "verdict_zh must mention the dual-repo context"
+        assert (
+            "V2" in FIVE_DOMAIN_REVIEW_VERDICT_ZH
+            or "ufo-galaxy" in FIVE_DOMAIN_REVIEW_VERDICT_ZH
+            or "Android" in FIVE_DOMAIN_REVIEW_VERDICT_ZH
+        ), "verdict_zh must mention the dual-repo context"
 
     def test_verdict_zh_mentions_follow_up_prs(self) -> None:
-        assert "PR" in FIVE_DOMAIN_REVIEW_VERDICT_ZH or \
-               "后续" in FIVE_DOMAIN_REVIEW_VERDICT_ZH, \
-               "verdict_zh must mention follow-up PRs"
+        assert (
+            "PR" in FIVE_DOMAIN_REVIEW_VERDICT_ZH or "后续" in FIVE_DOMAIN_REVIEW_VERDICT_ZH
+        ), "verdict_zh must mention follow-up PRs"
 
     def test_verdict_zh_mentions_partial_established(self) -> None:
-        assert "PARTIALLY_ESTABLISHED" in FIVE_DOMAIN_REVIEW_VERDICT_ZH or \
-               "部分成立" in FIVE_DOMAIN_REVIEW_VERDICT_ZH or \
-               "PARTIALLY" in FIVE_DOMAIN_REVIEW_VERDICT_ZH
+        assert (
+            "PARTIALLY_ESTABLISHED" in FIVE_DOMAIN_REVIEW_VERDICT_ZH
+            or "部分成立" in FIVE_DOMAIN_REVIEW_VERDICT_ZH
+            or "PARTIALLY" in FIVE_DOMAIN_REVIEW_VERDICT_ZH
+        )
 
 
 # =============================================================================
@@ -1040,50 +905,35 @@ class TestSystemMaturitySummary:
     def package(self) -> ImplementationReviewPackage:
         return build_five_domain_review()
 
-    def test_system_maturity_mentions_unified_panel(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_system_maturity_mentions_unified_panel(self, package: ImplementationReviewPackage) -> None:
         summary = package.system_maturity_summary.upper()
         assert "UNIFIED_PANEL" in summary or "PANEL" in summary
 
-    def test_system_maturity_mentions_three_state(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_system_maturity_mentions_three_state(self, package: ImplementationReviewPackage) -> None:
         summary = package.system_maturity_summary.upper()
         assert "THREE_STATE" in summary or "THREE-STATE" in summary or "DESKTOP" in summary
 
-    def test_system_maturity_mentions_operator_actionability(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_system_maturity_mentions_operator_actionability(self, package: ImplementationReviewPackage) -> None:
         summary = package.system_maturity_summary.upper()
         assert "OPERATOR" in summary
 
-    def test_system_maturity_mentions_natural_language(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_system_maturity_mentions_natural_language(self, package: ImplementationReviewPackage) -> None:
         summary = package.system_maturity_summary.upper()
         assert "NATURAL" in summary or "NL" in summary
 
-    def test_system_maturity_mentions_multimodal(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_system_maturity_mentions_multimodal(self, package: ImplementationReviewPackage) -> None:
         summary = package.system_maturity_summary.upper()
         assert "MULTIMODAL" in summary
 
-    def test_overclaiming_guards_summary_has_at_least_3_guards(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_overclaiming_guards_summary_has_at_least_3_guards(self, package: ImplementationReviewPackage) -> None:
         # Each guard should reference one of the 5 domains
         guards_text = package.overclaiming_guards_summary
         guard_count = guards_text.count("cannot") + guards_text.count("CANNOT")
         assert guard_count >= 3, (
-            f"overclaiming_guards_summary must explicitly say 'cannot' at least 3 times; "
-            f"got {guard_count}"
+            f"overclaiming_guards_summary must explicitly say 'cannot' at least 3 times; " f"got {guard_count}"
         )
 
-    def test_overclaiming_guards_mentions_all_5_domains(
-        self, package: ImplementationReviewPackage
-    ) -> None:
+    def test_overclaiming_guards_mentions_all_5_domains(self, package: ImplementationReviewPackage) -> None:
         text = package.overclaiming_guards_summary.lower()
         assert "panel" in text
         assert "three" in text or "three-state" in text or "existence" in text

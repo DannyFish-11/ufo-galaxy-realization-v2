@@ -39,6 +39,7 @@ def create_router() -> APIRouter:
         """
         try:
             from core.resilience.metrics import get_resilience_metrics
+
             metrics = get_resilience_metrics().snapshot()
         except Exception as exc:
             logger.warning("resilience/metrics error: %s", exc)
@@ -47,15 +48,18 @@ def create_router() -> APIRouter:
         router_extra: dict = {}
         try:
             from core.command_router import get_command_router
+
             cr = get_command_router()
             router_extra = cr.get_resilience_snapshot()
         except Exception as exc:
             logger.warning("resilience/metrics router snapshot error: %s", exc)
 
-        return JSONResponse({
-            "resilience_metrics": metrics,
-            "router": router_extra,
-        })
+        return JSONResponse(
+            {
+                "resilience_metrics": metrics,
+                "router": router_extra,
+            }
+        )
 
     # ── Prometheus text exposition ────────────────────────────────────────
 
@@ -68,6 +72,7 @@ def create_router() -> APIRouter:
         """
         try:
             from core.resilience.metrics import get_resilience_metrics
+
             text = get_resilience_metrics().prometheus_text()
         except Exception as exc:
             logger.warning("resilience/metrics/prom error: %s", exc)
@@ -76,6 +81,7 @@ def create_router() -> APIRouter:
         # Append adaptive-semaphore and per-target CB metrics
         try:
             from core.command_router import get_command_router
+
             cr = get_command_router()
             snap = cr.get_resilience_snapshot()
 
@@ -111,12 +117,15 @@ def create_router() -> APIRouter:
         """List all per-target circuit breakers and their current states."""
         try:
             from core.command_router import get_command_router
+
             cr = get_command_router()
             snap = cr.get_resilience_snapshot()
-            return JSONResponse({
-                "circuit_breakers": snap.get("circuit_breakers", {}),
-                "cb_enabled": snap.get("cb_enabled", False),
-            })
+            return JSONResponse(
+                {
+                    "circuit_breakers": snap.get("circuit_breakers", {}),
+                    "cb_enabled": snap.get("cb_enabled", False),
+                }
+            )
         except Exception as exc:
             logger.warning("list_circuit_breakers error: %s", exc)
             return JSONResponse({"circuit_breakers": {}, "cb_enabled": False})
@@ -128,6 +137,7 @@ def create_router() -> APIRouter:
         """Manually force a circuit breaker back to CLOSED state."""
         try:
             from core.command_router import get_command_router
+
             cr = get_command_router()
             cb = cr._circuit_breakers.get(target)
             if cb is None:

@@ -12,10 +12,10 @@ from pydantic import BaseModel, field_validator
 
 from core.schemas.multimodal import MultiModalContext
 
-
 # ============================================================================
 # Request/Response Models
 # ============================================================================
+
 
 class DeviceRegisterRequest(BaseModel):
     device_id: str
@@ -36,7 +36,7 @@ class VisionRequest(BaseModel):
     video_chunk: Optional[str] = None  # Base64 encoded video chunk
     mode: str = "full"
     instruction: str = ""
-    session_id: Optional[str] = None   # For video stream context
+    session_id: Optional[str] = None  # For video stream context
     is_last_chunk: bool = False
 
 
@@ -55,8 +55,8 @@ class ChatRequest(BaseModel):
     message: str
     device_id: str = ""
     context: List[Dict[str, str]] = []
-    user_id: str = ""          # 用户标识（跨设备统一会话）
-    session_id: str = ""       # 会话 ID（跨设备共享）
+    user_id: str = ""  # 用户标识（跨设备统一会话）
+    session_id: str = ""  # 会话 ID（跨设备共享）
     required_capabilities: Optional[List[str]] = None  # Phase 2: scheduler hint
     # Multi-modal context bundle (PR 1).  Absent for text-only requests.
     # When present, ``multimodal_context.images`` carries base64-encoded image
@@ -105,11 +105,12 @@ class OCRRequest(BaseModel):
 
 class CommandDispatchRequest(BaseModel):
     """命令分发请求"""
+
     source: str = "api"
     targets: List[str] = []
     command: str
     params: Dict[str, Any] = {}
-    mode: str = "sync"   # sync | async | parallel | serial
+    mode: str = "sync"  # sync | async | parallel | serial
     timeout: float = 30.0
     max_retries: int = 2
     notify_ws: bool = True
@@ -119,6 +120,7 @@ class CommandDispatchRequest(BaseModel):
 
 class AIIntentRequest(BaseModel):
     """AI 意图解析请求"""
+
     text: str
     session_id: str = ""
     context: Dict[str, Any] = {}
@@ -126,6 +128,7 @@ class AIIntentRequest(BaseModel):
 
 class ConversationRequest(BaseModel):
     """对话记忆请求"""
+
     session_id: str
     role: str = "user"
     content: str
@@ -136,8 +139,10 @@ class ConversationRequest(BaseModel):
 # Unified Command Protocol Models
 # ============================================================================
 
+
 class CommandStatus(str, Enum):
     """命令状态枚举"""
+
     QUEUED = "queued"
     RUNNING = "running"
     DONE = "done"
@@ -146,6 +151,7 @@ class CommandStatus(str, Enum):
 
 class TargetResult(BaseModel):
     """单个目标的执行结果"""
+
     status: CommandStatus
     output: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
@@ -155,6 +161,7 @@ class TargetResult(BaseModel):
 
 class UnifiedCommandRequest(BaseModel):
     """统一命令请求"""
+
     request_id: Optional[str] = None
     command: str
     targets: List[str]
@@ -165,6 +172,7 @@ class UnifiedCommandRequest(BaseModel):
 
 class UnifiedCommandResponse(BaseModel):
     """统一命令响应"""
+
     request_id: str
     status: CommandStatus
     created_at: str

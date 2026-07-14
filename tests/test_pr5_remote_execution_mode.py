@@ -187,9 +187,7 @@ class TestOpenClawdRemoteCommandMode:
         mock_cr.route_envelope = fake_route_envelope
 
         async def run():
-            with patch(
-                "core.command_router.get_command_router", return_value=mock_cr
-            ):
+            with patch("core.command_router.get_command_router", return_value=mock_cr):
                 oc = self._make_openclawd()
                 await oc.send_gateway_command(
                     device_id="dev_001",
@@ -233,9 +231,7 @@ class TestOpenClawdRemoteAgentMode:
             oc = OpenClawd.__new__(OpenClawd)
             oc._config = {}
 
-            with patch(
-                "core.command_router.get_command_router", return_value=mock_cr
-            ):
+            with patch("core.command_router.get_command_router", return_value=mock_cr):
                 result = await oc._dispatch_remote_agent(
                     message="run task",
                     device_id="dev_002",
@@ -276,11 +272,12 @@ class TestOpenClawdRemoteAgentMode:
             oc = OpenClawd.__new__(OpenClawd)
             oc._config = {}
 
-            with patch(
-                "core.command_router.get_command_router", return_value=mock_cr
-            ), patch(
-                "core.schemas.task_envelope.TaskEnvelope",
-                side_effect=CapturingTaskEnvelope,
+            with (
+                patch("core.command_router.get_command_router", return_value=mock_cr),
+                patch(
+                    "core.schemas.task_envelope.TaskEnvelope",
+                    side_effect=CapturingTaskEnvelope,
+                ),
             ):
                 await oc._dispatch_remote_agent(
                     message="do something",
@@ -290,14 +287,10 @@ class TestOpenClawdRemoteAgentMode:
         asyncio.new_event_loop().run_until_complete(run())
 
         assert len(captured_envelopes) >= 1
-        modes = [
-            e.get("remote_execution_mode")
-            for e in captured_envelopes
-            if "remote_execution_mode" in e
-        ]
-        assert any(m == RemoteExecutionMode.agent_runtime for m in modes), (
-            f"Expected agent_runtime in captured envelope kwargs, got: {captured_envelopes}"
-        )
+        modes = [e.get("remote_execution_mode") for e in captured_envelopes if "remote_execution_mode" in e]
+        assert any(
+            m == RemoteExecutionMode.agent_runtime for m in modes
+        ), f"Expected agent_runtime in captured envelope kwargs, got: {captured_envelopes}"
 
 
 # ---------------------------------------------------------------------------
@@ -315,8 +308,8 @@ class TestCommandRouterPreservesMode:
         # (deny-by-default,有意语义),须放行到执行器。
         from core.canonical_dispatch_slot_authority import (
             CanonicalDispatchSlot,
-            CanonicalDispatchSlotStatus,
             CanonicalDispatchSlotsResult,
+            CanonicalDispatchSlotStatus,
         )
 
         def _approve_all(device_ids, execution_mode, **kwargs):
@@ -484,8 +477,9 @@ class TestCommandRouterDispatchAgent:
     """dispatch_agent_remote result carries remote_execution_mode='agent_runtime'."""
 
     def test_dispatch_agent_result_carries_agent_runtime(self):
-        from core.command_router import CommandRouter
         import sys
+
+        from core.command_router import CommandRouter
 
         cr = CommandRouter.__new__(CommandRouter)
 
@@ -524,8 +518,9 @@ class TestCommandRouterDispatchAgent:
 
     def test_deploy_then_execute_result_carries_agent_runtime(self):
         """Physical device pre-deploy path also carries agent_runtime."""
-        from core.command_router import CommandRouter
         import sys
+
+        from core.command_router import CommandRouter
 
         cr = CommandRouter.__new__(CommandRouter)
 
@@ -558,9 +553,7 @@ class TestCommandRouterDispatchAgent:
                             "core.routes._shared": mock_shared_module,
                         },
                     ):
-                        with patch(
-                            "core.agent_manifest.AgentManifest.create_device_control_agent"
-                        ) as mock_manifest:
+                        with patch("core.agent_manifest.AgentManifest.create_device_control_agent") as mock_manifest:
                             manifest_obj = MagicMock()
                             manifest_obj.to_dict.return_value = {}
                             manifest_obj.checksum.return_value = "abc123"

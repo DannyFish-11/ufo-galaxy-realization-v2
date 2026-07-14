@@ -58,10 +58,7 @@ REVIEW_PR_TITLE_EN = (
     "advance Android truth full-chain propagation and practical operability closure"
 )
 REVIEW_CONVERGENCE_ANCHOR = "993P2"
-REVIEW_AUTHORITY = (
-    "COMPLETE_JOINT_SYSTEM_REVIEW::"
-    "core.complete_joint_system_review::real-code-only-v2-plus-android"
-)
+REVIEW_AUTHORITY = "COMPLETE_JOINT_SYSTEM_REVIEW::" "core.complete_joint_system_review::real-code-only-v2-plus-android"
 REVIEW_METHODOLOGY = (
     "Only current real V2 code (import checks + source token probes) and "
     "explicit Android code anchors at a reviewed commit are used as evidence. "
@@ -87,22 +84,13 @@ ANDROID_ANCHOR_MESH_CONTRACT = (
 ANDROID_ANCHOR_AUTONOMOUS_PIPELINE = (
     "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/agent/AutonomousExecutionPipeline.kt"
 )
-ANDROID_ANCHOR_WS_CLIENT = (
-    "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/network/GalaxyWebSocketClient.kt"
-)
+ANDROID_ANCHOR_WS_CLIENT = "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/network/GalaxyWebSocketClient.kt"
 ANDROID_ANCHOR_MESH_TEST = (
-    "ufo-galaxy-android/app/src/test/java/com/ufo/galaxy/runtime/"
-    "Pr8AndroidMeshParticipationContractTest.kt"
+    "ufo-galaxy-android/app/src/test/java/com/ufo/galaxy/runtime/" "Pr8AndroidMeshParticipationContractTest.kt"
 )
-ANDROID_ANCHOR_MODE_GATE = (
-    "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/runtime/LocalExecutionModeGate.kt"
-)
-ANDROID_ANCHOR_CONTINUITY = (
-    "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/session/DurableParticipantIdentity.kt"
-)
-ANDROID_ANCHOR_CAPABILITY_REPORT = (
-    "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/capability/CapabilityReport.kt"
-)
+ANDROID_ANCHOR_MODE_GATE = "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/runtime/LocalExecutionModeGate.kt"
+ANDROID_ANCHOR_CONTINUITY = "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/session/DurableParticipantIdentity.kt"
+ANDROID_ANCHOR_CAPABILITY_REPORT = "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/capability/CapabilityReport.kt"
 
 # ---------------------------------------------------------------------------
 # Enumerations
@@ -446,9 +434,7 @@ class CompleteJointSystemReport:
             "runtime_flow": [f.to_dict() for f in self.runtime_flow],
             "cross_repo_mismatches": [m.to_dict() for m in self.cross_repo_mismatches],
             "v2_next_convergence_priority": (
-                self.v2_next_convergence_priority.to_dict()
-                if self.v2_next_convergence_priority
-                else None
+                self.v2_next_convergence_priority.to_dict() if self.v2_next_convergence_priority else None
             ),
             "integrity_repair_actions": [a.to_dict() for a in self.integrity_repair_actions],
             "stage": self.stage.value,
@@ -473,9 +459,7 @@ def _module_exists(module_path: str) -> bool:
     rel = module_path.replace(".", os.sep) + ".py"
     rel_pkg = module_path.replace(".", os.sep) + os.sep + "__init__.py"
     return any(
-        os.path.isfile(os.path.join(base, rel))
-        or os.path.isfile(os.path.join(base, rel_pkg))
-        for base in sys.path
+        os.path.isfile(os.path.join(base, rel)) or os.path.isfile(os.path.join(base, rel_pkg)) for base in sys.path
     )
 
 
@@ -514,9 +498,7 @@ def _collect_probes() -> Dict[str, bool]:
     p["governance_has_execution_runtime_state"] = _source_contains(
         "core.unified_governance_semantics", "execution_runtime_state"
     )
-    p["governance_has_decision_causality"] = _source_contains(
-        "core.unified_governance_semantics", "decision_causality"
-    )
+    p["governance_has_decision_causality"] = _source_contains("core.unified_governance_semantics", "decision_causality")
     p["operator_surface"] = _module_exists("core.operator_surface")
     p["operator_snapshot"] = _source_contains("core.operator_surface", "OperatorSnapshot")
 
@@ -528,9 +510,7 @@ def _collect_probes() -> Dict[str, bool]:
 
     # --- Orchestration ---
     p["source_dispatch"] = _module_exists("core.runtime.source_dispatch_orchestrator")
-    p["dispatch_scores_candidate"] = _source_contains(
-        "core.runtime.source_dispatch_orchestrator", "_score_candidate"
-    )
+    p["dispatch_scores_candidate"] = _source_contains("core.runtime.source_dispatch_orchestrator", "_score_candidate")
     p["dispatch_consumes_android_snapshot"] = _source_contains(
         "core.runtime.source_dispatch_orchestrator", "android_snapshot"
     )
@@ -544,22 +524,16 @@ def _collect_probes() -> Dict[str, bool]:
     # --- Runtime-state truth ---
     p["android_device_state_store"] = _module_exists("core.android_device_state_store")
     p["android_runtime_host"] = _module_exists("core.android_runtime_host")
-    p["android_runtime_transition_reducer"] = _module_exists(
-        "core.android_runtime_transition_reducer"
-    )
+    p["android_runtime_transition_reducer"] = _module_exists("core.android_runtime_transition_reducer")
     p["android_mode_gate_policy"] = _module_exists("core.android_mode_gate_policy")
-    p["mode_gate_has_readiness"] = _source_contains(
-        "core.android_mode_gate_policy", "evaluate_android_mode_readiness"
-    )
+    p["mode_gate_has_readiness"] = _source_contains("core.android_mode_gate_policy", "evaluate_android_mode_readiness")
     p["mode_gate_has_build_cross_device"] = _source_contains(
         "core.android_mode_gate_policy", "build_cross_device_readiness_panel_dict"
     )
 
     # --- Android runtime node ---
     p["android_nl_chain_contract"] = _module_exists("core.android_nl_semantic_chain_contract")
-    p["android_nl_has_source"] = _source_contains(
-        "core.android_nl_semantic_chain_contract", "semantic_authority"
-    )
+    p["android_nl_has_source"] = _source_contains("core.android_nl_semantic_chain_contract", "semantic_authority")
     p["android_delegated_runtime"] = _module_exists("core.android_delegated_runtime_lifecycle_coordinator")
     p["android_participant_session"] = _module_exists("core.android_participant_session_state")
     p["android_runtime_dispatch"] = _module_exists("core.android_runtime_dispatch_binding")
@@ -570,13 +544,9 @@ def _collect_probes() -> Dict[str, bool]:
     p["android_v2_continuity_contract"] = _module_exists("core.android_v2_continuity_contract")
     p["contracts_dispatch_continuity"] = _module_exists("contracts.dispatch_continuity")
     p["contracts_execution_trace"] = _module_exists("contracts.execution_trace")
-    p["contracts_multi_device_projection"] = _module_exists(
-        "contracts.multi_device_runtime_projection"
-    )
+    p["contracts_multi_device_projection"] = _module_exists("contracts.multi_device_runtime_projection")
     p["contracts_mesh_membership"] = _module_exists("contracts.mesh_membership")
-    p["cross_repo_evidence_pipeline"] = _module_exists(
-        "core.canonical_cross_repo_evidence_pipeline"
-    )
+    p["cross_repo_evidence_pipeline"] = _module_exists("core.canonical_cross_repo_evidence_pipeline")
 
     # --- Mesh / hybrid / delegated collaboration ---
     p["mesh_runtime_center"] = _module_exists("core.mesh.mesh_runtime_center_state")
@@ -591,9 +561,7 @@ def _collect_probes() -> Dict[str, bool]:
     # --- Multimodal input-output chain ---
     p["desktop_presence_runtime"] = _module_exists("core.desktop_presence_runtime")
     p["desktop_existence_surface"] = _module_exists("core.desktop_existence_surface")
-    p["existence_surface_has_projection"] = _source_contains(
-        "core.desktop_existence_surface", "ExistenceProjection"
-    )
+    p["existence_surface_has_projection"] = _source_contains("core.desktop_existence_surface", "ExistenceProjection")
     p["android_perception_ingress"] = _module_exists("core.android_perception_ingress_contract")
 
     # --- Ingress surfaces ---
@@ -605,22 +573,16 @@ def _collect_probes() -> Dict[str, bool]:
 
     # --- Operator / panel / control / observability ---
     p["unified_panel_aggregation"] = _module_exists("core.unified_panel_aggregation")
-    p["panel_has_existence_surface"] = _source_contains(
-        "core.unified_panel_aggregation", "existence_surface"
-    )
-    p["panel_has_governance_state"] = _source_contains(
-        "core.unified_panel_aggregation", "governance_state"
-    )
-    p["panel_has_mesh_runtime"] = _source_contains(
-        "core.unified_panel_aggregation", "mesh_runtime_state"
-    )
+    p["panel_has_existence_surface"] = _source_contains("core.unified_panel_aggregation", "existence_surface")
+    p["panel_has_governance_state"] = _source_contains("core.unified_panel_aggregation", "governance_state")
+    p["panel_has_mesh_runtime"] = _source_contains("core.unified_panel_aggregation", "mesh_runtime_state")
     p["runtime_observability_sink"] = _module_exists("core.runtime.runtime_observability_sink")
     p["routing_observability"] = _module_exists("core.routing_observability")
 
     # --- Manifestation / carrier semantics ---
-    p["carrier_semantics_desktop"] = _source_contains(
-        "core.desktop_existence_surface", "carrier"
-    ) or _source_contains("core.desktop_presence_runtime", "carrier")
+    p["carrier_semantics_desktop"] = _source_contains("core.desktop_existence_surface", "carrier") or _source_contains(
+        "core.desktop_presence_runtime", "carrier"
+    )
     p["desktop_consumption_adapter"] = _module_exists("core.desktop_consumption_adapter")
     p["canonical_layer_model"] = _module_exists("core.canonical_layer_model")
     p["existence_surface_has_unified_carrier"] = _source_contains(
@@ -629,41 +591,21 @@ def _collect_probes() -> Dict[str, bool]:
 
     # --- Session continuity / durable identity ---
     p["attached_session_registry"] = _module_exists("core.attached_runtime_session_registry")
-    p["registry_has_durable_session"] = _source_contains(
-        "core.attached_runtime_session_registry", "durable_session_id"
-    )
-    p["registry_has_continuity_epoch"] = _source_contains(
-        "core.attached_runtime_session_registry", "continuity_epoch"
-    )
+    p["registry_has_durable_session"] = _source_contains("core.attached_runtime_session_registry", "durable_session_id")
+    p["registry_has_continuity_epoch"] = _source_contains("core.attached_runtime_session_registry", "continuity_epoch")
     p["flow_continuity_coordinator"] = _module_exists("core.flow_continuity_coordinator")
-    p["continuity_has_decide_reconnect"] = _source_contains(
-        "core.flow_continuity_coordinator", "decide_reconnect"
-    )
-    p["android_v2_continuity_has_stale_guard"] = _source_contains(
-        "core.android_v2_continuity_contract", "stale"
-    )
+    p["continuity_has_decide_reconnect"] = _source_contains("core.flow_continuity_coordinator", "decide_reconnect")
+    p["android_v2_continuity_has_stale_guard"] = _source_contains("core.android_v2_continuity_contract", "stale")
 
     # --- Proof / tests ---
-    p["e2e_android_snapshot"] = _module_exists(
-        "tests.integration.test_android_runtime_state_snapshot_e2e"
-    )
-    p["e2e_nl_canonical"] = _module_exists(
-        "tests.integration.test_nl_e2e_canonical_path"
-    )
-    p["test_orchestration_consumes_android"] = _module_exists(
-        "tests.test_orchestration_consumes_android_truth"
-    )
-    p["test_cross_repo_consistency"] = _module_exists(
-        "tests.test_pr12_cross_repo_consistency_gates"
-    )
-    p["test_mesh_runtime_center"] = _module_exists(
-        "tests.test_pr03_mesh_runtime_center_closure"
-    )
+    p["e2e_android_snapshot"] = _module_exists("tests.integration.test_android_runtime_state_snapshot_e2e")
+    p["e2e_nl_canonical"] = _module_exists("tests.integration.test_nl_e2e_canonical_path")
+    p["test_orchestration_consumes_android"] = _module_exists("tests.test_orchestration_consumes_android_truth")
+    p["test_cross_repo_consistency"] = _module_exists("tests.test_pr12_cross_repo_consistency_gates")
+    p["test_mesh_runtime_center"] = _module_exists("tests.test_pr03_mesh_runtime_center_closure")
 
     # --- PR-next-convergence (this PR) probes ---
-    p["next_convergence_audit"] = _module_exists(
-        "core.pr_next_convergence_closure_audit"
-    )
+    p["next_convergence_audit"] = _module_exists("core.pr_next_convergence_closure_audit")
     p["completion_ingress_has_android_context"] = _source_contains(
         "core.canonical_completion_ingress", "notify_with_android_context"
     )
@@ -687,23 +629,27 @@ def _collect_probes() -> Dict[str, bool]:
 
 def _build_system_identity(p: Dict[str, bool]) -> SystemIdentityVerdict:
     # Determine identity evidence quality based on probes
-    strong = all([
-        p.get("governance_module"),
-        p.get("operator_surface"),
-        p.get("android_delegated_runtime"),
-        p.get("mesh_runtime_center"),
-    ])
-    evidence = EvidenceState.HARD_ESTABLISHED if (
-        p.get("mesh_runtime_center_has_lifecycle_proof") and p.get("dispatch_consumes_android_snapshot")
-    ) else EvidenceState.PARTIAL
+    strong = all(
+        [
+            p.get("governance_module"),
+            p.get("operator_surface"),
+            p.get("android_delegated_runtime"),
+            p.get("mesh_runtime_center"),
+        ]
+    )
+    evidence = (
+        EvidenceState.HARD_ESTABLISHED
+        if (p.get("mesh_runtime_center_has_lifecycle_proof") and p.get("dispatch_consumes_android_snapshot"))
+        else EvidenceState.PARTIAL
+    )
 
     integration_degree = (
         "网络化程度：V2 + Android 已形成真实双节点协作网络（语义成立、局部运行成立），"
         "但 full mesh runtime 与 barrier 协同未完全运行级闭环，"
         "因此当前最准确定性是[中心控制型分布式智能系统]，"
         "而非[完全对等 mesh 网络]，也不再是简单[主程序 + 客户端]模型。"
-        if strong else
-        "网络化程度：证据仍偏薄，待更多运行级证明。"
+        if strong
+        else "网络化程度：证据仍偏薄，待更多运行级证明。"
     )
 
     return SystemIdentityVerdict(
@@ -740,14 +686,8 @@ def _build_system_identity(p: Dict[str, bool]) -> SystemIdentityVerdict:
 
 def _build_propositions(p: Dict[str, bool]) -> List[PropositionEntry]:
     _carrier_unified = p.get("existence_surface_has_unified_carrier", False)
-    _p10_verdict = (
-        PropositionVerdict.HARD_ESTABLISHED if _carrier_unified
-        else PropositionVerdict.PARTIALLY_ESTABLISHED
-    )
-    _p10_evidence = (
-        EvidenceState.HARD_ESTABLISHED if _carrier_unified
-        else EvidenceState.PARTIAL
-    )
+    _p10_verdict = PropositionVerdict.HARD_ESTABLISHED if _carrier_unified else PropositionVerdict.PARTIALLY_ESTABLISHED
+    _p10_evidence = EvidenceState.HARD_ESTABLISHED if _carrier_unified else EvidenceState.PARTIAL
     _p10_rationale = (
         "DesktopExistenceSurface / ExistenceProjection / desktop_presence_runtime 存在，"
         "desktop_consumption_adapter 存在。"
@@ -755,8 +695,8 @@ def _build_propositions(p: Dict[str, bool]) -> List[PropositionEntry]:
         "core.desktop_existence_surface (schema 1.1)，"
         "桌面 carrier 与 Android carrier 现在通过 CarrierSurfaceEntry 投影在同一语义层，"
         "R8 在 V2 侧已收口。"
-        if _carrier_unified else
-        "DesktopExistenceSurface / ExistenceProjection / desktop_presence_runtime 存在，"
+        if _carrier_unified
+        else "DesktopExistenceSurface / ExistenceProjection / desktop_presence_runtime 存在，"
         "desktop_consumption_adapter 存在，但[桌面 carrier 与 Android carrier 统一显化框架]"
         "尚未形成单一代码层面的完全统一。"
     )
@@ -770,8 +710,11 @@ def _build_propositions(p: Dict[str, bool]) -> List[PropositionEntry]:
             "unified_execution_governance 模块真实存在且携带 ExecutionType 优先级裁决逻辑；"
             "unified_governance_semantics 含 execution_runtime_state 与 decision_causality；"
             "operator_surface 具备 OperatorSnapshot。",
-            ["core/unified_execution_governance.py", "core/unified_governance_semantics.py",
-             "core/operator_surface.py"],
+            [
+                "core/unified_execution_governance.py",
+                "core/unified_governance_semantics.py",
+                "core/operator_surface.py",
+            ],
             [],
             [],
         ),
@@ -783,8 +726,7 @@ def _build_propositions(p: Dict[str, bool]) -> List[PropositionEntry]:
             "AutonomousExecutionPipeline（Android 侧）、android_delegated_runtime_lifecycle_coordinator、"
             "android_runtime_dispatch_binding 均真实存在。本地执行语义成立，"
             "但全链运行级 E2E 证明厚度仍有限。",
-            ["core/android_delegated_runtime_lifecycle_coordinator.py",
-             "core/android_runtime_dispatch_binding.py"],
+            ["core/android_delegated_runtime_lifecycle_coordinator.py", "core/android_runtime_dispatch_binding.py"],
             [ANDROID_ANCHOR_AUTONOMOUS_PIPELINE],
             ["R2", "R10"],
         ),
@@ -808,8 +750,7 @@ def _build_propositions(p: Dict[str, bool]) -> List[PropositionEntry]:
             "_score_candidate 与 get_device_state_snapshot 均存在，"
             "get_android_participation_evidence 现已进入 source_dispatch_orchestrator 与 device_selection（PR 1142）；"
             "编排已消费 Android participation truth，coverage 已提升但仍非所有分支均 runtime-level closed。",
-            ["core/runtime/source_dispatch_orchestrator.py",
-             "galaxy_gateway/routing/device_selection.py"],
+            ["core/runtime/source_dispatch_orchestrator.py", "galaxy_gateway/routing/device_selection.py"],
             [ANDROID_ANCHOR_WS_CLIENT],
             ["R1"],
         ),
@@ -820,8 +761,7 @@ def _build_propositions(p: Dict[str, bool]) -> List[PropositionEntry]:
             EvidenceState.RUNTIME_PROOF_THIN,
             "android_device_state_store / android_runtime_transition_reducer 存在；"
             "e2e 测试覆盖 snapshot roundtrip，但跨仓漂移收敛与冲突治理证据仍不足够厚。",
-            ["core/android_device_state_store.py",
-             "tests/integration/test_android_runtime_state_snapshot_e2e.py"],
+            ["core/android_device_state_store.py", "tests/integration/test_android_runtime_state_snapshot_e2e.py"],
             [ANDROID_ANCHOR_WS_CLIENT, ANDROID_ANCHOR_AUTONOMOUS_PIPELINE],
             ["R2"],
         ),
@@ -870,8 +810,7 @@ def _build_propositions(p: Dict[str, bool]) -> List[PropositionEntry]:
             "panel 投影已绑定 governance_state；本次 PR 新增 android_participation_verdict 字段，"
             "使 panel 直接可读 Android 参与层级。但[operator 看见的系统]与[runtime 真实世界]"
             "完全同构这一命题仍部分成立。",
-            ["core/unified_panel_aggregation.py", "core/operator_surface.py",
-             "core/routes/operator.py"],
+            ["core/unified_panel_aggregation.py", "core/operator_surface.py", "core/routes/operator.py"],
             [],
             ["R5"],
         ),
@@ -881,8 +820,11 @@ def _build_propositions(p: Dict[str, bool]) -> List[PropositionEntry]:
             _p10_verdict,
             _p10_evidence,
             _p10_rationale,
-            ["core/desktop_existence_surface.py", "core/desktop_presence_runtime.py",
-             "core/desktop_consumption_adapter.py"],
+            [
+                "core/desktop_existence_surface.py",
+                "core/desktop_presence_runtime.py",
+                "core/desktop_consumption_adapter.py",
+            ],
             [],
             _p10_gaps,
         ),
@@ -894,8 +836,11 @@ def _build_propositions(p: Dict[str, bool]) -> List[PropositionEntry]:
             "attached_runtime_session_registry 具备 durable_session_id / continuity_epoch；"
             "flow_continuity_coordinator 含 decide_reconnect；android_v2_continuity_contract 含 stale guard；"
             "但跨重启 / 进程重建场景下的完整闭环证明面仍偏薄。",
-            ["core/attached_runtime_session_registry.py", "core/flow_continuity_coordinator.py",
-             "core/android_v2_continuity_contract.py"],
+            [
+                "core/attached_runtime_session_registry.py",
+                "core/flow_continuity_coordinator.py",
+                "core/android_v2_continuity_contract.py",
+            ],
             [ANDROID_ANCHOR_CONTINUITY],
             ["R9"],
         ),
@@ -906,9 +851,11 @@ def _build_propositions(p: Dict[str, bool]) -> List[PropositionEntry]:
             EvidenceState.RUNTIME_PROOF_THIN,
             "已有 e2e_android_snapshot、e2e_nl_canonical、orchestration_consumes_android_truth 等测试，"
             "结构化证明较厚，但跨仓活体异常场景（断连/重放/降级/接管）的端到端运行级证明仍不足。",
-            ["tests/integration/test_android_runtime_state_snapshot_e2e.py",
-             "tests/integration/test_nl_e2e_canonical_path.py",
-             "tests/test_orchestration_consumes_android_truth.py"],
+            [
+                "tests/integration/test_android_runtime_state_snapshot_e2e.py",
+                "tests/integration/test_nl_e2e_canonical_path.py",
+                "tests/test_orchestration_consumes_android_truth.py",
+            ],
             [ANDROID_ANCHOR_MESH_TEST],
             ["R13"],
         ),
@@ -947,9 +894,11 @@ def _build_domains(p: Dict[str, bool]) -> List[DomainStatus]:
             "source_dispatch_orchestrator._score_candidate 消费 android_snapshot；"
             "device_selection 引入 get_device_state_snapshot；"
             "但并非所有治理分支均运行级闭环。",
-            ["core/runtime/source_dispatch_orchestrator.py",
-             "galaxy_gateway/routing/device_selection.py",
-             "core/unified_orchestration_spine.py"],
+            [
+                "core/runtime/source_dispatch_orchestrator.py",
+                "galaxy_gateway/routing/device_selection.py",
+                "core/unified_orchestration_spine.py",
+            ],
             [ANDROID_ANCHOR_WS_CLIENT],
             weight=1.5,
         ),
@@ -961,8 +910,11 @@ def _build_domains(p: Dict[str, bool]) -> List[DomainStatus]:
             "execution_runtime_state 与 decision_causality 入治理语义；"
             "android_device_state_store / android_runtime_transition_reducer 存在；"
             "跨仓透明链稳定冲突收敛证据仍偏薄。",
-            ["core/unified_governance_semantics.py", "core/android_device_state_store.py",
-             "core/android_runtime_transition_reducer.py"],
+            [
+                "core/unified_governance_semantics.py",
+                "core/android_device_state_store.py",
+                "core/android_runtime_transition_reducer.py",
+            ],
             [ANDROID_ANCHOR_WS_CLIENT, ANDROID_ANCHOR_AUTONOMOUS_PIPELINE],
             weight=1.5,
         ),
@@ -974,9 +926,11 @@ def _build_domains(p: Dict[str, bool]) -> List[DomainStatus]:
             "Android 本地执行、委托协作、信号回送均有代码支撑；"
             "mode_gate_policy 含 evaluate_android_mode_readiness；"
             "但本地 inference availability 到中心决策门控的完整闭合仍受限。",
-            ["core/android_delegated_runtime_lifecycle_coordinator.py",
-             "core/android_mode_gate_policy.py",
-             "core/android_execution_signal_reconciler.py"],
+            [
+                "core/android_delegated_runtime_lifecycle_coordinator.py",
+                "core/android_mode_gate_policy.py",
+                "core/android_execution_signal_reconciler.py",
+            ],
             [ANDROID_ANCHOR_AUTONOMOUS_PIPELINE, ANDROID_ANCHOR_MODE_GATE],
             weight=1.3,
         ),
@@ -999,9 +953,13 @@ def _build_domains(p: Dict[str, bool]) -> List[DomainStatus]:
             "android_v2_continuity_contract / contracts/dispatch_continuity / "
             "contracts/execution_trace / contracts/multi_device_runtime_projection 均存在；"
             "但正式跨仓契约的系统级 schema 一致性与版本管理仍有缺口。",
-            ["core/android_v2_continuity_contract.py", "contracts/dispatch_continuity.py",
-             "contracts/execution_trace.py", "contracts/multi_device_runtime_projection.py",
-             "contracts/mesh_membership.py"],
+            [
+                "core/android_v2_continuity_contract.py",
+                "contracts/dispatch_continuity.py",
+                "contracts/execution_trace.py",
+                "contracts/multi_device_runtime_projection.py",
+                "contracts/mesh_membership.py",
+            ],
             [ANDROID_ANCHOR_MESH_CONTRACT, ANDROID_ANCHOR_WS_CLIENT],
             weight=1.1,
         ),
@@ -1013,8 +971,11 @@ def _build_domains(p: Dict[str, bool]) -> List[DomainStatus]:
             "mesh_runtime_center_state.lifecycle_proof 区分 participation-ready 与 runtime-closed；"
             "mesh 参与契约与 barrier 语义均存在；"
             "full mesh runtime / barrier 协同的活体运行证明仍受约束。",
-            ["core/mesh/mesh_runtime_center_state.py", "core/mesh/live_mesh_runtime_engine.py",
-             "core/mesh/mesh_session_coordinator.py"],
+            [
+                "core/mesh/mesh_runtime_center_state.py",
+                "core/mesh/live_mesh_runtime_engine.py",
+                "core/mesh/mesh_session_coordinator.py",
+            ],
             [ANDROID_ANCHOR_MESH_CONTRACT, ANDROID_ANCHOR_MESH_TEST],
             weight=1.2,
         ),
@@ -1027,8 +988,11 @@ def _build_domains(p: Dict[str, bool]) -> List[DomainStatus]:
             "desktop_existence_surface 含 ExistenceProjection；"
             "android_perception_ingress_contract 存在；"
             "稳定跨仓多模态运行链端到端证明仍薄。",
-            ["core/android_nl_semantic_chain_contract.py", "core/desktop_existence_surface.py",
-             "core/android_perception_ingress_contract.py"],
+            [
+                "core/android_nl_semantic_chain_contract.py",
+                "core/desktop_existence_surface.py",
+                "core/android_perception_ingress_contract.py",
+            ],
             [ANDROID_ANCHOR_WS_CLIENT],
             weight=1.0,
         ),
@@ -1039,8 +1003,12 @@ def _build_domains(p: Dict[str, bool]) -> List[DomainStatus]:
             EvidenceState.PARTIAL,
             "统一入口 /api/v1/panel/unified 存在；entrypoint_router 存在；"
             "chat / operator / Android WS / panel 等入口的运行因果同路性仍需持续回归。",
-            ["core/routes/panel.py", "core/routes/chat.py", "core/routes/operator.py",
-             "core/unified/entrypoint_router.py"],
+            [
+                "core/routes/panel.py",
+                "core/routes/chat.py",
+                "core/routes/operator.py",
+                "core/unified/entrypoint_router.py",
+            ],
             [ANDROID_ANCHOR_WS_CLIENT],
             weight=1.1,
         ),
@@ -1052,8 +1020,12 @@ def _build_domains(p: Dict[str, bool]) -> List[DomainStatus]:
             "UnifiedPanelPayload 含 governance_state / mesh_runtime_state / existence_surface；"
             "runtime_observability_sink / routing_observability 存在；"
             "但显化与执行控制完全同构仍未最终收口。",
-            ["core/unified_panel_aggregation.py", "core/operator_surface.py",
-             "core/runtime/runtime_observability_sink.py", "core/routing_observability.py"],
+            [
+                "core/unified_panel_aggregation.py",
+                "core/operator_surface.py",
+                "core/runtime/runtime_observability_sink.py",
+                "core/routing_observability.py",
+            ],
             [],
             weight=1.2,
         ),
@@ -1065,8 +1037,12 @@ def _build_domains(p: Dict[str, bool]) -> List[DomainStatus]:
             "DesktopExistenceSurface / ExistenceProjection 统一 5 状态族；"
             "desktop_consumption_adapter 存在；"
             "桌面 + Android carrier 统一显化框架尚未在单一代码层面完全收口。",
-            ["core/desktop_existence_surface.py", "core/desktop_presence_runtime.py",
-             "core/desktop_consumption_adapter.py", "core/canonical_layer_model.py"],
+            [
+                "core/desktop_existence_surface.py",
+                "core/desktop_presence_runtime.py",
+                "core/desktop_consumption_adapter.py",
+                "core/canonical_layer_model.py",
+            ],
             [],
             weight=1.0,
         ),
@@ -1079,8 +1055,11 @@ def _build_domains(p: Dict[str, bool]) -> List[DomainStatus]:
             "flow_continuity_coordinator.decide_reconnect 存在；"
             "android_v2_continuity_contract 含 stale guard；"
             "进程重建 / V2 重启场景下的跨仓完整闭环证明仍有缺口。",
-            ["core/attached_runtime_session_registry.py", "core/flow_continuity_coordinator.py",
-             "core/android_v2_continuity_contract.py"],
+            [
+                "core/attached_runtime_session_registry.py",
+                "core/flow_continuity_coordinator.py",
+                "core/android_v2_continuity_contract.py",
+            ],
             [ANDROID_ANCHOR_CONTINUITY],
             weight=1.1,
         ),
@@ -1105,10 +1084,12 @@ def _build_domains(p: Dict[str, bool]) -> List[DomainStatus]:
             "e2e snapshot roundtrip 测试、NL canonical path 测试（40 个）、"
             "orchestration_consumes_android_truth 测试均存在；"
             "但跨仓活体异常场景（断连/回放/降级/接管）端到端运行级证明厚度仍不足。",
-            ["tests/integration/test_android_runtime_state_snapshot_e2e.py",
-             "tests/integration/test_nl_e2e_canonical_path.py",
-             "tests/test_orchestration_consumes_android_truth.py",
-             "tests/test_pr12_cross_repo_consistency_gates.py"],
+            [
+                "tests/integration/test_android_runtime_state_snapshot_e2e.py",
+                "tests/integration/test_nl_e2e_canonical_path.py",
+                "tests/test_orchestration_consumes_android_truth.py",
+                "tests/test_pr12_cross_repo_consistency_gates.py",
+            ],
             [ANDROID_ANCHOR_MESH_TEST],
             weight=1.3,
         ),
@@ -1130,9 +1111,11 @@ def _build_remaining_issues(p: Dict[str, bool]) -> List[RemainingIssue]:
             "不能宣称编排层完全状态真相驱动。",
             ["系统本体运行级闭环", "P4 命题 fully closed"],
             ["P4"],
-            ["core/runtime/source_dispatch_orchestrator.py",
-             "galaxy_gateway/routing/device_selection.py",
-             "core/unified_orchestration_spine.py"],
+            [
+                "core/runtime/source_dispatch_orchestrator.py",
+                "galaxy_gateway/routing/device_selection.py",
+                "core/unified_orchestration_spine.py",
+            ],
             [ANDROID_ANCHOR_WS_CLIENT],
         ),
         RemainingIssue(
@@ -1146,9 +1129,11 @@ def _build_remaining_issues(p: Dict[str, bool]) -> List[RemainingIssue]:
             "但状态漂移收敛规则、中心与设备侧冲突裁决的稳定证据不够厚。",
             ["runtime-state truth 单源可信命题", "P5 命题 fully closed"],
             ["P5"],
-            ["core/android_device_state_store.py",
-             "core/unified_governance_semantics.py",
-             "tests/integration/test_android_runtime_state_snapshot_e2e.py"],
+            [
+                "core/android_device_state_store.py",
+                "core/unified_governance_semantics.py",
+                "tests/integration/test_android_runtime_state_snapshot_e2e.py",
+            ],
             [ANDROID_ANCHOR_WS_CLIENT, ANDROID_ANCHOR_AUTONOMOUS_PIPELINE],
         ),
         RemainingIssue(
@@ -1177,9 +1162,11 @@ def _build_remaining_issues(p: Dict[str, bool]) -> List[RemainingIssue]:
             "但 live_mesh_runtime_engine + barrier 协同在跨仓活体条件下的连续运行证明仍受约束。",
             ["多设备协作运行级 fully closed 命题", "P7 命题升级为 fully established"],
             ["P7"],
-            ["core/mesh/live_mesh_runtime_engine.py",
-             "core/mesh/mesh_runtime_center_state.py",
-             "core/mesh/mesh_session_coordinator.py"],
+            [
+                "core/mesh/live_mesh_runtime_engine.py",
+                "core/mesh/mesh_runtime_center_state.py",
+                "core/mesh/mesh_session_coordinator.py",
+            ],
             [ANDROID_ANCHOR_MESH_CONTRACT, ANDROID_ANCHOR_MESH_TEST],
         ),
         RemainingIssue(
@@ -1194,8 +1181,7 @@ def _build_remaining_issues(p: Dict[str, bool]) -> List[RemainingIssue]:
             "控制面与执行面同源性待进一步收口。",
             ["单一控制面与显化面命题", "P9 命题 fully closed"],
             ["P9"],
-            ["core/operator_surface.py", "core/unified_panel_aggregation.py",
-             "core/routes/operator.py"],
+            ["core/operator_surface.py", "core/unified_panel_aggregation.py", "core/routes/operator.py"],
             [ANDROID_ANCHOR_WS_CLIENT],
         ),
         RemainingIssue(
@@ -1210,8 +1196,10 @@ def _build_remaining_issues(p: Dict[str, bool]) -> List[RemainingIssue]:
             "near-closure 成熟度命题仍无法成立。",
             ["near-closure 成熟度命题", "P12 命题升级为 PARTIALLY_ESTABLISHED"],
             ["P12"],
-            ["tests/integration/test_android_runtime_state_snapshot_e2e.py",
-             "tests/integration/test_nl_e2e_canonical_path.py"],
+            [
+                "tests/integration/test_android_runtime_state_snapshot_e2e.py",
+                "tests/integration/test_nl_e2e_canonical_path.py",
+            ],
             [ANDROID_ANCHOR_MESH_TEST],
         ),
         RemainingIssue(
@@ -1226,8 +1214,12 @@ def _build_remaining_issues(p: Dict[str, bool]) -> List[RemainingIssue]:
             "统一入口收口命题处于部分成立状态。",
             ["统一入口收口命题", "P8 命题 fully closed"],
             ["P8"],
-            ["core/routes/panel.py", "core/routes/chat.py", "core/routes/operator.py",
-             "core/unified/entrypoint_router.py"],
+            [
+                "core/routes/panel.py",
+                "core/routes/chat.py",
+                "core/routes/operator.py",
+                "core/unified/entrypoint_router.py",
+            ],
             [ANDROID_ANCHOR_WS_CLIENT],
         ),
         RemainingIssue(
@@ -1236,21 +1228,24 @@ def _build_remaining_issues(p: Dict[str, bool]) -> List[RemainingIssue]:
             GapClass.MANIFESTATION_CONTROL,
             WorkPriority.IMPORTANT_SECONDARY,
             StageGate.P1_BEFORE_NEAR_CLOSURE,
-            EvidenceState.HARD_ESTABLISHED
-            if p.get("existence_surface_has_unified_carrier")
-            else EvidenceState.PARTIAL,
-            "PR-8 V2：UnifiedCarrierSurface / CarrierSurfaceEntry 已加入 "
-            "core.desktop_existence_surface (schema 1.1)，"
-            "桌面 carrier 与 Android carrier 通过 CarrierSurfaceEntry 统一投影在同一语义层，"
-            "R8 V2 侧收口。"
-            if p.get("existence_surface_has_unified_carrier")
-            else "DesktopExistenceSurface 统一了桌面侧 5 个状态族，"
-            "但与 Android carrier 的统一显化框架（carrier 语义统一、execution surface 同层次投影）"
-            "尚未在单一代码层面完全实现。",
+            EvidenceState.HARD_ESTABLISHED if p.get("existence_surface_has_unified_carrier") else EvidenceState.PARTIAL,
+            (
+                "PR-8 V2：UnifiedCarrierSurface / CarrierSurfaceEntry 已加入 "
+                "core.desktop_existence_surface (schema 1.1)，"
+                "桌面 carrier 与 Android carrier 通过 CarrierSurfaceEntry 统一投影在同一语义层，"
+                "R8 V2 侧收口。"
+                if p.get("existence_surface_has_unified_carrier")
+                else "DesktopExistenceSurface 统一了桌面侧 5 个状态族，"
+                "但与 Android carrier 的统一显化框架（carrier 语义统一、execution surface 同层次投影）"
+                "尚未在单一代码层面完全实现。"
+            ),
             ["多设备统一显化面命题", "P10 命题 HARD_ESTABLISHED"],
             ["P10"],
-            ["core/desktop_existence_surface.py", "core/desktop_presence_runtime.py",
-             "core/desktop_consumption_adapter.py"],
+            [
+                "core/desktop_existence_surface.py",
+                "core/desktop_presence_runtime.py",
+                "core/desktop_consumption_adapter.py",
+            ],
             [],
         ),
         RemainingIssue(
@@ -1264,9 +1259,11 @@ def _build_remaining_issues(p: Dict[str, bool]) -> List[RemainingIssue]:
             "但 Android 进程重建 → V2 重启 → 任务恢复完整路径的运行级闭环证明仍有缺口。",
             ["session 连续性 fully closed 命题", "P11 命题 HARD_ESTABLISHED"],
             ["P11"],
-            ["core/attached_runtime_session_registry.py",
-             "core/flow_continuity_coordinator.py",
-             "core/android_v2_continuity_contract.py"],
+            [
+                "core/attached_runtime_session_registry.py",
+                "core/flow_continuity_coordinator.py",
+                "core/android_v2_continuity_contract.py",
+            ],
             [ANDROID_ANCHOR_CONTINUITY],
         ),
         RemainingIssue(
@@ -1296,9 +1293,12 @@ def _build_remaining_issues(p: Dict[str, bool]) -> List[RemainingIssue]:
             "尚未形成统一正式治理。",
             ["跨仓 contract 一致性命题"],
             [],
-            ["contracts/dispatch_continuity.py", "contracts/execution_trace.py",
-             "core/android_v2_continuity_contract.py",
-             "core/canonical_cross_repo_evidence_pipeline.py"],
+            [
+                "contracts/dispatch_continuity.py",
+                "contracts/execution_trace.py",
+                "core/android_v2_continuity_contract.py",
+                "core/canonical_cross_repo_evidence_pipeline.py",
+            ],
             [ANDROID_ANCHOR_MESH_CONTRACT],
         ),
         RemainingIssue(
@@ -1313,8 +1313,7 @@ def _build_remaining_issues(p: Dict[str, bool]) -> List[RemainingIssue]:
             "尚未得到运行级证明。",
             ["编排层完全状态真相驱动命题"],
             ["P4"],
-            ["core/unified_execution_governance.py",
-             "core/runtime/source_dispatch_orchestrator.py"],
+            ["core/unified_execution_governance.py", "core/runtime/source_dispatch_orchestrator.py"],
             [],
         ),
         RemainingIssue(
@@ -1328,8 +1327,10 @@ def _build_remaining_issues(p: Dict[str, bool]) -> List[RemainingIssue]:
             "但覆盖断连 → 回放 → 降级 → 接管组合路径的跨仓端到端运行级证明尚未形成。",
             ["near-closure 命题", "P3 全链 fully closed"],
             ["P3", "P12"],
-            ["tests/integration/test_android_runtime_state_snapshot_e2e.py",
-             "core/android_execution_signal_reconciler.py"],
+            [
+                "tests/integration/test_android_runtime_state_snapshot_e2e.py",
+                "core/android_execution_signal_reconciler.py",
+            ],
             [ANDROID_ANCHOR_MESH_TEST],
         ),
     ]
@@ -1349,16 +1350,15 @@ def _build_closure_map(
     result = []
     for prop in propositions:
         blocking = list(prop.open_gap_ids)
-        closed = (
-            prop.verdict == PropositionVerdict.HARD_ESTABLISHED
-            and not blocking
+        closed = prop.verdict == PropositionVerdict.HARD_ESTABLISHED and not blocking
+        result.append(
+            ClosureMapEntry(
+                prop_id=prop.prop_id,
+                verdict=prop.verdict,
+                closed=closed,
+                blocking_issue_ids=blocking,
+            )
         )
-        result.append(ClosureMapEntry(
-            prop_id=prop.prop_id,
-            verdict=prop.verdict,
-            closed=closed,
-            blocking_issue_ids=blocking,
-        ))
     return result
 
 
@@ -1380,10 +1380,7 @@ def _build_runtime_flow() -> List[RuntimeFlowStage]:
             "克隆后基础启动认知入口",
             "clone_setup",
             RuntimeMaturity.PARTIALLY_WIRED,
-            (
-                "V2 仓已有 clone-to-use 文档与最小启动命令，"
-                "但双仓（含 Android）从克隆到联调的统一一步式脚本仍缺失。"
-            ),
+            ("V2 仓已有 clone-to-use 文档与最小启动命令，" "但双仓（含 Android）从克隆到联调的统一一步式脚本仍缺失。"),
             ["R6", "R13"],
             [
                 "README.md",
@@ -1638,8 +1635,7 @@ def _build_cross_repo_mismatches() -> List[CrossRepoMismatch]:
             "M3",
             "能力/就绪/本地推理可用性尚未形成稳定统一门控",
             "V2 有 android_mode_gate_policy、capability_resolver 与 unified governance semantics。",
-            "Android 侧本地执行/本地推理能力真实存在，但其 availability 并未在双仓之间形成强制"
-            "一致的决策消费链。",
+            "Android 侧本地执行/本地推理能力真实存在，但其 availability 并未在双仓之间形成强制" "一致的决策消费链。",
             "这会让 Android 本地能力、V2 readiness judgement、operator 面板之间出现半语义/半治理"
             "状态，而不是稳定的一条真值轴。",
             ["R3", "R10"],
@@ -1670,9 +1666,7 @@ def _build_cross_repo_mismatches() -> List[CrossRepoMismatch]:
 def _build_v2_next_convergence_priority() -> V2ConvergencePriority:
     """Build the highest-value next-step V2-side integrity-linkage direction."""
     return V2ConvergencePriority(
-        title_zh=(
-            "从闭环真值同源解释推进到 board routing 完全消费 Android truth 并拉通 Android 侧 tier 上报"
-        ),
+        title_zh=("从闭环真值同源解释推进到 board routing 完全消费 Android truth 并拉通 Android 侧 tier 上报"),
         why_now_zh=(
             "PR 1142 已完成编排选路消费 Android participation evidence；"
             "本次 PR 完成了 closure 事件携带 Android context（notify_with_android_context）、"
@@ -1724,8 +1718,7 @@ def _build_integrity_repair_actions() -> List[IntegrityRepairAction]:
                 "tests/test_unified_result_ingress.py",
             ],
             android_dependency_zh=(
-                "Android 继续提供 proof_class / delegated result 质量信号；"
-                "本修复不依赖 Android 新改动即可生效。"
+                "Android 继续提供 proof_class / delegated result 质量信号；" "本修复不依赖 Android 新改动即可生效。"
             ),
         ),
         IntegrityRepairAction(
@@ -1743,9 +1736,7 @@ def _build_integrity_repair_actions() -> List[IntegrityRepairAction]:
                 "galaxy_gateway/routing/device_selection.py",
                 "tests/test_orchestration_consumes_android_truth.py",
             ],
-            android_dependency_zh=(
-                "依赖 Android 侧持续稳定上送参与真值字段；V2 侧已在缺省退化路径下保持兼容。"
-            ),
+            android_dependency_zh=("依赖 Android 侧持续稳定上送参与真值字段；V2 侧已在缺省退化路径下保持兼容。"),
         ),
         IntegrityRepairAction(
             action_id="IRA_ROUTING_TRUTH_STRONG_GATING",
@@ -1853,9 +1844,7 @@ def build_complete_joint_system_review() -> CompleteJointSystemReport:
 
     # Weighted mean
     total_weight = sum(d.weight for d in domains)
-    weighted = round(
-        sum(d.completion_pct * d.weight for d in domains) / total_weight, 1
-    )
+    weighted = round(sum(d.completion_pct * d.weight for d in domains) / total_weight, 1)
 
     # Stage determination based on P0/P1 gaps
     has_p0 = any(i.stage_gate == StageGate.P0_BEFORE_RUNTIME_CLOSURE for i in remaining)

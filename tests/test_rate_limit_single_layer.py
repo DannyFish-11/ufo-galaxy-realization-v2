@@ -34,9 +34,7 @@ def test_setup_middleware_can_omit_rate_limit_layer():
     SecurityManager().setup_middleware(without_rl, include_rate_limit=False)
 
     delta = len(with_rl.user_middleware) - len(without_rl.user_middleware)
-    assert delta == 1, (
-        f"include_rate_limit 应恰好切换一个限流中间件,实际差 {delta} 个"
-    )
+    assert delta == 1, f"include_rate_limit 应恰好切换一个限流中间件,实际差 {delta} 个"
 
 
 def test_default_still_includes_rate_limit_for_standalone_use():
@@ -54,10 +52,10 @@ def test_startup_wires_security_without_its_own_rate_limit():
     """core/startup.py 必须以 include_rate_limit=False 调 setup_middleware,
     确保 HTTP 限流只由性能层承担(源码级断言,避免有人日后又叠回去)。"""
     import inspect
+
     import core.startup as startup
 
     src = inspect.getsource(startup)
     assert "include_rate_limit=False" in src, (
-        "core/startup.py 应以 include_rate_limit=False 安装安全中间件,"
-        "把 HTTP 限流收口到性能层唯一一处"
+        "core/startup.py 应以 include_rate_limit=False 安装安全中间件," "把 HTTP 限流收口到性能层唯一一处"
     )

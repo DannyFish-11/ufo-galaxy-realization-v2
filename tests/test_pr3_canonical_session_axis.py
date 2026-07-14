@@ -20,8 +20,8 @@ from pathlib import Path
 import pytest
 
 from core.canonical_session_axis import (
-    ANDROID_SESSION_IDS_ARE_CLAIMS_POLICY,
     ALIAS_RESOLUTION_ORDER_IS_CANONICAL_POLICY,
+    ANDROID_SESSION_IDS_ARE_CLAIMS_POLICY,
     BARE_SESSION_IS_NOT_CANONICAL_POLICY,
     CANONICAL_SESSION_AXIS_AUTHORITY,
     CANONICAL_SESSION_AXIS_PR3_SENTINEL,
@@ -30,13 +30,13 @@ from core.canonical_session_axis import (
     RECONNECT_PRESERVES_RUNTIME_SESSION_ID_POLICY,
     SESSION_FAMILIES_ARE_DISJOINT_POLICY,
     TRANSFER_SESSION_TERMINAL_IS_NON_RECOVERABLE_POLICY,
+    AndroidSessionMapping,
+    SessionAxisSnapshot,
     SessionContinuityClass,
     SessionFamily,
     SessionFamilyRecord,
     SessionIdentifierRecord,
     SessionIdentifierRole,
-    AndroidSessionMapping,
-    SessionAxisSnapshot,
     build_session_axis_snapshot,
     classify_identifier_role,
     get_android_session_mapping_catalogue,
@@ -51,16 +51,12 @@ from core.canonical_session_axis import (
 
 
 def test_canonical_session_axis_authority_sentinel():
-    assert CANONICAL_SESSION_AXIS_AUTHORITY.startswith(
-        "CANONICAL_SESSION_AXIS_AUTHORITY::"
-    )
+    assert CANONICAL_SESSION_AXIS_AUTHORITY.startswith("CANONICAL_SESSION_AXIS_AUTHORITY::")
     assert "core.canonical_session_axis" in CANONICAL_SESSION_AXIS_AUTHORITY
 
 
 def test_pr3_sentinel_present():
-    assert CANONICAL_SESSION_AXIS_PR3_SENTINEL.startswith(
-        "CANONICAL_SESSION_AXIS_PR3_SENTINEL::"
-    )
+    assert CANONICAL_SESSION_AXIS_PR3_SENTINEL.startswith("CANONICAL_SESSION_AXIS_PR3_SENTINEL::")
     assert "PR3" in CANONICAL_SESSION_AXIS_PR3_SENTINEL
     assert "canonical-session-axis-v1" in CANONICAL_SESSION_AXIS_PR3_SENTINEL
 
@@ -182,8 +178,7 @@ def test_each_family_has_exactly_one_canonical_identifier():
     for family in SessionFamily:
         assert family in by_family, f"No canonical identifier for {family}"
         assert len(by_family[family]) == 1, (
-            f"Multiple canonical identifiers for {family}: "
-            f"{[r.field_name for r in by_family[family]]}"
+            f"Multiple canonical identifiers for {family}: " f"{[r.field_name for r in by_family[family]]}"
         )
 
 
@@ -198,9 +193,7 @@ def test_canonical_identifiers_have_priority_one():
 
 def test_all_aliases_resolve_to_known_canonical_names():
     canonical_names = {
-        r.field_name
-        for r in get_session_identifier_catalogue()
-        if r.role == SessionIdentifierRole.canonical
+        r.field_name for r in get_session_identifier_catalogue() if r.role == SessionIdentifierRole.canonical
     }
     # Also include the explicit canonical names from family records
     family_canonical = {r.canonical_identifier for r in get_session_family_catalogue()}
@@ -455,8 +448,7 @@ def test_invariant_canonical_identifier_uniqueness():
         if record.role == SessionIdentifierRole.canonical:
             fam = record.family
             assert fam not in by_family, (
-                f"Duplicate canonical identifier for {fam}: "
-                f"{by_family[fam]} and {record.field_name}"
+                f"Duplicate canonical identifier for {fam}: " f"{by_family[fam]} and {record.field_name}"
             )
             by_family[fam] = record.field_name
 
@@ -467,9 +459,7 @@ def test_invariant_canonical_identifier_uniqueness():
 
 def test_invariant_all_aliases_resolve():
     """Invariant 3: every alias/legacy_bare resolves to a known canonical name."""
-    canonical_names = {
-        r.canonical_identifier for r in get_session_family_catalogue()
-    }
+    canonical_names = {r.canonical_identifier for r in get_session_family_catalogue()}
     for record in get_session_identifier_catalogue():
         assert record.canonical_name in canonical_names, (
             f"Identifier {record.field_name!r} resolves to "
@@ -485,9 +475,7 @@ def test_invariant_android_mappings_non_empty_per_family():
         SessionFamily.delegation_transfer,
         SessionFamily.mesh,
     ]:
-        assert required_family in families, (
-            f"Android mapping catalogue missing entries for {required_family}"
-        )
+        assert required_family in families, f"Android mapping catalogue missing entries for {required_family}"
 
 
 def test_invariant_canonical_fields_have_priority_one():
@@ -495,8 +483,7 @@ def test_invariant_canonical_fields_have_priority_one():
     for record in get_session_identifier_catalogue():
         if record.role == SessionIdentifierRole.canonical:
             assert record.resolution_priority == 1, (
-                f"Canonical identifier {record.field_name!r} has priority "
-                f"{record.resolution_priority}, expected 1"
+                f"Canonical identifier {record.field_name!r} has priority " f"{record.resolution_priority}, expected 1"
             )
 
 
@@ -537,9 +524,7 @@ def test_canonical_session_axis_architecture_doc_exists():
         "android",
         "reconnect",
     ]:
-        assert required_term in text, (
-            f"Required term {required_term!r} not found in CANONICAL_SESSION_AXIS_V1.md"
-        )
+        assert required_term in text, f"Required term {required_term!r} not found in CANONICAL_SESSION_AXIS_V1.md"
 
 
 def test_ugcp_session_axis_doc_exists():
@@ -557,6 +542,4 @@ def test_ugcp_session_axis_doc_exists():
         "android",
         "reconnect",
     ]:
-        assert required_term in text, (
-            f"Required term {required_term!r} not found in UGCP_SESSION_AXIS_V1.md"
-        )
+        assert required_term in text, f"Required term {required_term!r} not found in UGCP_SESSION_AXIS_V1.md"

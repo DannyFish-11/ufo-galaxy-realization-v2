@@ -56,6 +56,7 @@ def _get_readiness_module():
     """Return the device_readiness module, or None on import failure."""
     try:
         import core.device_readiness as dr_mod
+
         return dr_mod
     except Exception as exc:
         logger.debug("device_readiness module unavailable: %s", exc)
@@ -66,6 +67,7 @@ def _get_udm():
     """Return UnifiedDeviceManager singleton, or None on failure."""
     try:
         from core.unified.device_manager import get_unified_device_manager
+
         return get_unified_device_manager()
     except Exception as exc:
         logger.debug("UDM unavailable: %s", exc)
@@ -98,6 +100,7 @@ def _get_participation_for_device(device_id: str) -> Dict[str, Any]:
             return result
 
         from core.device_selection import assess_device_participation
+
         status = assess_device_participation(device)
         participation_dict = status.to_dict()
         result.update(participation_dict)
@@ -187,14 +190,16 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     device_id,
                     exc,
                 )
-                summaries.append({
-                    "device_id": device_id,
-                    "error": str(exc),
-                    "registered": False,
-                    "online": False,
-                    "connected": False,
-                    "routable": False,
-                })
+                summaries.append(
+                    {
+                        "device_id": device_id,
+                        "error": str(exc),
+                        "registered": False,
+                        "online": False,
+                        "connected": False,
+                        "routable": False,
+                    }
+                )
 
         return JSONResponse(
             content={
@@ -281,9 +286,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         try:
             ready_devices = dr_mod.get_cross_device_ready_devices()
         except Exception as exc:
-            logger.warning(
-                "DeviceReadinessRoutes: get_cross_device_ready_devices failed: %s", exc
-            )
+            logger.warning("DeviceReadinessRoutes: get_cross_device_ready_devices failed: %s", exc)
             return JSONResponse(
                 content={
                     "success": True,

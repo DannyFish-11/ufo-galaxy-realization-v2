@@ -32,10 +32,7 @@ class AIPMessageSchema(BaseModel):
     )
     type: str = Field(
         ...,
-        description=(
-            "Message type, e.g. 'command', 'event', 'response', "
-            "'heartbeat', 'discovery'."
-        ),
+        description=("Message type, e.g. 'command', 'event', 'response', " "'heartbeat', 'discovery'."),
     )
     device_id: str = Field(
         ...,
@@ -104,10 +101,7 @@ class MCPToolSchema(BaseModel):
     )
     parameters: Dict[str, Any] = Field(
         default_factory=dict,
-        description=(
-            "JSON-Schema style parameter definition accepted by the "
-            "tool."
-        ),
+        description=("JSON-Schema style parameter definition accepted by the " "tool."),
     )
     server_name: str = Field(
         default="",

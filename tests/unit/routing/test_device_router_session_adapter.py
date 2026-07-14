@@ -23,14 +23,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
 
+
 def _reset_udm() -> None:
     """Reset UnifiedDeviceManager singleton between tests."""
     from core.unified import device_manager as _udm_mod
+
     _udm_mod.UnifiedDeviceManager._instance = None
 
 
@@ -45,12 +46,14 @@ def _fresh_router():
     """Return a new DeviceRouter instance with a clean UDM."""
     _reset_udm()
     from galaxy_gateway.device_router import DeviceRouter
+
     return DeviceRouter()
 
 
 # ---------------------------------------------------------------------------
 # 1. Connect / session establish updates canonical runtime state in UDM
 # ---------------------------------------------------------------------------
+
 
 class TestConnectUpdatesUDM:
     """register_device and on_device_connected patch canonical runtime state."""
@@ -64,6 +67,7 @@ class TestConnectUpdatesUDM:
         router.register_device("dev_connect_01", "android_phone", ["screen"])
 
         from core.unified.device_manager import UnifiedDeviceManager
+
         udm = UnifiedDeviceManager()
         device = udm.get_device("dev_connect_01")
         assert device is not None, "UDM must contain the device after register_device"
@@ -76,6 +80,7 @@ class TestConnectUpdatesUDM:
 
         from core.unified.device_manager import UnifiedDeviceManager
         from core.unified.models import UnifiedDeviceStatus
+
         udm = UnifiedDeviceManager()
         device = udm.get_device("dev_connect_02")
         assert device is not None
@@ -93,6 +98,7 @@ class TestConnectUpdatesUDM:
 
         from core.unified.device_manager import UnifiedDeviceManager
         from core.unified.models import UnifiedDeviceStatus
+
         udm = UnifiedDeviceManager()
         device = udm.get_device("dev_connect_03")
         assert device is not None
@@ -109,6 +115,7 @@ class TestConnectUpdatesUDM:
 
         from core.unified.device_manager import UnifiedDeviceManager
         from core.unified.models import UnifiedDeviceStatus
+
         udm = UnifiedDeviceManager()
         device = udm.get_device("dev_connect_04")
         assert device is not None
@@ -129,6 +136,7 @@ class TestConnectUpdatesUDM:
 # 2. Disconnect updates canonical runtime state in UDM
 # ---------------------------------------------------------------------------
 
+
 class TestDisconnectUpdatesUDM:
     """unregister_device and on_device_disconnected patch UDM to offline."""
 
@@ -144,6 +152,7 @@ class TestDisconnectUpdatesUDM:
 
         from core.unified.device_manager import UnifiedDeviceManager
         from core.unified.models import UnifiedDeviceStatus
+
         udm = UnifiedDeviceManager()
         device = udm.get_device("dev_disc_01")
         assert device is not None, "Device must still exist in UDM after unregister_device"
@@ -159,6 +168,7 @@ class TestDisconnectUpdatesUDM:
 
         from core.unified.device_manager import UnifiedDeviceManager
         from core.unified.models import UnifiedDeviceStatus
+
         udm = UnifiedDeviceManager()
         device = udm.get_device("dev_disc_02")
         assert device is not None, "Device must still exist in UDM after on_device_disconnected"
@@ -175,6 +185,7 @@ class TestDisconnectUpdatesUDM:
 
         from core.unified.device_manager import UnifiedDeviceManager
         from core.unified.models import UnifiedDeviceStatus
+
         udm = UnifiedDeviceManager()
         device = udm.get_device("dev_disc_03")
         assert device is not None
@@ -193,6 +204,7 @@ class TestDisconnectUpdatesUDM:
 # 3. Loss of router-local state does not erase canonical registration
 # ---------------------------------------------------------------------------
 
+
 class TestLocalStateLossPreservesCanonical:
     """Clearing local session cache must not touch canonical UDM registration."""
 
@@ -208,11 +220,10 @@ class TestLocalStateLossPreservesCanonical:
         router.devices.clear()
 
         from core.unified.device_manager import UnifiedDeviceManager
+
         udm = UnifiedDeviceManager()
         device = udm.get_device("dev_pres_01")
-        assert device is not None, (
-            "Canonical UDM registration must survive loss of router-local session cache"
-        )
+        assert device is not None, "Canonical UDM registration must survive loss of router-local session cache"
 
     def test_unregister_device_preserves_udm_entry(self):
         """unregister_device clears local session but preserves UDM entry."""
@@ -226,6 +237,7 @@ class TestLocalStateLossPreservesCanonical:
 
         # But UDM record persists
         from core.unified.device_manager import UnifiedDeviceManager
+
         udm = UnifiedDeviceManager()
         device = udm.get_device("dev_pres_02")
         assert device is not None, "UDM canonical registration must persist after unregister_device"
@@ -243,6 +255,7 @@ class TestLocalStateLossPreservesCanonical:
 
         # UDM record survives
         from core.unified.device_manager import UnifiedDeviceManager
+
         udm = UnifiedDeviceManager()
         device = udm.get_device("dev_pres_03")
         assert device is not None, "UDM entry must remain after on_device_disconnected"
@@ -257,6 +270,7 @@ class TestLocalStateLossPreservesCanonical:
             router.unregister_device(device_id)
 
         from core.unified.device_manager import UnifiedDeviceManager
+
         udm = UnifiedDeviceManager()
         device = udm.get_device(device_id)
         assert device is not None, "Device must still exist in UDM after multiple cycles"
@@ -265,6 +279,7 @@ class TestLocalStateLossPreservesCanonical:
 # ---------------------------------------------------------------------------
 # 4. Router can still route live tasks after authority demotion
 # ---------------------------------------------------------------------------
+
 
 class TestRoutingRemainsFunc:
     """Routing functionality must be unaffected by PR-3 changes."""
@@ -332,6 +347,7 @@ class TestRoutingRemainsFunc:
 # 5. Router read paths prefer canonical state with runtime enrichment
 # ---------------------------------------------------------------------------
 
+
 class TestReadPathCanonicalPreference:
     """get_canonical_device and get_enriched_device_view return the right data."""
 
@@ -354,9 +370,7 @@ class TestReadPathCanonicalPreference:
         router.devices.clear()  # Simulate abrupt local state loss
 
         canonical = router.get_canonical_device("dev_read_02")
-        assert canonical is not None, (
-            "get_canonical_device must read from UDM even with empty local cache"
-        )
+        assert canonical is not None, "get_canonical_device must read from UDM even with empty local cache"
 
     def test_get_enriched_device_view_prefers_udm_as_base(self):
         """get_enriched_device_view returns a view with UDM as the base."""

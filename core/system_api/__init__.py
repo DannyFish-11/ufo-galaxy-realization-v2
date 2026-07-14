@@ -22,7 +22,7 @@ from __future__ import annotations
 import platform
 from typing import TYPE_CHECKING
 
-from .platform_api import SystemAPI, NoOpSystemAPI
+from .platform_api import NoOpSystemAPI, SystemAPI
 
 if TYPE_CHECKING:
     pass
@@ -47,6 +47,7 @@ def get_system_api() -> "SystemAPI":
     if _instance is None:
         if platform.system() == "Windows":
             from .windows_adapter import WindowsAdapter  # noqa: PLC0415
+
             _instance = WindowsAdapter()
         else:
             _instance = NoOpSystemAPI()

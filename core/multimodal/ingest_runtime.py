@@ -45,13 +45,12 @@ video dependencies are absent, this module degrades gracefully: no exception is
 raised, no pipeline is started, and callers that check :func:`get_ingest_bus`
 receive ``None``.
 """
+
 from __future__ import annotations
-
-from typing import Callable  # auto: missing import
-
 
 import asyncio
 import logging
+from typing import Callable  # auto: missing import
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:  # 仅类型检查:MultimodalIngressBus 实际用时在函数内懒导入
@@ -124,10 +123,9 @@ def start_ingest_bus(
     # 规范默认路径；显式置 false 才走 SAFE_DEFAULT（text-only / 受限部署）opt-out。
     try:
         from core.unified_config import config as _cfg
+
         if not _cfg.get("enable_multimodal_ingest", True):
-            logger.debug(
-                "enable_multimodal_ingest=false — skipping ingest bus startup"
-            )
+            logger.debug("enable_multimodal_ingest=false — skipping ingest bus startup")
             return False
     except Exception as _cfg_err:
         # 读不到配置时不再静默放弃：连续感知是规范默认，缺配置按默认开（仍会优雅降级）。
@@ -143,6 +141,7 @@ def start_ingest_bus(
     # ── Construct bus ─────────────────────────────────────────────────────
     try:
         from core.multimodal.ingress_bus import MultimodalIngressBus
+
         bus = MultimodalIngressBus(tick_ms=tick_ms)
     except Exception as _bus_err:
         logger.debug("MultimodalIngressBus unavailable: %s", _bus_err)
@@ -152,27 +151,25 @@ def start_ingest_bus(
     audio_available = False
     try:
         from core.multimodal.audio_ingest import AudioIngestPipeline
+
         audio_pipeline = AudioIngestPipeline()
         audio_pipeline.add_callback(bus.update_audio)
         _schedule_pipeline(audio_pipeline, "audio")
         audio_available = True
     except Exception as _audio_err:
-        logger.debug(
-            "AudioIngestPipeline unavailable (non-fatal): %s", _audio_err
-        )
+        logger.debug("AudioIngestPipeline unavailable (non-fatal): %s", _audio_err)
 
     # ── Wire video pipeline (optional — skip if cv2 / camera missing) ─────
     video_available = False
     try:
         from core.multimodal.video_ingest import VideoIngestPipeline
+
         video_pipeline = VideoIngestPipeline()
         video_pipeline.add_callback(bus.update_video)
         _schedule_pipeline(video_pipeline, "video")
         video_available = True
     except Exception as _video_err:
-        logger.debug(
-            "VideoIngestPipeline unavailable (non-fatal): %s", _video_err
-        )
+        logger.debug("VideoIngestPipeline unavailable (non-fatal): %s", _video_err)
 
     # ── Wire desktop perception bridge（覆盖层三路 → 主动感知 bus）─────────────
     # 这是【屏幕】进入连续感知的唯一通路，也让摄像头/麦克风按覆盖层实际采集如实反映到
@@ -281,12 +278,13 @@ async def _desktop_perception_bridge_loop(bus, period_s: float) -> None:
     store 为空（未启用覆盖层感知）时各模态保持 missing，bus 自然降级，绝不抛错。
     """
     import asyncio as _asyncio
+
     try:
-        from core.perception.desktop_perception_store import get_desktop_perception_store
         from core.multimodal.audio_features import AudioState
-        from core.multimodal.video_features import VideoState
         from core.multimodal.perception_frame import ScreenState
         from core.multimodal.signal_quality import SignalQuality
+        from core.multimodal.video_features import VideoState
+        from core.perception.desktop_perception_store import get_desktop_perception_store
     except Exception as exc:  # noqa: BLE001
         logger.debug("desktop perception bridge deps unavailable: %s", exc)
         return
@@ -368,11 +366,12 @@ def _emit_ingest_active(
 ) -> None:
     """Emit a ``MULTIMODAL_INGEST_ACTIVE`` event on the StateEventBus."""
     active_modalities = [
-        name for name, available in (("audio", audio_available), ("video", video_available))
-        if available
+        name for name, available in (("audio", audio_available), ("video", video_available)) if available
     ]
     try:
-        from core.state_event_bus import emit as _seb_emit, StateEventType
+        from core.state_event_bus import StateEventType
+        from core.state_event_bus import emit as _seb_emit
+
         _seb_emit(
             StateEventType.MULTIMODAL_INGEST_ACTIVE,
             source="multimodal.ingest_runtime",
@@ -404,13 +403,14 @@ def _register_ingest_sources(
     """
     try:
         from core.desktop_presence_runtime import get_desktop_presence_runtime
+
         runtime = get_desktop_presence_runtime()
         registry = runtime.source_registry
 
         from core.multimodal.perception_source_registry import (
             PerceptionSourceType,
-            SourceModality,
             SourceHealthStatus,
+            SourceModality,
         )
 
         # -- Microphone source --------------------------------------------
@@ -421,11 +421,7 @@ def _register_ingest_sources(
             display_name="System Microphone",
             transport="local",
             priority=10,
-            health=(
-                SourceHealthStatus.HEALTHY
-                if audio_available
-                else SourceHealthStatus.UNAVAILABLE
-            ),
+            health=(SourceHealthStatus.HEALTHY if audio_available else SourceHealthStatus.UNAVAILABLE),
         )
         if audio_available:
             registry.mark_active(mic_id)
@@ -441,11 +437,7 @@ def _register_ingest_sources(
             display_name="Local Webcam",
             transport="local",
             priority=10,
-            health=(
-                SourceHealthStatus.HEALTHY
-                if video_available
-                else SourceHealthStatus.UNAVAILABLE
-            ),
+            health=(SourceHealthStatus.HEALTHY if video_available else SourceHealthStatus.UNAVAILABLE),
         )
         if video_available:
             registry.mark_active(cam_id)
@@ -459,6 +451,4 @@ def _register_ingest_sources(
             "active" if video_available else "unavailable",
         )
     except Exception as _err:
-        logger.debug(
-            "_register_ingest_sources: skipped (non-fatal): %s", _err
-        )
+        logger.debug("_register_ingest_sources: skipped (non-fatal): %s", _err)

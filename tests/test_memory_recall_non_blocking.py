@@ -34,8 +34,8 @@ import pytest
 @pytest.mark.asyncio
 async def test_memory_scope_aenter_does_not_block_event_loop(monkeypatch):
     """MemoryScope.__aenter__ 期间,并发协程必须能继续正常推进。"""
-    from core.memory import get_unified_memory
     import core.session_memory_facade as smf
+    from core.memory import get_unified_memory
 
     um = get_unified_memory()
     # 让 .enabled 为 True,无需真实 provider。
@@ -62,14 +62,14 @@ async def test_memory_scope_aenter_does_not_block_event_loop(monkeypatch):
         ticker_task.cancel()
 
     assert tick_count[0] >= 5, (
-        f"MemoryScope.__aenter__ 期间并发协程几乎没推进(tick={tick_count[0]})，"
-        f"说明语义召回仍在同步阻塞事件循环"
+        f"MemoryScope.__aenter__ 期间并发协程几乎没推进(tick={tick_count[0]})，" f"说明语义召回仍在同步阻塞事件循环"
     )
 
 
 def test_openclawd_handle_chat_offloads_unified_context():
     """静态核实:handle_chat 里对 get_unified_context 的调用经由 asyncio.to_thread。"""
     import inspect
+
     import core.openclawd as mod
 
     src = inspect.getsource(mod.OpenClawd.handle_chat)
@@ -81,10 +81,13 @@ def test_openclawd_handle_chat_offloads_unified_context():
 def test_execution_planner_execute_offloads_recall_calls():
     """静态核实:execute() 里对 recall/_experience_strategy_adjust 的调用经由 asyncio.to_thread。"""
     import inspect
+
     from core.agent.execution_planner import ExecutionPlanner
 
     src = inspect.getsource(ExecutionPlanner.execute)
     assert "asyncio.to_thread(self._experience_strategy_adjust" in src
-    assert "to_thread(_um.recall" in src or "to_thread(\n                    _um.recall" in src or (
-        "to_thread(" in src and "_um.recall" in src
+    assert (
+        "to_thread(_um.recall" in src
+        or "to_thread(\n                    _um.recall" in src
+        or ("to_thread(" in src and "_um.recall" in src)
     )

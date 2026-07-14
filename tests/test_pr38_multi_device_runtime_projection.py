@@ -85,7 +85,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
 # ---------------------------------------------------------------------------
@@ -152,7 +151,8 @@ def _make_session_dict(
         "primary_device_id": primary_device_id,
         "multi_device_required": multi_device_required,
         "merge_policy": merge_policy,
-        "participants": participants or [
+        "participants": participants
+        or [
             {"device_id": "dev_001", "roles": ["source"]},
             {"device_id": "dev_002", "roles": ["primary"]},
         ],
@@ -445,8 +445,16 @@ class TestRuntimeProjectionDeviceEntry:
 
         e = RuntimeProjectionDeviceEntry(device_id="dev_01")
         d = e.to_dict()
-        for field in ["device_id", "platform", "form_factor", "status",
-                      "connection_state", "runtime_capable", "health_score", "metadata"]:
+        for field in [
+            "device_id",
+            "platform",
+            "form_factor",
+            "status",
+            "connection_state",
+            "runtime_capable",
+            "health_score",
+            "metadata",
+        ]:
             assert field in d, f"Missing: {field}"
 
 
@@ -469,8 +477,15 @@ class TestRuntimeProjectionHostEntry:
 
         e = RuntimeProjectionHostEntry(host_id="h1")
         d = e.to_dict()
-        for field in ["host_id", "device_id", "status", "execution_mode",
-                      "accepts_handoff", "can_delegate", "metadata"]:
+        for field in [
+            "host_id",
+            "device_id",
+            "status",
+            "execution_mode",
+            "accepts_handoff",
+            "can_delegate",
+            "metadata",
+        ]:
             assert field in d
 
 
@@ -493,9 +508,17 @@ class TestRuntimeProjectionMeshSessionEntry:
 
         e = RuntimeProjectionMeshSessionEntry(session_id="s1")
         d = e.to_dict()
-        for field in ["session_id", "mesh_id", "status", "source_device_id",
-                      "primary_device_id", "participant_count", "multi_device_required",
-                      "merge_policy", "metadata"]:
+        for field in [
+            "session_id",
+            "mesh_id",
+            "status",
+            "source_device_id",
+            "primary_device_id",
+            "participant_count",
+            "multi_device_required",
+            "merge_policy",
+            "metadata",
+        ]:
             assert field in d
 
 
@@ -518,8 +541,15 @@ class TestRuntimeProjectionDispatchEntry:
 
         e = RuntimeProjectionDispatchEntry(dispatch_id="d1")
         d = e.to_dict()
-        for field in ["dispatch_id", "mode", "status", "source_device_id",
-                      "target_device_id", "mesh_session_id", "metadata"]:
+        for field in [
+            "dispatch_id",
+            "mode",
+            "status",
+            "source_device_id",
+            "target_device_id",
+            "mesh_session_id",
+            "metadata",
+        ]:
             assert field in d
 
 
@@ -541,8 +571,7 @@ class TestRuntimeProjectionHandoffEntry:
 
         e = RuntimeProjectionHandoffEntry(handoff_id="h1")
         d = e.to_dict()
-        for field in ["handoff_id", "source_device_id", "target_device_id",
-                      "task_id", "session_id", "metadata"]:
+        for field in ["handoff_id", "source_device_id", "target_device_id", "task_id", "session_id", "metadata"]:
             assert field in d
 
 
@@ -565,8 +594,7 @@ class TestRuntimeProjectionTakeoverEntry:
 
         e = RuntimeProjectionTakeoverEntry(result_id="r1")
         d = e.to_dict()
-        for field in ["result_id", "status", "device_id", "handoff_id",
-                      "session_id", "task_id", "metadata"]:
+        for field in ["result_id", "status", "device_id", "handoff_id", "session_id", "task_id", "metadata"]:
             assert field in d
 
 
@@ -589,9 +617,18 @@ class TestRuntimeProjectionCoordinatorEntry:
 
         e = RuntimeProjectionCoordinatorEntry()
         d = e.to_dict()
-        for field in ["coordinator_id", "session_id", "mesh_id", "status",
-                      "participant_count", "pending_count", "completed_count",
-                      "failed_count", "has_result_merge_summary", "metadata"]:
+        for field in [
+            "coordinator_id",
+            "session_id",
+            "mesh_id",
+            "status",
+            "participant_count",
+            "pending_count",
+            "completed_count",
+            "failed_count",
+            "has_result_merge_summary",
+            "metadata",
+        ]:
             assert field in d
 
 
@@ -614,8 +651,7 @@ class TestRuntimeProjectionResultEntry:
 
         e = RuntimeProjectionResultEntry(merge_id="m1")
         d = e.to_dict()
-        for field in ["merge_id", "status", "result_unit_count", "merge_policy",
-                      "session_id", "metadata"]:
+        for field in ["merge_id", "status", "result_unit_count", "merge_policy", "session_id", "metadata"]:
             assert field in d
 
 
@@ -751,10 +787,12 @@ class TestProjectRuntimeDevices:
     def test_multiple(self):
         from contracts.multi_device_runtime_projection import project_runtime_devices
 
-        result = project_runtime_devices([
-            _make_device_dict("dev_01"),
-            _make_device_dict("dev_02", platform="windows"),
-        ])
+        result = project_runtime_devices(
+            [
+                _make_device_dict("dev_01"),
+                _make_device_dict("dev_02", platform="windows"),
+            ]
+        )
         assert len(result) == 2
 
 
@@ -856,9 +894,13 @@ class TestProjectMeshSessionsParticipantCount:
     def test_participant_count(self):
         from contracts.multi_device_runtime_projection import project_mesh_sessions
 
-        session = _make_session_dict(participants=[
-            {"device_id": "d1"}, {"device_id": "d2"}, {"device_id": "d3"},
-        ])
+        session = _make_session_dict(
+            participants=[
+                {"device_id": "d1"},
+                {"device_id": "d2"},
+                {"device_id": "d3"},
+            ]
+        )
         result = project_mesh_sessions([session])
         assert result[0].participant_count == 3
 
@@ -1054,11 +1096,15 @@ class TestProjectCoordinatorStateCounts:
     def test_counts_propagated(self):
         from contracts.multi_device_runtime_projection import project_coordinator_state
 
-        result = project_coordinator_state([_make_coordinator_dict(
-            pending_count=2,
-            completed_count=3,
-            failed_count=1,
-        )])
+        result = project_coordinator_state(
+            [
+                _make_coordinator_dict(
+                    pending_count=2,
+                    completed_count=3,
+                    failed_count=1,
+                )
+            ]
+        )
         assert result[0].pending_count == 2
         assert result[0].completed_count == 3
         assert result[0].failed_count == 1
@@ -1067,12 +1113,16 @@ class TestProjectCoordinatorStateCounts:
         from contracts.multi_device_runtime_projection import project_coordinator_state
 
         # Simulate coordinator state with device ID lists instead of counts
-        result = project_coordinator_state([{
-            "coordinator_id": "c1",
-            "pending_device_ids": ["d1", "d2"],
-            "completed_device_ids": ["d3"],
-            "failed_device_ids": [],
-        }])
+        result = project_coordinator_state(
+            [
+                {
+                    "coordinator_id": "c1",
+                    "pending_device_ids": ["d1", "d2"],
+                    "completed_device_ids": ["d3"],
+                    "failed_device_ids": [],
+                }
+            ]
+        )
         assert result[0].pending_count == 2
         assert result[0].completed_count == 1
         assert result[0].failed_count == 0
@@ -1120,11 +1170,15 @@ class TestProjectMergedResultsCount:
     def test_count_from_units_list(self):
         from contracts.multi_device_runtime_projection import project_merged_results
 
-        result = project_merged_results([{
-            "merge_id": "mrg_001",
-            "status": "success",
-            "result_units": [{"unit_id": "u1"}, {"unit_id": "u2"}, {"unit_id": "u3"}],
-        }])
+        result = project_merged_results(
+            [
+                {
+                    "merge_id": "mrg_001",
+                    "status": "success",
+                    "result_units": [{"unit_id": "u1"}, {"unit_id": "u2"}, {"unit_id": "u3"}],
+                }
+            ]
+        )
         assert result[0].result_unit_count == 3
 
 
@@ -1179,8 +1233,8 @@ class TestFullProjectionBuild:
 class TestFullProjectionRoundTrip:
     def test_round_trip(self):
         from contracts.multi_device_runtime_projection import (
-            build_multi_device_runtime_projection,
             MultiDeviceRuntimeProjection,
+            build_multi_device_runtime_projection,
         )
 
         p = build_multi_device_runtime_projection(
@@ -1314,23 +1368,26 @@ class TestPartialProjectionRobust:
 class TestContractsPackageReExports:
     def test_top_level_projection_exported(self):
         from contracts import MultiDeviceRuntimeProjection
+
         assert MultiDeviceRuntimeProjection is not None
 
     def test_builder_exported(self):
         from contracts import build_multi_device_runtime_projection
+
         assert callable(build_multi_device_runtime_projection)
 
     def test_all_entry_types_exported(self):
         from contracts import (
+            RuntimeProjectionCoordinatorEntry,
             RuntimeProjectionDeviceEntry,
-            RuntimeProjectionHostEntry,
-            RuntimeProjectionMeshSessionEntry,
             RuntimeProjectionDispatchEntry,
             RuntimeProjectionHandoffEntry,
-            RuntimeProjectionTakeoverEntry,
-            RuntimeProjectionCoordinatorEntry,
+            RuntimeProjectionHostEntry,
+            RuntimeProjectionMeshSessionEntry,
             RuntimeProjectionResultEntry,
+            RuntimeProjectionTakeoverEntry,
         )
+
         for cls in [
             RuntimeProjectionDeviceEntry,
             RuntimeProjectionHostEntry,
@@ -1345,15 +1402,16 @@ class TestContractsPackageReExports:
 
     def test_all_adapter_functions_exported(self):
         from contracts import (
+            project_coordinator_state,
+            project_handoffs,
+            project_merged_results,
+            project_mesh_sessions,
             project_runtime_devices,
             project_runtime_hosts,
-            project_mesh_sessions,
             project_source_dispatches,
-            project_handoffs,
             project_takeovers,
-            project_coordinator_state,
-            project_merged_results,
         )
+
         for fn in [
             project_runtime_devices,
             project_runtime_hosts,
@@ -1375,37 +1433,41 @@ class TestContractsPackageReExports:
 class TestCoreUnifiedReExports:
     def test_projection_exported(self):
         from core.unified import MultiDeviceRuntimeProjection
+
         assert MultiDeviceRuntimeProjection is not None
 
     def test_builder_exported(self):
         from core.unified import build_multi_device_runtime_projection
+
         assert callable(build_multi_device_runtime_projection)
 
     def test_entry_types_exported(self):
         from core.unified import (
+            RuntimeProjectionCoordinatorEntry,
             RuntimeProjectionDeviceEntry,
-            RuntimeProjectionHostEntry,
-            RuntimeProjectionMeshSessionEntry,
             RuntimeProjectionDispatchEntry,
             RuntimeProjectionHandoffEntry,
-            RuntimeProjectionTakeoverEntry,
-            RuntimeProjectionCoordinatorEntry,
+            RuntimeProjectionHostEntry,
+            RuntimeProjectionMeshSessionEntry,
             RuntimeProjectionResultEntry,
+            RuntimeProjectionTakeoverEntry,
         )
+
         assert RuntimeProjectionDeviceEntry is not None
         assert RuntimeProjectionHostEntry is not None
 
     def test_adapter_functions_exported(self):
         from core.unified import (
+            project_coordinator_state,
+            project_handoffs,
+            project_merged_results,
+            project_mesh_sessions,
             project_runtime_devices,
             project_runtime_hosts,
-            project_mesh_sessions,
             project_source_dispatches,
-            project_handoffs,
             project_takeovers,
-            project_coordinator_state,
-            project_merged_results,
         )
+
         assert callable(project_runtime_devices)
         assert callable(project_merged_results)
 
@@ -1433,6 +1495,7 @@ class TestMultiDeviceProjectionEndpointResponse:
     def test_endpoint_returns_json(self):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
         from core.routes.projection import create_router
 
         app = FastAPI()
@@ -1453,6 +1516,7 @@ class TestMultiDeviceProjectionEndpointKeys:
     def test_stable_keys_present(self):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
         from core.routes.projection import create_router
 
         app = FastAPI()
@@ -1487,6 +1551,7 @@ class TestMultiDeviceProjectionEndpointGraceful:
     def test_graceful_degradation(self):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
         from core.routes.projection import create_router
 
         # Even if internals fail, endpoint should return 200 with a valid dict
@@ -1505,6 +1570,7 @@ class TestMultiDeviceProjectionEndpointGraceful:
     def test_endpoint_surfaces_coordinator_result_merge_and_formation_metadata(self):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
         from core.routes.projection import create_router
 
         class _FakeCoordinator:
@@ -1545,15 +1611,19 @@ class TestMultiDeviceProjectionEndpointGraceful:
                 }
 
         app = FastAPI()
-        with patch(
-            "core.mesh.body_mesh_registry.get_body_mesh_registry",
-            return_value=_FakeRegistry(),
-        ), patch(
-            "contracts.mesh_session_coordinator.build_coordinator_summary",
-            return_value=_FakeSummary(),
-        ), patch(
-            "core.multi_device_projection_canonicalization.enrich_multi_device_projection",
-            return_value=_FakeEnrichment(),
+        with (
+            patch(
+                "core.mesh.body_mesh_registry.get_body_mesh_registry",
+                return_value=_FakeRegistry(),
+            ),
+            patch(
+                "contracts.mesh_session_coordinator.build_coordinator_summary",
+                return_value=_FakeSummary(),
+            ),
+            patch(
+                "core.multi_device_projection_canonicalization.enrich_multi_device_projection",
+                return_value=_FakeEnrichment(),
+            ),
         ):
             app.include_router(create_router())
             client = TestClient(app, raise_server_exceptions=False)
@@ -1573,8 +1643,8 @@ class TestMultiDeviceProjectionEndpointGraceful:
 
 class TestBuildWithPydanticModels:
     def test_with_mesh_session_pydantic_model(self):
-        from contracts.multi_device_runtime_projection import build_multi_device_runtime_projection
         from contracts.mesh_session import build_mesh_session
+        from contracts.multi_device_runtime_projection import build_multi_device_runtime_projection
 
         session = build_mesh_session(
             source_device_id="phone_001",
@@ -1586,8 +1656,8 @@ class TestBuildWithPydanticModels:
         assert p.mesh_sessions[0].primary_device_id == "tablet_002"
 
     def test_with_coordinator_pydantic_model(self):
-        from contracts.multi_device_runtime_projection import build_multi_device_runtime_projection
         from contracts.mesh_session_coordinator import build_coordinator_summary
+        from contracts.multi_device_runtime_projection import build_multi_device_runtime_projection
 
         summary = build_coordinator_summary(
             mesh_id="mesh_alpha",
@@ -1691,10 +1761,14 @@ class TestProjectCoordinatorStateFlag:
     def test_flag_inferred_from_result_merge_summary(self):
         from contracts.multi_device_runtime_projection import project_coordinator_state
 
-        result = project_coordinator_state([{
-            "coordinator_id": "c1",
-            "result_merge_summary": {"merge_id": "m1"},
-        }])
+        result = project_coordinator_state(
+            [
+                {
+                    "coordinator_id": "c1",
+                    "result_merge_summary": {"merge_id": "m1"},
+                }
+            ]
+        )
         assert result[0].has_result_merge_summary is True
 
 

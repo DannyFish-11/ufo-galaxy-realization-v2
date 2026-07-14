@@ -34,6 +34,7 @@
 作为**始终在线的高端兜底**（见其 PROPRIETARY 提供商），任何档位在本地不可用/能力
 不足时自动降级到云端。
 """
+
 from __future__ import annotations
 
 import logging
@@ -58,26 +59,25 @@ _LEGACY_MODEL_FILE = PROJECT_ROOT / ".galaxy_model"
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class ModelCapability:
-    vision: bool = False      # 看
-    audio_in: bool = False    # 听（原生音频理解）
-    audio_out: bool = False   # 说（原生语音合成）
-    tools: bool = False       # 工具调用
+    vision: bool = False  # 看
+    audio_in: bool = False  # 听（原生音频理解）
+    audio_out: bool = False  # 说（原生语音合成）
+    tools: bool = False  # 工具调用
 
     def to_dict(self) -> Dict[str, bool]:
-        return {"vision": self.vision, "audio_in": self.audio_in,
-                "audio_out": self.audio_out, "tools": self.tools}
+        return {"vision": self.vision, "audio_in": self.audio_in, "audio_out": self.audio_out, "tools": self.tools}
 
 
 @dataclass(frozen=True)
 class ModelSpec:
-    tag: str                  # Ollama tag 或容器模型标识
-    name: str                 # 人类可读名
-    desc: str                 # 模态/能力说明
+    tag: str  # Ollama tag 或容器模型标识
+    name: str  # 人类可读名
+    desc: str  # 模态/能力说明
     caps: ModelCapability
-    source: str = "local"     # local(Ollama) | container(vLLM 容器) | cloud
+    source: str = "local"  # local(Ollama) | container(vLLM 容器) | cloud
     requires_gpu: bool = False
-    size_mb_val: int = 0       # 尺寸(MB)——**本目录即 SSOT**,不再反向依赖 LocalBrainManager
-    is_default: bool = False   # 默认主脑(LocalBrainManager.RECOMMENDED_MODELS['default'] 派生自此)
+    size_mb_val: int = 0  # 尺寸(MB)——**本目录即 SSOT**,不再反向依赖 LocalBrainManager
+    is_default: bool = False  # 默认主脑(LocalBrainManager.RECOMMENDED_MODELS['default'] 派生自此)
 
     def size_mb(self) -> int:
         """尺寸(MB)——本目录自己拥有(唯一真相源);未定义返回 0。"""
@@ -85,9 +85,13 @@ class ModelSpec:
 
     def to_dict(self) -> Dict[str, object]:
         return {
-            "tag": self.tag, "name": self.name, "desc": self.desc,
-            "source": self.source, "requires_gpu": self.requires_gpu,
-            "size_mb": self.size_mb(), "caps": self.caps.to_dict(),
+            "tag": self.tag,
+            "name": self.name,
+            "desc": self.desc,
+            "source": self.source,
+            "requires_gpu": self.requires_gpu,
+            "size_mb": self.size_mb(),
+            "caps": self.caps.to_dict(),
         }
 
 
@@ -96,24 +100,41 @@ class ModelSpec:
 # MiniCPM-o 4.5：看/听/说全原生（全模态，需显卡）。
 _MODELS: Dict[str, ModelSpec] = {
     "gemma4:e2b": ModelSpec(
-        "gemma4:e2b", "Gemma 4 · E2B", "看 · 听(原生) · 轻量",
+        "gemma4:e2b",
+        "Gemma 4 · E2B",
+        "看 · 听(原生) · 轻量",
         ModelCapability(vision=True, audio_in=True, audio_out=False, tools=True),
-        source="local", requires_gpu=False, size_mb_val=1800,
+        source="local",
+        requires_gpu=False,
+        size_mb_val=1800,
     ),
     "gemma4:e4b": ModelSpec(
-        "gemma4:e4b", "Gemma 4 · E4B", "看 · 听(原生) · 中等显存",
+        "gemma4:e4b",
+        "Gemma 4 · E4B",
+        "看 · 听(原生) · 中等显存",
         ModelCapability(vision=True, audio_in=True, audio_out=False, tools=True),
-        source="local", requires_gpu=False, size_mb_val=3000,
+        source="local",
+        requires_gpu=False,
+        size_mb_val=3000,
     ),
     "gemma4:12b": ModelSpec(
-        "gemma4:12b", "Gemma 4 · 12B", "看 · 听(原生) · 工具 · 128K",
+        "gemma4:12b",
+        "Gemma 4 · 12B",
+        "看 · 听(原生) · 工具 · 128K",
         ModelCapability(vision=True, audio_in=True, audio_out=False, tools=True),
-        source="local", requires_gpu=True, size_mb_val=8000, is_default=True,
+        source="local",
+        requires_gpu=True,
+        size_mb_val=8000,
+        is_default=True,
     ),
     "openbmb/minicpm-o4.5": ModelSpec(
-        "openbmb/minicpm-o4.5", "MiniCPM-o 4.5", "全模态 看/听/说 全原生(需显卡)",
+        "openbmb/minicpm-o4.5",
+        "MiniCPM-o 4.5",
+        "全模态 看/听/说 全原生(需显卡)",
         ModelCapability(vision=True, audio_in=True, audio_out=True, tools=True),
-        source="local", requires_gpu=True, size_mb_val=6000,
+        source="local",
+        requires_gpu=True,
+        size_mb_val=6000,
     ),
 }
 
@@ -131,10 +152,10 @@ def default_model() -> str:
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class Tier:
-    key: str                  # "A" | "B"
+    key: str  # "A" | "B"
     label: str
     desc: str
-    kind: str                 # "single" | "composite"
+    kind: str  # "single" | "composite"
     model_tags: List[str] = field(default_factory=list)
     # single 档内可在多个候选里选一个作主脑（如 A 档 Gemma 三选一）；
     # composite 档全部同时运行（保留字段以便将来扩展，当前无复合档）。
@@ -142,12 +163,18 @@ class Tier:
 
 _TIERS: Dict[str, Tier] = {
     "A": Tier(
-        "A", "A 档 · 轻量本地", "Gemma 4 系：看 + 听(原生)，说走 TTS 桥；无独显也能跑",
-        "single", ["gemma4:e2b", "gemma4:e4b", "gemma4:12b"],
+        "A",
+        "A 档 · 轻量本地",
+        "Gemma 4 系：看 + 听(原生)，说走 TTS 桥；无独显也能跑",
+        "single",
+        ["gemma4:e2b", "gemma4:e4b", "gemma4:12b"],
     ),
     "B": Tier(
-        "B", "B 档 · 全模态单模型", "MiniCPM-o 4.5：看/听/说 全原生(需显卡)",
-        "single", ["openbmb/minicpm-o4.5"],
+        "B",
+        "B 档 · 全模态单模型",
+        "MiniCPM-o 4.5：看/听/说 全原生(需显卡)",
+        "single",
+        ["openbmb/minicpm-o4.5"],
     ),
 }
 
@@ -216,14 +243,13 @@ def local_choice_options() -> List[str]:
 class EffectiveIO:
     """一个档位（含其全部活跃模型）对外呈现的有效多模态 IO 通路。"""
 
-    vision: str      # "native" | "none"
-    audio_in: str    # "native" | "asr_bridge"
-    audio_out: str   # "native" | "tts_bridge"
+    vision: str  # "native" | "none"
+    audio_in: str  # "native" | "asr_bridge"
+    audio_out: str  # "native" | "tts_bridge"
     tools: bool
 
     def to_dict(self) -> Dict[str, object]:
-        return {"vision": self.vision, "audio_in": self.audio_in,
-                "audio_out": self.audio_out, "tools": self.tools}
+        return {"vision": self.vision, "audio_in": self.audio_in, "audio_out": self.audio_out, "tools": self.tools}
 
 
 def effective_io(model_tags: List[str]) -> EffectiveIO:
@@ -257,6 +283,7 @@ def active_effective_io() -> EffectiveIO:
 def _read_state() -> Dict[str, str]:
     """读【一条】统一记录 {tier, main_brain};无则一次性迁移旧的 .galaxy_tier/.galaxy_model。"""
     import json
+
     try:
         if _STATE_FILE.exists():
             data = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
@@ -286,6 +313,7 @@ def _read_state() -> Dict[str, str]:
 def _write_state(tier: str, main_brain: str) -> None:
     """写【一条】统一记录,并派生导出运行时 env(GALAXY_MODEL_TIER / OLLAMA_MODEL)。"""
     import json
+
     rec = {"tier": (tier or "").strip().upper(), "main_brain": (main_brain or "").strip()}
     try:
         _STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -364,7 +392,10 @@ def catalog_snapshot() -> Dict[str, object]:
         "current_tier": current,
         "tiers": [
             {
-                "key": t.key, "label": t.label, "desc": t.desc, "kind": t.kind,
+                "key": t.key,
+                "label": t.label,
+                "desc": t.desc,
+                "kind": t.kind,
                 "models": [m.to_dict() for m in tier_models(t.key)],
                 "effective_io": tier_effective_io(t.key).to_dict(),
             }

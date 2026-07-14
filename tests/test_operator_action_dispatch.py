@@ -17,9 +17,11 @@ PR-3: Operator Control-Plane Activation — tests proving:
 8. Android-compatible routing: device_dispatch forwards device_id so routing
    can prefer the requested device.
 """
+
 from __future__ import annotations
 
 import asyncio
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -35,12 +37,11 @@ from core.operator_action_contract import (
 )
 from core.routes.operator import create_router
 from core.unified_panel_aggregation import (
+    UnifiedPanelPayload,
     get_last_operator_action_result,
     record_last_operator_action_result,
     reset_last_operator_action_result,
-    UnifiedPanelPayload,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -91,10 +92,7 @@ class TestOperatorActionContract:
         assert OperatorActionKind.device_dispatch.value == "device_dispatch"
         assert OperatorActionKind.flow_cancel.value == "flow_cancel"
         assert OperatorActionKind.retry_admission.value == "retry_admission"
-        assert (
-            OperatorActionKind.escalate_dependency_failure.value
-            == "escalate_dependency_failure"
-        )
+        assert OperatorActionKind.escalate_dependency_failure.value == "escalate_dependency_failure"
 
     def test_operator_action_request_defaults(self):
         req = OperatorActionRequest()
@@ -164,55 +162,52 @@ class TestOperatorSurfaceIsActionCapable:
 
     def test_execute_operator_action_method_exists(self):
         from core.operator_surface import OperatorSurface
+
         surface = OperatorSurface()
         assert hasattr(surface, "execute_operator_action"), (
-            "OperatorSurface must have execute_operator_action() — "
-            "the surface is observation-only without it"
+            "OperatorSurface must have execute_operator_action() — " "the surface is observation-only without it"
         )
 
     def test_execute_operator_action_is_coroutine(self):
         import inspect
+
         from core.operator_surface import OperatorSurface
+
         surface = OperatorSurface()
-        assert inspect.iscoroutinefunction(surface.execute_operator_action), (
-            "execute_operator_action must be async"
-        )
+        assert inspect.iscoroutinefunction(surface.execute_operator_action), "execute_operator_action must be async"
 
     def test_unsupported_action_kind_returns_result(self):
         """Unsupported action kinds return a result with accepted=False — not an exception."""
         from core.operator_surface import OperatorSurface
+
         surface = OperatorSurface()
         req = OperatorActionRequest(action_kind="__nonexistent__", message="x")
-        result = asyncio.new_event_loop().run_until_complete(
-            surface.execute_operator_action(req)
-        )
+        result = asyncio.new_event_loop().run_until_complete(surface.execute_operator_action(req))
         assert isinstance(result, OperatorActionResult)
         assert result.accepted is False
         assert "unsupported" in result.error.lower()
 
     def test_flow_cancel_missing_flow_id_returns_error(self):
         from core.operator_surface import OperatorSurface
+
         surface = OperatorSurface()
         req = OperatorActionRequest(
             action_kind=OperatorActionKind.flow_cancel.value,
             flow_id="",
         )
-        result = asyncio.new_event_loop().run_until_complete(
-            surface.execute_operator_action(req)
-        )
+        result = asyncio.new_event_loop().run_until_complete(surface.execute_operator_action(req))
         assert result.accepted is False
         assert "flow_id" in result.error.lower()
 
     def test_flow_cancel_unknown_flow_returns_error(self):
         from core.operator_surface import OperatorSurface
+
         surface = OperatorSurface()
         req = OperatorActionRequest(
             action_kind=OperatorActionKind.flow_cancel.value,
             flow_id="nonexistent_flow_999",
         )
-        result = asyncio.new_event_loop().run_until_complete(
-            surface.execute_operator_action(req)
-        )
+        result = asyncio.new_event_loop().run_until_complete(surface.execute_operator_action(req))
         assert result.accepted is False
         assert "not found" in result.error.lower()
 
@@ -230,8 +225,7 @@ class TestOperatorActionEndpoint:
         resp = client.post("/api/v1/operator/action", json={})
         # Should not be 404 (endpoint not found) or 405 (method not allowed on GET-only)
         assert resp.status_code != 404, (
-            "POST /api/v1/operator/action must exist — the surface is "
-            "observation-only if this endpoint is missing"
+            "POST /api/v1/operator/action must exist — the surface is " "observation-only if this endpoint is missing"
         )
 
     def test_action_dispatch_returns_result_schema(self, client):
@@ -254,8 +248,7 @@ class TestOperatorActionEndpoint:
             data = resp.json()
             # operator_entry_mode confirms this went through the contract
             assert data.get("operator_entry_mode") == OPERATOR_ACTION_ENTRY_MODE, (
-                f"Expected operator_entry_mode='operator_action', got: "
-                f"{data.get('operator_entry_mode')!r}"
+                f"Expected operator_entry_mode='operator_action', got: " f"{data.get('operator_entry_mode')!r}"
             )
 
     def test_action_dispatch_returns_action_kind(self, client):
@@ -332,8 +325,9 @@ class TestOperatorActionEndpoint:
         assert "approval_token" in str(data.get("error", ""))
 
     def test_approval_gated_action_with_token_accepts_when_state_allows(self):
-        from core.operator_surface import OperatorSurface
         import unittest.mock as mock
+
+        from core.operator_surface import OperatorSurface
 
         surface = OperatorSurface()
         req = OperatorActionRequest(
@@ -355,9 +349,7 @@ class TestOperatorActionEndpoint:
             "get_operator_action_availability",
             return_value=mock_availability,
         ):
-            result = asyncio.new_event_loop().run_until_complete(
-                surface.execute_operator_action(req)
-            )
+            result = asyncio.new_event_loop().run_until_complete(surface.execute_operator_action(req))
         assert result.accepted is True
         # PR-4: The old stub "governed_intervention_recorded" disposition has been
         # replaced by real PR-4 orchestration. The result should now come from
@@ -366,8 +358,9 @@ class TestOperatorActionEndpoint:
         assert "pr4" in src or "operator_action_layer" in src or result.accepted is True
 
     def test_duplicate_manual_intervention_not_reported_as_canonical_acceptance(self):
-        from core.operator_surface import OperatorSurface
         import unittest.mock as mock
+
+        from core.operator_surface import OperatorSurface
 
         surface = OperatorSurface()
         req = OperatorActionRequest(
@@ -390,12 +383,8 @@ class TestOperatorActionEndpoint:
             "get_operator_action_availability",
             return_value=mock_availability,
         ):
-            first = asyncio.new_event_loop().run_until_complete(
-                surface.execute_operator_action(req)
-            )
-            duplicate = asyncio.new_event_loop().run_until_complete(
-                surface.execute_operator_action(req)
-            )
+            first = asyncio.new_event_loop().run_until_complete(surface.execute_operator_action(req))
+            duplicate = asyncio.new_event_loop().run_until_complete(surface.execute_operator_action(req))
         assert first.runtime_result.get("continuity_adjudication_classification") == "current-accepted"
         assert duplicate.accepted is False
         assert duplicate.runtime_result.get("continuity_adjudication_classification") == "duplicate-ignored"
@@ -477,9 +466,7 @@ class TestOperatorFlowCancelEndpoint:
     def test_cancel_endpoint_exists(self, client):
         """The endpoint must not return 405 (method not allowed on read-only)."""
         resp = client.post("/api/v1/operator/flows/test_flow_id/cancel")
-        assert resp.status_code != 405, (
-            "POST /api/v1/operator/flows/{flow_id}/cancel must exist"
-        )
+        assert resp.status_code != 405, "POST /api/v1/operator/flows/{flow_id}/cancel must exist"
 
     def test_cancel_result_has_action_kind(self, client):
         resp = client.post("/api/v1/operator/flows/no_such_flow_xyz/cancel")
@@ -490,12 +477,13 @@ class TestOperatorFlowCancelEndpoint:
     def test_cancel_existing_flow_accepted(self, client):
         """When a real flow exists, cancellation should be accepted."""
         from core.delegated_flow_entity import (
-            create_delegated_flow_entity,
-            get_delegated_flow_entity_runtime,
             DelegatedFlowSignal,
             advance_flow_phase,
+            create_delegated_flow_entity,
+            get_delegated_flow_entity_runtime,
+            reset_delegated_flow_entity_runtime,
         )
-        from core.delegated_flow_entity import reset_delegated_flow_entity_runtime
+
         reset_delegated_flow_entity_runtime()
 
         rt = get_delegated_flow_entity_runtime()
@@ -527,9 +515,10 @@ class TestNoParallelActionPath:
     def test_operator_surface_execute_uses_desktop_presence_runtime(self):
         """execute_operator_action delegates to DesktopPresenceRuntime.handle_request
         for dispatch actions, not a parallel engine."""
+        import unittest.mock as mock
+
         from core.operator_action_contract import OperatorActionRequest
         from core.operator_surface import OperatorSurface
-        import unittest.mock as mock
 
         surface = OperatorSurface()
         req = OperatorActionRequest(
@@ -541,11 +530,13 @@ class TestNoParallelActionPath:
         fake_runtime = mock.MagicMock()
 
         async def fake_handle_request(message, *, source, entry_mode, **kwargs):
-            handle_request_calls.append({
-                "message": message,
-                "source": source,
-                "entry_mode": entry_mode,
-            })
+            handle_request_calls.append(
+                {
+                    "message": message,
+                    "source": source,
+                    "entry_mode": entry_mode,
+                }
+            )
             return {
                 "runtime_session_id": "test_rsid",
                 "trace_id": "test_rsid",
@@ -558,30 +549,26 @@ class TestNoParallelActionPath:
             "core.desktop_presence_runtime.get_desktop_presence_runtime",
             return_value=fake_runtime,
         ):
-            result = asyncio.new_event_loop().run_until_complete(
-                surface.execute_operator_action(req)
-            )
+            result = asyncio.new_event_loop().run_until_complete(surface.execute_operator_action(req))
 
         # The mock must have been called (proves canonical path was taken)
         assert len(handle_request_calls) == 1, (
-            "execute_operator_action must delegate to "
-            "DesktopPresenceRuntime.handle_request exactly once"
+            "execute_operator_action must delegate to " "DesktopPresenceRuntime.handle_request exactly once"
         )
         call = handle_request_calls[0]
         # source must be "operator" — not a parallel engine tag
-        assert call["source"] == "operator", (
-            f"Expected source='operator', got {call['source']!r}"
-        )
+        assert call["source"] == "operator", f"Expected source='operator', got {call['source']!r}"
         # entry_mode must be the canonical operator entry mode tag
-        assert call["entry_mode"] == OPERATOR_ACTION_ENTRY_MODE, (
-            f"Expected entry_mode='operator_action', got {call['entry_mode']!r}"
-        )
+        assert (
+            call["entry_mode"] == OPERATOR_ACTION_ENTRY_MODE
+        ), f"Expected entry_mode='operator_action', got {call['entry_mode']!r}"
         assert result.accepted is True
 
     def test_dispatch_result_carries_runtime_session_id(self):
         """Result must carry runtime_session_id from DesktopPresenceRuntime,
         proving end-to-end correlation."""
         import unittest.mock as mock
+
         from core.operator_surface import OperatorSurface
 
         surface = OperatorSurface()
@@ -598,9 +585,7 @@ class TestNoParallelActionPath:
             "core.desktop_presence_runtime.get_desktop_presence_runtime",
             return_value=fake_runtime,
         ):
-            result = asyncio.new_event_loop().run_until_complete(
-                surface.execute_operator_action(req)
-            )
+            result = asyncio.new_event_loop().run_until_complete(surface.execute_operator_action(req))
 
         assert result.runtime_session_id == "rsid_from_dpr"
         assert result.trace_id == "rsid_from_dpr"
@@ -608,8 +593,10 @@ class TestNoParallelActionPath:
     def test_operator_source_recognized_in_dispatch(self):
         """DesktopPresenceRuntime._dispatch must accept 'operator' source without
         falling through to the warning branch."""
-        from core.desktop_presence_runtime import DesktopPresenceRuntime
         import inspect
+
+        from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         # Read source code to verify "operator" is in the recognized sources set
         src = inspect.getsource(DesktopPresenceRuntime._dispatch)
         assert '"operator"' in src or "'operator'" in src, (
@@ -628,9 +615,7 @@ class TestNoParallelActionPath:
             action_kind=OperatorActionKind.flow_cancel.value,
             flow_id="nonexistent_flow_for_test",
         )
-        result = asyncio.new_event_loop().run_until_complete(
-            surface.execute_operator_action(req)
-        )
+        result = asyncio.new_event_loop().run_until_complete(surface.execute_operator_action(req))
         # Must fail because flow does not exist — but must NOT involve DPR
         assert result.accepted is False
         # "not found" indicates DelegatedFlowEntityRuntime was queried
@@ -648,9 +633,9 @@ class TestUnifiedPanelPayloadIntegration:
 
     def test_unified_panel_payload_has_last_operator_action_field(self):
         payload = UnifiedPanelPayload()
-        assert hasattr(payload, "last_operator_action"), (
-            "UnifiedPanelPayload must have last_operator_action field (PR-3)"
-        )
+        assert hasattr(
+            payload, "last_operator_action"
+        ), "UnifiedPanelPayload must have last_operator_action field (PR-3)"
         assert isinstance(payload.last_operator_action, dict)
 
     def test_last_operator_action_empty_by_default(self):
@@ -671,9 +656,7 @@ class TestUnifiedPanelPayloadIntegration:
         assert retrieved.runtime_session_id == "test_rsid_integration"
 
     def test_unified_panel_payload_to_dict_includes_last_operator_action(self):
-        payload = UnifiedPanelPayload(
-            last_operator_action={"action_kind": "dispatch", "accepted": True}
-        )
+        payload = UnifiedPanelPayload(last_operator_action={"action_kind": "dispatch", "accepted": True})
         d = payload.to_dict()
         assert "last_operator_action" in d
         assert d["last_operator_action"]["action_kind"] == "dispatch"
@@ -683,6 +666,7 @@ class TestUnifiedPanelPayloadIntegration:
             UnifiedPanelAggregationService,
             reset_last_operator_action_result,
         )
+
         reset_last_operator_action_result()
 
         result = OperatorActionResult(
@@ -708,11 +692,13 @@ class TestUnifiedPanelPayloadIntegration:
     def test_build_payload_last_operator_action_empty_without_prior_action(self):
         import os
         import tempfile
+
         import core.unified_panel_aggregation as upa
         from core.unified_panel_aggregation import (
             UnifiedPanelAggregationService,
             reset_last_operator_action_result,
         )
+
         # 隔离持久化路径:get_last_operator_action_result() 在内存为 None 时会从
         # 磁盘 _load;若指向默认路径,其它测试/进程遗留的 runtime/panel_last_
         # operator_action.json 会被恢复,导致"无前置动作应为空"拿到脏数据。
@@ -752,6 +738,7 @@ class TestAndroidCompatibleDispatch:
     def test_device_dispatch_forwards_device_id_to_runtime(self):
         """DesktopPresenceRuntime must receive device_id from device_dispatch."""
         import unittest.mock as mock
+
         from core.operator_surface import OperatorSurface
 
         surface = OperatorSurface()
@@ -776,13 +763,10 @@ class TestAndroidCompatibleDispatch:
             "core.desktop_presence_runtime.get_desktop_presence_runtime",
             return_value=fake_runtime,
         ):
-            asyncio.new_event_loop().run_until_complete(
-                surface.execute_operator_action(req)
-            )
+            asyncio.new_event_loop().run_until_complete(surface.execute_operator_action(req))
 
         assert received_kwargs.get("device_id") == "android_dev_1", (
-            f"device_id must be forwarded to DesktopPresenceRuntime, "
-            f"got: {received_kwargs.get('device_id')!r}"
+            f"device_id must be forwarded to DesktopPresenceRuntime, " f"got: {received_kwargs.get('device_id')!r}"
         )
         assert received_kwargs.get("source") == "operator"
         assert received_kwargs.get("entry_mode") == OPERATOR_ACTION_ENTRY_MODE

@@ -271,6 +271,7 @@ def _make_launcher() -> Any:
     """Return a lightweight NodeSystemLauncher for baseline checks."""
     import json as _json
     from unittest.mock import MagicMock as _MM
+
     from launcher.node_startup import NodeSystemLauncher
 
     ndj_path = PROJECT_ROOT / "node_dependencies.json"
@@ -296,8 +297,8 @@ def _check_callable_node_baseline(
     )
     try:
         from core.callable_node_baseline import (
-            CALLABLE_NODE_BASELINE_ESTABLISHED,
             CALLABLE_ARCHITECTURAL_CLASSES,
+            CALLABLE_NODE_BASELINE_ESTABLISHED,
         )
 
         req.status = BaselineCheckStatus.PASSED
@@ -439,7 +440,7 @@ def _check_node_lifecycle_governor_importable(
             get_node_lifecycle_governor,
         )
 
-        gov = get_node_lifecycle_governor()
+        get_node_lifecycle_governor()
         req.status = BaselineCheckStatus.PASSED
         req.detail = "node_lifecycle_governor importable and singleton accessible"
     except Exception as exc:
@@ -589,9 +590,7 @@ class DeploymentBaselineRuntime:
         with self._lock:
             self._reports.append(report)
 
-    def latest_report(
-        self, env: Optional[DeploymentEnvironment] = None
-    ) -> Optional[DeploymentBaselineReport]:
+    def latest_report(self, env: Optional[DeploymentEnvironment] = None) -> Optional[DeploymentBaselineReport]:
         with self._lock:
             if env is None:
                 return self._reports[-1] if self._reports else None

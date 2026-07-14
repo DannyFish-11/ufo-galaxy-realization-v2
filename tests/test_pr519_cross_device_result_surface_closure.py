@@ -72,10 +72,10 @@ import uuid
 from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _run(coro):
     return asyncio.new_event_loop().run_until_complete(coro)
@@ -85,23 +85,28 @@ def _run(coro):
 # A) Authority sentinels
 # ===========================================================================
 
+
 class TestA_AuthoritySentinels(unittest.TestCase):
     """A) Authority sentinels are importable."""
 
     def test_A1_authority_importable(self):
         from core.cross_device_result_surface import CROSS_DEVICE_RESULT_SURFACE_AUTHORITY
+
         self.assertIn("PR519", CROSS_DEVICE_RESULT_SURFACE_AUTHORITY)
 
     def test_A2_integrated_importable(self):
         from core.cross_device_result_surface import CROSS_DEVICE_RESULT_SURFACE_INTEGRATED
+
         self.assertIn("INTEGRATED", CROSS_DEVICE_RESULT_SURFACE_INTEGRATED)
 
     def test_A3_gap007_resolved_importable(self):
         from core.cross_device_result_surface import CROSS_DEVICE_RESULT_SURFACE_GAP007_RESOLVED
+
         self.assertIn("GAP_517_007_RESOLVED", CROSS_DEVICE_RESULT_SURFACE_GAP007_RESOLVED)
 
     def test_A4_layer_position(self):
         from core.cross_device_result_surface import CROSS_DEVICE_RESULT_SURFACE_LAYER_POSITION
+
         self.assertEqual(CROSS_DEVICE_RESULT_SURFACE_LAYER_POSITION, 12)
 
 
@@ -109,15 +114,18 @@ class TestA_AuthoritySentinels(unittest.TestCase):
 # B) ResultEnvelope production
 # ===========================================================================
 
+
 class TestB_ResultEnvelopeProduction(unittest.TestCase):
     """B) surface_cross_device_result produces a ResultEnvelope."""
 
     def _call(self, raw_result, **kwargs):
         from core.cross_device_result_surface import surface_cross_device_result
+
         return surface_cross_device_result(raw_result, **kwargs)
 
     def test_B1_returns_result_surface_record(self):
         from core.multi_device_control_integrity import ResultSurfaceRecord
+
         sr = self._call({"success": True}, task_id=str(uuid.uuid4()), device_id="dev-1")
         self.assertIsInstance(sr, ResultSurfaceRecord)
 
@@ -127,6 +135,7 @@ class TestB_ResultEnvelopeProduction(unittest.TestCase):
 
     def test_B3_envelope_success_true(self):
         from core.cross_device_execution_chain import get_cross_device_chain
+
         _tid = str(uuid.uuid4())
         self._call({"success": True, "result": {"data": "ok"}}, task_id=_tid, device_id="dev-2")
         snap = get_cross_device_chain().snapshot()
@@ -137,6 +146,7 @@ class TestB_ResultEnvelopeProduction(unittest.TestCase):
 
     def test_B4_envelope_success_false_for_failure(self):
         from core.cross_device_execution_chain import get_cross_device_chain
+
         _tid = str(uuid.uuid4())
         self._call({"success": False, "error": "device offline"}, task_id=_tid)
         snap = get_cross_device_chain().snapshot()
@@ -147,6 +157,7 @@ class TestB_ResultEnvelopeProduction(unittest.TestCase):
 
     def test_B5_task_id_from_raw_result(self):
         from core.cross_device_execution_chain import get_cross_device_chain
+
         _tid = str(uuid.uuid4())
         self._call({"success": True, "task_id": _tid})  # no explicit task_id kwarg
         snap = get_cross_device_chain().snapshot()
@@ -158,15 +169,18 @@ class TestB_ResultEnvelopeProduction(unittest.TestCase):
 # C) ChainExecutionRecord
 # ===========================================================================
 
+
 class TestC_ChainExecutionRecord(unittest.TestCase):
     """C) ChainExecutionRecord is produced and appended to the chain singleton."""
 
     def _call(self, raw_result, **kwargs):
         from core.cross_device_result_surface import surface_cross_device_result
+
         return surface_cross_device_result(raw_result, **kwargs)
 
     def test_C1_record_appended(self):
         from core.cross_device_execution_chain import get_cross_device_chain
+
         _tid = str(uuid.uuid4())
         before = get_cross_device_chain().snapshot().total_executions
         self._call({"success": True}, task_id=_tid)
@@ -175,9 +189,9 @@ class TestC_ChainExecutionRecord(unittest.TestCase):
 
     def test_C2_record_fields(self):
         from core.cross_device_execution_chain import get_cross_device_chain
+
         _tid = str(uuid.uuid4())
-        self._call({"success": True}, task_id=_tid, device_id="dev-99",
-                   route_mode="multi_device")
+        self._call({"success": True}, task_id=_tid, device_id="dev-99", route_mode="multi_device")
         snap = get_cross_device_chain().snapshot()
         records = [r for r in snap.recent_records if r.task_id == _tid]
         self.assertGreater(len(records), 0)
@@ -187,21 +201,21 @@ class TestC_ChainExecutionRecord(unittest.TestCase):
 
     def test_C3_legacy_path_recorded(self):
         from core.cross_device_execution_chain import get_cross_device_chain
+
         _tid = str(uuid.uuid4())
-        self._call({"success": True}, task_id=_tid,
-                   legacy_path_used="cross_device_coordinator.legacy")
+        self._call({"success": True}, task_id=_tid, legacy_path_used="cross_device_coordinator.legacy")
         snap = get_cross_device_chain().snapshot()
         records = [r for r in snap.recent_records if r.task_id == _tid]
         self.assertGreater(len(records), 0)
-        self.assertEqual(records[-1].legacy_path_used,
-                         "cross_device_coordinator.legacy")
+        self.assertEqual(records[-1].legacy_path_used, "cross_device_coordinator.legacy")
         self.assertFalse(records[-1].is_canonical)
 
     def test_C4_chain_snapshot_reflects_execution(self):
         from core.cross_device_execution_chain import (
-            get_cross_device_chain,
             build_cross_device_chain_snapshot,
+            get_cross_device_chain,
         )
+
         _tid = str(uuid.uuid4())
         self._call({"success": True}, task_id=_tid)
         snap = build_cross_device_chain_snapshot()
@@ -212,11 +226,13 @@ class TestC_ChainExecutionRecord(unittest.TestCase):
 # D) TaskGraphRuntime update
 # ===========================================================================
 
+
 class TestD_TaskGraphRuntimeUpdate(unittest.TestCase):
     """D) TaskGraphRuntime is updated by surface_cross_device_result."""
 
     def _call(self, raw_result, **kwargs):
         from core.cross_device_result_surface import surface_cross_device_result
+
         return surface_cross_device_result(raw_result, **kwargs)
 
     def test_D1_task_graph_updated_flag(self):
@@ -226,13 +242,15 @@ class TestD_TaskGraphRuntimeUpdate(unittest.TestCase):
 
     def test_D2_tgr_has_node(self):
         from core.task_graph_runtime import get_task_graph_runtime
+
         _tid = str(uuid.uuid4())
         self._call({"success": True}, task_id=_tid, device_id="dev-tgr-1")
         tgr = get_task_graph_runtime()
         self.assertIsNotNone(tgr.get_node_by_task_id(_tid))
 
     def test_D3_completed_state_for_success(self):
-        from core.task_graph_runtime import get_task_graph_runtime, GraphNodeState
+        from core.task_graph_runtime import GraphNodeState, get_task_graph_runtime
+
         _tid = str(uuid.uuid4())
         self._call({"success": True}, task_id=_tid)
         node = get_task_graph_runtime().get_node_by_task_id(_tid)
@@ -240,7 +258,8 @@ class TestD_TaskGraphRuntimeUpdate(unittest.TestCase):
         self.assertEqual(node.state, GraphNodeState.COMPLETED)
 
     def test_D4_failed_state_for_failure(self):
-        from core.task_graph_runtime import get_task_graph_runtime, GraphNodeState
+        from core.task_graph_runtime import GraphNodeState, get_task_graph_runtime
+
         _tid = str(uuid.uuid4())
         self._call({"success": False, "error": "timeout"}, task_id=_tid)
         node = get_task_graph_runtime().get_node_by_task_id(_tid)
@@ -252,11 +271,13 @@ class TestD_TaskGraphRuntimeUpdate(unittest.TestCase):
 # E) ReplayFoundation update
 # ===========================================================================
 
+
 class TestE_ReplayFoundationUpdate(unittest.TestCase):
     """E) ReplayFoundation receives runtime events."""
 
     def _call(self, raw_result, **kwargs):
         from core.cross_device_result_surface import surface_cross_device_result
+
         return surface_cross_device_result(raw_result, **kwargs)
 
     def test_E1_replay_updated_flag(self):
@@ -265,28 +286,30 @@ class TestE_ReplayFoundationUpdate(unittest.TestCase):
         self.assertTrue(sr.replay_foundation_updated)
 
     def test_E2_task_completed_event_in_buffer(self):
-        from core.replay_foundation import get_replay_foundation, ReplayEventKind
+        from core.replay_foundation import ReplayEventKind, get_replay_foundation
+
         _tid = str(uuid.uuid4())
         self._call({"success": True}, task_id=_tid, trace_id="tr-e2")
         rf = get_replay_foundation()
         snap = rf.snapshot()
         events = [
-            e for e in snap.recent_runtime_events
-            if e.get("task_id") == _tid
-            and e.get("kind") == ReplayEventKind.TASK_COMPLETED
+            e
+            for e in snap.recent_runtime_events
+            if e.get("task_id") == _tid and e.get("kind") == ReplayEventKind.TASK_COMPLETED
         ]
         self.assertGreater(len(events), 0, "No TASK_COMPLETED event found")
 
     def test_E3_task_failed_event_in_buffer(self):
-        from core.replay_foundation import get_replay_foundation, ReplayEventKind
+        from core.replay_foundation import ReplayEventKind, get_replay_foundation
+
         _tid = str(uuid.uuid4())
         self._call({"success": False, "error": "device unreachable"}, task_id=_tid)
         rf = get_replay_foundation()
         snap = rf.snapshot()
         events = [
-            e for e in snap.recent_runtime_events
-            if e.get("task_id") == _tid
-            and e.get("kind") == ReplayEventKind.TASK_FAILED
+            e
+            for e in snap.recent_runtime_events
+            if e.get("task_id") == _tid and e.get("kind") == ReplayEventKind.TASK_FAILED
         ]
         self.assertGreater(len(events), 0, "No TASK_FAILED event found")
 
@@ -295,15 +318,18 @@ class TestE_ReplayFoundationUpdate(unittest.TestCase):
 # F) ResultSurfaceRecord classification
 # ===========================================================================
 
+
 class TestF_ResultSurfaceClassification(unittest.TestCase):
     """F) ResultSurfaceRecord is classified correctly."""
 
     def _call(self, raw_result, **kwargs):
         from core.cross_device_result_surface import surface_cross_device_result
+
         return surface_cross_device_result(raw_result, **kwargs)
 
     def test_F1_canonical_full_when_all_surfaces_updated(self):
         from core.multi_device_control_integrity import ResultSurfaceKind
+
         _tid = str(uuid.uuid4())
         sr = self._call({"success": True}, task_id=_tid)
         # result_envelope + task_graph + replay all updated → CANONICAL_FULL
@@ -324,6 +350,7 @@ class TestF_ResultSurfaceClassification(unittest.TestCase):
 # G) CrossDeviceCoordinator wiring
 # ===========================================================================
 
+
 class TestG_CoordinatorWiring(unittest.TestCase):
     """G) CrossDeviceCoordinator is wired to surface_cross_device_result."""
 
@@ -331,42 +358,41 @@ class TestG_CoordinatorWiring(unittest.TestCase):
         from galaxy_gateway.cross_device_coordinator import (
             CROSS_DEVICE_RESULT_SURFACE_INTEGRATED,
         )
+
         self.assertIn("INTEGRATED", CROSS_DEVICE_RESULT_SURFACE_INTEGRATED)
 
     def test_G2_execute_calls_surface(self):
         """execute_cross_device_task calls surface_cross_device_result."""
-        with patch(
-            "galaxy_gateway.cross_device_coordinator.surface_cross_device_result"
-        ) as mock_surface:
+        with patch("galaxy_gateway.cross_device_coordinator.surface_cross_device_result") as mock_surface:
             from galaxy_gateway.cross_device_coordinator import CrossDeviceCoordinator
+
             coord = CrossDeviceCoordinator()
             coord._analyze_cross_device_task = MagicMock(return_value="generic")
-            coord._execute_generic_cross_device_task = AsyncMock(
-                return_value={"success": True, "data": "done"}
+            coord._execute_generic_cross_device_task = AsyncMock(return_value={"success": True, "data": "done"})
+            _run(
+                coord.execute_cross_device_task(
+                    "test command",
+                    {"task_id": "t-g2"},
+                    _substrate_caller="test",
+                )
             )
-            _run(coord.execute_cross_device_task(
-                "test command",
-                {"task_id": "t-g2"},
-                _substrate_caller="test",
-            ))
             mock_surface.assert_called_once()
 
     def test_G3_failure_path_calls_surface(self):
         """Failure path in execute_cross_device_task also calls surface."""
-        with patch(
-            "galaxy_gateway.cross_device_coordinator.surface_cross_device_result"
-        ) as mock_surface:
+        with patch("galaxy_gateway.cross_device_coordinator.surface_cross_device_result") as mock_surface:
             from galaxy_gateway.cross_device_coordinator import CrossDeviceCoordinator
+
             coord = CrossDeviceCoordinator()
             coord._analyze_cross_device_task = MagicMock(return_value="generic")
-            coord._execute_generic_cross_device_task = AsyncMock(
-                side_effect=RuntimeError("device offline")
+            coord._execute_generic_cross_device_task = AsyncMock(side_effect=RuntimeError("device offline"))
+            result = _run(
+                coord.execute_cross_device_task(
+                    "test command",
+                    {"task_id": "t-g3"},
+                    _substrate_caller="test",
+                )
             )
-            result = _run(coord.execute_cross_device_task(
-                "test command",
-                {"task_id": "t-g3"},
-                _substrate_caller="test",
-            ))
             self.assertFalse(result.get("success"))
             mock_surface.assert_called_once()
 
@@ -376,23 +402,23 @@ class TestG_CoordinatorWiring(unittest.TestCase):
 
         coord = CrossDeviceCoordinator()
         coord._analyze_cross_device_task = MagicMock(return_value="generic")
-        coord._execute_generic_cross_device_task = AsyncMock(
-            return_value={"success": True, "message": "compat"}
-        )
+        coord._execute_generic_cross_device_task = AsyncMock(return_value={"success": True, "message": "compat"})
 
         task_id = str(uuid.uuid4())
-        result = _run(coord.execute_cross_device_task(
-            "test command",
-            {
-                "task_id": task_id,
-                "route_mode": "cross_device_compat_fallback",
-                "dispatch_path": "compat_fallback",
-                "fallback_reason": "device_router_exception",
-                "compat_path_used": "cross_device_coordinator",
-                "_compat_legacy_bypass": "capability_orchestrator.builtin_cross_device",
-            },
-            _substrate_caller="capability_orchestrator.compat_fallback",
-        ))
+        result = _run(
+            coord.execute_cross_device_task(
+                "test command",
+                {
+                    "task_id": task_id,
+                    "route_mode": "cross_device_compat_fallback",
+                    "dispatch_path": "compat_fallback",
+                    "fallback_reason": "device_router_exception",
+                    "compat_path_used": "cross_device_coordinator",
+                    "_compat_legacy_bypass": "capability_orchestrator.builtin_cross_device",
+                },
+                _substrate_caller="capability_orchestrator.compat_fallback",
+            )
+        )
 
         self.assertTrue(result["success"])
         self.assertEqual(result["dispatch_path"], "compat_fallback")
@@ -413,33 +439,33 @@ class TestG_CoordinatorWiring(unittest.TestCase):
 # H) DeviceRouter wiring
 # ===========================================================================
 
+
 class TestH_DeviceRouterWiring(unittest.TestCase):
     """H) DeviceRouter is wired to surface_cross_device_result."""
 
     def test_H1_sentinel_importable_from_device_router(self):
         from galaxy_gateway.device_router import CROSS_DEVICE_RESULT_SURFACE_INTEGRATED
+
         self.assertIn("INTEGRATED", CROSS_DEVICE_RESULT_SURFACE_INTEGRATED)
 
     def test_H2_route_task_calls_surface_after_dispatch(self):
         """route_task calls surface_cross_device_result after dispatch."""
-        with patch(
-            "galaxy_gateway.device_router.surface_cross_device_result"
-        ) as mock_surface:
+        with patch("galaxy_gateway.device_router.surface_cross_device_result") as mock_surface:
             from galaxy_gateway.device_router import DeviceRouter
 
             router = DeviceRouter()
             _fake_device = MagicMock()
             _fake_device.device_id = "phone-001"
-            router._analyze_command = AsyncMock(return_value={
-                "requires_cross_device": False,
-                "exec_mode": "both",
-                "task_type": "command",
-            })
+            router._analyze_command = AsyncMock(
+                return_value={
+                    "requires_cross_device": False,
+                    "exec_mode": "both",
+                    "task_type": "command",
+                }
+            )
             router._select_devices = MagicMock(return_value=[_fake_device])
             router._create_task = MagicMock(return_value={"task_id": "t-h2"})
-            router.dispatch_task = AsyncMock(
-                return_value={"success": True, "result": "done"}
-            )
+            router.dispatch_task = AsyncMock(return_value={"success": True, "result": "done"})
 
             result = _run(router.route_task("test command", {"task_id": "t-h2"}))
             self.assertTrue(result.get("success"))
@@ -450,11 +476,13 @@ class TestH_DeviceRouterWiring(unittest.TestCase):
 # I) GAP-517-007 resolved in gap catalog
 # ===========================================================================
 
+
 class TestI_GapCatalog(unittest.TestCase):
     """I) GAP-517-007 is resolved in the integrity gap catalog."""
 
     def _get_gap(self, gap_id: str):
         from core.multi_device_control_integrity import get_residual_integrity_gaps
+
         for g in get_residual_integrity_gaps():
             if g.gap_id == gap_id:
                 return g
@@ -487,6 +515,7 @@ class TestI_GapCatalog(unittest.TestCase):
 # J) Projection enrichment (GAP-517-008 partial)
 # ===========================================================================
 
+
 class TestJ_ProjectionEnrichment(unittest.TestCase):
     """J) multi-device projection includes chain and task-graph snapshots."""
 
@@ -496,6 +525,7 @@ class TestJ_ProjectionEnrichment(unittest.TestCase):
         from contracts.multi_device_runtime_projection import (
             build_multi_device_runtime_projection,
         )
+
         # Simulate how the projection endpoint now calls build with metadata
         proj = build_multi_device_runtime_projection(
             metadata={
@@ -517,9 +547,8 @@ class TestJ_ProjectionEnrichment(unittest.TestCase):
         from contracts.multi_device_runtime_projection import (
             build_multi_device_runtime_projection,
         )
-        proj = build_multi_device_runtime_projection(
-            metadata={"result_surface_enriched": True}
-        )
+
+        proj = build_multi_device_runtime_projection(metadata={"result_surface_enriched": True})
         self.assertTrue(proj.metadata.get("result_surface_enriched"))
 
 

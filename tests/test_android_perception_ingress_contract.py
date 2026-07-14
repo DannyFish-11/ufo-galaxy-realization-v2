@@ -37,9 +37,7 @@ def test_payload_contract_defaults_to_one_shot_request_bound():
 
 
 def test_ingress_context_for_canonical_participation_respects_ingest_gate():
-    mm_context = MultiModalContext(
-        metadata={"android_perception_participation": ANDROID_PERCEPTION_CANONICAL}
-    )
+    mm_context = MultiModalContext(metadata={"android_perception_participation": ANDROID_PERCEPTION_CANONICAL})
 
     with patch(
         "core.android_perception_ingress_contract._is_multimodal_ingest_enabled",
@@ -49,10 +47,7 @@ def test_ingress_context_for_canonical_participation_respects_ingest_gate():
             source="android_vision",
             multimodal_context=mm_context,
         )
-    assert (
-        disabled_ctx["android_perception_ingress_route"]
-        == ANDROID_PERCEPTION_ROUTE_REQUEST_BOUND
-    )
+    assert disabled_ctx["android_perception_ingress_route"] == ANDROID_PERCEPTION_ROUTE_REQUEST_BOUND
 
     with patch(
         "core.android_perception_ingress_contract._is_multimodal_ingest_enabled",
@@ -62,15 +57,6 @@ def test_ingress_context_for_canonical_participation_respects_ingest_gate():
             source="android_vision",
             multimodal_context=mm_context,
         )
-    assert (
-        enabled_ctx["android_perception_ingress_route"]
-        == ANDROID_PERCEPTION_ROUTE_INGRESS_BUS
-    )
-    assert (
-        enabled_ctx["android_perception_canonical_protocol"]
-        == ANDROID_PERCEPTION_CANONICAL_PROTOCOL
-    )
-    assert (
-        enabled_ctx["android_perception_canonical_handler"]
-        == ANDROID_PERCEPTION_CANONICAL_HANDLER
-    )
+    assert enabled_ctx["android_perception_ingress_route"] == ANDROID_PERCEPTION_ROUTE_INGRESS_BUS
+    assert enabled_ctx["android_perception_canonical_protocol"] == ANDROID_PERCEPTION_CANONICAL_PROTOCOL
+    assert enabled_ctx["android_perception_canonical_handler"] == ANDROID_PERCEPTION_CANONICAL_HANDLER

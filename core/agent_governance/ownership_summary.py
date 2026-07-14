@@ -29,7 +29,7 @@ import dataclasses
 from typing import Any, Dict, Optional
 
 from .agent_role import AgentRole
-from .handoff_policy import HandoffPolicy, DEFAULT_HANDOFF_POLICY
+from .handoff_policy import DEFAULT_HANDOFF_POLICY, HandoffPolicy
 from .responsibility_graph import OwnershipRecord
 
 __all__ = [
@@ -208,6 +208,7 @@ def make_ownership_summary(
     OwnershipSummary
         Always returns a valid summary.
     """
+
     def _parse(raw: str) -> AgentRole:
         try:
             return AgentRole(raw)

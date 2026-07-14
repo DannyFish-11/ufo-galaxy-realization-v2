@@ -38,6 +38,7 @@ logger = logging.getLogger("Galaxy.ChannelPlugins")
 # ChannelAdapter 抽象基类
 # ============================================================================
 
+
 class ChannelAdapter(ABC):
     """
     渠道适配器抽象基类
@@ -94,6 +95,7 @@ class ChannelAdapter(ABC):
 # 内置示例插件：Console（开箱即用，无需外部服务）
 # ============================================================================
 
+
 class ConsoleChannelAdapter(ChannelAdapter):
     """
     控制台渠道适配器
@@ -110,6 +112,7 @@ class ConsoleChannelAdapter(ChannelAdapter):
 
     async def send(self, message: str, **kwargs) -> Dict[str, Any]:
         import time
+
         ts = datetime.now().strftime("%H:%M:%S")
         target = kwargs.get("target", "broadcast")
         print(f"[Channel:Console] [{ts}] -> {target}: {message}")
@@ -126,20 +129,25 @@ class ConsoleChannelAdapter(ChannelAdapter):
     def inject(self, message: str, sender: str = "test") -> None:
         """向 inbox 注入消息（供测试使用）"""
         import time
-        self._inbox.append({
-            "from": sender,
-            "content": message,
-            "timestamp": time.time(),
-        })
+
+        self._inbox.append(
+            {
+                "from": sender,
+                "content": message,
+                "timestamp": time.time(),
+            }
+        )
 
 
 # ============================================================================
 # 插件加载器
 # ============================================================================
 
+
 @dataclass
 class PluginInfo:
     """已加载插件信息"""
+
     plugin_id: str
     adapter: ChannelAdapter
     loaded_at: float = field(default_factory=time.time)
@@ -253,14 +261,16 @@ class ChannelPluginLoader:
         """列出已加载的插件"""
         result = []
         for pid, info in self._plugins.items():
-            result.append({
-                "plugin_id": pid,
-                "name": info.adapter.name,
-                "description": info.adapter.description,
-                "version": info.adapter.version,
-                "source": info.source,
-                "loaded_at": info.loaded_at,
-            })
+            result.append(
+                {
+                    "plugin_id": pid,
+                    "name": info.adapter.name,
+                    "description": info.adapter.description,
+                    "version": info.adapter.version,
+                    "source": info.source,
+                    "loaded_at": info.loaded_at,
+                }
+            )
         return result
 
     def get_adapter(self, plugin_id: str) -> Optional[ChannelAdapter]:
@@ -293,9 +303,7 @@ class ChannelPluginLoader:
         每个子目录如果包含 channel.py，则尝试加载。
         """
         if plugins_dir is None:
-            plugins_dir = os.path.join(
-                os.path.dirname(os.path.dirname(__file__)), "external", "channels"
-            )
+            plugins_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "external", "channels")
 
         if not os.path.isdir(plugins_dir):
             return {"loaded": 0, "results": []}
@@ -315,6 +323,7 @@ class ChannelPluginLoader:
 # ============================================================================
 # 单例访问
 # ============================================================================
+
 
 def get_channel_loader() -> ChannelPluginLoader:
     return ChannelPluginLoader.get_instance()

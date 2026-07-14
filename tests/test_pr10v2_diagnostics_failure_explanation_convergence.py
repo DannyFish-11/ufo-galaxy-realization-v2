@@ -74,7 +74,6 @@ from core.diagnostics_failure_explanation_convergence import (
     get_surfaces_by_semantic_kind,
 )
 
-
 # ---------------------------------------------------------------------------
 # 1. Authority and sentinel non-empty with expected keywords
 # ---------------------------------------------------------------------------
@@ -86,22 +85,14 @@ def test_authority_sentinel_non_empty_and_keywords() -> None:
     assert "diagnostics_failure_explanation_convergence" in (
         DIAGNOSTICS_FAILURE_EXPLANATION_CONVERGENCE_AUTHORITY.lower()
     )
-    assert "authority" in (
-        DIAGNOSTICS_FAILURE_EXPLANATION_CONVERGENCE_AUTHORITY.lower()
-    )
+    assert "authority" in (DIAGNOSTICS_FAILURE_EXPLANATION_CONVERGENCE_AUTHORITY.lower())
 
 
 def test_pr10v2_sentinel_non_empty_and_keywords() -> None:
-    assert isinstance(
-        DIAGNOSTICS_FAILURE_EXPLANATION_CONVERGENCE_PR10V2_SENTINEL, str
-    )
+    assert isinstance(DIAGNOSTICS_FAILURE_EXPLANATION_CONVERGENCE_PR10V2_SENTINEL, str)
     assert DIAGNOSTICS_FAILURE_EXPLANATION_CONVERGENCE_PR10V2_SENTINEL
-    assert "pr10v2" in (
-        DIAGNOSTICS_FAILURE_EXPLANATION_CONVERGENCE_PR10V2_SENTINEL.lower()
-    )
-    assert "boundary_locked" in (
-        DIAGNOSTICS_FAILURE_EXPLANATION_CONVERGENCE_PR10V2_SENTINEL.lower()
-    )
+    assert "pr10v2" in (DIAGNOSTICS_FAILURE_EXPLANATION_CONVERGENCE_PR10V2_SENTINEL.lower())
+    assert "boundary_locked" in (DIAGNOSTICS_FAILURE_EXPLANATION_CONVERGENCE_PR10V2_SENTINEL.lower())
 
 
 # ---------------------------------------------------------------------------
@@ -117,16 +108,10 @@ def test_summary_policy_non_empty_and_keywords() -> None:
 
 
 def test_diagnostics_policy_non_empty_and_keywords() -> None:
-    assert isinstance(
-        DIAGNOSTICS_MUST_NOT_BE_READ_BACK_AS_ACCEPTANCE_INPUT_POLICY, str
-    )
+    assert isinstance(DIAGNOSTICS_MUST_NOT_BE_READ_BACK_AS_ACCEPTANCE_INPUT_POLICY, str)
     assert DIAGNOSTICS_MUST_NOT_BE_READ_BACK_AS_ACCEPTANCE_INPUT_POLICY
-    assert "must not" in (
-        DIAGNOSTICS_MUST_NOT_BE_READ_BACK_AS_ACCEPTANCE_INPUT_POLICY.lower()
-    )
-    assert "acceptance" in (
-        DIAGNOSTICS_MUST_NOT_BE_READ_BACK_AS_ACCEPTANCE_INPUT_POLICY.lower()
-    )
+    assert "must not" in (DIAGNOSTICS_MUST_NOT_BE_READ_BACK_AS_ACCEPTANCE_INPUT_POLICY.lower())
+    assert "acceptance" in (DIAGNOSTICS_MUST_NOT_BE_READ_BACK_AS_ACCEPTANCE_INPUT_POLICY.lower())
 
 
 def test_artifact_policy_non_empty_and_keywords() -> None:
@@ -139,9 +124,7 @@ def test_artifact_policy_non_empty_and_keywords() -> None:
 def test_audit_policy_non_empty_and_keywords() -> None:
     assert isinstance(AUDIT_POSTRUN_IS_RETROSPECTIVE_NOT_PRESCRIPTIVE_POLICY, str)
     assert AUDIT_POSTRUN_IS_RETROSPECTIVE_NOT_PRESCRIPTIVE_POLICY
-    assert "retrospective" in (
-        AUDIT_POSTRUN_IS_RETROSPECTIVE_NOT_PRESCRIPTIVE_POLICY.lower()
-    )
+    assert "retrospective" in (AUDIT_POSTRUN_IS_RETROSPECTIVE_NOT_PRESCRIPTIVE_POLICY.lower())
 
 
 def test_no_parallel_platform_policy_non_empty_and_keywords() -> None:
@@ -237,9 +220,7 @@ def test_registry_has_all_five_kinds() -> None:
     registry = get_diagnostics_surface_registry()
     present_kinds = {s.semantic_kind for s in registry}
     for kind in DiagnosticsSemanticKind:
-        assert kind in present_kinds, (
-            f"No surface registered for semantic kind: {kind.value}"
-        )
+        assert kind in present_kinds, f"No surface registered for semantic kind: {kind.value}"
 
 
 # ---------------------------------------------------------------------------
@@ -265,45 +246,35 @@ def test_classify_unknown_surface_id_returns_unknown() -> None:
 
 
 def test_get_surfaces_by_semantic_kind_authority() -> None:
-    surfaces = get_surfaces_by_semantic_kind(
-        DiagnosticsSemanticKind.authority_execution_truth
-    )
+    surfaces = get_surfaces_by_semantic_kind(DiagnosticsSemanticKind.authority_execution_truth)
     assert len(surfaces) >= 1
     for s in surfaces:
         assert s.semantic_kind == DiagnosticsSemanticKind.authority_execution_truth
 
 
 def test_get_surfaces_by_semantic_kind_failure_diagnostics() -> None:
-    surfaces = get_surfaces_by_semantic_kind(
-        DiagnosticsSemanticKind.failure_diagnostics_truth
-    )
+    surfaces = get_surfaces_by_semantic_kind(DiagnosticsSemanticKind.failure_diagnostics_truth)
     assert len(surfaces) >= 1
     for s in surfaces:
         assert s.semantic_kind == DiagnosticsSemanticKind.failure_diagnostics_truth
 
 
 def test_get_surfaces_by_semantic_kind_artifact() -> None:
-    surfaces = get_surfaces_by_semantic_kind(
-        DiagnosticsSemanticKind.artifact_evidence_truth
-    )
+    surfaces = get_surfaces_by_semantic_kind(DiagnosticsSemanticKind.artifact_evidence_truth)
     assert len(surfaces) >= 1
     for s in surfaces:
         assert s.semantic_kind == DiagnosticsSemanticKind.artifact_evidence_truth
 
 
 def test_get_surfaces_by_semantic_kind_operator_summary() -> None:
-    surfaces = get_surfaces_by_semantic_kind(
-        DiagnosticsSemanticKind.operator_summary_explanation
-    )
+    surfaces = get_surfaces_by_semantic_kind(DiagnosticsSemanticKind.operator_summary_explanation)
     assert len(surfaces) >= 1
     for s in surfaces:
         assert s.semantic_kind == DiagnosticsSemanticKind.operator_summary_explanation
 
 
 def test_get_surfaces_by_semantic_kind_audit_postrun() -> None:
-    surfaces = get_surfaces_by_semantic_kind(
-        DiagnosticsSemanticKind.audit_postrun_interpretation
-    )
+    surfaces = get_surfaces_by_semantic_kind(DiagnosticsSemanticKind.audit_postrun_interpretation)
     assert len(surfaces) >= 1
     for s in surfaces:
         assert s.semantic_kind == DiagnosticsSemanticKind.audit_postrun_interpretation
@@ -341,14 +312,11 @@ def test_snapshot_android_uplink_surfaces_non_empty() -> None:
 
 
 def test_authority_execution_truth_surfaces_exist() -> None:
-    surfaces = get_surfaces_by_semantic_kind(
-        DiagnosticsSemanticKind.authority_execution_truth
-    )
+    surfaces = get_surfaces_by_semantic_kind(DiagnosticsSemanticKind.authority_execution_truth)
     ids = {s.surface_id for s in surfaces}
     # At least one execution authority module is registered
     assert any(
-        "runtime" in sid or "execution" in sid or "chain" in sid
-        for sid in ids
+        "runtime" in sid or "execution" in sid or "chain" in sid for sid in ids
     ), f"No execution-authority surface found; got: {ids}"
 
 
@@ -360,28 +328,22 @@ def test_authority_execution_truth_surfaces_exist() -> None:
 def test_android_diagnostics_uplink_surfaces_count() -> None:
     registry = get_diagnostics_surface_registry()
     uplink_surfaces = [s for s in registry if s.android_diagnostics_uplink]
-    assert len(uplink_surfaces) >= 2, (
-        f"Expected ≥2 android_diagnostics_uplink surfaces; "
-        f"got {len(uplink_surfaces)}"
-    )
+    assert len(uplink_surfaces) >= 2, f"Expected ≥2 android_diagnostics_uplink surfaces; " f"got {len(uplink_surfaces)}"
 
 
 def test_android_diagnostics_uplink_includes_artifact_ingress() -> None:
     registry = get_diagnostics_surface_registry()
     uplink_ids = {s.surface_id for s in registry if s.android_diagnostics_uplink}
     assert any("artifact" in sid or "evaluator" in sid for sid in uplink_ids), (
-        f"No Android evaluator artifact surface in uplink chain; "
-        f"uplink IDs: {uplink_ids}"
+        f"No Android evaluator artifact surface in uplink chain; " f"uplink IDs: {uplink_ids}"
     )
 
 
 def test_android_diagnostics_uplink_includes_failure_signal_ingress() -> None:
     registry = get_diagnostics_surface_registry()
     uplink_ids = {s.surface_id for s in registry if s.android_diagnostics_uplink}
-    assert any("failure" in sid or "ingress" in sid or "android" in sid.lower()
-               for sid in uplink_ids), (
-        f"No Android failure signal ingress in uplink chain; "
-        f"uplink IDs: {uplink_ids}"
+    assert any("failure" in sid or "ingress" in sid or "android" in sid.lower() for sid in uplink_ids), (
+        f"No Android failure signal ingress in uplink chain; " f"uplink IDs: {uplink_ids}"
     )
 
 
@@ -391,9 +353,7 @@ def test_android_diagnostics_uplink_includes_failure_signal_ingress() -> None:
 
 
 def test_failure_diagnostics_surfaces_may_not_redefine() -> None:
-    surfaces = get_surfaces_by_semantic_kind(
-        DiagnosticsSemanticKind.failure_diagnostics_truth
-    )
+    surfaces = get_surfaces_by_semantic_kind(DiagnosticsSemanticKind.failure_diagnostics_truth)
     for s in surfaces:
         assert s.may_not_redefine_authority_truth is True, (
             f"failure_diagnostics_truth surface {s.surface_id!r} has "
@@ -408,13 +368,10 @@ def test_failure_diagnostics_surfaces_may_not_redefine() -> None:
 
 
 def test_artifact_evidence_surfaces_may_not_redefine() -> None:
-    surfaces = get_surfaces_by_semantic_kind(
-        DiagnosticsSemanticKind.artifact_evidence_truth
-    )
+    surfaces = get_surfaces_by_semantic_kind(DiagnosticsSemanticKind.artifact_evidence_truth)
     for s in surfaces:
         assert s.may_not_redefine_authority_truth is True, (
-            f"artifact_evidence_truth surface {s.surface_id!r} has "
-            f"may_not_redefine_authority_truth=False"
+            f"artifact_evidence_truth surface {s.surface_id!r} has " f"may_not_redefine_authority_truth=False"
         )
 
 
@@ -424,13 +381,10 @@ def test_artifact_evidence_surfaces_may_not_redefine() -> None:
 
 
 def test_operator_summary_surfaces_may_not_redefine() -> None:
-    surfaces = get_surfaces_by_semantic_kind(
-        DiagnosticsSemanticKind.operator_summary_explanation
-    )
+    surfaces = get_surfaces_by_semantic_kind(DiagnosticsSemanticKind.operator_summary_explanation)
     for s in surfaces:
         assert s.may_not_redefine_authority_truth is True, (
-            f"operator_summary_explanation surface {s.surface_id!r} has "
-            f"may_not_redefine_authority_truth=False"
+            f"operator_summary_explanation surface {s.surface_id!r} has " f"may_not_redefine_authority_truth=False"
         )
 
 
@@ -440,13 +394,10 @@ def test_operator_summary_surfaces_may_not_redefine() -> None:
 
 
 def test_audit_postrun_surfaces_may_not_redefine() -> None:
-    surfaces = get_surfaces_by_semantic_kind(
-        DiagnosticsSemanticKind.audit_postrun_interpretation
-    )
+    surfaces = get_surfaces_by_semantic_kind(DiagnosticsSemanticKind.audit_postrun_interpretation)
     for s in surfaces:
         assert s.may_not_redefine_authority_truth is True, (
-            f"audit_postrun_interpretation surface {s.surface_id!r} has "
-            f"may_not_redefine_authority_truth=False"
+            f"audit_postrun_interpretation surface {s.surface_id!r} has " f"may_not_redefine_authority_truth=False"
         )
 
 
@@ -464,17 +415,17 @@ def test_android_diagnostics_uplink_path_non_empty_tuple() -> None:
 def test_android_diagnostics_uplink_path_contains_ssot_step() -> None:
     path = get_android_diagnostics_uplink_path()
     combined = " ".join(path).lower()
-    assert "v2_android_truth_ssot" in combined or "ssot" in combined, (
-        f"Uplink path does not reference SSOT build step: {path}"
-    )
+    assert (
+        "v2_android_truth_ssot" in combined or "ssot" in combined
+    ), f"Uplink path does not reference SSOT build step: {path}"
 
 
 def test_android_diagnostics_uplink_path_contains_projection_step() -> None:
     path = get_android_diagnostics_uplink_path()
     combined = " ".join(path).lower()
-    assert "stage 3" in combined or "projection" in combined, (
-        f"Uplink path does not reference Stage 3 projection: {path}"
-    )
+    assert (
+        "stage 3" in combined or "projection" in combined
+    ), f"Uplink path does not reference Stage 3 projection: {path}"
 
 
 # ---------------------------------------------------------------------------
@@ -492,8 +443,7 @@ def test_snapshot_total_surfaces_equals_sum_of_counts() -> None:
         + snap.audit_postrun_count
     )
     assert snap.total_surfaces == computed_sum, (
-        f"total_surfaces ({snap.total_surfaces}) != sum of counts "
-        f"({computed_sum})"
+        f"total_surfaces ({snap.total_surfaces}) != sum of counts " f"({computed_sum})"
     )
 
 
@@ -504,9 +454,7 @@ def test_snapshot_total_surfaces_equals_sum_of_counts() -> None:
 
 def test_snapshot_has_exactly_five_policies() -> None:
     snap = build_diagnostics_failure_convergence_snapshot()
-    assert len(snap.policies) == 5, (
-        f"Expected exactly 5 policies; got {len(snap.policies)}"
-    )
+    assert len(snap.policies) == 5, f"Expected exactly 5 policies; got {len(snap.policies)}"
 
 
 # ---------------------------------------------------------------------------
@@ -515,9 +463,7 @@ def test_snapshot_has_exactly_five_policies() -> None:
 
 
 def test_authority_execution_truth_surfaces_may_redefine() -> None:
-    surfaces = get_surfaces_by_semantic_kind(
-        DiagnosticsSemanticKind.authority_execution_truth
-    )
+    surfaces = get_surfaces_by_semantic_kind(DiagnosticsSemanticKind.authority_execution_truth)
     for s in surfaces:
         assert s.may_not_redefine_authority_truth is False, (
             f"authority_execution_truth surface {s.surface_id!r} has "
@@ -534,9 +480,7 @@ def test_authority_execution_truth_surfaces_may_redefine() -> None:
 def test_every_surface_has_non_empty_notes() -> None:
     registry = get_diagnostics_surface_registry()
     for s in registry:
-        assert s.notes, (
-            f"Surface {s.surface_id!r} has an empty notes field"
-        )
+        assert s.notes, f"Surface {s.surface_id!r} has an empty notes field"
 
 
 # ---------------------------------------------------------------------------

@@ -122,7 +122,6 @@ from core.routing_observability import (
     reset_routing_metrics,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers / Fixtures
 # ---------------------------------------------------------------------------
@@ -301,6 +300,7 @@ class TestRoutingDecisionEvent:
 
     def test_timestamp_auto_populated(self):
         import time as _time
+
         before = _time.time()
         evt = RoutingDecisionEvent()
         after = _time.time()
@@ -310,9 +310,18 @@ class TestRoutingDecisionEvent:
         evt = RoutingDecisionEvent()
         d = evt.to_dict()
         expected_keys = {
-            "event_id", "timestamp", "trace_id", "runtime_session_id",
-            "route_kind", "is_native_multimodal", "provider", "model",
-            "route_reason", "fallback_kind", "fallback_reason", "active_modalities",
+            "event_id",
+            "timestamp",
+            "trace_id",
+            "runtime_session_id",
+            "route_kind",
+            "is_native_multimodal",
+            "provider",
+            "model",
+            "route_reason",
+            "fallback_kind",
+            "fallback_reason",
+            "active_modalities",
         }
         assert expected_keys == set(d.keys())
 
@@ -376,9 +385,17 @@ class TestFallbackDecisionEvent:
         evt = FallbackDecisionEvent()
         d = evt.to_dict()
         expected_keys = {
-            "event_id", "timestamp", "trace_id", "runtime_session_id",
-            "fallback_kind", "from_route_kind", "to_route_kind",
-            "provider", "model", "fallback_reason", "active_modalities",
+            "event_id",
+            "timestamp",
+            "trace_id",
+            "runtime_session_id",
+            "fallback_kind",
+            "from_route_kind",
+            "to_route_kind",
+            "provider",
+            "model",
+            "fallback_reason",
+            "active_modalities",
         }
         assert expected_keys == set(d.keys())
 
@@ -780,10 +797,7 @@ class TestProviderUnavailableVsCapabilityMismatch:
         assert kind == RoutingFallbackKind.CAPABILITY_MISMATCH.value
 
     def test_kinds_are_distinct(self):
-        assert (
-            RoutingFallbackKind.PROVIDER_UNAVAILABLE.value
-            != RoutingFallbackKind.CAPABILITY_MISMATCH.value
-        )
+        assert RoutingFallbackKind.PROVIDER_UNAVAILABLE.value != RoutingFallbackKind.CAPABILITY_MISMATCH.value
 
     def test_counters_separate_in_metrics(self):
         m = ControlLoopMetrics()
@@ -804,14 +818,22 @@ class TestSnapshotStability:
         snap = RoutingAnalyticsSnapshot()
         d = snap.to_dict()
         expected_keys = {
-            "schema_version", "total_decisions",
-            "native_multimodal_count", "text_only_count",
-            "partial_multimodal_count", "advisory_count",
-            "native_multimodal_rate", "text_only_rate",
-            "partial_multimodal_rate", "advisory_rate",
-            "fallback_kind_counts", "route_reason_counts",
-            "provider_counts", "model_counts",
-            "projection_mismatch_count", "snapshotted_at",
+            "schema_version",
+            "total_decisions",
+            "native_multimodal_count",
+            "text_only_count",
+            "partial_multimodal_count",
+            "advisory_count",
+            "native_multimodal_rate",
+            "text_only_rate",
+            "partial_multimodal_rate",
+            "advisory_rate",
+            "fallback_kind_counts",
+            "route_reason_counts",
+            "provider_counts",
+            "model_counts",
+            "projection_mismatch_count",
+            "snapshotted_at",
         }
         assert expected_keys == set(d.keys())
 
@@ -824,9 +846,13 @@ class TestSnapshotStability:
         d2 = reconstructed.to_dict()
         # All numeric fields should be identical
         for key in [
-            "total_decisions", "native_multimodal_count", "text_only_count",
-            "native_multimodal_rate", "text_only_rate",
-            "projection_mismatch_count", "schema_version",
+            "total_decisions",
+            "native_multimodal_count",
+            "text_only_count",
+            "native_multimodal_rate",
+            "text_only_rate",
+            "projection_mismatch_count",
+            "schema_version",
         ]:
             assert d[key] == d2[key], f"mismatch on {key}: {d[key]} != {d2[key]}"
         assert d["fallback_kind_counts"] == d2["fallback_kind_counts"]

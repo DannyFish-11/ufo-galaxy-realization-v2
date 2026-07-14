@@ -40,11 +40,12 @@ logger = logging.getLogger("Galaxy.API")
 # ============================================================================
 
 _ALLOWED_MCP_EXECUTABLES = {"node", "python", "python3", "npx", "uvx", "deno"}
-_SHELL_METACHAR_RE = re.compile(r'[;|&`$(){}]')
+_SHELL_METACHAR_RE = re.compile(r"[;|&`$(){}]")
 
 
 class MCPLoadRequest(BaseModel):
     """加载 MCP 服务器的请求体"""
+
     name: str = Field(..., description="MCP 服务器名称")
     command: str = Field(..., description="启动命令，如 'node /path/to/server.js'")
     args: List[str] = Field(default_factory=list, description="命令行参数")
@@ -60,9 +61,7 @@ class MCPLoadRequest(BaseModel):
             raise ValueError("Command cannot be empty")
         base = Path(parts[0]).name
         if base not in _ALLOWED_MCP_EXECUTABLES:
-            raise ValueError(
-                f"Executable '{base}' not in allowlist: {_ALLOWED_MCP_EXECUTABLES}"
-            )
+            raise ValueError(f"Executable '{base}' not in allowlist: {_ALLOWED_MCP_EXECUTABLES}")
         if _SHELL_METACHAR_RE.search(v):
             raise ValueError("Command contains disallowed shell metacharacters")
         return v
@@ -70,12 +69,14 @@ class MCPLoadRequest(BaseModel):
 
 class MCPToolCallRequest(BaseModel):
     """调用 MCP 工具的请求体"""
+
     tool_name: str = Field(..., description="工具名称")
     arguments: Dict[str, Any] = Field(default_factory=dict, description="工具参数")
 
 
 class SkillLoadRequest(BaseModel):
     """加载技能的请求体"""
+
     name: str = Field(default="", description="技能名称 (可选，从 skill.json 读取)")
     path: str = Field(default="", description="技能目录路径 (包含 skill.json)")
     config: Dict[str, Any] = Field(default_factory=dict, description="额外配置")
@@ -83,6 +84,7 @@ class SkillLoadRequest(BaseModel):
 
 class SkillExecuteRequest(BaseModel):
     """执行技能的请求体"""
+
     input: Dict[str, Any] = Field(default_factory=dict, description="输入参数")
     context: Dict[str, Any] = Field(default_factory=dict, description="执行上下文")
 
@@ -90,6 +92,7 @@ class SkillExecuteRequest(BaseModel):
 # ============================================================================
 # 路由工厂
 # ============================================================================
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:
     """Create protocol management routes router."""
@@ -106,20 +109,24 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             from core.mcp_loader import mcp_loader
 
             servers = mcp_loader.list_servers()
-            return JSONResponse({
-                "success": True,
-                "servers": servers,
-                "total": len(servers),
-            })
+            return JSONResponse(
+                {
+                    "success": True,
+                    "servers": servers,
+                    "total": len(servers),
+                }
+            )
 
         except ImportError:
             logger.warning("MCP Loader 模块不可用")
-            return JSONResponse({
-                "success": False,
-                "error": "MCP Loader 模块未安装",
-                "servers": [],
-                "total": 0,
-            })
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": "MCP Loader 模块未安装",
+                    "servers": [],
+                    "total": 0,
+                }
+            )
         except Exception as e:
             logger.error(f"列出 MCP 服务器失败: {e}")
             return JSONResponse(
@@ -202,13 +209,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 )
 
             tools = await mcp_loader.list_tools(server_id)
-            return JSONResponse({
-                "success": True,
-                "server_name": name,
-                "server_id": server_id,
-                "tools": tools,
-                "total": len(tools),
-            })
+            return JSONResponse(
+                {
+                    "success": True,
+                    "server_name": name,
+                    "server_id": server_id,
+                    "tools": tools,
+                    "total": len(tools),
+                }
+            )
 
         except ImportError:
             return JSONResponse(
@@ -233,7 +242,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         )
         logger.info(
             "MCP 工具调用: trace_id=%s task_id=%s server=%s tool=%s",
-            envelope.trace_id, envelope.task_id, name, req.tool_name,
+            envelope.trace_id,
+            envelope.task_id,
+            name,
+            req.tool_name,
         )
         try:
             from core.mcp_loader import mcp_loader
@@ -253,7 +265,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
             logger.info(
                 "MCP 工具调用完成: trace_id=%s server=%s tool=%s success=%s",
-                envelope.trace_id, name, req.tool_name, result.get("success", False),
+                envelope.trace_id,
+                name,
+                req.tool_name,
+                result.get("success", False),
             )
             status_code = 200 if result.get("success") else 400
             return JSONResponse(result, status_code=status_code)
@@ -265,7 +280,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             )
         except Exception as e:
             logger.error(
-                "MCP 工具调用失败: trace_id=%s error=%s", envelope.trace_id, e,
+                "MCP 工具调用失败: trace_id=%s error=%s",
+                envelope.trace_id,
+                e,
             )
             return JSONResponse(
                 {"success": False, "error": str(e)},
@@ -284,21 +301,25 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
             skills = skill_loader.list_skills()
             stats = skill_loader.get_stats()
-            return JSONResponse({
-                "success": True,
-                "skills": skills,
-                "total": len(skills),
-                "stats": stats,
-            })
+            return JSONResponse(
+                {
+                    "success": True,
+                    "skills": skills,
+                    "total": len(skills),
+                    "stats": stats,
+                }
+            )
 
         except ImportError:
             logger.warning("Skill Loader 模块不可用")
-            return JSONResponse({
-                "success": False,
-                "error": "Skill Loader 模块未安装",
-                "skills": [],
-                "total": 0,
-            })
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": "Skill Loader 模块未安装",
+                    "skills": [],
+                    "total": 0,
+                }
+            )
         except Exception as e:
             logger.error(f"列出技能失败: {e}")
             return JSONResponse(
@@ -323,10 +344,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 skill_id=req.name if req.name else None,
             )
 
-            logger.info(
-                f"技能加载: {req.name or req.path} -> "
-                f"success={result.get('success', False)}"
-            )
+            logger.info(f"技能加载: {req.name or req.path} -> " f"success={result.get('success', False)}")
             status_code = 200 if result.get("success") else 400
             return JSONResponse(result, status_code=status_code)
 
@@ -363,10 +381,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
             result = await skill_loader.execute(skill_id, **exec_params)
 
-            logger.info(
-                f"技能执行: {name} ({skill_id}) -> "
-                f"success={result.get('success', False)}"
-            )
+            logger.info(f"技能执行: {name} ({skill_id}) -> " f"success={result.get('success', False)}")
             status_code = 200 if result.get("success") else 400
             return JSONResponse(result, status_code=status_code)
 
@@ -425,10 +440,14 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         server_id = _find_mcp_server_id(name) or name
         try:
             from core.mcp_skill_reload import reload_mcp
+
             result = await reload_mcp(server_id)
             logger.info(
                 "MCP 热重载: %s -> loaded=%s validated=%s tool_count=%d",
-                server_id, result.get("loaded"), result.get("validated"), result.get("tool_count", 0),
+                server_id,
+                result.get("loaded"),
+                result.get("validated"),
+                result.get("tool_count", 0),
             )
             status_code = 200 if result.get("loaded") else 500
             return JSONResponse(result, status_code=status_code)
@@ -446,10 +465,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         skill_id = _find_skill_id(name) or name
         try:
             from core.mcp_skill_reload import reload_skill
+
             result = await reload_skill(skill_id)
             logger.info(
                 "Skill 热重载: %s -> loaded=%s validated=%s",
-                skill_id, result.get("loaded"), result.get("validated"),
+                skill_id,
+                result.get("loaded"),
+                result.get("validated"),
             )
             status_code = 200 if result.get("loaded") else 500
             return JSONResponse(result, status_code=status_code)
@@ -466,10 +488,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """
         try:
             from core.mcp_skill_reload import reload_all
+
             result = await reload_all()
             logger.info(
                 "全量热重载完成: mcp=%d skills=%d errors=%d",
-                len(result.get("mcp", {})), len(result.get("skills", {})), result.get("total_errors", 0),
+                len(result.get("mcp", {})),
+                len(result.get("skills", {})),
+                result.get("total_errors", 0),
             )
             return JSONResponse({"success": True, **result})
         except Exception as e:
@@ -488,6 +513,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """
         try:
             from core.mcp_skill_reload import get_load_status
+
             status = get_load_status()
             return JSONResponse({"success": True, **status})
         except Exception as e:
@@ -562,6 +588,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 # ============================================================================
 # 辅助函数
 # ============================================================================
+
 
 def _find_mcp_server_id(name: str) -> Optional[str]:
     """通过名称或 ID 查找 MCP 服务器，返回 server_id"""

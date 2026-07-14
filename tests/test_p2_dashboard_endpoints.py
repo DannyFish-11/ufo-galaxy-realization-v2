@@ -15,6 +15,7 @@ import json
 import os
 import sys
 import time
+
 import pytest
 
 # Make sure the project root is on sys.path
@@ -31,13 +32,17 @@ pytest.importorskip("dashboard.backend.main", reason="Dashboard backend stores n
 
 # The stores (DeviceTraceStore, _AgentDeviceRegistry, _OrchestrationStore) are
 # not yet implemented in dashboard.backend.main — skip the whole module.
-pytest.skip("Dashboard backend stores (DeviceTraceStore, _AgentDeviceRegistry, "
-            "_OrchestrationStore) not implemented in dashboard.backend.main", allow_module_level=True)
+pytest.skip(
+    "Dashboard backend stores (DeviceTraceStore, _AgentDeviceRegistry, "
+    "_OrchestrationStore) not implemented in dashboard.backend.main",
+    allow_module_level=True,
+)
 
 
 # ===========================================================================
 # Helpers
 # ===========================================================================
+
 
 def _clear_stores() -> None:
     """Reset all in-process stores before each test."""
@@ -51,6 +56,7 @@ def _clear_stores() -> None:
 # ===========================================================================
 # 1. DeviceTraceStore unit tests
 # ===========================================================================
+
 
 class TestDeviceTraceStore:
     def setup_method(self):
@@ -108,6 +114,7 @@ class TestDeviceTraceStore:
 # 2. Device Execution Trace API endpoints
 # ===========================================================================
 
+
 class TestDeviceTraceEndpoints:
     def setup_method(self):
         _clear_stores()
@@ -163,6 +170,7 @@ class TestDeviceTraceEndpoints:
 # ===========================================================================
 # 3. Agent–Device Collaboration Mapping endpoints
 # ===========================================================================
+
 
 class TestAgentDeviceMapping:
     def setup_method(self):
@@ -228,6 +236,7 @@ class TestAgentDeviceMapping:
 # ===========================================================================
 # 4. Multi-Device Orchestration endpoints
 # ===========================================================================
+
 
 class TestOrchestrationEndpoints:
     def setup_method(self):
@@ -323,6 +332,7 @@ class TestOrchestrationEndpoints:
 # ===========================================================================
 # 5. execute/parallel integration – trace + orchestration side effects
 # ===========================================================================
+
 
 class TestParallelExecuteP2Integration:
     def setup_method(self):

@@ -34,9 +34,7 @@ def bridge():
 
 
 @pytest.mark.asyncio
-async def test_register_ack_explicitly_distinguishes_auth_registration_and_participation(
-    bridge, monkeypatch
-):
+async def test_register_ack_explicitly_distinguishes_auth_registration_and_participation(bridge, monkeypatch):
     monkeypatch.delenv("GALAXY_AUTH_ENABLED", raising=False)
     monkeypatch.delenv("GALAXY_API_TOKEN", raising=False)
     monkeypatch.delenv("GALAXY_API_TOKENS", raising=False)

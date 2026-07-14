@@ -295,12 +295,10 @@ def seed_fabric_nodes_into_discovery(fabric: Any, discovery: Any) -> int:
         skipped and not counted).
     """
     try:
-        from core.node_discovery import DiscoveredNode, NodeRole as DiscoveryNodeRole, DiscoveryState
+        from core.node_discovery import DiscoveredNode, DiscoveryState
+        from core.node_discovery import NodeRole as DiscoveryNodeRole
     except ImportError:
-        logger.warning(
-            "seed_fabric_nodes_into_discovery: core.node_discovery unavailable; "
-            "skipping seed."
-        )
+        logger.warning("seed_fabric_nodes_into_discovery: core.node_discovery unavailable; " "skipping seed.")
         return 0
 
     seeded = 0
@@ -321,11 +319,7 @@ def seed_fabric_nodes_into_discovery(fabric: Any, discovery: Any) -> int:
             continue
 
         # Map fabric NodeRole to discovery NodeRole where possible.
-        role_value = (
-            node_info.role.value
-            if hasattr(node_info.role, "value")
-            else str(node_info.role)
-        )
+        role_value = node_info.role.value if hasattr(node_info.role, "value") else str(node_info.role)
         try:
             discovery_role = DiscoveryNodeRole(role_value)
         except ValueError:
@@ -359,7 +353,8 @@ def seed_fabric_nodes_into_discovery(fabric: Any, discovery: Any) -> int:
         except Exception as exc:
             logger.debug(
                 "seed_fabric_nodes_into_discovery: register_node(%s) failed: %s",
-                node_id, exc,
+                node_id,
+                exc,
             )
 
     logger.info(
@@ -401,11 +396,11 @@ def announce_node_to_discovery(
         ``False`` on error.
     """
     try:
-        from core.node_discovery import DiscoveredNode, NodeRole as DiscoveryNodeRole, DiscoveryState
+        from core.node_discovery import DiscoveredNode, DiscoveryState
+        from core.node_discovery import NodeRole as DiscoveryNodeRole
     except ImportError:
         logger.debug(
-            "announce_node_to_discovery: core.node_discovery unavailable; "
-            "skipping announcement for %s.",
+            "announce_node_to_discovery: core.node_discovery unavailable; " "skipping announcement for %s.",
             node_id,
         )
         return False
@@ -416,9 +411,7 @@ def announce_node_to_discovery(
             existing.last_heartbeat = time.time()
             if existing.state not in (DiscoveryState.HEALTHY, DiscoveryState.REGISTERED):
                 existing.state = DiscoveryState.REGISTERED
-            logger.debug(
-                "announce_node_to_discovery: refreshed heartbeat for %s", node_id
-            )
+            logger.debug("announce_node_to_discovery: refreshed heartbeat for %s", node_id)
             return True
 
         caps = list(capabilities) if capabilities else [node_id]
@@ -440,9 +433,7 @@ def announce_node_to_discovery(
         logger.debug("announce_node_to_discovery: registered %s", node_id)
         return True
     except Exception as exc:
-        logger.debug(
-            "announce_node_to_discovery: failed for %s: %s", node_id, exc
-        )
+        logger.debug("announce_node_to_discovery: failed for %s: %s", node_id, exc)
         return False
 
 
@@ -471,16 +462,15 @@ def initialize_discovery_from_startup(
         Number of nodes seeded.
     """
     logger.info(
-        "NodeDiscoveryRuntime: initializing discovery from startup "
-        "(policy: %s)",
+        "NodeDiscoveryRuntime: initializing discovery from startup " "(policy: %s)",
         DISCOVERY_PARTICIPATES_IN_STARTUP_PATH_POLICY[:60] + "...",
     )
     seeded = seed_fabric_nodes_into_discovery(fabric, discovery)
     total_in_discovery = len(getattr(discovery, "nodes", {}))
     logger.info(
-        "NodeDiscoveryRuntime: startup seed complete — "
-        "%d node(s) seeded, %d total in discovery",
-        seeded, total_in_discovery,
+        "NodeDiscoveryRuntime: startup seed complete — " "%d node(s) seeded, %d total in discovery",
+        seeded,
+        total_in_discovery,
     )
     return seeded
 
@@ -541,9 +531,7 @@ def build_discovery_runtime_snapshot(
         logger.warning("build_discovery_runtime_snapshot: discovery query failed: %s", exc)
 
     # Build per-node records.
-    all_node_ids: Set[str] = (
-        set(fabric_nodes.keys()) | set(discovery_nodes.keys()) | launcher_set
-    )
+    all_node_ids: Set[str] = set(fabric_nodes.keys()) | set(discovery_nodes.keys()) | launcher_set
 
     records: List[NodeDiscoveryParticipationRecord] = []
     healthy_count = 0
@@ -558,9 +546,7 @@ def build_discovery_runtime_snapshot(
         if node_id in fabric_nodes:
             rec.in_fabric_registry = True
             ni = fabric_nodes[node_id]
-            rec.fabric_status = (
-                ni.status.value if hasattr(ni.status, "value") else str(ni.status)
-            )
+            rec.fabric_status = ni.status.value if hasattr(ni.status, "value") else str(ni.status)
         else:
             rec.in_fabric_registry = False
 
@@ -568,9 +554,7 @@ def build_discovery_runtime_snapshot(
         if node_id in discovery_nodes:
             rec.in_discovery = True
             dn = discovery_nodes[node_id]
-            rec.discovery_state = (
-                dn.state.value if hasattr(dn.state, "value") else str(dn.state)
-            )
+            rec.discovery_state = dn.state.value if hasattr(dn.state, "value") else str(dn.state)
         else:
             rec.in_discovery = False
 
@@ -620,9 +604,10 @@ def build_discovery_runtime_snapshot(
     snap.seeded_count = len(fabric_healthy)
 
     logger.debug(
-        "NodeDiscoveryRuntime snapshot: aligned=%d undiscovered_active=%d "
-        "discovery_orphan=%d total=%d",
-        healthy_count, undiscovered_active_count, discovery_orphan_count,
+        "NodeDiscoveryRuntime snapshot: aligned=%d undiscovered_active=%d " "discovery_orphan=%d total=%d",
+        healthy_count,
+        undiscovered_active_count,
+        discovery_orphan_count,
         len(all_node_ids),
     )
     return snap
@@ -671,7 +656,8 @@ def get_discovery_participation_summary(
         except Exception as exc:
             logger.debug("Fallback triggered: %s", exc)
             summary["discovery_healthy"] = sum(
-                1 for n in disc_nodes.values()
+                1
+                for n in disc_nodes.values()
                 if getattr(n, "state", None) is not None
                 and (
                     hasattr(n.state, "value")

@@ -58,8 +58,7 @@ TARGET_DEVICE_VALIDATOR_CHAIN_POSITION: int = 3
 # both of which are TIL-aligned (TRUTH_INTEGRATION_LAYER_BACKED=True).
 # The compat cache is NOT consulted by any layer in this chain.
 VALIDATOR_TRUTH_SOURCE: str = (
-    "READINESS(UCM+UDM) + PARTICIPATION via TRUTH_INTEGRATION_LAYER_BACKED=True; "
-    "compat-cache excluded"
+    "READINESS(UCM+UDM) + PARTICIPATION via TRUTH_INTEGRATION_LAYER_BACKED=True; " "compat-cache excluded"
 )
 
 # PR-5: Affirms that this validator only consumes canonical resolved truth
@@ -189,6 +188,7 @@ def _check_readiness(device_id: str) -> tuple[bool, bool, Dict[str, Any], List[s
     """
     try:
         from core.device_readiness import get_device_readiness  # type: ignore
+
         rs = get_device_readiness(device_id)
         registered = bool(getattr(rs, "registered", False))
         ready = bool(
@@ -230,6 +230,7 @@ def _check_capabilities(
     # Try UDM as the canonical capability source.
     try:
         from core.unified.device_manager import get_unified_device_manager  # type: ignore
+
         udm = get_unified_device_manager()
         if udm is None:
             return True, {}, ["capability-check-skipped:udm-returned-none"]
@@ -259,9 +260,7 @@ def _check_capabilities(
         )
     except ImportError:
         # Capability subsystem unavailable — degrade gracefully.
-        logger.debug(
-            "TargetDeviceValidator: UDM unavailable for capability check on %s", device_id
-        )
+        logger.debug("TargetDeviceValidator: UDM unavailable for capability check on %s", device_id)
         return (
             True,
             {},
@@ -291,6 +290,7 @@ def _check_orchestration(device_id: str) -> tuple[bool, Dict[str, Any], List[str
     """
     try:
         from core.device_participation import get_device_participation  # type: ignore
+
         ps = get_device_participation(device_id)
         eligible = bool(getattr(ps, "orchestration_eligible", False))
         src: Dict[str, Any] = {}
@@ -380,9 +380,7 @@ def validate_target_device(
         result.reasons.append("not-ready")
 
     # ── 2. Capability check ─────────────────────────────────────────────
-    cap_match, cap_src, cap_reasons = _check_capabilities(
-        device_id, required_capabilities or []
-    )
+    cap_match, cap_src, cap_reasons = _check_capabilities(device_id, required_capabilities or [])
     result.capability_match = cap_match
     result.sources.update(cap_src)
     result.reasons.extend(cap_reasons)
@@ -398,12 +396,7 @@ def validate_target_device(
         result.orchestration_eligible = True
 
     # ── Derive overall verdict ──────────────────────────────────────────
-    result.valid = (
-        result.registered
-        and result.ready
-        and result.capability_match
-        and result.orchestration_eligible
-    )
+    result.valid = result.registered and result.ready and result.capability_match and result.orchestration_eligible
 
     if not result.valid:
         logger.warning(

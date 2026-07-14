@@ -14,6 +14,7 @@ logger = logging.getLogger("Galaxy.Adapter.DBus")
 
 try:
     import dbus
+
     DBUS_AVAILABLE = True
 except ImportError:
     dbus = None
@@ -45,7 +46,8 @@ class DBusAdapter(TransportAdapter):
         """Call D-Bus method on target service.
 
         target format: "bus_type:service:object_path:interface:method"
-        e.g., "session:org.freedesktop.Notifications:/org/freedesktop/Notifications:org.freedesktop.Notifications:Notify"
+        e.g., "session:org.freedesktop.Notifications:/org/freedesktop/Notifications:
+               org.freedesktop.Notifications:Notify"
         """
         if not DBUS_AVAILABLE:
             return {"success": False, "error": "dbus-python not installed"}

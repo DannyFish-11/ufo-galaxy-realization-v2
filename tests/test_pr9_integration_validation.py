@@ -39,6 +39,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 # 1. Authoritative Startup Path
 # ===========================================================================
 
+
 class TestStartupPath:
     """The canonical startup path main.py → unified_launcher.py → launcher/ is intact."""
 
@@ -47,9 +48,7 @@ class TestStartupPath:
 
     def test_main_py_delegates_to_unified_launcher(self):
         content = (PROJECT_ROOT / "main.py").read_text()
-        assert "unified_launcher" in content, (
-            "main.py must reference unified_launcher.py"
-        )
+        assert "unified_launcher" in content, "main.py must reference unified_launcher.py"
 
     def test_unified_launcher_exists(self):
         assert (PROJECT_ROOT / "unified_launcher.py").exists()
@@ -57,52 +56,62 @@ class TestStartupPath:
     def test_launcher_package_init_exists(self):
         assert (PROJECT_ROOT / "launcher" / "__init__.py").exists()
 
-    @pytest.mark.parametrize("submodule", [
-        "launcher.bootstrap",
-        "launcher.service_manager",
-        "launcher.core_services",
-        "launcher.node_startup",
-        "launcher.health_checks",
-        "launcher.shutdown",
-    ])
+    @pytest.mark.parametrize(
+        "submodule",
+        [
+            "launcher.bootstrap",
+            "launcher.service_manager",
+            "launcher.core_services",
+            "launcher.node_startup",
+            "launcher.health_checks",
+            "launcher.shutdown",
+        ],
+    )
     def test_launcher_submodule_importable(self, submodule):
         importlib.import_module(submodule)
 
     def test_launcher_bootstrap_exports_system_config(self):
         from launcher.bootstrap import SystemConfig
+
         assert SystemConfig is not None
 
     def test_launcher_bootstrap_exports_system_state(self):
         from launcher.bootstrap import SystemState
+
         assert SystemState is not None
 
     def test_launcher_bootstrap_exports_print_status(self):
         from launcher.bootstrap import print_status
+
         assert callable(print_status)
 
     def test_launcher_service_manager_exports_service_manager(self):
         from launcher.service_manager import ServiceManager
+
         assert ServiceManager is not None
 
     def test_launcher_node_startup_exports_node_system_launcher(self):
         from launcher.node_startup import NodeSystemLauncher
+
         assert NodeSystemLauncher is not None
 
     def test_launcher_shutdown_exports_async_shutdown(self):
         from launcher.shutdown import async_shutdown
+
         assert callable(async_shutdown)
 
     def test_unified_launcher_imports_launcher_package(self):
         """unified_launcher.py must reference the launcher sub-package."""
         content = (PROJECT_ROOT / "unified_launcher.py").read_text()
-        assert "from launcher" in content or "import launcher" in content, (
-            "unified_launcher.py must import from the launcher/ sub-package"
-        )
+        assert (
+            "from launcher" in content or "import launcher" in content
+        ), "unified_launcher.py must import from the launcher/ sub-package"
 
 
 # ===========================================================================
 # 2. Core Authority Chain
 # ===========================================================================
+
 
 class TestAuthorityChain:
     """The core authority chain modules are importable with correct class names."""
@@ -137,16 +146,18 @@ class TestAuthorityChain:
 # 3. Repository Layout Registry
 # ===========================================================================
 
+
 class TestRepoLayoutRegistry:
     """core.repo_layout_registry correctly classifies directories."""
 
     @pytest.fixture(scope="class")
     def registry_helpers(self):
         from core.repo_layout_registry import (
-            is_active_runtime_directory,
             is_active_desktop_status_directory,
+            is_active_runtime_directory,
             is_legacy_directory,
         )
+
         return is_active_runtime_directory, is_active_desktop_status_directory, is_legacy_directory
 
     @pytest.mark.parametrize("directory", ["core", "launcher", "nodes"])
@@ -156,9 +167,9 @@ class TestRepoLayoutRegistry:
 
     def test_status_board_v2_is_active_desktop_status(self, registry_helpers):
         _, is_active_status, _ = registry_helpers
-        assert is_active_status("windows_client/status_board_v2"), (
-            "'windows_client/status_board_v2' should be ACTIVE_DESKTOP_STATUS"
-        )
+        assert is_active_status(
+            "windows_client/status_board_v2"
+        ), "'windows_client/status_board_v2' should be ACTIVE_DESKTOP_STATUS"
 
     def test_dashboard_is_legacy(self, registry_helpers):
         _, _, is_legacy = registry_helpers
@@ -166,23 +177,27 @@ class TestRepoLayoutRegistry:
 
     def test_get_repo_layout_registry_returns_singleton(self):
         from core.repo_layout_registry import get_repo_layout_registry
+
         r1 = get_repo_layout_registry()
         r2 = get_repo_layout_registry()
         assert r1 is r2
 
     def test_registry_has_entries(self):
         from core.repo_layout_registry import get_repo_layout_registry
+
         registry = get_repo_layout_registry()
         assert len(registry.active_entries()) > 0
 
     def test_core_entry_is_present(self):
         from core.repo_layout_registry import get_repo_layout_entry
+
         entry = get_repo_layout_entry("core")
         assert entry is not None
         assert "active" in entry.role.value.lower()
 
     def test_dashboard_entry_is_present(self):
         from core.repo_layout_registry import get_repo_layout_entry
+
         entry = get_repo_layout_entry("dashboard")
         assert entry is not None
         assert "legacy" in entry.role.value.lower()
@@ -191,6 +206,7 @@ class TestRepoLayoutRegistry:
 # ===========================================================================
 # 4. Node Registry Consistency
 # ===========================================================================
+
 
 class TestNodeRegistry:
     """node_dependencies.json is present, valid, and internally consistent."""
@@ -227,46 +243,33 @@ class TestNodeRegistry:
             for node_id, entry in nodes.items()
             if entry.get("startup_policy", "active") not in valid_policies
         ]
-        assert not invalid, (
-            f"Nodes with unrecognised startup_policy: {invalid[:5]}"
-        )
+        assert not invalid, f"Nodes with unrecognised startup_policy: {invalid[:5]}"
 
     def test_active_nodes_majority(self, nodes):
-        active = sum(
-            1 for e in nodes.values()
-            if e.get("startup_policy", "active") == "active"
-        )
+        active = sum(1 for e in nodes.values() if e.get("startup_policy", "active") == "active")
         assert active >= 50, f"Expected ≥50 active nodes, got {active}"
 
     def test_skip_nodes_count_reasonable(self, nodes):
-        skipped = sum(
-            1 for e in nodes.values()
-            if e.get("startup_policy") == "skip"
-        )
-        assert skipped <= 20, (
-            f"Unexpectedly many skip-policy nodes: {skipped}"
-        )
+        skipped = sum(1 for e in nodes.values() if e.get("startup_policy") == "skip")
+        assert skipped <= 20, f"Unexpectedly many skip-policy nodes: {skipped}"
 
     def test_node_ids_have_expected_pattern(self, nodes):
         """Node IDs should follow the Node_NN_Name pattern."""
-        malformed = [
-            k for k in nodes if not (k.startswith("Node_") or k.startswith("node_"))
-        ]
+        malformed = [k for k in nodes if not (k.startswith("Node_") or k.startswith("node_"))]
         # Allow up to 5 exceptions (may have infrastructure entries)
-        assert len(malformed) <= 5, (
-            f"Unexpected node ID format: {malformed[:5]}"
-        )
+        assert len(malformed) <= 5, f"Unexpected node ID format: {malformed[:5]}"
 
     def test_pr7_metadata_present(self, node_data):
         """node_dependencies.json should carry PR-7 unification metadata."""
-        assert "_pr7_node_unification" in node_data, (
-            "node_dependencies.json should contain _pr7_node_unification key from PR-7"
-        )
+        assert (
+            "_pr7_node_unification" in node_data
+        ), "node_dependencies.json should contain _pr7_node_unification key from PR-7"
 
 
 # ===========================================================================
 # 5. Legacy Surface Isolation
 # ===========================================================================
+
 
 class TestLegacySurfaceIsolation:
     """Legacy surfaces carry their isolation markers and don't claim active authority."""
@@ -280,22 +283,19 @@ class TestLegacySurfaceIsolation:
         assert not (PROJECT_ROOT / "dashboard" / "frontend").exists()
 
     def test_status_board_v2_active_surface_marker_exists(self):
-        assert (
-            PROJECT_ROOT / "windows_client" / "status_board_v2" / "ACTIVE_SURFACE.md"
-        ).exists()
+        assert (PROJECT_ROOT / "windows_client" / "status_board_v2" / "ACTIVE_SURFACE.md").exists()
 
     def test_dashboard_readme_mentions_legacy_status(self):
         readme = PROJECT_ROOT / "dashboard" / "README.md"
         if not readme.exists():
             pytest.skip("dashboard/README.md not present")
         content = readme.read_text().lower()
-        assert any(kw in content for kw in ("legacy", "demoted", "deprecated")), (
-            "dashboard/README.md should describe its legacy/demoted status"
-        )
+        assert any(
+            kw in content for kw in ("legacy", "demoted", "deprecated")
+        ), "dashboard/README.md should describe its legacy/demoted status"
 
     def test_dashboard_legacy_surface_md_content(self):
         assert not (PROJECT_ROOT / "dashboard" / "LEGACY_SURFACE.md").exists()
-
 
     def test_status_board_v2_active_surface_md_content(self):
         marker = PROJECT_ROOT / "windows_client" / "status_board_v2" / "ACTIVE_SURFACE.md"
@@ -307,21 +307,23 @@ class TestLegacySurfaceIsolation:
 # 6. Critical Documentation
 # ===========================================================================
 
+
 class TestCriticalDocs:
     """All required architecture and runbook docs are present."""
 
-    @pytest.mark.parametrize("rel_path", [
-        "docs/ARCHITECTURE_BASELINE.md",
-        "docs/REPO_LAYOUT.md",
-        "docs/NODE_ACTIVE_MANIFEST.md",
-        "docs/ENTRYPOINT_AND_SURFACE_DEMOTION.md",
-        "docs/UNIFIED_STARTUP.md",
-        "docs/MAINTAINER_RUNBOOK.md",
-    ])
+    @pytest.mark.parametrize(
+        "rel_path",
+        [
+            "docs/ARCHITECTURE_BASELINE.md",
+            "docs/REPO_LAYOUT.md",
+            "docs/NODE_ACTIVE_MANIFEST.md",
+            "docs/ENTRYPOINT_AND_SURFACE_DEMOTION.md",
+            "docs/UNIFIED_STARTUP.md",
+            "docs/MAINTAINER_RUNBOOK.md",
+        ],
+    )
     def test_required_doc_exists(self, rel_path):
-        assert (PROJECT_ROOT / rel_path).exists(), (
-            f"Required doc not found: {rel_path}"
-        )
+        assert (PROJECT_ROOT / rel_path).exists(), f"Required doc not found: {rel_path}"
 
     def test_maintainer_runbook_contains_startup_section(self):
         doc = PROJECT_ROOT / "docs" / "MAINTAINER_RUNBOOK.md"
@@ -357,6 +359,7 @@ class TestCriticalDocs:
 # 7. Validation Script
 # ===========================================================================
 
+
 class TestValidationScript:
     """scripts/validate_runtime.py exists and is runnable as a module."""
 
@@ -382,6 +385,7 @@ class TestValidationScript:
     def test_validate_runtime_module_importable(self):
         """The validation script can be imported without side effects."""
         import importlib.util
+
         spec = importlib.util.spec_from_file_location(
             "validate_runtime",
             PROJECT_ROOT / "scripts" / "validate_runtime.py",

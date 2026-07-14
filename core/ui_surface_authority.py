@@ -223,8 +223,7 @@ class UISurfaceAuthorityRegistry:
     def is_legacy(self, surface_path: str) -> bool:
         """Return ``True`` if *surface_path* is a legacy surface."""
         role = self.get_role(surface_path)
-        return role in (UISurfaceRole.LEGACY_UI, UISurfaceRole.LEGACY_SHELL,
-                        UISurfaceRole.COMPATIBILITY_ONLY)
+        return role in (UISurfaceRole.LEGACY_UI, UISurfaceRole.LEGACY_SHELL, UISurfaceRole.COMPATIBILITY_ONLY)
 
     def is_projection_driven(self, surface_path: str) -> bool:
         """Return ``True`` if *surface_path* is the canonical projection-driven surface."""
@@ -236,17 +235,20 @@ class UISurfaceAuthorityRegistry:
 
     def projection_driven_surfaces(self) -> List[UISurfaceEntry]:
         """Return only the ``PROJECTION_DRIVEN`` entries."""
-        return [e for e in self._registry.values()
-                if e.role == UISurfaceRole.PROJECTION_DRIVEN]
+        return [e for e in self._registry.values() if e.role == UISurfaceRole.PROJECTION_DRIVEN]
 
     def legacy_surfaces(self) -> List[UISurfaceEntry]:
         """Return all ``LEGACY_*`` and ``COMPATIBILITY_ONLY`` entries."""
-        return [e for e in self._registry.values()
-                if e.role in (
-                    UISurfaceRole.LEGACY_UI,
-                    UISurfaceRole.LEGACY_SHELL,
-                    UISurfaceRole.COMPATIBILITY_ONLY,
-                )]
+        return [
+            e
+            for e in self._registry.values()
+            if e.role
+            in (
+                UISurfaceRole.LEGACY_UI,
+                UISurfaceRole.LEGACY_SHELL,
+                UISurfaceRole.COMPATIBILITY_ONLY,
+            )
+        ]
 
     def summary(self) -> Dict:
         """Return a structured summary dict (used by builders and tests)."""
@@ -257,9 +259,7 @@ class UISurfaceAuthorityRegistry:
             "projection_driven_count": projection_count,
             "legacy_count": legacy_count,
             "projection_is_only_outward_truth": projection_count >= 1,
-            "surfaces": [e.to_dict() for e in sorted(
-                self._registry.values(), key=lambda e: e.surface_path
-            )],
+            "surfaces": [e.to_dict() for e in sorted(self._registry.values(), key=lambda e: e.surface_path)],
         }
 
 
@@ -292,7 +292,6 @@ _REGISTRY._register(
             "core.routes.projection → RuntimeProjection → DesktopStatusProjection."
         ),
     ),
-
     # ------------------------------------------------------------------
     # DELETED — dashboard/ (retired WebUI management panel)
     # ------------------------------------------------------------------
@@ -323,16 +322,13 @@ _REGISTRY._register(
         pr_demoted="PR-mainline-closure",
         notes="dashboard/ is DELETED; do not recreate it as a status authority.",
     ),
-
     # ------------------------------------------------------------------
     # DELETED — windows_client/ root legacy shell/status surfaces
     # ------------------------------------------------------------------
     UISurfaceEntry(
         surface_path="windows_client.main",
         role=UISurfaceRole.DELETED,
-        description=(
-            "Windows Client main entry-point — deleted host-specific legacy shell."
-        ),
+        description=("Windows Client main entry-point — deleted host-specific legacy shell."),
         canonical_contract=None,
         superseded_by="windows_client.status_board_v2",
         pr_demoted="PR-mainline-closure",
@@ -345,9 +341,7 @@ _REGISTRY._register(
     UISurfaceEntry(
         surface_path="windows_client.status_board",
         role=UISurfaceRole.DELETED,
-        description=(
-            "windows_client/status_board.py — deleted ad-hoc status board."
-        ),
+        description=("windows_client/status_board.py — deleted ad-hoc status board."),
         canonical_contract=None,
         superseded_by="windows_client.status_board_v2",
         pr_demoted="PR-mainline-closure",

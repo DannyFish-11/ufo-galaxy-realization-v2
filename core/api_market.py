@@ -11,14 +11,15 @@ API 端点:
 - POST /api/v1/market/publish        - 发布技能
 """
 
+import hashlib
 import json
 import logging
+import os
 import re
 from datetime import datetime, timezone
-import os
-import hashlib
-from typing import Dict, List, Any
-from fastapi import APIRouter, HTTPException, Header
+from typing import Any, Dict, List
+
+from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -71,8 +72,10 @@ def _verify_publish_token(token: str) -> bool:
 # 数据模型
 # ============================================================================
 
+
 class SkillPublishRequest(BaseModel):
     """技能发布请求"""
+
     name: str
     description: str
     version: str = "1.0.0"
@@ -143,12 +146,13 @@ BUILTIN_SKILLS = [
 _published_skills: List[Dict[str, Any]] = []
 
 # 版本号校验模式（例如 "1.2.3"）
-_VERSION_PATTERN = re.compile(r'^\d+\.\d+\.\d+$')
+_VERSION_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
 
 
 # ============================================================================
 # API 端点
 # ============================================================================
+
 
 @router.get("/api/v1/market/skills")
 async def list_market_skills(
@@ -165,15 +169,17 @@ async def list_market_skills(
 
     # 分页
     total = len(skills)
-    skills = skills[offset:offset + limit]
+    skills = skills[offset : offset + limit]
 
-    return JSONResponse({
-        "success": True,
-        "skills": skills,
-        "total": total,
-        "limit": limit,
-        "offset": offset,
-    })
+    return JSONResponse(
+        {
+            "success": True,
+            "skills": skills,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
+    )
 
 
 @router.get("/api/v1/market/skills/{skill_id}")
@@ -182,19 +188,25 @@ async def get_market_skill(skill_id: str):
     for skill in BUILTIN_SKILLS + _published_skills:
         if skill["id"] == skill_id:
             # 返回完整信息
-            return JSONResponse({
-                "success": True,
-                "skill": {
-                    **skill,
-                    "download_url": f"https://raw.githubusercontent.com/DannyFish-11/galaxy-realization-v2/main/skills/examples/{skill_id}/SKILL.md",
-                    "readme": f"# {skill['name']}\n\n{skill['description']}",
-                },
-            })
+            return JSONResponse(
+                {
+                    "success": True,
+                    "skill": {
+                        **skill,
+                        "download_url": "https://raw.githubusercontent.com/DannyFish-11/galaxy-realization-v2"
+                        f"/main/skills/examples/{skill_id}/SKILL.md",
+                        "readme": f"# {skill['name']}\n\n{skill['description']}",
+                    },
+                }
+            )
 
-    return JSONResponse({
-        "success": False,
-        "error": "技能不存在",
-    }, status_code=404)
+    return JSONResponse(
+        {
+            "success": False,
+            "error": "技能不存在",
+        },
+        status_code=404,
+    )
 
 
 @router.get("/api/v1/market/search")
@@ -205,17 +217,21 @@ async def search_market_skills(q: str, limit: int = 10):
     results = []
     for skill in BUILTIN_SKILLS + _published_skills:
         # 搜索名称、描述、标签
-        if (q in skill["name"].lower() or
-            q in skill["description"].lower() or
-            any(q in tag.lower() for tag in skill["tags"])):
+        if (
+            q in skill["name"].lower()
+            or q in skill["description"].lower()
+            or any(q in tag.lower() for tag in skill["tags"])
+        ):
             results.append(skill)
 
-    return JSONResponse({
-        "success": True,
-        "query": q,
-        "skills": results[:limit],
-        "total": len(results),
-    })
+    return JSONResponse(
+        {
+            "success": True,
+            "query": q,
+            "skills": results[:limit],
+            "total": len(results),
+        }
+    )
 
 
 @router.post("/api/v1/market/publish")
@@ -240,7 +256,7 @@ async def publish_skill(
     if not _VERSION_PATTERN.match(req.version):
         raise HTTPException(status_code=400, detail="版本号格式无效，应为 x.y.z")
 
-    skill_id = re.sub(r'-+', '-', re.sub(r'[^a-z0-9-]', '-', req.name.lower().strip())).strip('-')
+    skill_id = re.sub(r"-+", "-", re.sub(r"[^a-z0-9-]", "-", req.name.lower().strip())).strip("-")
 
     # 检查是否已存在（同名更新）
     existing_idx = None
@@ -278,11 +294,14 @@ async def publish_skill(
     _save_published_skills(_published_skills)
     logger.info(f"技能 {action}: {skill_id} v{req.version} by {skill_data['author']}")
 
-    return JSONResponse({
-        "success": True,
-        "message": f"技能已{action}",
-        "skill": {k: v for k, v in skill_data.items() if k != "content"},
-    }, status_code=201)
+    return JSONResponse(
+        {
+            "success": True,
+            "message": f"技能已{action}",
+            "skill": {k: v for k, v in skill_data.items() if k != "content"},
+        },
+        status_code=201,
+    )
 
 
 @router.get("/api/v1/market/tags")
@@ -292,26 +311,30 @@ async def list_tags():
     for skill in BUILTIN_SKILLS + _published_skills:
         tags.update(skill["tags"])
 
-    return JSONResponse({
-        "success": True,
-        "tags": sorted(list(tags)),
-    })
+    return JSONResponse(
+        {
+            "success": True,
+            "tags": sorted(list(tags)),
+        }
+    )
 
 
 @router.get("/api/v1/market/stats")
 async def market_stats():
     """市场统计"""
     all_skills = BUILTIN_SKILLS + _published_skills
-    return JSONResponse({
-        "success": True,
-        "stats": {
-            "total_skills": len(all_skills),
-            "builtin_skills": len(BUILTIN_SKILLS),
-            "published_skills": len(_published_skills),
-            "total_downloads": sum(s["downloads"] for s in all_skills),
-            "avg_rating": sum(s["rating"] for s in all_skills) / max(len(all_skills), 1),
-        },
-    })
+    return JSONResponse(
+        {
+            "success": True,
+            "stats": {
+                "total_skills": len(all_skills),
+                "builtin_skills": len(BUILTIN_SKILLS),
+                "published_skills": len(_published_skills),
+                "total_downloads": sum(s["downloads"] for s in all_skills),
+                "avg_rating": sum(s["rating"] for s in all_skills) / max(len(all_skills), 1),
+            },
+        }
+    )
 
 
 # ============================================================================

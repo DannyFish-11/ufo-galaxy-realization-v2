@@ -38,10 +38,10 @@ class TestDuplicateCommandDedup:
 
     def test_completed_key_raises_duplicate(self):
         from core.unified.idempotency import (
-            check_idempotency,
-            record_idempotency,
-            make_payload_hash,
             DuplicateCommandError,
+            check_idempotency,
+            make_payload_hash,
+            record_idempotency,
         )
 
         h = make_payload_hash({"action": "send_message"})
@@ -54,10 +54,10 @@ class TestDuplicateCommandDedup:
 
     def test_duplicate_returns_cached_result(self):
         from core.unified.idempotency import (
-            check_idempotency,
-            record_idempotency,
-            make_payload_hash,
             DuplicateCommandError,
+            check_idempotency,
+            make_payload_hash,
+            record_idempotency,
         )
 
         h = make_payload_hash({"action": "take_screenshot"})
@@ -70,10 +70,10 @@ class TestDuplicateCommandDedup:
 
     def test_failed_key_allows_resubmission(self):
         from core.unified.idempotency import (
+            IdempotencyStatus,
             check_idempotency,
             get_idempotency_store,
             make_payload_hash,
-            IdempotencyStatus,
         )
 
         h = make_payload_hash({"action": "download_file"})
@@ -88,10 +88,10 @@ class TestDuplicateCommandDedup:
 
     def test_in_flight_key_does_not_raise(self):
         from core.unified.idempotency import (
+            IdempotencyStatus,
             check_idempotency,
             get_idempotency_store,
             make_payload_hash,
-            IdempotencyStatus,
         )
 
         h = make_payload_hash({"action": "process"})
@@ -114,10 +114,10 @@ class TestIdempotencyConflict:
 
     def test_different_payload_same_key_raises_conflict(self):
         from core.unified.idempotency import (
-            check_idempotency,
-            record_idempotency,
-            make_payload_hash,
             IdempotencyConflictError,
+            check_idempotency,
+            make_payload_hash,
+            record_idempotency,
         )
 
         h1 = make_payload_hash({"action": "open_app", "app": "maps"})
@@ -133,8 +133,8 @@ class TestIdempotencyConflict:
     def test_conflict_no_raise_mode(self):
         from core.unified.idempotency import (
             check_idempotency,
-            record_idempotency,
             make_payload_hash,
+            record_idempotency,
         )
 
         h1 = make_payload_hash({"cmd": "A"})
@@ -190,11 +190,11 @@ class TestIdempotencyStoreStats:
 
     def test_stats_track_hits_and_misses(self):
         from core.unified.idempotency import (
+            DuplicateCommandError,
             check_idempotency,
-            record_idempotency,
             get_idempotency_store,
             make_payload_hash,
-            DuplicateCommandError,
+            record_idempotency,
         )
 
         h = make_payload_hash({"op": "test"})
@@ -211,9 +211,9 @@ class TestIdempotencyStoreStats:
 
     def test_store_size_tracked(self):
         from core.unified.idempotency import (
-            record_idempotency,
             get_idempotency_store,
             make_payload_hash,
+            record_idempotency,
         )
 
         for i in range(5):

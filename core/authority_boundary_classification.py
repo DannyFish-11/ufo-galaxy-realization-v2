@@ -383,7 +383,6 @@ _AUTHORITY_MATRIX: List[AuthoritySurface] = [
     # 1. SSOT write surfaces
     #    These are the only surfaces allowed to write authoritative state.
     # =========================================================================
-
     AuthoritySurface(
         surface_id="udm",
         module_path="core.unified.device_manager.UnifiedDeviceManager",
@@ -413,12 +412,10 @@ _AUTHORITY_MATRIX: List[AuthoritySurface] = [
             "competing connection-state stores."
         ),
     ),
-
     # =========================================================================
     # 2. Canonical registries
     #    Hold the authoritative set of registered entities and current state.
     # =========================================================================
-
     AuthoritySurface(
         surface_id="node_fabric_registry",
         module_path="core.nodes.node_fabric_registry.NodeFabricRegistry",
@@ -506,12 +503,10 @@ _AUTHORITY_MATRIX: List[AuthoritySurface] = [
             "the governed canonical architecture."
         ),
     ),
-
     # =========================================================================
     # 3. Truth compilation surfaces
     #    Compile or assemble truth from canonical sources into coherent snapshots.
     # =========================================================================
-
     AuthoritySurface(
         surface_id="truth_integration_layer",
         module_path="core.truth_integration_layer",
@@ -572,12 +567,10 @@ _AUTHORITY_MATRIX: List[AuthoritySurface] = [
             "write authority."
         ),
     ),
-
     # =========================================================================
     # 4. Projection surfaces
     #    Read-only views that adapt canonical truth for external consumers.
     # =========================================================================
-
     AuthoritySurface(
         surface_id="projection_routes",
         module_path="core.routes.projection",
@@ -650,12 +643,10 @@ _AUTHORITY_MATRIX: List[AuthoritySurface] = [
             "Layer-1 canonical readiness."
         ),
     ),
-
     # =========================================================================
     # 5. Cache / index surfaces
     #    Derived from canonical sources; must not be treated as truth.
     # =========================================================================
-
     AuthoritySurface(
         surface_id="device_pool_manager",
         module_path="core.device_pool_manager",
@@ -723,12 +714,10 @@ _AUTHORITY_MATRIX: List[AuthoritySurface] = [
         ),
         canonical_replacement="core.nodes.node_fabric_registry.NodeFabricRegistry",
     ),
-
     # =========================================================================
     # 6. Compatibility facades
     #    Legacy shims providing backward-compatible APIs over canonical surfaces.
     # =========================================================================
-
     AuthoritySurface(
         surface_id="node_registry_compat_facade",
         module_path="core.node_registry.NodeRegistry",
@@ -780,12 +769,10 @@ _AUTHORITY_MATRIX: List[AuthoritySurface] = [
         ),
         canonical_replacement="core.unified.device_manager.UnifiedDeviceManager",
     ),
-
     # =========================================================================
     # 7. Adapter / routing helper surfaces
     #    Protocol translation, transport routing, and migration adapters.
     # =========================================================================
-
     AuthoritySurface(
         surface_id="fusion_entry_adapter",
         module_path="core.fusion_entry_adapter",
@@ -865,12 +852,10 @@ _AUTHORITY_MATRIX: List[AuthoritySurface] = [
             "outcomes derived from canonical eligibility state."
         ),
     ),
-
     # =========================================================================
     # 8. Transitional surfaces
     #    Must not be extended as canonical architecture.
     # =========================================================================
-
     AuthoritySurface(
         surface_id="legacy_node_registry_json_scan",
         module_path="core.openclawd._collect_tools.layer3_node_registry_json",
@@ -910,9 +895,7 @@ _AUTHORITY_MATRIX: List[AuthoritySurface] = [
 ]
 
 # Lookup index by surface_id for O(1) classify_surface() calls.
-_AUTHORITY_MATRIX_INDEX: Dict[str, AuthoritySurface] = {
-    entry.surface_id: entry for entry in _AUTHORITY_MATRIX
-}
+_AUTHORITY_MATRIX_INDEX: Dict[str, AuthoritySurface] = {entry.surface_id: entry for entry in _AUTHORITY_MATRIX}
 
 
 # ---------------------------------------------------------------------------
@@ -1016,9 +999,7 @@ def build_authority_matrix_summary() -> AuthorityMatrixSummary:
         if count:
             by_role[role.value] = count
 
-    compat_facade_ids = [
-        e.surface_id for e in matrix if e.role == AuthorityRole.compat_facade
-    ]
+    compat_facade_ids = [e.surface_id for e in matrix if e.role == AuthorityRole.compat_facade]
     transitional_ids = [e.surface_id for e in matrix if e.is_transitional]
 
     return AuthorityMatrixSummary(

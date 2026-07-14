@@ -62,8 +62,8 @@ AW. DelegatedFlowAcceptanceReport.to_dict() includes readiness_report_id.
 from __future__ import annotations
 
 import json
-import sys
 import os
+import sys
 from typing import Any, Dict
 
 import pytest
@@ -74,27 +74,26 @@ if _PROJECT_ROOT not in sys.path:
 
 import core.delegated_flow_acceptance_gate as _gate_mod
 from core.delegated_flow_acceptance_gate import (
-    DELEGATED_FLOW_ACCEPTANCE_GATE_AUTHORITY,
-    DELEGATED_FLOW_ACCEPTANCE_GATE_PR10V2_SENTINEL,
+    ACCEPTANCE_EVIDENCE_GAP_MUST_BE_OPERATOR_VISIBLE_POLICY,
+    ACCEPTANCE_GATE_FAIL_CONSERVATIVE_ON_MISSING_EVIDENCE_POLICY,
     ACCEPTANCE_GATE_IS_EVIDENCE_BACKED_JUDGMENT_POLICY,
     ACCEPTANCE_GATE_IS_PROJECTION_ONLY_POLICY,
-    ACCEPTANCE_GATE_FAIL_CONSERVATIVE_ON_MISSING_EVIDENCE_POLICY,
-    ACCEPTANCE_EVIDENCE_GAP_MUST_BE_OPERATOR_VISIBLE_POLICY,
+    ACCEPTANCE_REFERENCES_CANONICAL_EVIDENCE_SOURCES_POLICY,
     ACCEPTANCE_VERDICT_IS_STABLE_ARTIFACT_POLICY,
     ALL_SIX_DIMENSIONS_REQUIRED_FOR_GRADUATION_POLICY,
+    DELEGATED_FLOW_ACCEPTANCE_GATE_AUTHORITY,
+    DELEGATED_FLOW_ACCEPTANCE_GATE_PR10V2_SENTINEL,
     READINESS_IS_PREREQUISITE_FOR_ACCEPTANCE_POLICY,
-    ACCEPTANCE_REFERENCES_CANONICAL_EVIDENCE_SOURCES_POLICY,
     AcceptanceDimension,
-    DimensionEvidenceStatus,
+    DelegatedFlowAcceptanceGate,
+    DelegatedFlowAcceptanceReport,
     DelegatedFlowAcceptanceVerdict,
     DimensionEvidenceResult,
-    DelegatedFlowAcceptanceReport,
-    DelegatedFlowAcceptanceGate,
+    DimensionEvidenceStatus,
     evaluate_delegated_flow_acceptance,
     get_acceptance_gate,
     reset_acceptance_gate,
 )
-
 
 # ===========================================================================
 # Fixtures
@@ -120,9 +119,7 @@ def _make_accepted_dim(dim: AcceptanceDimension) -> DimensionEvidenceResult:
     )
 
 
-def _make_rejected_dim(
-    dim: AcceptanceDimension, description: str = "test gap"
-) -> DimensionEvidenceResult:
+def _make_rejected_dim(dim: AcceptanceDimension, description: str = "test gap") -> DimensionEvidenceResult:
     """Return a DimensionEvidenceResult with rejected status."""
     return DimensionEvidenceResult(
         dimension=dim,
@@ -133,9 +130,7 @@ def _make_rejected_dim(
     )
 
 
-def _make_unknown_dim(
-    dim: AcceptanceDimension, description: str = "unknown gap"
-) -> DimensionEvidenceResult:
+def _make_unknown_dim(dim: AcceptanceDimension, description: str = "unknown gap") -> DimensionEvidenceResult:
     """Return a DimensionEvidenceResult with unknown status."""
     return DimensionEvidenceResult(
         dimension=dim,
@@ -148,10 +143,7 @@ def _make_unknown_dim(
 
 def _all_accepted_dims() -> Dict[str, DimensionEvidenceResult]:
     """Return a dimensions dict with all six dimensions accepted."""
-    return {
-        dim.value: _make_accepted_dim(dim)
-        for dim in AcceptanceDimension.all_dimensions()
-    }
+    return {dim.value: _make_accepted_dim(dim) for dim in AcceptanceDimension.all_dimensions()}
 
 
 # ===========================================================================
@@ -254,15 +246,11 @@ class TestAcceptanceDimension:
 
     def test_from_string_valid(self):
         assert (
-            AcceptanceDimension.from_string("truth_ownership_evidence")
-            == AcceptanceDimension.truth_ownership_evidence
+            AcceptanceDimension.from_string("truth_ownership_evidence") == AcceptanceDimension.truth_ownership_evidence
         )
 
     def test_from_string_valid_readiness(self):
-        assert (
-            AcceptanceDimension.from_string("readiness_prerequisite")
-            == AcceptanceDimension.readiness_prerequisite
-        )
+        assert AcceptanceDimension.from_string("readiness_prerequisite") == AcceptanceDimension.readiness_prerequisite
 
     def test_from_string_invalid_returns_default(self):
         result = AcceptanceDimension.from_string("nonexistent_dim")
@@ -306,34 +294,19 @@ class TestDimensionEvidenceStatus:
         assert DimensionEvidenceStatus.unknown.value == "unknown"
 
     def test_from_string_accepted(self):
-        assert (
-            DimensionEvidenceStatus.from_string("accepted")
-            == DimensionEvidenceStatus.accepted
-        )
+        assert DimensionEvidenceStatus.from_string("accepted") == DimensionEvidenceStatus.accepted
 
     def test_from_string_rejected(self):
-        assert (
-            DimensionEvidenceStatus.from_string("rejected")
-            == DimensionEvidenceStatus.rejected
-        )
+        assert DimensionEvidenceStatus.from_string("rejected") == DimensionEvidenceStatus.rejected
 
     def test_from_string_unknown(self):
-        assert (
-            DimensionEvidenceStatus.from_string("unknown")
-            == DimensionEvidenceStatus.unknown
-        )
+        assert DimensionEvidenceStatus.from_string("unknown") == DimensionEvidenceStatus.unknown
 
     def test_from_string_invalid_defaults_to_unknown(self):
-        assert (
-            DimensionEvidenceStatus.from_string("bogus")
-            == DimensionEvidenceStatus.unknown
-        )
+        assert DimensionEvidenceStatus.from_string("bogus") == DimensionEvidenceStatus.unknown
 
     def test_from_string_non_string_defaults_to_unknown(self):
-        assert (
-            DimensionEvidenceStatus.from_string(42)  # type: ignore[arg-type]
-            == DimensionEvidenceStatus.unknown
-        )
+        assert DimensionEvidenceStatus.from_string(42) == DimensionEvidenceStatus.unknown  # type: ignore[arg-type]
 
 
 # ===========================================================================
@@ -370,32 +343,20 @@ class TestDelegatedFlowAcceptanceVerdict:
 
     def test_from_string_invalid_defaults_to_unknown(self):
         result = DelegatedFlowAcceptanceVerdict.from_string("not_a_verdict")
-        assert (
-            result
-            == DelegatedFlowAcceptanceVerdict.acceptance_unknown_due_to_incomplete_signals
-        )
+        assert result == DelegatedFlowAcceptanceVerdict.acceptance_unknown_due_to_incomplete_signals
 
     def test_from_string_non_string_defaults_to_unknown(self):
         result = DelegatedFlowAcceptanceVerdict.from_string(None)  # type: ignore[arg-type]
-        assert (
-            result
-            == DelegatedFlowAcceptanceVerdict.acceptance_unknown_due_to_incomplete_signals
-        )
+        assert result == DelegatedFlowAcceptanceVerdict.acceptance_unknown_due_to_incomplete_signals
 
     def test_is_accepted_true_for_accepted_for_graduation(self):
         assert DelegatedFlowAcceptanceVerdict.accepted_for_graduation.is_accepted is True
 
     def test_is_accepted_false_for_rejected(self):
-        assert (
-            DelegatedFlowAcceptanceVerdict.rejected_due_to_truth_contract_gap.is_accepted
-            is False
-        )
+        assert DelegatedFlowAcceptanceVerdict.rejected_due_to_truth_contract_gap.is_accepted is False
 
     def test_is_accepted_false_for_unknown(self):
-        assert (
-            DelegatedFlowAcceptanceVerdict.acceptance_unknown_due_to_incomplete_signals.is_accepted
-            is False
-        )
+        assert DelegatedFlowAcceptanceVerdict.acceptance_unknown_due_to_incomplete_signals.is_accepted is False
 
     def test_is_rejected_true_for_all_rejected_variants(self):
         for verdict in DelegatedFlowAcceptanceVerdict:
@@ -403,32 +364,19 @@ class TestDelegatedFlowAcceptanceVerdict:
                 assert verdict.is_rejected is True, f"{verdict.value} should be rejected"
 
     def test_is_rejected_false_for_accepted(self):
-        assert (
-            DelegatedFlowAcceptanceVerdict.accepted_for_graduation.is_rejected is False
-        )
+        assert DelegatedFlowAcceptanceVerdict.accepted_for_graduation.is_rejected is False
 
     def test_is_rejected_false_for_unknown(self):
-        assert (
-            DelegatedFlowAcceptanceVerdict.acceptance_unknown_due_to_incomplete_signals.is_rejected
-            is False
-        )
+        assert DelegatedFlowAcceptanceVerdict.acceptance_unknown_due_to_incomplete_signals.is_rejected is False
 
     def test_is_unknown_true_for_incomplete_signals(self):
-        assert (
-            DelegatedFlowAcceptanceVerdict.acceptance_unknown_due_to_incomplete_signals.is_unknown
-            is True
-        )
+        assert DelegatedFlowAcceptanceVerdict.acceptance_unknown_due_to_incomplete_signals.is_unknown is True
 
     def test_is_unknown_false_for_accepted(self):
-        assert (
-            DelegatedFlowAcceptanceVerdict.accepted_for_graduation.is_unknown is False
-        )
+        assert DelegatedFlowAcceptanceVerdict.accepted_for_graduation.is_unknown is False
 
     def test_is_unknown_false_for_rejected(self):
-        assert (
-            DelegatedFlowAcceptanceVerdict.rejected_due_to_compat_bypass_risk.is_unknown
-            is False
-        )
+        assert DelegatedFlowAcceptanceVerdict.rejected_due_to_compat_bypass_risk.is_unknown is False
 
 
 # ===========================================================================
@@ -583,11 +531,7 @@ class TestDelegatedFlowAcceptanceReport:
 
     def test_get_dimension_returns_correct_result(self):
         dim_result = _make_accepted_dim(AcceptanceDimension.truth_ownership_evidence)
-        rpt = DelegatedFlowAcceptanceReport(
-            dimensions={
-                AcceptanceDimension.truth_ownership_evidence.value: dim_result
-            }
-        )
+        rpt = DelegatedFlowAcceptanceReport(dimensions={AcceptanceDimension.truth_ownership_evidence.value: dim_result})
         retrieved = rpt.get_dimension(AcceptanceDimension.truth_ownership_evidence)
         assert retrieved is dim_result
 
@@ -833,9 +777,7 @@ class TestCollectEvidenceGaps:
 
 class TestBuildSummary:
     def test_accepted_summary_contains_accepted_for_graduation(self):
-        summary = DelegatedFlowAcceptanceGate._build_summary(
-            DelegatedFlowAcceptanceVerdict.accepted_for_graduation, []
-        )
+        summary = DelegatedFlowAcceptanceGate._build_summary(DelegatedFlowAcceptanceVerdict.accepted_for_graduation, [])
         assert "ACCEPTED FOR GRADUATION" in summary.upper()
 
     def test_rejected_summary_contains_not_accepted(self):
@@ -902,9 +844,7 @@ class TestAcceptedDimHasEmptyGapDescription:
         assert r.gap_description == ""
 
     def test_rejected_dim_non_empty_gap(self):
-        r = _make_rejected_dim(
-            AcceptanceDimension.continuity_replay_evidence, "some gap"
-        )
+        r = _make_rejected_dim(AcceptanceDimension.continuity_replay_evidence, "some gap")
         assert r.gap_description != ""
 
 
@@ -952,9 +892,7 @@ class TestAllExports:
 
 class TestPolicySentinelCount:
     def test_at_least_8_policy_sentinels(self):
-        policy_names = [
-            n for n in _gate_mod.__all__ if n.upper().endswith("_POLICY")
-        ]
+        policy_names = [n for n in _gate_mod.__all__ if n.upper().endswith("_POLICY")]
         assert len(policy_names) >= 8
 
 

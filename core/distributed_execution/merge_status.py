@@ -48,7 +48,6 @@ from __future__ import annotations
 
 from enum import Enum
 
-
 __all__ = [
     "MergeStatus",
     "MERGE_STATUS_ORDER",
@@ -100,9 +99,7 @@ MERGE_STATUS_ORDER: list = [
     MergeStatus.TIMED_OUT,
 ]
 
-_STATUS_SEVERITY: dict = {
-    s: i for i, s in enumerate(MERGE_STATUS_ORDER)
-}
+_STATUS_SEVERITY: dict = {s: i for i, s in enumerate(MERGE_STATUS_ORDER)}
 
 
 # ---------------------------------------------------------------------------

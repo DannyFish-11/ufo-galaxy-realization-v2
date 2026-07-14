@@ -364,9 +364,7 @@ def ingest_android_handoff_response(
     try:
         envelope = extract_handoff_response_envelope(message)
     except Exception as exc:
-        logger.error(
-            "handoff_v2 ingress: failed to extract response envelope: %s", exc
-        )
+        logger.error("handoff_v2 ingress: failed to extract response envelope: %s", exc)
         # Produce a minimal unknown envelope so the outcome is still typed.
         envelope = AndroidHandoffResponseEnvelope(
             response_kind=HandoffResponseKind.unknown,
@@ -388,8 +386,7 @@ def ingest_android_handoff_response(
             envelope=envelope,
             was_correlated=False,
             reject_reason=(
-                f"unknown response_kind; handoff_id={envelope.handoff_id!r} "
-                f"device_id={envelope.device_id!r}"
+                f"unknown response_kind; handoff_id={envelope.handoff_id!r} " f"device_id={envelope.device_id!r}"
             ),
         )
 
@@ -399,9 +396,7 @@ def ingest_android_handoff_response(
     try:
         callback = _runtime.resolve(envelope, clear=is_terminal)
     except Exception as exc:
-        logger.error(
-            "handoff_v2 ingress: runtime.resolve failed: %s", exc
-        )
+        logger.error("handoff_v2 ingress: runtime.resolve failed: %s", exc)
         return HandoffV2ResponseOutcome(
             envelope=envelope,
             was_correlated=False,
@@ -434,8 +429,7 @@ def ingest_android_handoff_response(
         )
     except Exception as exc:
         logger.error(
-            "handoff_v2 ingress: callback raised (non-fatal): "
-            "handoff_id=%r kind=%s error=%s",
+            "handoff_v2 ingress: callback raised (non-fatal): " "handoff_id=%r kind=%s error=%s",
             envelope.handoff_id,
             envelope.response_kind,
             exc,
@@ -446,6 +440,7 @@ def ingest_android_handoff_response(
     if is_terminal:
         try:
             from core.canonical_completion_ingress import get_canonical_completion_ingress
+
             get_canonical_completion_ingress().notify(envelope)
         except Exception as _cci_exc:
             logger.debug(

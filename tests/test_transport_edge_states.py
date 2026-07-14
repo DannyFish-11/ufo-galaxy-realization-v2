@@ -40,19 +40,20 @@ Validates that:
 
 from __future__ import annotations
 
-import pytest
 from unittest.mock import MagicMock
 
+import pytest
+
 from core.network_topology_runtime import (
-    TopologyNodeKind,
-    TopologyEdgeKind,
     TopologyConnectionState,
-    TopologyNode,
     TopologyEdge,
+    TopologyEdgeKind,
+    TopologyNode,
+    TopologyNodeKind,
     TransportPathInfo,
     assimilate_transport_hierarchy_record,
-    project_transport_path,
     get_network_topology_runtime,
+    project_transport_path,
     reset_network_topology_runtime,
 )
 
@@ -73,39 +74,33 @@ def _make_strategy_record(strategy: str, fallback_used: bool = False) -> MagicMo
 
 
 def test_01_direct_edge_kind():
-    e = TopologyEdge(edge_id="e1", source_node_id="a", target_node_id="b",
-                     kind=TopologyEdgeKind.DIRECT)
+    e = TopologyEdge(edge_id="e1", source_node_id="a", target_node_id="b", kind=TopologyEdgeKind.DIRECT)
     assert e.kind == TopologyEdgeKind.DIRECT
     assert e.to_dict()["kind"] == "direct"
 
 
 def test_02_gateway_edge_kind():
-    e = TopologyEdge(edge_id="e2", source_node_id="a", target_node_id="b",
-                     kind=TopologyEdgeKind.GATEWAY)
+    e = TopologyEdge(edge_id="e2", source_node_id="a", target_node_id="b", kind=TopologyEdgeKind.GATEWAY)
     assert e.to_dict()["kind"] == "gateway"
 
 
 def test_03_relay_edge_kind():
-    e = TopologyEdge(edge_id="e3", source_node_id="a", target_node_id="b",
-                     kind=TopologyEdgeKind.RELAY)
+    e = TopologyEdge(edge_id="e3", source_node_id="a", target_node_id="b", kind=TopologyEdgeKind.RELAY)
     assert e.to_dict()["kind"] == "relay"
 
 
 def test_04_mesh_edge_kind():
-    e = TopologyEdge(edge_id="e4", source_node_id="a", target_node_id="b",
-                     kind=TopologyEdgeKind.MESH)
+    e = TopologyEdge(edge_id="e4", source_node_id="a", target_node_id="b", kind=TopologyEdgeKind.MESH)
     assert e.to_dict()["kind"] == "mesh"
 
 
 def test_05_fabric_edge_kind():
-    e = TopologyEdge(edge_id="e5", source_node_id="a", target_node_id="b",
-                     kind=TopologyEdgeKind.FABRIC)
+    e = TopologyEdge(edge_id="e5", source_node_id="a", target_node_id="b", kind=TopologyEdgeKind.FABRIC)
     assert e.to_dict()["kind"] == "fabric"
 
 
 def test_06_projected_semantic_edge_kind():
-    e = TopologyEdge(edge_id="e6", source_node_id="a", target_node_id="b",
-                     kind=TopologyEdgeKind.PROJECTED_SEMANTIC)
+    e = TopologyEdge(edge_id="e6", source_node_id="a", target_node_id="b", kind=TopologyEdgeKind.PROJECTED_SEMANTIC)
     assert e.to_dict()["kind"] == "projected_semantic"
 
 
@@ -117,12 +112,16 @@ def test_07_project_transport_path_returns_info():
 
 def test_08_project_transport_path_effective_path_set():
     rt = get_network_topology_runtime()
-    rt.register_edge(TopologyEdge(
-        edge_id="pref1", source_node_id="src", target_node_id="tgt",
-        kind=TopologyEdgeKind.DIRECT,
-        state=TopologyConnectionState.PREFERRED,
-        preferred=True,
-    ))
+    rt.register_edge(
+        TopologyEdge(
+            edge_id="pref1",
+            source_node_id="src",
+            target_node_id="tgt",
+            kind=TopologyEdgeKind.DIRECT,
+            state=TopologyConnectionState.PREFERRED,
+            preferred=True,
+        )
+    )
     info = rt.project_transport_path("src", "tgt")
     assert info.effective_path == "direct"
     assert info.preferred_edge_id == "pref1"
@@ -130,27 +129,39 @@ def test_08_project_transport_path_effective_path_set():
 
 def test_09_project_transport_path_fallback_path_set():
     rt = get_network_topology_runtime()
-    rt.register_edge(TopologyEdge(
-        edge_id="fb1", source_node_id="src", target_node_id="tgt",
-        kind=TopologyEdgeKind.RELAY,
-        state=TopologyConnectionState.FALLBACK,
-    ))
+    rt.register_edge(
+        TopologyEdge(
+            edge_id="fb1",
+            source_node_id="src",
+            target_node_id="tgt",
+            kind=TopologyEdgeKind.RELAY,
+            state=TopologyConnectionState.FALLBACK,
+        )
+    )
     info = rt.project_transport_path("src", "tgt")
     assert info.fallback_path == "relay"
 
 
 def test_10_project_transport_path_available_paths():
     rt = get_network_topology_runtime()
-    rt.register_edge(TopologyEdge(
-        edge_id="avail1", source_node_id="src", target_node_id="tgt",
-        kind=TopologyEdgeKind.DIRECT,
-        state=TopologyConnectionState.CONNECTED,
-    ))
-    rt.register_edge(TopologyEdge(
-        edge_id="avail2", source_node_id="src", target_node_id="tgt",
-        kind=TopologyEdgeKind.RELAY,
-        state=TopologyConnectionState.FALLBACK,
-    ))
+    rt.register_edge(
+        TopologyEdge(
+            edge_id="avail1",
+            source_node_id="src",
+            target_node_id="tgt",
+            kind=TopologyEdgeKind.DIRECT,
+            state=TopologyConnectionState.CONNECTED,
+        )
+    )
+    rt.register_edge(
+        TopologyEdge(
+            edge_id="avail2",
+            source_node_id="src",
+            target_node_id="tgt",
+            kind=TopologyEdgeKind.RELAY,
+            state=TopologyConnectionState.FALLBACK,
+        )
+    )
     info = rt.project_transport_path("src", "tgt")
     assert "direct" in info.available_paths
     assert "relay" in info.available_paths
@@ -222,66 +233,84 @@ def test_20_gateway_strategy_gives_gateway_edge():
 
 def test_21_update_to_preferred_sets_preferred_flag():
     rt = get_network_topology_runtime()
-    rt.register_edge(TopologyEdge(
-        edge_id="upd1", source_node_id="a", target_node_id="b"))
+    rt.register_edge(TopologyEdge(edge_id="upd1", source_node_id="a", target_node_id="b"))
     rt.update_edge_state("upd1", TopologyConnectionState.PREFERRED, preferred=True)
     assert rt.all_edges()[0].preferred is True
 
 
 def test_22_update_to_fallback_does_not_change_preferred():
     rt = get_network_topology_runtime()
-    rt.register_edge(TopologyEdge(
-        edge_id="upd2", source_node_id="a", target_node_id="b", preferred=False))
+    rt.register_edge(TopologyEdge(edge_id="upd2", source_node_id="a", target_node_id="b", preferred=False))
     rt.update_edge_state("upd2", TopologyConnectionState.FALLBACK)
     assert rt.all_edges()[0].preferred is False
 
 
 def test_23_latent_edge_not_in_available_paths():
     rt = get_network_topology_runtime()
-    rt.register_edge(TopologyEdge(
-        edge_id="lat1", source_node_id="src", target_node_id="tgt",
-        kind=TopologyEdgeKind.MESH,
-        state=TopologyConnectionState.LATENT,
-    ))
+    rt.register_edge(
+        TopologyEdge(
+            edge_id="lat1",
+            source_node_id="src",
+            target_node_id="tgt",
+            kind=TopologyEdgeKind.MESH,
+            state=TopologyConnectionState.LATENT,
+        )
+    )
     info = rt.project_transport_path("src", "tgt")
     assert "mesh" not in info.available_paths
 
 
 def test_24_unavailable_edge_not_in_available_paths():
     rt = get_network_topology_runtime()
-    rt.register_edge(TopologyEdge(
-        edge_id="unav1", source_node_id="src", target_node_id="tgt",
-        kind=TopologyEdgeKind.DIRECT,
-        state=TopologyConnectionState.UNAVAILABLE,
-    ))
+    rt.register_edge(
+        TopologyEdge(
+            edge_id="unav1",
+            source_node_id="src",
+            target_node_id="tgt",
+            kind=TopologyEdgeKind.DIRECT,
+            state=TopologyConnectionState.UNAVAILABLE,
+        )
+    )
     info = rt.project_transport_path("src", "tgt")
     assert "direct" not in info.available_paths
 
 
 def test_25_connected_edge_in_available_paths():
     rt = get_network_topology_runtime()
-    rt.register_edge(TopologyEdge(
-        edge_id="conn1", source_node_id="src", target_node_id="tgt",
-        kind=TopologyEdgeKind.DIRECT,
-        state=TopologyConnectionState.CONNECTED,
-    ))
+    rt.register_edge(
+        TopologyEdge(
+            edge_id="conn1",
+            source_node_id="src",
+            target_node_id="tgt",
+            kind=TopologyEdgeKind.DIRECT,
+            state=TopologyConnectionState.CONNECTED,
+        )
+    )
     info = rt.project_transport_path("src", "tgt")
     assert "direct" in info.available_paths
 
 
 def test_26_multiple_edges_all_in_available():
     rt = get_network_topology_runtime()
-    rt.register_edge(TopologyEdge(
-        edge_id="multi1", source_node_id="src", target_node_id="tgt",
-        kind=TopologyEdgeKind.DIRECT,
-        state=TopologyConnectionState.PREFERRED,
-        preferred=True,
-    ))
-    rt.register_edge(TopologyEdge(
-        edge_id="multi2", source_node_id="src", target_node_id="tgt",
-        kind=TopologyEdgeKind.RELAY,
-        state=TopologyConnectionState.FALLBACK,
-    ))
+    rt.register_edge(
+        TopologyEdge(
+            edge_id="multi1",
+            source_node_id="src",
+            target_node_id="tgt",
+            kind=TopologyEdgeKind.DIRECT,
+            state=TopologyConnectionState.PREFERRED,
+            preferred=True,
+        )
+    )
+    rt.register_edge(
+        TopologyEdge(
+            edge_id="multi2",
+            source_node_id="src",
+            target_node_id="tgt",
+            kind=TopologyEdgeKind.RELAY,
+            state=TopologyConnectionState.FALLBACK,
+        )
+    )
     info = rt.project_transport_path("src", "tgt")
     assert "direct" in info.available_paths
     assert "relay" in info.available_paths
@@ -289,26 +318,28 @@ def test_26_multiple_edges_all_in_available():
 
 def test_27_removed_edge_not_in_edges_from():
     rt = get_network_topology_runtime()
-    rt.register_edge(TopologyEdge(
-        edge_id="rem1", source_node_id="src", target_node_id="tgt"))
+    rt.register_edge(TopologyEdge(edge_id="rem1", source_node_id="src", target_node_id="tgt"))
     rt.remove_edge("rem1")
     assert not any(e.edge_id == "rem1" for e in rt.edges_from("src"))
 
 
 def test_28_no_preferred_edges_when_none_preferred():
     rt = get_network_topology_runtime()
-    rt.register_edge(TopologyEdge(
-        edge_id="np1", source_node_id="a", target_node_id="b", preferred=False))
+    rt.register_edge(TopologyEdge(edge_id="np1", source_node_id="a", target_node_id="b", preferred=False))
     assert rt.preferred_edges() == []
 
 
 def test_29_project_preferred_edge_id_matches():
     rt = get_network_topology_runtime()
-    rt.register_edge(TopologyEdge(
-        edge_id="pid1", source_node_id="src", target_node_id="tgt",
-        state=TopologyConnectionState.PREFERRED,
-        preferred=True,
-    ))
+    rt.register_edge(
+        TopologyEdge(
+            edge_id="pid1",
+            source_node_id="src",
+            target_node_id="tgt",
+            state=TopologyConnectionState.PREFERRED,
+            preferred=True,
+        )
+    )
     info = rt.project_transport_path("src", "tgt")
     assert info.preferred_edge_id == "pid1"
 

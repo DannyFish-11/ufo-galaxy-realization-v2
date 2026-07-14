@@ -2,8 +2,8 @@ from __future__ import annotations
 
 
 def test_phase4_background_subsystems_reports_degraded_when_dispatch_not_ready(monkeypatch):
-    from core.system_orchestrator import SystemOrchestrator, PhaseStatus
     import core.runtime.source_dispatch_orchestrator as orchestrator
+    from core.system_orchestrator import PhaseStatus, SystemOrchestrator
 
     class _Plan:
         ready = False

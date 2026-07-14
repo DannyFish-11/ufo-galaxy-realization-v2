@@ -36,6 +36,7 @@ Coverage
 from __future__ import annotations
 
 import json
+
 import pytest
 
 # ---------------------------------------------------------------------------
@@ -45,6 +46,7 @@ import pytest
 
 def _try_import(module_path: str) -> bool:
     import importlib
+
     try:
         importlib.import_module(module_path)
         return True
@@ -62,14 +64,12 @@ class TestConsolidationPathsAvailable:
 
     def test_01_ingress_path_available(self):
         assert _try_import("core.unified_runtime_truth_ingress"), (
-            "core.unified_runtime_truth_ingress must be importable — "
-            "it is the canonical ingress truth path."
+            "core.unified_runtime_truth_ingress must be importable — " "it is the canonical ingress truth path."
         )
 
     def test_02_continuity_path_available(self):
         assert _try_import("core.flow_continuity_coordinator"), (
-            "core.flow_continuity_coordinator must be importable — "
-            "it is the canonical continuity path."
+            "core.flow_continuity_coordinator must be importable — " "it is the canonical continuity path."
         )
 
     def test_03_orchestration_review_path_available(self):
@@ -86,8 +86,7 @@ class TestConsolidationPathsAvailable:
 
     def test_05_operator_surface_available(self):
         assert _try_import("core.operator_surface"), (
-            "core.operator_surface must be importable — "
-            "it is the canonical operator truth surface."
+            "core.operator_surface must be importable — " "it is the canonical operator truth surface."
         )
 
     def test_06_flow_operator_surface_available(self):
@@ -108,6 +107,7 @@ def completion_status():
         build_system_completion_status,
         reset_system_completion_status,
     )
+
     reset_system_completion_status()
     return build_system_completion_status()
 
@@ -120,16 +120,14 @@ def consolidation_evidence(completion_status):
 class TestSystemCompletionStatusConsolidation:
     """Verify SystemCompletionStatus includes V2 final consolidation evidence."""
 
-    def test_07_completion_status_has_v2_consolidation_evidence(
-        self, completion_status
-    ):
+    def test_07_completion_status_has_v2_consolidation_evidence(self, completion_status):
         assert hasattr(completion_status, "v2_consolidation_evidence"), (
             "SystemCompletionStatus must have a v2_consolidation_evidence field "
             "(added by PR-10 V2 final consolidation pass)."
         )
-        assert isinstance(completion_status.v2_consolidation_evidence, dict), (
-            "v2_consolidation_evidence must be a dict."
-        )
+        assert isinstance(
+            completion_status.v2_consolidation_evidence, dict
+        ), "v2_consolidation_evidence must be a dict."
 
     def test_08_consolidation_evidence_required_keys(self, consolidation_evidence):
         required_keys = {
@@ -142,9 +140,7 @@ class TestSystemCompletionStatusConsolidation:
             "continuity_coordinator_ok",
         }
         for key in required_keys:
-            assert key in consolidation_evidence, (
-                f"v2_consolidation_evidence must have key '{key}'."
-            )
+            assert key in consolidation_evidence, f"v2_consolidation_evidence must have key '{key}'."
 
     def test_08b_consolidation_evidence_chain_paths_keys(self, consolidation_evidence):
         chain_paths = consolidation_evidence["chain_paths_available"]
@@ -158,9 +154,7 @@ class TestSystemCompletionStatusConsolidation:
             "flow_operator_surface",
         }
         for path in expected_paths:
-            assert path in chain_paths, (
-                f"chain_paths_available must contain key '{path}'."
-            )
+            assert path in chain_paths, f"chain_paths_available must contain key '{path}'."
             assert isinstance(chain_paths[path], bool)
 
     def test_08c_consolidation_evidence_counts_consistent(self, consolidation_evidence):
@@ -174,13 +168,9 @@ class TestSystemCompletionStatusConsolidation:
             "status_alignment must include 'v2_consolidation_chain_coherent' "
             "(added by PR-10 V2 final consolidation pass)."
         )
-        assert isinstance(
-            completion_status.status_alignment["v2_consolidation_chain_coherent"], bool
-        )
+        assert isinstance(completion_status.status_alignment["v2_consolidation_chain_coherent"], bool)
 
-    def test_09b_consolidation_chain_coherent_matches_evidence(
-        self, completion_status, consolidation_evidence
-    ):
+    def test_09b_consolidation_chain_coherent_matches_evidence(self, completion_status, consolidation_evidence):
         assert (
             completion_status.status_alignment["v2_consolidation_chain_coherent"]
             == consolidation_evidence["chain_coherent"]
@@ -207,9 +197,10 @@ class TestHonestCompletionReporting:
 
     def test_10b_verdict_not_fully_closed(self, completion_status):
         from core.dual_repo_system_completeness_review import CompletenessVerdict
-        assert completion_status.completeness_verdict != CompletenessVerdict.fully_closed.value, (
-            "completeness_verdict must not be 'fully_closed' in a fresh environment."
-        )
+
+        assert (
+            completion_status.completeness_verdict != CompletenessVerdict.fully_closed.value
+        ), "completeness_verdict must not be 'fully_closed' in a fresh environment."
 
     def test_10c_system_not_fully_operational(self, completion_status):
         assert not completion_status.is_fully_operational, (
@@ -219,8 +210,7 @@ class TestHonestCompletionReporting:
 
     def test_10d_closure_pct_below_100(self, completion_status):
         assert completion_status.system_closure_pct < 100.0, (
-            "system_closure_pct must be < 100% in a fresh environment. "
-            f"Got: {completion_status.system_closure_pct}"
+            "system_closure_pct must be < 100% in a fresh environment. " f"Got: {completion_status.system_closure_pct}"
         )
 
     def test_10e_architecture_pct_100(self, completion_status):
@@ -231,10 +221,11 @@ class TestHonestCompletionReporting:
 
     def test_11_architecture_structure_complete(self):
         from core.dual_repo_system_completeness_review import (
-            build_completeness_review,
             CompletenessDimension,
             CompletenessLabel,
+            build_completeness_review,
         )
+
         report = build_completeness_review()
         entry = report.get_dimension(CompletenessDimension.architecture_structure)
         assert entry is not None
@@ -246,10 +237,11 @@ class TestHonestCompletionReporting:
 
     def test_12_runtime_closure_evidence_gap_fresh_env(self):
         from core.dual_repo_system_completeness_review import (
-            build_completeness_review,
             CompletenessDimension,
             CompletenessLabel,
+            build_completeness_review,
         )
+
         report = build_completeness_review()
         entry = report.get_dimension(CompletenessDimension.runtime_closure)
         assert entry is not None
@@ -261,10 +253,11 @@ class TestHonestCompletionReporting:
 
     def test_13_cross_repo_evidence_gap_no_android_device(self):
         from core.dual_repo_system_completeness_review import (
-            build_completeness_review,
             CompletenessDimension,
             CompletenessLabel,
+            build_completeness_review,
         )
+
         report = build_completeness_review()
         entry = report.get_dimension(CompletenessDimension.cross_repo_evidence)
         assert entry is not None
@@ -282,13 +275,13 @@ class TestHonestCompletionReporting:
 
     def test_14_completeness_verdict_not_fully_closed(self):
         from core.dual_repo_system_completeness_review import (
-            build_completeness_review,
             CompletenessVerdict,
+            build_completeness_review,
         )
+
         report = build_completeness_review()
         assert not report.is_fully_closed, (
-            "dual_repo_system_completeness_review verdict must not be "
-            "'fully_closed' in a fresh environment."
+            "dual_repo_system_completeness_review verdict must not be " "'fully_closed' in a fresh environment."
         )
         assert report.verdict != CompletenessVerdict.fully_closed
 
@@ -316,30 +309,25 @@ class TestCanonicalPathAlignment:
         from core.unified_runtime_truth_ingress import (
             INGRESS_ROUTES_TO_CORRECT_SUB_PATH_POLICY,
         )
+
         assert INGRESS_ROUTES_TO_CORRECT_SUB_PATH_POLICY
-        assert "INGRESS_ROUTES_TO_CORRECT_SUB_PATH_PR2" in (
-            INGRESS_ROUTES_TO_CORRECT_SUB_PATH_POLICY
-        )
+        assert "INGRESS_ROUTES_TO_CORRECT_SUB_PATH_PR2" in (INGRESS_ROUTES_TO_CORRECT_SUB_PATH_POLICY)
 
     def test_16_operator_surfaces_aligned(self):
         """Both operator surfaces are available for aligned operator truth."""
-        assert _try_import("core.operator_surface"), (
-            "core.operator_surface must be importable."
-        )
-        assert _try_import("core.flow_level_operator_surface"), (
-            "core.flow_level_operator_surface must be importable."
-        )
+        assert _try_import("core.operator_surface"), "core.operator_surface must be importable."
+        assert _try_import("core.flow_level_operator_surface"), "core.flow_level_operator_surface must be importable."
 
     def test_17_android_state_only_via_v2_truth_paths(self):
         """Android state is only accessible via existing V2 truth paths (not fabricated)."""
         # The android_device_state_store is the canonical Android state store on V2.
         # Verify it follows existing V2 ingress/truth pattern.
         assert _try_import("core.android_device_state_store"), (
-            "core.android_device_state_store must be importable — "
-            "it is the V2-side Android state truth path."
+            "core.android_device_state_store must be importable — " "it is the V2-side Android state truth path."
         )
         # The ecosystem summary should never fabricate device data.
         from core.android_device_state_store import get_device_ecosystem_summary
+
         summary = get_device_ecosystem_summary()
         assert isinstance(summary, dict)
         # In a fresh environment, there must be no fabricated devices.
@@ -349,9 +337,7 @@ class TestCanonicalPathAlignment:
             f"Got: {summary.get('total_devices_with_snapshot')}"
         )
 
-    def test_18_no_detached_architecture_in_consolidation_evidence(
-        self, consolidation_evidence
-    ):
+    def test_18_no_detached_architecture_in_consolidation_evidence(self, consolidation_evidence):
         """Consolidation evidence only references existing canonical paths."""
         chain_paths = consolidation_evidence["chain_paths_available"]
         # All referenced modules must be the canonical ones from prior PRs.
@@ -379,14 +365,17 @@ class TestCanonicalPathAlignment:
 class TestIndividualPathsAndSummary:
     """Final import and summary checks."""
 
-    @pytest.mark.parametrize("module_path", [
-        "core.unified_runtime_truth_ingress",
-        "core.flow_continuity_coordinator",
-        "core.orchestration_review_surface",
-        "core.desktop_presence_runtime",
-        "core.operator_surface",
-        "core.flow_level_operator_surface",
-    ])
+    @pytest.mark.parametrize(
+        "module_path",
+        [
+            "core.unified_runtime_truth_ingress",
+            "core.flow_continuity_coordinator",
+            "core.orchestration_review_surface",
+            "core.desktop_presence_runtime",
+            "core.operator_surface",
+            "core.flow_level_operator_surface",
+        ],
+    )
     def test_19_each_chain_path_independently_importable(self, module_path):
         assert _try_import(module_path), (
             f"{module_path} must be independently importable. "
@@ -394,9 +383,7 @@ class TestIndividualPathsAndSummary:
         )
 
     def test_20_summary_includes_consolidation_status(self, completion_status):
-        assert completion_status.summary, (
-            "SystemCompletionStatus.summary must be non-empty."
-        )
+        assert completion_status.summary, "SystemCompletionStatus.summary must be non-empty."
         # The summary must include the consolidation chain status.
         # The Chinese text for consolidation path status is present.
         summary_lower = completion_status.summary.lower()

@@ -3,6 +3,7 @@
 All Win32 calls are mocked so these tests pass on any platform.
 Platform-specific branches are exercised via monkeypatching.
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -12,6 +13,7 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
+from core.system_api import get_system_api, reset_system_api
 from core.system_api.platform_api import (
     AppLaunchResult,
     HotkeyHandle,
@@ -19,17 +21,16 @@ from core.system_api.platform_api import (
     TrayHandle,
     WindowInfo,
 )
-from core.system_api import get_system_api, reset_system_api
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_windows_adapter():
     """Return a WindowsAdapter with Win32 calls mocked out."""
-    from core.system_api.windows_adapter import WindowsAdapter
     import core.system_api.windows_adapter as mod
+    from core.system_api.windows_adapter import WindowsAdapter
 
     adapter = WindowsAdapter.__new__(WindowsAdapter)
     adapter.__init__()
@@ -39,6 +40,7 @@ def _make_windows_adapter():
 # ===========================================================================
 # NoOpSystemAPI
 # ===========================================================================
+
 
 class TestNoOpSystemAPI:
     def test_is_available_false(self):
@@ -89,6 +91,7 @@ class TestNoOpSystemAPI:
 # get_system_api factory
 # ===========================================================================
 
+
 class TestGetSystemAPI:
     def setup_method(self):
         reset_system_api()
@@ -119,19 +122,18 @@ class TestGetSystemAPI:
         mock_adapter = MagicMock()
         mock_cls = MagicMock(return_value=mock_adapter)
 
-        with patch("core.system_api.platform.system", return_value="Windows"), \
-             patch("core.system_api.WindowsAdapter", mock_cls, create=True):
+        with (
+            patch("core.system_api.platform.system", return_value="Windows"),
+            patch("core.system_api.WindowsAdapter", mock_cls, create=True),
+        ):
             # Reimport get_system_api with patched platform
             import core.system_api as _mod
+
             original = _mod._instance
             _mod._instance = None
             try:
                 # Patch the import inside get_system_api
-                with patch.dict("sys.modules", {
-                    "core.system_api.windows_adapter": MagicMock(
-                        WindowsAdapter=mock_cls
-                    )
-                }):
+                with patch.dict("sys.modules", {"core.system_api.windows_adapter": MagicMock(WindowsAdapter=mock_cls)}):
                     api = _mod.get_system_api()
                     assert api is mock_adapter
             finally:
@@ -142,12 +144,14 @@ class TestGetSystemAPI:
 # WindowsAdapter — mocked Win32 environment
 # ===========================================================================
 
+
 class TestWindowsAdapterLaunchApp:
     """Tests for WindowsAdapter.launch_app — Win32 is fully mocked."""
 
     def _make_adapter_with_win32(self):
-        from core.system_api.windows_adapter import WindowsAdapter
         import core.system_api.windows_adapter as mod
+        from core.system_api.windows_adapter import WindowsAdapter
+
         adapter = WindowsAdapter.__new__(WindowsAdapter)
         adapter.__init__()
         return adapter, mod
@@ -164,8 +168,7 @@ class TestWindowsAdapterLaunchApp:
         mock_shell32 = MagicMock()
         mock_shell32.ShellExecuteW.return_value = 42  # > 32 → success
 
-        with patch.object(mod, "_WIN32_AVAILABLE", True), \
-             patch.object(mod, "_shell32", mock_shell32):
+        with patch.object(mod, "_WIN32_AVAILABLE", True), patch.object(mod, "_shell32", mock_shell32):
             result = adapter.launch_app("notepad.exe")
 
         assert result.success is True
@@ -179,9 +182,11 @@ class TestWindowsAdapterLaunchApp:
         mock_proc = MagicMock()
         mock_proc.pid = 9999
 
-        with patch.object(mod, "_WIN32_AVAILABLE", True), \
-             patch.object(mod, "_shell32", mock_shell32), \
-             patch("subprocess.Popen", return_value=mock_proc):
+        with (
+            patch.object(mod, "_WIN32_AVAILABLE", True),
+            patch.object(mod, "_shell32", mock_shell32),
+            patch("subprocess.Popen", return_value=mock_proc),
+        ):
             result = adapter.launch_app("myapp.exe", args=["--flag"])
 
         assert result.success is True
@@ -192,9 +197,11 @@ class TestWindowsAdapterLaunchApp:
         mock_shell32 = MagicMock()
         mock_shell32.ShellExecuteW.return_value = 2
 
-        with patch.object(mod, "_WIN32_AVAILABLE", True), \
-             patch.object(mod, "_shell32", mock_shell32), \
-             patch("subprocess.Popen", side_effect=FileNotFoundError):
+        with (
+            patch.object(mod, "_WIN32_AVAILABLE", True),
+            patch.object(mod, "_shell32", mock_shell32),
+            patch("subprocess.Popen", side_effect=FileNotFoundError),
+        ):
             result = adapter.launch_app("doesnotexist.exe")
 
         assert result.success is False
@@ -205,9 +212,11 @@ class TestWindowsAdapterLaunchApp:
         mock_shell32 = MagicMock()
         mock_shell32.ShellExecuteW.return_value = 5  # ERROR_ACCESS_DENIED
 
-        with patch.object(mod, "_WIN32_AVAILABLE", True), \
-             patch.object(mod, "_shell32", mock_shell32), \
-             patch("subprocess.Popen", side_effect=PermissionError):
+        with (
+            patch.object(mod, "_WIN32_AVAILABLE", True),
+            patch.object(mod, "_shell32", mock_shell32),
+            patch("subprocess.Popen", side_effect=PermissionError),
+        ):
             result = adapter.launch_app("restricted.exe")
 
         assert result.success is False
@@ -218,8 +227,7 @@ class TestWindowsAdapterLaunchApp:
         mock_proc = MagicMock()
         mock_proc.pid = 1234
 
-        with patch.object(mod, "_WIN32_AVAILABLE", False), \
-             patch("subprocess.Popen", return_value=mock_proc):
+        with patch.object(mod, "_WIN32_AVAILABLE", False), patch("subprocess.Popen", return_value=mock_proc):
             result = adapter.launch_app("app.exe")
 
         assert result.success is True
@@ -227,8 +235,9 @@ class TestWindowsAdapterLaunchApp:
 
 class TestWindowsAdapterWindowManagement:
     def _make(self):
-        from core.system_api.windows_adapter import WindowsAdapter
         import core.system_api.windows_adapter as mod
+        from core.system_api.windows_adapter import WindowsAdapter
+
         a = WindowsAdapter.__new__(WindowsAdapter)
         a.__init__()
         return a, mod
@@ -273,8 +282,7 @@ class TestWindowsAdapterWindowManagement:
         mock_user32 = MagicMock()
         mock_user32.SetForegroundWindow.return_value = True
 
-        with patch.object(mod, "_WIN32_AVAILABLE", True), \
-             patch.object(mod, "_user32", mock_user32):
+        with patch.object(mod, "_WIN32_AVAILABLE", True), patch.object(mod, "_user32", mock_user32):
             result = adapter.focus_window(1001)
 
         assert result is True
@@ -287,9 +295,11 @@ class TestWindowsAdapterWindowManagement:
 
         fake_windows = [WindowInfo(hwnd=2001, title="Notepad")]
 
-        with patch.object(mod, "_WIN32_AVAILABLE", True), \
-             patch.object(mod, "_user32", mock_user32), \
-             patch.object(mod, "_collect_windows", return_value=fake_windows):
+        with (
+            patch.object(mod, "_WIN32_AVAILABLE", True),
+            patch.object(mod, "_user32", mock_user32),
+            patch.object(mod, "_collect_windows", return_value=fake_windows),
+        ):
             result = adapter.focus_window("Notepad")
 
         assert result is True
@@ -297,8 +307,7 @@ class TestWindowsAdapterWindowManagement:
 
     def test_focus_window_not_found_returns_false(self):
         adapter, mod = self._make()
-        with patch.object(mod, "_WIN32_AVAILABLE", True), \
-             patch.object(mod, "_collect_windows", return_value=[]):
+        with patch.object(mod, "_WIN32_AVAILABLE", True), patch.object(mod, "_collect_windows", return_value=[]):
             result = adapter.focus_window("NonExistent")
         assert result is False
 
@@ -310,8 +319,9 @@ class TestWindowsAdapterWindowManagement:
 
 class TestWindowsAdapterHotkeys:
     def _make(self):
-        from core.system_api.windows_adapter import WindowsAdapter
         import core.system_api.windows_adapter as mod
+        from core.system_api.windows_adapter import WindowsAdapter
+
         a = WindowsAdapter.__new__(WindowsAdapter)
         a.__init__()
         return a, mod
@@ -321,8 +331,7 @@ class TestWindowsAdapterHotkeys:
         mock_user32 = MagicMock()
         mock_user32.RegisterHotKey.return_value = True
 
-        with patch.object(mod, "_WIN32_AVAILABLE", True), \
-             patch.object(mod, "_user32", mock_user32):
+        with patch.object(mod, "_WIN32_AVAILABLE", True), patch.object(mod, "_user32", mock_user32):
             handle = adapter.register_hotkey(42, 0x2, 0x41)
 
         assert isinstance(handle, HotkeyHandle)
@@ -336,8 +345,7 @@ class TestWindowsAdapterHotkeys:
         mock_user32.RegisterHotKey.return_value = True
 
         cb = MagicMock()
-        with patch.object(mod, "_WIN32_AVAILABLE", True), \
-             patch.object(mod, "_user32", mock_user32):
+        with patch.object(mod, "_WIN32_AVAILABLE", True), patch.object(mod, "_user32", mock_user32):
             handle = adapter.register_hotkey(1, 0x0, 0x42, callback=cb)
 
         assert handle.active is True
@@ -350,9 +358,11 @@ class TestWindowsAdapterHotkeys:
         mock_kernel32 = MagicMock()
         mock_kernel32.GetLastError.return_value = 1409  # ERROR_HOTKEY_ALREADY_REGISTERED
 
-        with patch.object(mod, "_WIN32_AVAILABLE", True), \
-             patch.object(mod, "_user32", mock_user32), \
-             patch.object(mod, "_kernel32", mock_kernel32):
+        with (
+            patch.object(mod, "_WIN32_AVAILABLE", True),
+            patch.object(mod, "_user32", mock_user32),
+            patch.object(mod, "_kernel32", mock_kernel32),
+        ):
             handle = adapter.register_hotkey(99, 0x2, 0x41)
 
         assert handle.active is False
@@ -369,8 +379,7 @@ class TestWindowsAdapterHotkeys:
         mock_user32.RegisterHotKey.return_value = True
         mock_user32.UnregisterHotKey.return_value = True
 
-        with patch.object(mod, "_WIN32_AVAILABLE", True), \
-             patch.object(mod, "_user32", mock_user32):
+        with patch.object(mod, "_WIN32_AVAILABLE", True), patch.object(mod, "_user32", mock_user32):
             handle = adapter.register_hotkey(5, 0x2, 0x41)
             result = adapter.unregister_hotkey(handle)
 
@@ -386,8 +395,9 @@ class TestWindowsAdapterHotkeys:
 
 class TestWindowsAdapterTray:
     def _make(self):
-        from core.system_api.windows_adapter import WindowsAdapter
         import core.system_api.windows_adapter as mod
+        from core.system_api.windows_adapter import WindowsAdapter
+
         a = WindowsAdapter.__new__(WindowsAdapter)
         a.__init__()
         return a, mod
@@ -404,8 +414,7 @@ class TestWindowsAdapterTray:
         mock_shell32 = MagicMock()
         mock_shell32.Shell_NotifyIconW.return_value = 1  # success
 
-        with patch.object(mod, "_WIN32_AVAILABLE", True), \
-             patch.object(mod, "_shell32", mock_shell32):
+        with patch.object(mod, "_WIN32_AVAILABLE", True), patch.object(mod, "_shell32", mock_shell32):
             handle = adapter.create_tray_icon("Galaxy")
 
         assert handle.active is True
@@ -415,8 +424,7 @@ class TestWindowsAdapterTray:
         mock_shell32 = MagicMock()
         mock_shell32.Shell_NotifyIconW.return_value = 0  # failure (headless)
 
-        with patch.object(mod, "_WIN32_AVAILABLE", True), \
-             patch.object(mod, "_shell32", mock_shell32):
+        with patch.object(mod, "_WIN32_AVAILABLE", True), patch.object(mod, "_shell32", mock_shell32):
             handle = adapter.create_tray_icon("Galaxy")
 
         assert handle.active is False
@@ -430,8 +438,7 @@ class TestWindowsAdapterTray:
         adapter, mod = self._make()
         mock_shell32 = MagicMock()
 
-        with patch.object(mod, "_WIN32_AVAILABLE", True), \
-             patch.object(mod, "_shell32", mock_shell32):
+        with patch.object(mod, "_WIN32_AVAILABLE", True), patch.object(mod, "_shell32", mock_shell32):
             handle = TrayHandle(active=True, tooltip="x")
             adapter.destroy_tray_icon(handle)
 
@@ -442,6 +449,7 @@ class TestWindowsAdapterTray:
 # ===========================================================================
 # Data classes / contracts
 # ===========================================================================
+
 
 class TestDataClasses:
     def test_app_launch_result_defaults(self):

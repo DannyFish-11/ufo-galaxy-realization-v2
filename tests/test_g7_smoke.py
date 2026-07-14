@@ -45,6 +45,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.absolute()
 # Helpers — build ephemeral stub apps identical to what quick_verify.sh uses
 # ===========================================================================
 
+
 def _build_vlm_stub_app():
     """Return a TestClient-ready FastAPI app matching the VLM stub."""
     from fastapi import FastAPI
@@ -87,6 +88,7 @@ def _build_tasker_stub_app():
 # 1–3. VLM stub
 # ===========================================================================
 
+
 class TestVLMStub:
     """VLM stub endpoints return the correct shape."""
 
@@ -120,6 +122,7 @@ class TestVLMStub:
 # 4–5. Tasker stub
 # ===========================================================================
 
+
 class TestTaskerStub:
     """Tasker stub endpoints return the correct shape."""
 
@@ -150,6 +153,7 @@ class TestTaskerStub:
 # 6. Galaxy Gateway /health (in-process, no live port required)
 # ===========================================================================
 
+
 class TestGatewayHealth:
     """/health endpoint on the real gateway app returns expected payload."""
 
@@ -176,6 +180,7 @@ class TestGatewayHealth:
 # 7. Gateway WS /ws/status connect (no crash)
 # ===========================================================================
 
+
 class TestGatewayWSStatus:
     """/ws/status endpoint accepts a connection without raising an exception."""
 
@@ -198,14 +203,13 @@ class TestGatewayWSStatus:
         except Exception as exc:
             # A WebSocketDisconnect with code 1000/1001 is acceptable.
             msg = str(exc).lower()
-            assert "403" not in msg and "404" not in msg, (
-                f"/ws/status rejected with unexpected error: {exc}"
-            )
+            assert "403" not in msg and "404" not in msg, f"/ws/status rejected with unexpected error: {exc}"
 
 
 # ===========================================================================
 # 8. Makefile targets present
 # ===========================================================================
+
 
 class TestMakefile:
     """Top-level Makefile exists and declares the required targets."""
@@ -239,6 +243,7 @@ class TestMakefile:
 # 9. quick_verify.sh exists and is executable
 # ===========================================================================
 
+
 class TestQuickVerifyScript:
     """scripts/quick_verify.sh is present and executable."""
 
@@ -266,6 +271,7 @@ class TestQuickVerifyScript:
 # ===========================================================================
 # 10. QUICKSTART.md one-command section
 # ===========================================================================
+
 
 class TestQuickstartDocs:
     """QUICKSTART.md contains the G7 one-command quick-verify section."""

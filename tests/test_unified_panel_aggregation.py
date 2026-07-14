@@ -23,7 +23,6 @@ from types import SimpleNamespace
 from typing import Any, Dict
 from unittest.mock import MagicMock, patch
 
-
 # ---------------------------------------------------------------------------
 # A. Payload model — structure & serialisation
 # ---------------------------------------------------------------------------
@@ -34,20 +33,23 @@ class TestUnifiedPanelPayloadStructure(unittest.TestCase):
 
     def _import_payload(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         return UnifiedPanelPayload
 
     def test_A01_import_succeeds(self):
         from core.unified_panel_aggregation import (
-            UnifiedPanelPayload,
-            UNIFIED_PANEL_AGGREGATION_AUTHORITY,
             PANEL_STATE_SCHEMA_VERSION,
+            UNIFIED_PANEL_AGGREGATION_AUTHORITY,
+            UnifiedPanelPayload,
         )
+
         self.assertIsInstance(UNIFIED_PANEL_AGGREGATION_AUTHORITY, str)
         self.assertIn("UNIFIED_PANEL_AGGREGATION_V1", UNIFIED_PANEL_AGGREGATION_AUTHORITY)
         self.assertEqual(PANEL_STATE_SCHEMA_VERSION, "1.0")
 
     def test_A02_default_construction(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         p = UnifiedPanelPayload()
         self.assertIsInstance(p.payload_id, str)
         self.assertTrue(p.payload_id.startswith("panel_"))
@@ -57,6 +59,7 @@ class TestUnifiedPanelPayloadStructure(unittest.TestCase):
 
     def test_A03_operator_section_fields(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         p = UnifiedPanelPayload()
         for field in [
             "active_task_count",
@@ -71,6 +74,7 @@ class TestUnifiedPanelPayloadStructure(unittest.TestCase):
 
     def test_A04_shell_presence_fields(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         p = UnifiedPanelPayload()
         self.assertIsInstance(p.desktop_shell_state, str)
         self.assertIsInstance(p.presence_tristate, str)
@@ -78,6 +82,7 @@ class TestUnifiedPanelPayloadStructure(unittest.TestCase):
 
     def test_A05_continuum_fields(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         p = UnifiedPanelPayload()
         self.assertIsInstance(p.tri_state_phase, str)
         # runtime_domain may be None
@@ -86,47 +91,65 @@ class TestUnifiedPanelPayloadStructure(unittest.TestCase):
 
     def test_A06_android_section_fields(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         p = UnifiedPanelPayload()
         self.assertIsInstance(p.android_ecosystem, dict)
         self.assertIsInstance(p.android_device_execution_digest, list)
 
     def test_A07_readiness_fields(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         p = UnifiedPanelPayload()
         self.assertIsInstance(p.readiness_verdict, str)
         self.assertIsInstance(p.blocked_dimensions, list)
 
     def test_A08_surface_spec_field(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         p = UnifiedPanelPayload()
         self.assertIsInstance(p.active_surface_spec, dict)
 
     def test_A09_source_field(self):
         from core.unified_panel_aggregation import (
-            UnifiedPanelPayload,
             UNIFIED_PANEL_AGGREGATION_AUTHORITY,
+            UnifiedPanelPayload,
         )
+
         p = UnifiedPanelPayload()
         self.assertEqual(p._source, UNIFIED_PANEL_AGGREGATION_AUTHORITY)
 
     def test_A10_to_dict_contains_all_required_keys(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         p = UnifiedPanelPayload()
         d = p.to_dict()
         required_keys = {
-            "payload_id", "generated_at", "schema_version",
+            "payload_id",
+            "generated_at",
+            "schema_version",
             # operator
-            "active_task_count", "active_flow_count", "online_device_count",
-            "capability_provider_count", "online_provider_count",
-            "topology_node_count", "topology_edge_count",
+            "active_task_count",
+            "active_flow_count",
+            "online_device_count",
+            "capability_provider_count",
+            "online_provider_count",
+            "topology_node_count",
+            "topology_edge_count",
             # shell/presence
-            "desktop_shell_state", "presence_tristate", "manifestation_summary",
+            "desktop_shell_state",
+            "presence_tristate",
+            "manifestation_summary",
             # continuum
-            "tri_state_phase", "runtime_domain", "presence_intensity", "coherence",
+            "tri_state_phase",
+            "runtime_domain",
+            "presence_intensity",
+            "coherence",
             # android
-            "android_ecosystem", "android_device_execution_digest",
+            "android_ecosystem",
+            "android_device_execution_digest",
             # readiness
-            "readiness_verdict", "blocked_dimensions",
+            "readiness_verdict",
+            "blocked_dimensions",
             # surface
             "active_surface_spec",
             # governance
@@ -144,6 +167,7 @@ class TestUnifiedPanelPayloadStructure(unittest.TestCase):
 
     def test_A11_to_dict_is_json_serialisable(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         p = UnifiedPanelPayload()
         p.android_ecosystem = {"total_devices_with_snapshot": 2, "local_ai_ready_count": 1}
         p.android_device_execution_digest = [{"device_id": "dev_1", "model_ready": True}]
@@ -154,14 +178,16 @@ class TestUnifiedPanelPayloadStructure(unittest.TestCase):
 
     def test_A12_unique_payload_ids(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         ids = {UnifiedPanelPayload().payload_id for _ in range(20)}
         self.assertEqual(len(ids), 20)
 
     def test_A13_schema_version_is_1_0(self):
         from core.unified_panel_aggregation import (
-            UnifiedPanelPayload,
             PANEL_STATE_SCHEMA_VERSION,
+            UnifiedPanelPayload,
         )
+
         p = UnifiedPanelPayload()
         self.assertEqual(p.schema_version, "1.0")
         self.assertEqual(PANEL_STATE_SCHEMA_VERSION, "1.0")
@@ -183,6 +209,7 @@ class TestUnifiedPanelAggregationServiceSources(unittest.TestCase):
             UnifiedPanelAggregationService,
             UnifiedPanelPayload,
         )
+
         svc = UnifiedPanelAggregationService()
         result = svc.build_payload()
         self.assertIsInstance(result, UnifiedPanelPayload)
@@ -190,6 +217,7 @@ class TestUnifiedPanelAggregationServiceSources(unittest.TestCase):
     def test_B03_build_payload_never_raises(self):
         """Even when all sub-sources fail, build_payload must return a valid payload."""
         from core.unified_panel_aggregation import UnifiedPanelAggregationService
+
         svc = UnifiedPanelAggregationService()
         # Patch the fill methods to raise so we verify the outer guard in build_payload
         with patch.object(svc, "_fill_from_operator_snapshot", side_effect=RuntimeError("mock failure")):
@@ -199,6 +227,7 @@ class TestUnifiedPanelAggregationServiceSources(unittest.TestCase):
                         with patch.object(svc, "_fill_active_surface_spec", side_effect=RuntimeError("mock failure")):
                             result = svc.build_payload()
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         self.assertIsInstance(result, UnifiedPanelPayload)
 
     def test_B04_operator_snapshot_feeds_payload(self):
@@ -238,8 +267,8 @@ class TestUnifiedPanelAggregationServiceSources(unittest.TestCase):
 
     def test_B05_surface_selector_wires_active_surface_spec(self):
         """Active surface spec must come from SurfaceSelector."""
-        from core.unified_panel_aggregation import UnifiedPanelAggregationService
         from core.generative_ui.widget_schema import SurfaceSpec, SurfaceType
+        from core.unified_panel_aggregation import UnifiedPanelAggregationService
 
         mock_spec = SurfaceSpec(surface_type=SurfaceType.CONTROL_CONSOLE, title="Test Console")
         mock_selector = MagicMock()
@@ -260,6 +289,7 @@ class TestUnifiedPanelAggregationServiceSources(unittest.TestCase):
     def test_B06_surface_spec_for_chat_mode(self):
         """Default chat mode should produce a chat_panel surface spec."""
         from core.unified_panel_aggregation import UnifiedPanelAggregationService
+
         svc = UnifiedPanelAggregationService()
         result = svc.build_payload(mode="chat")
         spec = result.active_surface_spec
@@ -310,8 +340,7 @@ class TestUnifiedPanelAggregationServiceSources(unittest.TestCase):
         self.assertIn("discipline_issues", evidence)
         self.assertTrue(
             any(
-                isinstance(issue, dict)
-                and issue.get("issue") == "missing_truth_compilation_evidence_keys"
+                isinstance(issue, dict) and issue.get("issue") == "missing_truth_compilation_evidence_keys"
                 for issue in evidence["discipline_issues"]
             )
         )
@@ -349,30 +378,35 @@ class TestAndroidTruthParticipation(unittest.TestCase):
 
     def test_C01_android_ecosystem_field_is_present(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         p = UnifiedPanelPayload()
         d = p.to_dict()
         self.assertIn("android_ecosystem", d)
 
     def test_C02_android_device_execution_digest_is_present(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         p = UnifiedPanelPayload()
         d = p.to_dict()
         self.assertIn("android_device_execution_digest", d)
 
     def test_C02b_governance_state_is_present(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         p = UnifiedPanelPayload()
         d = p.to_dict()
         self.assertIn("governance_state", d)
 
     def test_C02c_mesh_runtime_state_is_present(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         p = UnifiedPanelPayload()
         d = p.to_dict()
         self.assertIn("mesh_runtime_state", d)
 
     def test_C02ca_unified_mode_model_is_present(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         p = UnifiedPanelPayload()
         d = p.to_dict()
         self.assertIn("unified_mode_model", d)
@@ -407,9 +441,12 @@ class TestAndroidTruthParticipation(unittest.TestCase):
         }
 
         svc = UnifiedPanelAggregationService()
-        with patch("core.operator_surface.get_operator_surface", return_value=mock_surface), patch(
-            "core.unified_governance_semantics.build_unified_governance_state",
-            return_value=canonical_governance,
+        with (
+            patch("core.operator_surface.get_operator_surface", return_value=mock_surface),
+            patch(
+                "core.unified_governance_semantics.build_unified_governance_state",
+                return_value=canonical_governance,
+            ),
         ):
             payload = svc.build_payload()
 
@@ -421,34 +458,38 @@ class TestAndroidTruthParticipation(unittest.TestCase):
 
         snapshot = SimpleNamespace(device_id="android-panel-1")
         svc = UnifiedPanelAggregationService()
-        with patch(
-            "core.android_device_state_store.list_device_state_snapshots",
-            return_value=[snapshot],
-        ), patch(
-            "core.v2_android_truth_ssot.build_v2_android_truth_block",
-            return_value=V2AndroidTruthBlock(
-                device_id="android-panel-1",
-                participation_tier="dispatch_eligible",
-                dispatch_eligible=True,
-                device_mode="cross_device",
-                mode_readiness_state="ready",
+        with (
+            patch(
+                "core.android_device_state_store.list_device_state_snapshots",
+                return_value=[snapshot],
             ),
-        ), patch(
-            "core.unified_governance_semantics.build_unified_governance_state",
-            return_value={
-                "devices": [
-                    {
-                        "device_id": "android-panel-1",
-                        "takeover_active": False,
-                        "governance_policy": {
-                            "operation_state": "admissible",
-                            "automatic_decision": "allow",
-                            "primary_path": "delegated_execution",
-                        },
-                    }
-                ],
-                "mesh_runtime_state": {},
-            },
+            patch(
+                "core.v2_android_truth_ssot.build_v2_android_truth_block",
+                return_value=V2AndroidTruthBlock(
+                    device_id="android-panel-1",
+                    participation_tier="dispatch_eligible",
+                    dispatch_eligible=True,
+                    device_mode="cross_device",
+                    mode_readiness_state="ready",
+                ),
+            ),
+            patch(
+                "core.unified_governance_semantics.build_unified_governance_state",
+                return_value={
+                    "devices": [
+                        {
+                            "device_id": "android-panel-1",
+                            "takeover_active": False,
+                            "governance_policy": {
+                                "operation_state": "admissible",
+                                "automatic_decision": "allow",
+                                "primary_path": "delegated_execution",
+                            },
+                        }
+                    ],
+                    "mesh_runtime_state": {},
+                },
+            ),
         ):
             payload = svc.build_payload()
 
@@ -483,22 +524,25 @@ class TestAndroidTruthParticipation(unittest.TestCase):
 
         snapshot = SimpleNamespace(device_id="android-panel-constraint-1")
         svc = UnifiedPanelAggregationService()
-        with patch(
-            "core.android_device_state_store.list_device_state_snapshots",
-            return_value=[snapshot],
-        ), patch(
-            "core.v2_android_truth_ssot.build_v2_android_truth_block",
-            return_value=V2AndroidTruthBlock(
-                device_id="android-panel-constraint-1",
-                participation_tier="dispatch_eligible",
-                dispatch_eligible=True,
-                device_mode="cross_device",
-                mode_readiness_state="degraded",
-                execution_mode_state="delegated",
-                runtime_constrained=True,
-                runtime_deferred=True,
-                local_mode_active=False,
-                local_mode_gate_deferred=True,
+        with (
+            patch(
+                "core.android_device_state_store.list_device_state_snapshots",
+                return_value=[snapshot],
+            ),
+            patch(
+                "core.v2_android_truth_ssot.build_v2_android_truth_block",
+                return_value=V2AndroidTruthBlock(
+                    device_id="android-panel-constraint-1",
+                    participation_tier="dispatch_eligible",
+                    dispatch_eligible=True,
+                    device_mode="cross_device",
+                    mode_readiness_state="degraded",
+                    execution_mode_state="delegated",
+                    runtime_constrained=True,
+                    runtime_deferred=True,
+                    local_mode_active=False,
+                    local_mode_gate_deferred=True,
+                ),
             ),
         ):
             payload = svc.build_payload()
@@ -511,8 +555,8 @@ class TestAndroidTruthParticipation(unittest.TestCase):
 
     def test_C03_android_ecosystem_whitelisted_keys(self):
         """android_ecosystem in payload must respect the ANDROID_ECOSYSTEM_SNAPSHOT_KEYS whitelist."""
-        from core.unified_panel_aggregation import UnifiedPanelAggregationService
         from core.operator_surface import ANDROID_ECOSYSTEM_SNAPSHOT_KEYS
+        from core.unified_panel_aggregation import UnifiedPanelAggregationService
 
         mock_eco = {
             "total_devices_with_snapshot": 3,
@@ -545,8 +589,8 @@ class TestAndroidTruthParticipation(unittest.TestCase):
 
     def test_C04_android_device_digest_includes_per_device_readiness(self):
         """Each Android device snapshot must contribute a readiness digest entry."""
-        from core.unified_panel_aggregation import UnifiedPanelAggregationService
         from core.android_device_state_store import DeviceStateSnapshot
+        from core.unified_panel_aggregation import UnifiedPanelAggregationService
 
         # Build a minimal DeviceStateSnapshot fixture
         snap = DeviceStateSnapshot(device_id="dev_001")
@@ -582,16 +626,17 @@ class TestAndroidTruthParticipation(unittest.TestCase):
     def test_C05_android_store_authority_sentinel_present(self):
         """ANDROID_DEVICE_STATE_STORE_AUTHORITY must be importable and non-empty."""
         from core.android_device_state_store import ANDROID_DEVICE_STATE_STORE_AUTHORITY
+
         self.assertIsInstance(ANDROID_DEVICE_STATE_STORE_AUTHORITY, str)
         self.assertGreater(len(ANDROID_DEVICE_STATE_STORE_AUTHORITY), 10)
 
     def test_C06_android_ecosystem_survives_empty_store(self):
         """When no Android devices are registered the payload must still be valid."""
-        from core.unified_panel_aggregation import UnifiedPanelAggregationService
         from core.android_device_state_store import (
             get_android_device_state_store,
             reset_android_device_state_store,
         )
+        from core.unified_panel_aggregation import UnifiedPanelAggregationService
 
         reset_android_device_state_store()
         try:
@@ -648,6 +693,7 @@ class TestFanOutReplacement(unittest.TestCase):
 
     def _get_payload_dict(self) -> Dict[str, Any]:
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         p = UnifiedPanelPayload()
         p.active_task_count = 3
         p.active_flow_count = 1
@@ -721,17 +767,17 @@ class TestRegressionSafety(unittest.TestCase):
     def test_E01_operator_surface_module_is_importable(self):
         """Regression: OperatorSurface must remain importable (source 1 of 5)."""
         from core.operator_surface import (  # noqa: F401
-            get_operator_surface,
-            OperatorSnapshot,
             OPERATOR_SURFACE_AUTHORITY,
+            OperatorSnapshot,
+            get_operator_surface,
         )
 
     def test_E02_android_store_module_is_importable(self):
         """Regression: android_device_state_store must remain importable (source 2 of 5)."""
         from core.android_device_state_store import (  # noqa: F401
+            ANDROID_DEVICE_STATE_STORE_AUTHORITY,
             get_device_ecosystem_summary,
             list_device_state_snapshots,
-            ANDROID_DEVICE_STATE_STORE_AUTHORITY,
         )
 
     def test_E03_surface_selector_module_is_importable(self):
@@ -742,12 +788,14 @@ class TestRegressionSafety(unittest.TestCase):
     def test_E04_operator_snapshot_has_android_ecosystem_field(self):
         """Regression: OperatorSnapshot.android_ecosystem must exist (feeds android section)."""
         from core.operator_surface import OperatorSnapshot
+
         snap = OperatorSnapshot()
         self.assertTrue(hasattr(snap, "android_ecosystem"))
 
     def test_E05_operator_snapshot_has_manifestation_fields(self):
         """Regression: shell/presence fields must exist in OperatorSnapshot."""
         from core.operator_surface import OperatorSnapshot
+
         snap = OperatorSnapshot()
         self.assertTrue(hasattr(snap, "desktop_shell_state"))
         self.assertTrue(hasattr(snap, "presence_tristate"))
@@ -756,11 +804,13 @@ class TestRegressionSafety(unittest.TestCase):
     def test_E06_unified_panel_aggregation_authority_is_stable(self):
         """Regression: authority sentinel must not be empty."""
         from core.unified_panel_aggregation import UNIFIED_PANEL_AGGREGATION_AUTHORITY
+
         self.assertIn("UNIFIED_PANEL_AGGREGATION_V1", UNIFIED_PANEL_AGGREGATION_AUTHORITY)
 
     def test_E07_to_dict_operator_fields_match_direct_access(self):
         """Regression: to_dict() must faithfully mirror all operator-section fields."""
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         p = UnifiedPanelPayload()
         p.active_task_count = 42
         p.active_flow_count = 7
@@ -773,6 +823,7 @@ class TestRegressionSafety(unittest.TestCase):
     def test_E08_android_ecosystem_whitelist_parity(self):
         """Regression: the whitelist used here must match ANDROID_ECOSYSTEM_SNAPSHOT_KEYS."""
         from core.operator_surface import ANDROID_ECOSYSTEM_SNAPSHOT_KEYS
+
         expected = {
             "total_devices_with_snapshot",
             "local_ai_ready_count",
@@ -786,11 +837,12 @@ class TestRegressionSafety(unittest.TestCase):
 
     def test_E09_panel_route_module_is_importable(self):
         """Regression: panel route module must be importable and router factory present."""
-        from core.routes.panel import create_router, PANEL_ROUTES_AUTHORITY  # noqa: F401
+        from core.routes.panel import PANEL_ROUTES_AUTHORITY, create_router  # noqa: F401
 
     def test_E10_build_unified_panel_payload_returns_schema_1_0(self):
         """Regression: schema version must not silently change."""
         from core.unified_panel_aggregation import build_unified_panel_payload
+
         payload = build_unified_panel_payload()
         self.assertEqual(payload.schema_version, "1.0")
 
@@ -819,8 +871,9 @@ class TestPanelUnifiedRoute(unittest.IsolatedAsyncioTestCase):
 
     async def _client(self):
         """Return an httpx AsyncClient against a minimal FastAPI app."""
-        from httpx import AsyncClient, ASGITransport
         from fastapi import FastAPI
+        from httpx import ASGITransport, AsyncClient
+
         from core.routes.panel import create_router
 
         app = FastAPI()
@@ -878,6 +931,7 @@ class TestPanelUnifiedRoute(unittest.IsolatedAsyncioTestCase):
 
     async def test_F07_source_annotation_is_authority_string(self):
         from core.unified_panel_aggregation import UNIFIED_PANEL_AGGREGATION_AUTHORITY
+
         async with await self._client() as client:
             resp = await client.get("/api/v1/panel/unified")
         data = resp.json()
@@ -969,6 +1023,7 @@ class TestSingletonManagement(unittest.TestCase):
             get_unified_panel_aggregation_service,
             reset_unified_panel_aggregation_service,
         )
+
         reset_unified_panel_aggregation_service()
         svc1 = get_unified_panel_aggregation_service()
         svc2 = get_unified_panel_aggregation_service()
@@ -979,6 +1034,7 @@ class TestSingletonManagement(unittest.TestCase):
             get_unified_panel_aggregation_service,
             reset_unified_panel_aggregation_service,
         )
+
         reset_unified_panel_aggregation_service()
         svc1 = get_unified_panel_aggregation_service()
         reset_unified_panel_aggregation_service()
@@ -987,9 +1043,10 @@ class TestSingletonManagement(unittest.TestCase):
 
     def test_G03_build_unified_panel_payload_convenience_wrapper(self):
         from core.unified_panel_aggregation import (
-            build_unified_panel_payload,
             UnifiedPanelPayload,
+            build_unified_panel_payload,
         )
+
         result = build_unified_panel_payload()
         self.assertIsInstance(result, UnifiedPanelPayload)
 
@@ -1009,6 +1066,7 @@ class TestSingletonManagement(unittest.TestCase):
                 record_last_operator_action_result,
                 reset_last_operator_action_result,
             )
+
             original_path = upa._LAST_OPERATOR_ACTION_STATE_PATH
             upa._LAST_OPERATOR_ACTION_STATE_PATH = state_path
 

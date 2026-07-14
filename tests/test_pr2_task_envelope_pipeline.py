@@ -20,16 +20,17 @@ PR-2 smoke tests — 核心链路统一为 TaskEnvelope
 
 import asyncio
 import uuid
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 from core.command_router import GatewayErrorCode
 from core.schemas.task_envelope import TaskEnvelope
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_mock_executor(captured_calls=None):
     """Return an async executor that records calls."""
@@ -51,9 +52,10 @@ def _make_approved_slots_result(device_ids):
     """
     from core.canonical_dispatch_slot_authority import (
         CanonicalDispatchSlot,
-        CanonicalDispatchSlotStatus,
         CanonicalDispatchSlotsResult,
+        CanonicalDispatchSlotStatus,
     )
+
     slots = [
         CanonicalDispatchSlot(
             device_id=d,
@@ -86,11 +88,13 @@ def _patch_v3_slot_gate(device_ids):
 # 1. CommandRouter.route_envelope (primary path)
 # ---------------------------------------------------------------------------
 
+
 class TestRouteEnvelopePrimaryPath:
     """PR-2: route_envelope 为主路径，内部只处理 TaskEnvelope。"""
 
     def _make_router(self, executor):
         from core.command_router import CommandRouter
+
         return CommandRouter(executor=executor)
 
     @pytest.mark.asyncio
@@ -173,11 +177,13 @@ class TestRouteEnvelopePrimaryPath:
 # 2. CommandRouter.dispatch (compat layer builds TaskEnvelope)
 # ---------------------------------------------------------------------------
 
+
 class TestDispatchCompatLayer:
     """PR-2: dispatch 为兼容层，接收 CommandRequest 后立即构造 TaskEnvelope。"""
 
     def _make_router(self, executor):
         from core.command_router import CommandRouter
+
         return CommandRouter(executor=executor)
 
     @pytest.mark.asyncio
@@ -203,7 +209,8 @@ class TestDispatchCompatLayer:
         executor = _make_mock_executor()
         router = self._make_router(executor)
 
-        from core.command_router import CommandRequest, CommandMode
+        from core.command_router import CommandMode, CommandRequest
+
         req = CommandRequest(
             source="test_compat",
             targets=["dev_compat"],
@@ -219,6 +226,7 @@ class TestDispatchCompatLayer:
 # ---------------------------------------------------------------------------
 # 3. NATSExecutor — uses envelope identifiers from params
 # ---------------------------------------------------------------------------
+
 
 class TestNATSExecutorEnvelopeIds:
     """PR-2: NATSExecutor extracts _galaxy_task_id/_galaxy_trace_id from params."""
@@ -254,6 +262,7 @@ class TestNATSExecutorEnvelopeIds:
 # 4. DeviceRouter.dispatch_task uses route_envelope
 # ---------------------------------------------------------------------------
 
+
 class TestDeviceRouterDispatchTaskEnvelope:
     """PR-AIP-UNIFIED: dispatch_task 是基底层,统一走 AIPTransport。
 
@@ -266,22 +275,24 @@ class TestDeviceRouterDispatchTaskEnvelope:
     @pytest.mark.asyncio
     async def test_dispatch_task_routes_via_aip_transport(self):
         """dispatch_task sends through AIPTransport, not route_envelope."""
-        from unittest.mock import AsyncMock, MagicMock, patch as _patch
-        from galaxy_gateway.device_router import DeviceRouter, Device
+        from unittest.mock import AsyncMock, MagicMock
+        from unittest.mock import patch as _patch
+
+        from galaxy_gateway.device_router import Device, DeviceRouter
 
         # 若基底层错误地回环进编排层,这个 executor 会被调用 —— 断言其为空。
         executor = _make_mock_executor()
         from core.command_router import CommandRouter
+
         mock_router = CommandRouter(executor=executor)
 
         import core.command_router as _cr_mod
+
         original_get_router = _cr_mod.get_command_router
         _cr_mod.get_command_router = lambda: mock_router
 
         mock_transport = MagicMock()
-        mock_transport.send = AsyncMock(
-            return_value={"success": True, "result": {"ok": True}}
-        )
+        mock_transport.send = AsyncMock(return_value={"success": True, "result": {"ok": True}})
         try:
             dr = DeviceRouter()
             device = Device(
@@ -321,17 +332,18 @@ class TestDeviceRouterDispatchTaskEnvelope:
 # 5. AgentBridge.handoff uses task_id as dedup key
 # ---------------------------------------------------------------------------
 
+
 class TestAgentBridgeEnvelopeDedup:
     """PR-2: AgentBridge deduplicates on task_id when provided."""
 
     @pytest.mark.asyncio
     async def test_dedup_by_task_id(self):
+        import galaxy_gateway.agent_bridge as _ab_mod
         from galaxy_gateway.agent_bridge import (
             AgentBridge,
             AgentBridgeConfig,
             HandoffContract,
         )
-        import galaxy_gateway.agent_bridge as _ab_mod
 
         bridge = AgentBridge(config=AgentBridgeConfig(enabled=False))
         # Pre-populate the dedup cache with a task_id key
@@ -345,6 +357,7 @@ class TestAgentBridgeEnvelopeDedup:
         )
 
         import os
+
         old_env = os.environ.get("GALAXY_CROSS_DEVICE_ENABLED")
         os.environ["GALAXY_CROSS_DEVICE_ENABLED"] = "1"
         # Re-enable bridge for this test
@@ -363,11 +376,12 @@ class TestAgentBridgeEnvelopeDedup:
     @pytest.mark.asyncio
     async def test_handoff_from_envelope_entry(self):
         """handoff_from_envelope is callable and goes through the bridge."""
+        import os
+
         from galaxy_gateway.agent_bridge import (
             AgentBridge,
             AgentBridgeConfig,
         )
-        import os
 
         bridge = AgentBridge(config=AgentBridgeConfig(enabled=False))
         envelope = TaskEnvelope(
@@ -378,6 +392,7 @@ class TestAgentBridgeEnvelopeDedup:
             tool_name="noop",
             args={},
         )
+
         # With bridge disabled, handoff_from_envelope returns local_fallback result
         async def _local(task: dict):
             return {"success": True, "bridge_source": "local_fallback", "trace_id": "hfe-trace"}
@@ -404,12 +419,14 @@ class TestAgentBridgeEnvelopeDedup:
 # 6. TaskOrchestrator.submit_task creates TaskEnvelope immediately
 # ---------------------------------------------------------------------------
 
+
 class TestTaskOrchestratorEnvelope:
     """PR-2: submit_task 立即创建 TaskEnvelope 并存储在 _task_envelopes。"""
 
     @pytest.mark.asyncio
     async def test_submit_task_creates_envelope(self):
-        from unittest.mock import MagicMock, AsyncMock
+        from unittest.mock import AsyncMock, MagicMock
+
         from galaxy_gateway.orchestrator.task_orchestrator import (
             TaskOrchestrator,
             TaskPriority,

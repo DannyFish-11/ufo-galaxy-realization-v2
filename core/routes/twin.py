@@ -32,6 +32,7 @@ logger = logging.getLogger("UFO-Galaxy.API")
 
 # ── Request Models ──
 
+
 class TwinCreateRequest(BaseModel):
     device_id: str
     device_type: str = "generic"
@@ -54,12 +55,14 @@ class TwinScenarioRequest(BaseModel):
 
 # ── Router ──
 
+
 def create_router(service_manager=None, config=None) -> APIRouter:
     """Create twin commander routes."""
     router = APIRouter()
 
     def _get_engine():
         from core.digital_twin_engine import get_digital_twin_engine
+
         return get_digital_twin_engine()
 
     @router.get("/api/v1/twin/status")
@@ -79,10 +82,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         # 检查是否已存在
         existing = engine.get_twin_by_device(req.device_id)
         if existing:
-            return JSONResponse({
-                "success": False,
-                "error": f"设备 {req.device_id} 已有孪生体: {existing.twin_id}",
-            }, status_code=409)
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": f"设备 {req.device_id} 已有孪生体: {existing.twin_id}",
+                },
+                status_code=409,
+            )
 
         twin = engine.create_twin(
             device_id=req.device_id,
@@ -91,13 +97,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             drift_threshold=req.drift_threshold,
         )
 
-        return JSONResponse({
-            "success": True,
-            "twin_id": twin.twin_id,
-            "device_id": twin.device_id,
-            "device_type": twin.device_type,
-            "status": twin.status.value,
-        })
+        return JSONResponse(
+            {
+                "success": True,
+                "twin_id": twin.twin_id,
+                "device_id": twin.device_id,
+                "device_type": twin.device_type,
+                "status": twin.status.value,
+            }
+        )
 
     @router.get("/api/v1/twin/{twin_id}")
     async def twin_detail(twin_id: str):
@@ -141,18 +149,24 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 return {}
 
             from core.digital_twin_engine import CouplingMode
+
             await twin.couple(state_fetcher, mode=CouplingMode.COUPLED)
-            return JSONResponse({
-                "success": True,
-                "twin_id": twin_id,
-                "coupling_mode": twin.coupling_mode.value,
-                "status": twin.status.value,
-            })
+            return JSONResponse(
+                {
+                    "success": True,
+                    "twin_id": twin_id,
+                    "coupling_mode": twin.coupling_mode.value,
+                    "status": twin.status.value,
+                }
+            )
         except Exception as e:
-            return JSONResponse({
-                "success": False,
-                "error": f"耦合失败: {str(e)}",
-            }, status_code=500)
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": f"耦合失败: {str(e)}",
+                },
+                status_code=500,
+            )
 
     @router.post("/api/v1/twin/{twin_id}/decouple")
     async def twin_decouple(twin_id: str, auth: dict = Depends(require_auth)):
@@ -163,15 +177,18 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             raise HTTPException(status_code=404, detail=f"孪生体不存在: {twin_id}")
 
         await twin.decouple()
-        return JSONResponse({
-            "success": True,
-            "twin_id": twin_id,
-            "coupling_mode": twin.coupling_mode.value,
-        })
+        return JSONResponse(
+            {
+                "success": True,
+                "twin_id": twin_id,
+                "coupling_mode": twin.coupling_mode.value,
+            }
+        )
 
     @router.post("/api/v1/twin/{twin_id}/switch-mode")
     async def twin_switch_mode(
-        twin_id: str, req: TwinSwitchModeRequest,
+        twin_id: str,
+        req: TwinSwitchModeRequest,
         auth: dict = Depends(require_auth),
     ):
         """切换耦合模式"""
@@ -181,6 +198,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             raise HTTPException(status_code=404, detail=f"孪生体不存在: {twin_id}")
 
         from core.digital_twin_engine import CouplingMode
+
         mode_map = {
             "coupled": CouplingMode.COUPLED,
             "decoupled": CouplingMode.DECOUPLED,
@@ -191,11 +209,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             raise HTTPException(status_code=400, detail=f"无效模式: {req.mode}")
 
         await twin.switch_mode(new_mode)
-        return JSONResponse({
-            "success": True,
-            "twin_id": twin_id,
-            "coupling_mode": twin.coupling_mode.value,
-        })
+        return JSONResponse(
+            {
+                "success": True,
+                "twin_id": twin_id,
+                "coupling_mode": twin.coupling_mode.value,
+            }
+        )
 
     @router.post("/api/v1/twin/{twin_id}/simulate")
     async def twin_simulate(twin_id: str, req: TwinSimulateRequest):
@@ -206,14 +226,16 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             raise HTTPException(status_code=404, detail=f"孪生体不存在: {twin_id}")
 
         result = await twin.simulate_action(req.action, req.params)
-        return JSONResponse({
-            "twin_id": result.twin_id,
-            "action": result.action,
-            "predicted_state": result.predicted_state,
-            "success_probability": result.success_probability,
-            "risks": result.risks,
-            "side_effects": result.side_effects,
-        })
+        return JSONResponse(
+            {
+                "twin_id": result.twin_id,
+                "action": result.action,
+                "predicted_state": result.predicted_state,
+                "success_probability": result.success_probability,
+                "risks": result.risks,
+                "side_effects": result.side_effects,
+            }
+        )
 
     @router.get("/api/v1/twin/{twin_id}/drift")
     async def twin_drift_report(twin_id: str):
@@ -223,19 +245,21 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         if not twin:
             raise HTTPException(status_code=404, detail=f"孪生体不存在: {twin_id}")
 
-        return JSONResponse({
-            "twin_id": twin_id,
-            "drift_threshold": twin.drift_threshold,
-            "drift_history": [
-                {
-                    "twin_id": d.twin_id,
-                    "drifted_properties": d.drifted_properties,
-                    "max_drift": d.max_drift,
-                    "severity": d.severity,
-                }
-                for d in twin.drift_history[-20:]  # 最近 20 条
-            ],
-        })
+        return JSONResponse(
+            {
+                "twin_id": twin_id,
+                "drift_threshold": twin.drift_threshold,
+                "drift_history": [
+                    {
+                        "twin_id": d.twin_id,
+                        "drifted_properties": d.drifted_properties,
+                        "max_drift": d.max_drift,
+                        "severity": d.severity,
+                    }
+                    for d in twin.drift_history[-20:]  # 最近 20 条
+                ],
+            }
+        )
 
     @router.get("/api/v1/twin/{twin_id}/predict")
     async def twin_predict(twin_id: str, steps: int = 5):
@@ -246,28 +270,32 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             raise HTTPException(status_code=404, detail=f"孪生体不存在: {twin_id}")
 
         predictions = await twin.predict_future_state(steps=steps)
-        return JSONResponse({
-            "twin_id": twin_id,
-            "predictions": predictions,
-        })
+        return JSONResponse(
+            {
+                "twin_id": twin_id,
+                "predictions": predictions,
+            }
+        )
 
     @router.post("/api/v1/twin/scenario")
     async def twin_scenario(req: TwinScenarioRequest, auth: dict = Depends(require_auth)):
         """批量场景模拟"""
         engine = _get_engine()
         results = await engine.simulate_scenario(req.actions)
-        return JSONResponse({
-            "results": [
-                {
-                    "twin_id": r.twin_id,
-                    "action": r.action,
-                    "predicted_state": r.predicted_state,
-                    "success_probability": r.success_probability,
-                    "risks": r.risks,
-                    "side_effects": r.side_effects,
-                }
-                for r in results
-            ]
-        })
+        return JSONResponse(
+            {
+                "results": [
+                    {
+                        "twin_id": r.twin_id,
+                        "action": r.action,
+                        "predicted_state": r.predicted_state,
+                        "success_probability": r.success_probability,
+                        "risks": r.risks,
+                        "side_effects": r.side_effects,
+                    }
+                    for r in results
+                ]
+            }
+        )
 
     return router

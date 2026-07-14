@@ -199,15 +199,16 @@ __all__ = [
 
 logger = logging.getLogger("Galaxy.DelegatedFlowPersistence")
 
+from core.android_runtime_dispatch_binding import AndroidRuntimeDispatchBindingRecord as _BindingRecord  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # Deferred module-level imports (domain objects)
 # ---------------------------------------------------------------------------
 # Imported here rather than inside _from_dict methods to avoid repeated import
 # overhead during bulk deserialization, while keeping the module load-safe.
 from core.attached_runtime_session_registry import AttachedSessionRegistryEntry as _SessionEntry  # noqa: E402
-from core.delegated_runtime_handoff_contract import DelegatedHandoffContractRecord as _ContractRecord  # noqa: E402
-from core.android_runtime_dispatch_binding import AndroidRuntimeDispatchBindingRecord as _BindingRecord  # noqa: E402
 from core.delegated_flow_entity import DelegatedFlowEntity as _FlowEntity  # noqa: E402
+from core.delegated_runtime_handoff_contract import DelegatedHandoffContractRecord as _ContractRecord  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Sentinels
@@ -326,9 +327,7 @@ class DurableSnapshotEnvelope:
         Used for integrity verification on load.
     """
 
-    snapshot_id: str = field(
-        default_factory=lambda: f"dfp_{uuid.uuid4().hex[:12]}"
-    )
+    snapshot_id: str = field(default_factory=lambda: f"dfp_{uuid.uuid4().hex[:12]}")
     schema_kind: str = ""
     schema_version: str = "1"
     created_at: float = field(default_factory=time.time)
@@ -527,8 +526,7 @@ class _GenericDurableStore(Generic[_T]):
 
         if not envelope.verify_digest():
             logger.warning(
-                "DurableStore[%s]: snapshot %s failed integrity check — "
-                "digest mismatch; skipping restore",
+                "DurableStore[%s]: snapshot %s failed integrity check — " "digest mismatch; skipping restore",
                 self._SCHEMA_KIND,
                 envelope.snapshot_id,
             )
@@ -573,9 +571,7 @@ class _GenericDurableStore(Generic[_T]):
                 return True
             try:
                 os.unlink(self._store_path)
-                logger.debug(
-                    "DurableStore[%s]: snapshot cleared", self._SCHEMA_KIND
-                )
+                logger.debug("DurableStore[%s]: snapshot cleared", self._SCHEMA_KIND)
                 return True
             except Exception as exc:
                 logger.warning(
@@ -596,9 +592,7 @@ class _GenericDurableStore(Generic[_T]):
 # ---------------------------------------------------------------------------
 
 
-class SessionDurableStore(
-    _GenericDurableStore["AttachedSessionRegistryEntry"]
-):
+class SessionDurableStore(_GenericDurableStore["AttachedSessionRegistryEntry"]):
     """Durable store for :class:`~core.attached_runtime_session_registry.AttachedSessionRegistryEntry`.
 
     Owns the snapshot file ``data/session_snapshot.json`` (by default).
@@ -620,9 +614,7 @@ class SessionDurableStore(
 # ---------------------------------------------------------------------------
 
 
-class ContractDurableStore(
-    _GenericDurableStore["DelegatedHandoffContractRecord"]
-):
+class ContractDurableStore(_GenericDurableStore["DelegatedHandoffContractRecord"]):
     """Durable store for :class:`~core.delegated_runtime_handoff_contract.DelegatedHandoffContractRecord`.
 
     Owns the snapshot file ``data/contract_snapshot.json`` (by default).
@@ -644,9 +636,7 @@ class ContractDurableStore(
 # ---------------------------------------------------------------------------
 
 
-class BindingDurableStore(
-    _GenericDurableStore["AndroidRuntimeDispatchBindingRecord"]
-):
+class BindingDurableStore(_GenericDurableStore["AndroidRuntimeDispatchBindingRecord"]):
     """Durable store for :class:`~core.android_runtime_dispatch_binding.AndroidRuntimeDispatchBindingRecord`.
 
     Owns the snapshot file ``data/binding_snapshot.json`` (by default).
@@ -668,9 +658,7 @@ class BindingDurableStore(
 # ---------------------------------------------------------------------------
 
 
-class FlowEntityDurableStore(
-    _GenericDurableStore["DelegatedFlowEntity"]
-):
+class FlowEntityDurableStore(_GenericDurableStore["DelegatedFlowEntity"]):
     """Durable store for :class:`~core.delegated_flow_entity.DelegatedFlowEntity`.
 
     Owns the snapshot file ``data/flow_entity_snapshot.json`` (by default).
@@ -718,18 +706,10 @@ class DelegatedFlowPersistenceBundle:
         binding_store: Optional[BindingDurableStore] = None,
         flow_entity_store: Optional[FlowEntityDurableStore] = None,
     ) -> None:
-        self.session_store: SessionDurableStore = (
-            session_store or get_session_durable_store()
-        )
-        self.contract_store: ContractDurableStore = (
-            contract_store or get_contract_durable_store()
-        )
-        self.binding_store: BindingDurableStore = (
-            binding_store or get_binding_durable_store()
-        )
-        self.flow_entity_store: FlowEntityDurableStore = (
-            flow_entity_store or get_flow_entity_durable_store()
-        )
+        self.session_store: SessionDurableStore = session_store or get_session_durable_store()
+        self.contract_store: ContractDurableStore = contract_store or get_contract_durable_store()
+        self.binding_store: BindingDurableStore = binding_store or get_binding_durable_store()
+        self.flow_entity_store: FlowEntityDurableStore = flow_entity_store or get_flow_entity_durable_store()
 
     # ------------------------------------------------------------------
     # Coordinated checkpoint
@@ -770,15 +750,19 @@ class DelegatedFlowPersistenceBundle:
         """
         if sessions is None:
             from core.attached_runtime_session_registry import get_session_registry as _gsr
+
             sessions = _gsr().list_all()
         if contracts is None:
             from core.delegated_runtime_handoff_contract import get_handoff_contract_runtime as _ghcr
+
             contracts = _ghcr().list_all()
         if bindings is None:
             from core.android_runtime_dispatch_binding import get_dispatch_binding_runtime as _gdbr
+
             bindings = _gdbr().list_all()
         if flow_entities is None:
             from core.delegated_flow_entity import get_delegated_flow_entity_runtime as _gfer
+
             flow_entities = _gfer().list_all()
 
         return {
@@ -895,9 +879,7 @@ def get_flow_entity_durable_store(
     global _flow_entity_store_instance
     with _flow_entity_store_lock:
         if _flow_entity_store_instance is None:
-            _flow_entity_store_instance = FlowEntityDurableStore(
-                store_path=store_path
-            )
+            _flow_entity_store_instance = FlowEntityDurableStore(store_path=store_path)
     return _flow_entity_store_instance
 
 

@@ -218,9 +218,7 @@ class ConfigBridge:
         availability = AvailabilityStatus.from_dashboard_entry(
             available=snapshot.available,
             missing_env_key=snapshot.missing_env_key,
-            env_keys=snapshot.env_keys or (
-                [snapshot.missing_env_key] if snapshot.missing_env_key else []
-            ),
+            env_keys=snapshot.env_keys or ([snapshot.missing_env_key] if snapshot.missing_env_key else []),
         )
 
         # Category: direct unless the snapshot carries a hint
@@ -278,11 +276,7 @@ class ConfigBridge:
 
         availability = AvailabilityStatus(
             available=node_entry.all_configured,
-            missing_env_key=(
-                node_entry.keys[0].env_var
-                if node_entry.keys and not node_entry.all_configured
-                else None
-            ),
+            missing_env_key=(node_entry.keys[0].env_var if node_entry.keys and not node_entry.all_configured else None),
             all_env_keys=[k.env_var for k in node_entry.keys],
         )
 
@@ -348,7 +342,8 @@ class ConfigBridge:
             except Exception as exc:
                 logger.warning(
                     "ConfigBridge: skipping provider '%s' due to error: %s",
-                    snap.provider, exc,
+                    snap.provider,
+                    exc,
                 )
                 continue
 
@@ -359,13 +354,14 @@ class ConfigBridge:
                 inv_entry.error_rate = health.error_rate
             entries.append(inv_entry)
 
-        for node_entry in (node_entries or []):
+        for node_entry in node_entries or []:
             try:
                 top_entry = self.bridge_node_api(node_entry)
             except Exception as exc:
                 logger.warning(
                     "ConfigBridge: skipping node '%s' due to error: %s",
-                    node_entry.node_id, exc,
+                    node_entry.node_id,
+                    exc,
                 )
                 continue
             entries.append(ProviderInventoryEntry(entry=top_entry))

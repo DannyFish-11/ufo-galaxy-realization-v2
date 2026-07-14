@@ -22,28 +22,37 @@ tags: ["weather", "api"]
 curl "wttr.in/London?format=3"
 """
 
-import re
+import asyncio
 import json
 import logging
-import asyncio
 import os
-import shutil
+import re
 import shlex
+import shutil
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.SkillMD")
 
 # Strict allowlist of commands permitted in SKILL.md execution
-ALLOWED_COMMANDS = frozenset([
-    "curl", "wget", "python", "python3", "node", "bash", "sh",
-])
+ALLOWED_COMMANDS = frozenset(
+    [
+        "curl",
+        "wget",
+        "python",
+        "python3",
+        "node",
+        "bash",
+        "sh",
+    ]
+)
 
 
 @dataclass
 class SkillMD:
     """SKILL.md 解析结果"""
+
     name: str
     description: str
     version: str = "1.0.0"
@@ -93,6 +102,7 @@ class SkillMDLoader:
         """SKILL.md 加载/卸载后，最佳努力刷新能力总线并广播事件。"""
         try:
             from core.agent.capability_registry import CapabilityRegistry
+
             reg = CapabilityRegistry.get_instance()
             await reg.refresh(force=True)
             logger.info("CapabilityRegistry 已刷新（SKILL.md %s: %s）", skill_id, event)
@@ -101,8 +111,19 @@ class SkillMDLoader:
 
         try:
             from core.routes._shared import broadcast_event
-            await broadcast_event("skill_update", {"skill_id": skill_id, "event": event, "runtime_semantics": "shell_command_skill"})
-            await broadcast_event("capability_update", {"source": "skill_md_loader", "skill_id": skill_id, "event": event, "runtime_semantics": "shell_command_skill"})
+
+            await broadcast_event(
+                "skill_update", {"skill_id": skill_id, "event": event, "runtime_semantics": "shell_command_skill"}
+            )
+            await broadcast_event(
+                "capability_update",
+                {
+                    "source": "skill_md_loader",
+                    "skill_id": skill_id,
+                    "event": event,
+                    "runtime_semantics": "shell_command_skill",
+                },
+            )
         except Exception as exc:
             logger.debug("SKILL.md capability broadcast failed（不影响运行）: %s", exc)
 
@@ -220,7 +241,7 @@ class SkillMDLoader:
         commands = []
 
         # 提取代码块
-        pattern = r'```(\w+)?\n(.*?)```'
+        pattern = r"```(\w+)?\n(.*?)```"
         matches = re.findall(pattern, md_content, re.DOTALL)
 
         for lang, code in matches:
@@ -232,10 +253,12 @@ class SkillMDLoader:
                 for line in code.split("\n"):
                     line = line.strip()
                     if line and not line.startswith("#"):
-                        commands.append({
-                            "language": lang,
-                            "command": line,
-                        })
+                        commands.append(
+                            {
+                                "language": lang,
+                                "command": line,
+                            }
+                        )
 
         return commands
 
@@ -339,19 +362,23 @@ class SkillMDLoader:
                 try:
                     argv = shlex.split(command)
                 except ValueError as exc:
-                    results.append({
-                        "command": command,
-                        "success": False,
-                        "error": f"命令解析失败: {exc}",
-                    })
+                    results.append(
+                        {
+                            "command": command,
+                            "success": False,
+                            "error": f"命令解析失败: {exc}",
+                        }
+                    )
                     continue
 
                 if not argv:
-                    results.append({
-                        "command": command,
-                        "success": False,
-                        "error": "空命令",
-                    })
+                    results.append(
+                        {
+                            "command": command,
+                            "success": False,
+                            "error": "空命令",
+                        }
+                    )
                     continue
 
                 # Enforce allowlist: use os.path.basename so full paths like
@@ -359,25 +386,29 @@ class SkillMDLoader:
                 base_cmd = os.path.basename(argv[0])
                 if base_cmd not in ALLOWED_COMMANDS:
                     logger.warning("命令被安全策略阻止: '%s'", base_cmd)
-                    results.append({
-                        "command": command,
-                        "success": False,
-                        "error": (
-                            f"命令被安全策略阻止: '{base_cmd}' 不在允许列表中。"
-                            f" 允许的命令: {', '.join(sorted(ALLOWED_COMMANDS))}"
-                        ),
-                    })
+                    results.append(
+                        {
+                            "command": command,
+                            "success": False,
+                            "error": (
+                                f"命令被安全策略阻止: '{base_cmd}' 不在允许列表中。"
+                                f" 允许的命令: {', '.join(sorted(ALLOWED_COMMANDS))}"
+                            ),
+                        }
+                    )
                     continue
 
                 resolved = shutil.which(base_cmd)
                 if resolved is None and not (os.path.isabs(argv[0]) and os.path.exists(argv[0])):
-                    results.append({
-                        "command": command,
-                        "success": False,
-                        "error": f"运行时能力不可用: 找不到可执行命令 '{base_cmd}'",
-                        "runtime_semantics": "shell_command_skill",
-                        "capability_checked": True,
-                    })
+                    results.append(
+                        {
+                            "command": command,
+                            "success": False,
+                            "error": f"运行时能力不可用: 找不到可执行命令 '{base_cmd}'",
+                            "runtime_semantics": "shell_command_skill",
+                            "capability_checked": True,
+                        }
+                    )
                     continue
 
                 # Execute safely — no shell; argv is explicit.
@@ -395,31 +426,37 @@ class SkillMDLoader:
                     timeout=60,
                 )
 
-                results.append({
-                    "command": command,
-                    "success": process.returncode == 0,
-                    "stdout": stdout.decode(),
-                    "stderr": stderr.decode(),
-                    "runtime_semantics": "shell_command_skill",
-                    "capability_checked": True,
-                })
+                results.append(
+                    {
+                        "command": command,
+                        "success": process.returncode == 0,
+                        "stdout": stdout.decode(),
+                        "stderr": stderr.decode(),
+                        "runtime_semantics": "shell_command_skill",
+                        "capability_checked": True,
+                    }
+                )
 
             except asyncio.TimeoutError:
-                results.append({
-                    "command": command,
-                    "success": False,
-                    "error": "执行超时",
-                    "runtime_semantics": "shell_command_skill",
-                    "capability_checked": True,
-                })
+                results.append(
+                    {
+                        "command": command,
+                        "success": False,
+                        "error": "执行超时",
+                        "runtime_semantics": "shell_command_skill",
+                        "capability_checked": True,
+                    }
+                )
             except Exception as e:
-                results.append({
-                    "command": command,
-                    "success": False,
-                    "error": str(e),
-                    "runtime_semantics": "shell_command_skill",
-                    "capability_checked": True,
-                })
+                results.append(
+                    {
+                        "command": command,
+                        "success": False,
+                        "error": str(e),
+                        "runtime_semantics": "shell_command_skill",
+                        "capability_checked": True,
+                    }
+                )
 
         return {
             "success": all(r["success"] for r in results),

@@ -113,6 +113,7 @@ def _parse_interval_seconds(interval_str: str) -> int:
 # HEARTBEAT.md parser
 # ---------------------------------------------------------------------------
 
+
 def load_heartbeat_tasks(task_file: str) -> str:
     """Read the HEARTBEAT.md file and return its full content as a string.
 
@@ -154,6 +155,7 @@ def extract_task_lines(heartbeat_content: str) -> List[str]:
 # ACK suppression
 # ---------------------------------------------------------------------------
 
+
 def is_ack_response(response: str, ack_token: str, max_chars: int) -> bool:
     """Return *True* if the response should be suppressed (ACK only).
 
@@ -176,6 +178,7 @@ def is_ack_response(response: str, ack_token: str, max_chars: int) -> bool:
 # Tier routing
 # ---------------------------------------------------------------------------
 
+
 def should_escalate_to_tier2(task_lines: List[str], tier2_triggers: List[str]) -> bool:
     """Return *True* if any task line matches a tier-2 trigger keyword.
 
@@ -192,6 +195,7 @@ def should_escalate_to_tier2(task_lines: List[str], tier2_triggers: List[str]) -
 # ---------------------------------------------------------------------------
 # HeartbeatScheduler
 # ---------------------------------------------------------------------------
+
 
 class HeartbeatScheduler:
     """Async heartbeat scheduler for OpenClawd.
@@ -215,17 +219,13 @@ class HeartbeatScheduler:
         self._config = _load_yaml_config(config_path)
         self._hb_config: Dict[str, Any] = self._config.get("heartbeat", {})
         self._enabled: bool = bool(self._hb_config.get("enabled", True))
-        self._interval_seconds: int = _parse_interval_seconds(
-            self._hb_config.get("interval", "30m")
-        )
+        self._interval_seconds: int = _parse_interval_seconds(self._hb_config.get("interval", "30m"))
         self._task_file: str = self._hb_config.get("task_file", "agent/HEARTBEAT.md")
         self._ack_token: str = self._hb_config.get("ack_token", "HEARTBEAT_OK")
         self._max_output_chars: int = int(self._hb_config.get("max_output_chars", 160))
         self._tier1_model: str = self._hb_config.get("tier1_model", "local_small")
         self._tier2_model: str = self._hb_config.get("tier2_model", "gpt-4o")
-        self._tier2_triggers: List[str] = list(
-            self._hb_config.get("tier2_trigger", [])
-        )
+        self._tier2_triggers: List[str] = list(self._hb_config.get("tier2_trigger", []))
 
         self._task: Optional[asyncio.Task] = None
         self._stop_event: asyncio.Event = asyncio.Event()
@@ -381,6 +381,7 @@ def get_heartbeat_scheduler(
     if openclawd is None:
         try:
             from core.openclawd import get_openclawd
+
             openclawd = get_openclawd()
         except Exception as exc:
             logger.warning("Cannot create HeartbeatScheduler: OpenClawd unavailable: %s", exc)

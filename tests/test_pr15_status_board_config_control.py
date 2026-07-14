@@ -121,29 +121,33 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 from unittest.mock import MagicMock, call, patch
 
-
 # ---------------------------------------------------------------------------
 # Helpers to import the modules under test
 # ---------------------------------------------------------------------------
 
+
 def _import_control_module():
     import windows_client.status_board_v2.config_control as m
+
     return m
 
 
 def _import_package():
     import windows_client.status_board_v2 as pkg
+
     return pkg
 
 
 def _import_app_module():
     import windows_client.status_board_v2.app as m
+
     return m
 
 
 # ---------------------------------------------------------------------------
 # Minimal mock ConfigService
 # ---------------------------------------------------------------------------
+
 
 class _MockConfigService:
     """Minimal mock that records calls to set_toggle / set_native_mm_policy."""
@@ -172,6 +176,7 @@ class _MockConfigService:
 @dataclass
 class _MockStore:
     """Minimal mock store exposing _config_path."""
+
     _config_path: str = "/tmp/runtime/config.json"
 
 
@@ -190,6 +195,7 @@ class _MockHotReloadManager:
 # ---------------------------------------------------------------------------
 # Test cases
 # ---------------------------------------------------------------------------
+
 
 class TestImports(unittest.TestCase):
     """Tests 1–13: Import and sentinel checks."""
@@ -418,7 +424,9 @@ class TestRejections(unittest.TestCase):
 
     def test_36_invalid_mode_error_meaningful(self):
         surface, svc = self._surface()
-        svc._should_raise = ValueError("Invalid native_multimodal_policy 'turbo'. Valid values: ['allow_fallback', 'prefer', 'strict']")
+        svc._should_raise = ValueError(
+            "Invalid native_multimodal_policy 'turbo'. Valid values: ['allow_fallback', 'prefer', 'strict']"
+        )
         result = surface.apply_routing_policy("turbo")
         # Error must mention the bad value
         self.assertIn("turbo", result.error)
@@ -560,12 +568,7 @@ class TestHotReload(unittest.TestCase):
         _, _, result = self._surface_without_manager()
         # reason should explain that reload is not available
         combined = (result.reason + " " + result.error).lower()
-        self.assertTrue(
-            "not" in combined
-            or "startup" in combined
-            or "restart" in combined
-            or "absent" in combined
-        )
+        self.assertTrue("not" in combined or "startup" in combined or "restart" in combined or "absent" in combined)
 
     def test_57_reload_errors_propagate_to_reason(self):
         surface, _, mgr = self._surface_with_manager(errors=["config file missing"])
@@ -583,6 +586,7 @@ class TestAppIntegration(unittest.TestCase):
 
     def test_58_app_accepts_control_surface(self):
         from windows_client.status_board_v2.app import StatusBoardV2App
+
         m = _import_control_module()
         svc = _MockConfigService()
         control = m.ConfigControlSurface(service=svc)
@@ -595,6 +599,7 @@ class TestAppIntegration(unittest.TestCase):
 
     def test_59_render_once_includes_feedback_when_result_present(self):
         from windows_client.status_board_v2.app import StatusBoardV2App
+
         m = _import_control_module()
         svc = _MockConfigService()
         control = m.ConfigControlSurface(service=svc)
@@ -606,6 +611,7 @@ class TestAppIntegration(unittest.TestCase):
 
     def test_60_render_once_no_feedback_panel_when_no_result(self):
         from windows_client.status_board_v2.app import StatusBoardV2App
+
         m = _import_control_module()
         svc = _MockConfigService()
         control = m.ConfigControlSurface(service=svc)
@@ -617,6 +623,7 @@ class TestAppIntegration(unittest.TestCase):
 
     def test_61_control_panel_contains_header(self):
         from windows_client.status_board_v2.app import StatusBoardV2App
+
         m = _import_control_module()
         svc = _MockConfigService()
         control = m.ConfigControlSurface(service=svc)
@@ -628,6 +635,7 @@ class TestAppIntegration(unittest.TestCase):
 
     def test_62_control_panel_shows_feedback_text(self):
         from windows_client.status_board_v2.app import StatusBoardV2App
+
         m = _import_control_module()
         svc = _MockConfigService()
         control = m.ConfigControlSurface(service=svc)
@@ -640,6 +648,7 @@ class TestAppIntegration(unittest.TestCase):
 
     def test_63_render_once_still_renders_existing_surfaces(self):
         from windows_client.status_board_v2.app import StatusBoardV2App
+
         app = StatusBoardV2App(from_stdin=True, control_surface=None)
         frame = app.render_once(self._minimal_projection())
         # Board title still present
@@ -651,6 +660,7 @@ class TestCLI(unittest.TestCase):
 
     def _build_parser(self):
         from windows_client.status_board_v2.app import _build_parser
+
         return _build_parser()
 
     def test_64_parser_has_apply_toggle(self):
@@ -665,6 +675,7 @@ class TestCLI(unittest.TestCase):
 
     def test_66_apply_toggle_arg_parses_true(self):
         from windows_client.status_board_v2.app import _apply_toggle_arg
+
         m = _import_control_module()
         svc = _MockConfigService()
         control = m.ConfigControlSurface(service=svc)
@@ -674,6 +685,7 @@ class TestCLI(unittest.TestCase):
 
     def test_67_apply_toggle_arg_parses_false(self):
         from windows_client.status_board_v2.app import _apply_toggle_arg
+
         m = _import_control_module()
         svc = _MockConfigService()
         control = m.ConfigControlSurface(service=svc)
@@ -683,6 +695,7 @@ class TestCLI(unittest.TestCase):
 
     def test_68_apply_toggle_arg_rejects_no_equals(self):
         from windows_client.status_board_v2.app import _apply_toggle_arg
+
         m = _import_control_module()
         svc = _MockConfigService()
         control = m.ConfigControlSurface(service=svc)

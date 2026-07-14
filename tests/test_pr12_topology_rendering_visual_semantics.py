@@ -193,6 +193,7 @@ def _make_canonical_vm():
             system_layer="OneAPI",
             available=True,
         )
+
     return _VM()
 
 
@@ -222,6 +223,7 @@ def _make_degraded_vm():
             system_layer="OneAPI",
             available=False,
         )
+
     return _VM()
 
 
@@ -246,6 +248,7 @@ def _make_partial_vm():
             available=False,
         )
         oneapi_horizon = _MockOneAPIHorizon()
+
     return _VM()
 
 
@@ -265,11 +268,13 @@ def _make_unavailable_vm():
         integration_health = "unavailable"
         provider_routing = _MockProviderRouting()
         oneapi_horizon = None
+
     return _VM()
 
 
 def _build_layout(vm):
     from windows_client.status_board_v2.topology_layout import build_constellation_layout
+
     return build_constellation_layout(vm)
 
 
@@ -277,55 +282,66 @@ def _build_layout(vm):
 # Test 1-10: importability
 # ---------------------------------------------------------------------------
 
+
 def test_01_topology_renderer_module_importable():
     import windows_client.status_board_v2.topology_renderer as _m
+
     assert _m is not None
 
 
 def test_02_TopologyRenderer_importable():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     assert TopologyRenderer is not None
 
 
 def test_03_TOPOLOGY_RENDERER_AUTHORITY_importable():
     from windows_client.status_board_v2.topology_renderer import TOPOLOGY_RENDERER_AUTHORITY
+
     assert TOPOLOGY_RENDERER_AUTHORITY is not None
 
 
 def test_04_TopologyRenderer_in_package_all():
     from windows_client.status_board_v2 import TopologyRenderer
+
     assert TopologyRenderer is not None
 
 
 def test_05_TOPOLOGY_RENDERER_AUTHORITY_in_package_all():
     from windows_client.status_board_v2 import TOPOLOGY_RENDERER_AUTHORITY
+
     assert TOPOLOGY_RENDERER_AUTHORITY is not None
 
 
 def test_06_authority_is_nonempty_string():
     from windows_client.status_board_v2.topology_renderer import TOPOLOGY_RENDERER_AUTHORITY
+
     assert isinstance(TOPOLOGY_RENDERER_AUTHORITY, str)
     assert len(TOPOLOGY_RENDERER_AUTHORITY) > 0
 
 
 def test_07_authority_contains_TopologyRenderer():
     from windows_client.status_board_v2.topology_renderer import TOPOLOGY_RENDERER_AUTHORITY
+
     assert "TopologyRenderer" in TOPOLOGY_RENDERER_AUTHORITY
 
 
 def test_08_TopologyRenderer_instantiates():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     renderer = TopologyRenderer()
     assert renderer is not None
 
 
 def test_09_render_layout_method_exists():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     assert callable(getattr(TopologyRenderer(), "render_layout", None))
 
 
 def test_10_render_layout_dict_method_exists():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     assert callable(getattr(TopologyRenderer(), "render_layout_dict", None))
 
 
@@ -333,20 +349,24 @@ def test_10_render_layout_dict_method_exists():
 # Test 11-13: graceful None handling
 # ---------------------------------------------------------------------------
 
+
 def test_11_render_layout_none_returns_string():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     result = TopologyRenderer().render_layout(None)
     assert isinstance(result, str)
 
 
 def test_12_render_layout_none_contains_unavailable():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     result = TopologyRenderer().render_layout(None)
     assert "UNAVAILABLE" in result.upper()
 
 
 def test_13_render_layout_none_does_not_raise():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     try:
         TopologyRenderer().render_layout(None)
     except Exception as exc:
@@ -357,8 +377,10 @@ def test_13_render_layout_none_does_not_raise():
 # Test 14-25: canonical layout rendering
 # ---------------------------------------------------------------------------
 
+
 def test_14_canonical_render_layout_returns_string():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     result = TopologyRenderer().render_layout(layout)
     assert isinstance(result, str)
@@ -366,6 +388,7 @@ def test_14_canonical_render_layout_returns_string():
 
 def test_15_canonical_output_contains_canonical():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "CANONICAL" in result
@@ -373,6 +396,7 @@ def test_15_canonical_output_contains_canonical():
 
 def test_16_canonical_output_contains_star_symbol():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "★" in result
@@ -380,6 +404,7 @@ def test_16_canonical_output_contains_star_symbol():
 
 def test_17_canonical_output_contains_primary():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "PRIMARY" in result
@@ -387,6 +412,7 @@ def test_17_canonical_output_contains_primary():
 
 def test_18_canonical_output_contains_support():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "SUPPORT" in result
@@ -394,6 +420,7 @@ def test_18_canonical_output_contains_support():
 
 def test_19_canonical_output_contains_lower_horizon():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "LOWER-HORIZON" in result
@@ -401,6 +428,7 @@ def test_19_canonical_output_contains_lower_horizon():
 
 def test_20_canonical_output_contains_canonical_edge():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "━━▶" in result
@@ -408,6 +436,7 @@ def test_20_canonical_output_contains_canonical_edge():
 
 def test_21_canonical_output_contains_auth_tag():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "[auth]" in result
@@ -415,6 +444,7 @@ def test_21_canonical_output_contains_auth_tag():
 
 def test_22_canonical_output_no_degraded_warning():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     result = TopologyRenderer().render_layout(layout)
     # Should NOT contain a DEGRADED banner
@@ -423,6 +453,7 @@ def test_22_canonical_output_no_degraded_warning():
 
 def test_23_canonical_output_no_not_auth_tag():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "[NOT-auth]" not in result
@@ -430,6 +461,7 @@ def test_23_canonical_output_no_not_auth_tag():
 
 def test_24_canonical_output_contains_provider_id():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     result = TopologyRenderer().render_layout(layout)
     # Provider id is "openai" — should appear somewhere in output
@@ -438,9 +470,10 @@ def test_24_canonical_output_contains_provider_id():
 
 def test_25_canonical_output_contains_renderer_authority():
     from windows_client.status_board_v2.topology_renderer import (
-        TopologyRenderer,
         TOPOLOGY_RENDERER_AUTHORITY,
+        TopologyRenderer,
     )
+
     layout = _build_layout(_make_canonical_vm())
     result = TopologyRenderer().render_layout(layout)
     assert TOPOLOGY_RENDERER_AUTHORITY in result
@@ -450,8 +483,10 @@ def test_25_canonical_output_contains_renderer_authority():
 # Test 26-33: degraded layout rendering
 # ---------------------------------------------------------------------------
 
+
 def test_26_degraded_render_layout_returns_string():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_degraded_vm())
     result = TopologyRenderer().render_layout(layout)
     assert isinstance(result, str)
@@ -459,6 +494,7 @@ def test_26_degraded_render_layout_returns_string():
 
 def test_27_degraded_output_contains_degraded():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_degraded_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "DEGRADED" in result
@@ -466,6 +502,7 @@ def test_27_degraded_output_contains_degraded():
 
 def test_28_degraded_output_contains_warning_symbol():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_degraded_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "⚠" in result
@@ -473,6 +510,7 @@ def test_28_degraded_output_contains_warning_symbol():
 
 def test_29_degraded_output_contains_not_auth():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_degraded_vm())
     result = TopologyRenderer().render_layout(layout)
     # Must contain NOT-auth or "NOT authoritative" somewhere
@@ -481,6 +519,7 @@ def test_29_degraded_output_contains_not_auth():
 
 def test_30_degraded_output_contains_fallback_edge():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_degraded_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "╌╌▷" in result
@@ -488,6 +527,7 @@ def test_30_degraded_output_contains_fallback_edge():
 
 def test_31_degraded_output_no_auth_tag_for_primary():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_degraded_vm())
     result = TopologyRenderer().render_layout(layout)
     # Degraded primary node must not be tagged [auth]
@@ -496,6 +536,7 @@ def test_31_degraded_output_no_auth_tag_for_primary():
 
 def test_32_degraded_output_not_presenting_as_canonical():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_degraded_vm())
     result = TopologyRenderer().render_layout(layout)
     # The "CANONICAL" keyword should not appear as a positive authority banner
@@ -506,6 +547,7 @@ def test_32_degraded_output_not_presenting_as_canonical():
 
 def test_33_degraded_output_contains_lower_horizon():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_degraded_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "LOWER-HORIZON" in result
@@ -515,8 +557,10 @@ def test_33_degraded_output_contains_lower_horizon():
 # Test 34-38: partial layout rendering
 # ---------------------------------------------------------------------------
 
+
 def test_34_partial_render_layout_returns_string():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_partial_vm())
     result = TopologyRenderer().render_layout(layout)
     assert isinstance(result, str)
@@ -524,6 +568,7 @@ def test_34_partial_render_layout_returns_string():
 
 def test_35_partial_output_contains_partial():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_partial_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "PARTIAL" in result
@@ -531,6 +576,7 @@ def test_35_partial_output_contains_partial():
 
 def test_36_partial_output_contains_warning_symbol():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_partial_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "⚠" in result
@@ -538,6 +584,7 @@ def test_36_partial_output_contains_warning_symbol():
 
 def test_37_partial_output_contains_missing():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_partial_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "missing" in result.lower()
@@ -545,6 +592,7 @@ def test_37_partial_output_contains_missing():
 
 def test_38_partial_output_no_canonical_authority():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_partial_vm())
     result = TopologyRenderer().render_layout(layout)
     # Partial must not present a fully authoritative canonical banner
@@ -555,8 +603,10 @@ def test_38_partial_output_no_canonical_authority():
 # Test 39-43: unavailable layout rendering
 # ---------------------------------------------------------------------------
 
+
 def test_39_unavailable_render_layout_returns_string():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_unavailable_vm())
     result = TopologyRenderer().render_layout(layout)
     assert isinstance(result, str)
@@ -564,6 +614,7 @@ def test_39_unavailable_render_layout_returns_string():
 
 def test_40_unavailable_output_contains_unavailable():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_unavailable_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "UNAVAILABLE" in result
@@ -571,6 +622,7 @@ def test_40_unavailable_output_contains_unavailable():
 
 def test_41_unavailable_output_contains_circle_symbol():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_unavailable_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "○" in result
@@ -578,6 +630,7 @@ def test_41_unavailable_output_contains_circle_symbol():
 
 def test_42_unavailable_output_no_auth_tag():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_unavailable_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "[auth]" not in result
@@ -585,6 +638,7 @@ def test_42_unavailable_output_no_auth_tag():
 
 def test_43_unavailable_output_no_primary_star():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     # unavailable vm produces a layout with no primary nodes → no ★
     layout = _build_layout(_make_unavailable_vm())
     result = TopologyRenderer().render_layout(layout)
@@ -596,8 +650,10 @@ def test_43_unavailable_output_no_primary_star():
 # Test 44-51: OneAPI lower-horizon rendering invariants
 # ---------------------------------------------------------------------------
 
+
 def test_44_oneapi_in_lower_horizon_canonical():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "LOWER-HORIZON" in result
@@ -606,6 +662,7 @@ def test_44_oneapi_in_lower_horizon_canonical():
 
 def test_45_oneapi_in_lower_horizon_degraded():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_degraded_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "LOWER-HORIZON" in result
@@ -613,6 +670,7 @@ def test_45_oneapi_in_lower_horizon_degraded():
 
 def test_46_oneapi_in_lower_horizon_partial():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_partial_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "LOWER-HORIZON" in result
@@ -620,6 +678,7 @@ def test_46_oneapi_in_lower_horizon_partial():
 
 def test_47_oneapi_in_lower_horizon_none_vm():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(None)
     result = TopologyRenderer().render_layout(layout)
     assert "LOWER-HORIZON" in result
@@ -627,6 +686,7 @@ def test_47_oneapi_in_lower_horizon_none_vm():
 
 def test_48_oneapi_section_has_hexagon_symbol():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     for vm in [_make_canonical_vm(), _make_degraded_vm(), _make_partial_vm()]:
         layout = _build_layout(vm)
         result = TopologyRenderer().render_layout(layout)
@@ -635,6 +695,7 @@ def test_48_oneapi_section_has_hexagon_symbol():
 
 def test_49_oneapi_section_contains_lower_horizon_text():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "lower-horizon" in result.lower()
@@ -642,35 +703,35 @@ def test_49_oneapi_section_contains_lower_horizon_text():
 
 def test_50_oneapi_node_never_tagged_auth():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     for vm in [_make_canonical_vm(), _make_degraded_vm(), _make_partial_vm(), None]:
         layout = _build_layout(vm)
         result = TopologyRenderer().render_layout(layout)
         # Look for lines with ⬡ symbol — they must not contain [auth]
         for line in result.splitlines():
             if "⬡" in line:
-                assert "[auth]" not in line, (
-                    f"OneAPI node (⬡) has [auth] tag in line: {line!r}"
-                )
+                assert "[auth]" not in line, f"OneAPI node (⬡) has [auth] tag in line: {line!r}"
 
 
 def test_51_lower_horizon_after_primary_support():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     result = TopologyRenderer().render_layout(layout)
     primary_pos = result.find("PRIMARY")
     support_pos = result.find("SUPPORT")
     lower_pos = result.find("LOWER-HORIZON")
-    assert primary_pos < support_pos < lower_pos, (
-        "Expected PRIMARY < SUPPORT < LOWER-HORIZON in rendered output"
-    )
+    assert primary_pos < support_pos < lower_pos, "Expected PRIMARY < SUPPORT < LOWER-HORIZON in rendered output"
 
 
 # ---------------------------------------------------------------------------
 # Test 52-58: render_layout_dict
 # ---------------------------------------------------------------------------
 
+
 def test_52_render_layout_dict_from_canonical_to_dict():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     d = layout.to_dict()
     result = TopologyRenderer().render_layout_dict(d)
@@ -679,6 +740,7 @@ def test_52_render_layout_dict_from_canonical_to_dict():
 
 def test_53_render_layout_dict_canonical_contains_canonical():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     d = layout.to_dict()
     result = TopologyRenderer().render_layout_dict(d)
@@ -687,6 +749,7 @@ def test_53_render_layout_dict_canonical_contains_canonical():
 
 def test_54_render_layout_dict_canonical_contains_primary():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     d = layout.to_dict()
     result = TopologyRenderer().render_layout_dict(d)
@@ -695,6 +758,7 @@ def test_54_render_layout_dict_canonical_contains_primary():
 
 def test_55_render_layout_dict_degraded_contains_degraded():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_degraded_vm())
     d = layout.to_dict()
     result = TopologyRenderer().render_layout_dict(d)
@@ -703,6 +767,7 @@ def test_55_render_layout_dict_degraded_contains_degraded():
 
 def test_56_render_layout_dict_degraded_contains_not_auth():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_degraded_vm())
     d = layout.to_dict()
     result = TopologyRenderer().render_layout_dict(d)
@@ -711,12 +776,14 @@ def test_56_render_layout_dict_degraded_contains_not_auth():
 
 def test_57_render_layout_dict_empty_returns_unavailable():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     result = TopologyRenderer().render_layout_dict({})
     assert "UNAVAILABLE" in result.upper()
 
 
 def test_58_render_layout_dict_returns_string():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_partial_vm())
     result = TopologyRenderer().render_layout_dict(layout.to_dict())
     assert isinstance(result, str)
@@ -726,8 +793,10 @@ def test_58_render_layout_dict_returns_string():
 # Test 59-67: readiness visual distinctness
 # ---------------------------------------------------------------------------
 
+
 def test_59_canonical_degraded_outputs_distinct():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     renderer = TopologyRenderer()
     canonical_out = renderer.render_layout(_build_layout(_make_canonical_vm()))
     degraded_out = renderer.render_layout(_build_layout(_make_degraded_vm()))
@@ -736,6 +805,7 @@ def test_59_canonical_degraded_outputs_distinct():
 
 def test_60_canonical_unavailable_outputs_distinct():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     renderer = TopologyRenderer()
     canonical_out = renderer.render_layout(_build_layout(_make_canonical_vm()))
     unavail_out = renderer.render_layout(_build_layout(_make_unavailable_vm()))
@@ -744,6 +814,7 @@ def test_60_canonical_unavailable_outputs_distinct():
 
 def test_61_degraded_unavailable_outputs_distinct():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     renderer = TopologyRenderer()
     degraded_out = renderer.render_layout(_build_layout(_make_degraded_vm()))
     unavail_out = renderer.render_layout(_build_layout(_make_unavailable_vm()))
@@ -752,15 +823,17 @@ def test_61_degraded_unavailable_outputs_distinct():
 
 def test_62_render_layout_none_contains_renderer_authority():
     from windows_client.status_board_v2.topology_renderer import (
-        TopologyRenderer,
         TOPOLOGY_RENDERER_AUTHORITY,
+        TopologyRenderer,
     )
+
     result = TopologyRenderer().render_layout(None)
     assert TOPOLOGY_RENDERER_AUTHORITY in result
 
 
 def test_63_rendered_output_is_multiline():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "\n" in result
@@ -768,6 +841,7 @@ def test_63_rendered_output_is_multiline():
 
 def test_64_render_does_not_raise_for_all_readiness_states():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     renderer = TopologyRenderer()
     for vm in [
         _make_canonical_vm(),
@@ -785,6 +859,7 @@ def test_64_render_does_not_raise_for_all_readiness_states():
 
 def test_65_routing_peer_symbol_in_canonical():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     result = TopologyRenderer().render_layout(layout)
     # routing_peer symbol ✧ should appear in the support section
@@ -793,6 +868,7 @@ def test_65_routing_peer_symbol_in_canonical():
 
 def test_66_oneapi_hexagon_symbol_in_any_layout():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     renderer = TopologyRenderer()
     for vm in [_make_canonical_vm(), _make_degraded_vm()]:
         layout = _build_layout(vm)
@@ -802,6 +878,7 @@ def test_66_oneapi_hexagon_symbol_in_any_layout():
 
 def test_67_lower_horizon_link_edge_in_canonical():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "╌╌⬡" in result
@@ -811,9 +888,11 @@ def test_67_lower_horizon_link_edge_in_canonical():
 # Test 68-76: layout authority and semantic invariants
 # ---------------------------------------------------------------------------
 
+
 def test_68_canonical_output_contains_layout_authority():
-    from windows_client.status_board_v2.topology_renderer import TopologyRenderer
     from windows_client.status_board_v2.topology_layout import TOPOLOGY_LAYOUT_AUTHORITY
+    from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     result = TopologyRenderer().render_layout(layout)
     assert TOPOLOGY_LAYOUT_AUTHORITY in result
@@ -821,6 +900,7 @@ def test_68_canonical_output_contains_layout_authority():
 
 def test_69_degraded_uses_fallback_edge_not_canonical():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_degraded_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "╌╌▷" in result
@@ -829,6 +909,7 @@ def test_69_degraded_uses_fallback_edge_not_canonical():
 
 def test_70_partial_primary_has_not_auth():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_partial_vm())
     result = TopologyRenderer().render_layout(layout)
     # Partial primary node is not authoritative → [not-auth] or similar
@@ -837,6 +918,7 @@ def test_70_partial_primary_has_not_auth():
 
 def test_71_unavailable_primary_section_empty():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_unavailable_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "no primary provider" in result.lower() or "★" not in result
@@ -844,6 +926,7 @@ def test_71_unavailable_primary_section_empty():
 
 def test_72_render_layout_with_dict_calls_render_layout_dict():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     d = layout.to_dict()
     # Passing a dict directly to render_layout should also work
@@ -854,6 +937,7 @@ def test_72_render_layout_with_dict_calls_render_layout_dict():
 
 def test_73_render_layout_dict_partial_contains_partial():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_partial_vm())
     d = layout.to_dict()
     result = TopologyRenderer().render_layout_dict(d)
@@ -862,6 +946,7 @@ def test_73_render_layout_dict_partial_contains_partial():
 
 def test_74_render_layout_dict_unavailable_contains_unavailable():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_unavailable_vm())
     d = layout.to_dict()
     result = TopologyRenderer().render_layout_dict(d)
@@ -870,6 +955,7 @@ def test_74_render_layout_dict_unavailable_contains_unavailable():
 
 def test_75_degraded_output_no_canonical_banner():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_degraded_vm())
     result = TopologyRenderer().render_layout(layout)
     # The canonical readiness description line must not appear
@@ -878,6 +964,7 @@ def test_75_degraded_output_no_canonical_banner():
 
 def test_76_unavailable_output_no_canonical_banner():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_unavailable_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "CANONICAL   —" not in result
@@ -887,15 +974,18 @@ def test_76_unavailable_output_no_canonical_banner():
 # Test 77-82: edge cases
 # ---------------------------------------------------------------------------
 
+
 def test_77_render_layout_no_relations_does_not_raise():
-    from windows_client.status_board_v2.topology_renderer import TopologyRenderer
-    from windows_client.status_board_v2.topology_layout import (
-        TopologyConstellationLayout,
-        TopologyLayoutLayer,
-        TopologyLayerKind,
-        TOPOLOGY_LAYOUT_AUTHORITY,
-    )
     import uuid
+
+    from windows_client.status_board_v2.topology_layout import (
+        TOPOLOGY_LAYOUT_AUTHORITY,
+        TopologyConstellationLayout,
+        TopologyLayerKind,
+        TopologyLayoutLayer,
+    )
+    from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = TopologyConstellationLayout(
         layout_id=str(uuid.uuid4()),
         readiness_label="canonical",
@@ -929,6 +1019,7 @@ def test_77_render_layout_no_relations_does_not_raise():
 
 def test_78_render_layout_no_support_nodes_does_not_raise():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_unavailable_vm())
     # Unavailable layout has no support nodes
     try:
@@ -940,6 +1031,7 @@ def test_78_render_layout_no_support_nodes_does_not_raise():
 
 def test_79_render_layout_no_primary_nodes_does_not_raise():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(None)
     # None vm → unavailable layout with no primary nodes
     try:
@@ -951,16 +1043,19 @@ def test_79_render_layout_no_primary_nodes_does_not_raise():
 
 def test_80_TopologyRenderer_in_package_all():
     import windows_client.status_board_v2 as pkg
+
     assert "TopologyRenderer" in pkg.__all__
 
 
 def test_81_TOPOLOGY_RENDERER_AUTHORITY_in_package_all():
     import windows_client.status_board_v2 as pkg
+
     assert "TOPOLOGY_RENDERER_AUTHORITY" in pkg.__all__
 
 
 def test_82_output_contains_topology_constellation_header():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "Topology Constellation" in result
@@ -970,8 +1065,10 @@ def test_82_output_contains_topology_constellation_header():
 # Test 83-90: remaining invariants
 # ---------------------------------------------------------------------------
 
+
 def test_83_canonical_output_contains_relations_section():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "RELATIONS" in result
@@ -979,6 +1076,7 @@ def test_83_canonical_output_contains_relations_section():
 
 def test_84_render_layout_dict_unknown_readiness_does_not_raise():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     d = {
         "readiness_label": "xyzzy_unknown",
         "is_authoritative": False,
@@ -1001,6 +1099,7 @@ def test_84_render_layout_dict_unknown_readiness_does_not_raise():
 
 def test_85_degraded_no_canonical_banner():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_degraded_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "fully authoritative topology" not in result
@@ -1008,6 +1107,7 @@ def test_85_degraded_no_canonical_banner():
 
 def test_86_canonical_has_bullet_symbol():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "●" in result
@@ -1015,6 +1115,7 @@ def test_86_canonical_has_bullet_symbol():
 
 def test_87_degraded_has_half_circle_symbol():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_degraded_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "◑" in result
@@ -1022,6 +1123,7 @@ def test_87_degraded_has_half_circle_symbol():
 
 def test_88_partial_has_quarter_circle_symbol():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_partial_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "◔" in result
@@ -1029,6 +1131,7 @@ def test_88_partial_has_quarter_circle_symbol():
 
 def test_89_unavailable_has_open_circle_symbol():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_unavailable_vm())
     result = TopologyRenderer().render_layout(layout)
     assert "○" in result
@@ -1036,6 +1139,7 @@ def test_89_unavailable_has_open_circle_symbol():
 
 def test_90_render_layout_dict_none_returns_unavailable_frame():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     # render_layout_dict(None) — None should be treated as empty / missing
     try:
         result = TopologyRenderer().render_layout_dict({})

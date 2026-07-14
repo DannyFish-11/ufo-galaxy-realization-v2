@@ -312,10 +312,7 @@ def classify_ownership_transfer_proof_quality(
             )
 
         # ── Rule 2: Missing / incomplete / partial evidence ───────────────────
-        if (
-            evidence_quality == "missing"
-            or ownership_state == "degraded_incomplete_evidence"
-        ):
+        if evidence_quality == "missing" or ownership_state == "degraded_incomplete_evidence":
             diagnosis.append("ownership_transfer_proof_class:incomplete")
             return OwnershipTransferProofQualityResult(
                 proof_class=OwnershipTransferProofClass.incomplete,
@@ -381,12 +378,7 @@ def classify_ownership_transfer_proof_quality(
             )
 
         # ── Rule 5: Confirmed strong ──────────────────────────────────────────
-        if (
-            is_converged
-            and evidence_quality == "strong"
-            and ownership_state in _confirmed_states
-            and not degraded_in
-        ):
+        if is_converged and evidence_quality == "strong" and ownership_state in _confirmed_states and not degraded_in:
             diagnosis.append("ownership_transfer_proof_class:confirmed_strong")
             return OwnershipTransferProofQualityResult(
                 proof_class=OwnershipTransferProofClass.confirmed_strong,
@@ -409,9 +401,7 @@ def classify_ownership_transfer_proof_quality(
         )
 
     except Exception as exc:  # noqa: BLE001
-        logger.debug(
-            "classify_ownership_transfer_proof_quality failed (non-fatal): %s", exc
-        )
+        logger.debug("classify_ownership_transfer_proof_quality failed (non-fatal): %s", exc)
         return OwnershipTransferProofQualityResult(
             proof_class=OwnershipTransferProofClass.incomplete,
             is_sufficient_for_closure=False,
@@ -506,8 +496,7 @@ def get_latest_ownership_transfer_proof_quality_for_device(
 
     except Exception as exc:  # noqa: BLE001
         logger.debug(
-            "get_latest_ownership_transfer_proof_quality_for_device failed "
-            "(non-fatal): device_id=%r exc=%s",
+            "get_latest_ownership_transfer_proof_quality_for_device failed " "(non-fatal): device_id=%r exc=%s",
             device_id,
             exc,
         )

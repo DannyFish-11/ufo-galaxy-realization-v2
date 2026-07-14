@@ -52,17 +52,17 @@ import pytest
 
 try:
     from core.attached_runtime_reuse_dispatch import (
-        ReuseDispatchResolutionKind,
-        ReuseDispatchResolution,
-        resolve_reuse_dispatch_surface,
-        REUSE_DISPATCH_PR23_SENTINEL,
-        TAKEOVER_DISPATCH_CONSULTS_REGISTRY_FIRST_PR23_POLICY,
         DELEGATED_FALLBACK_REQUIRES_INELIGIBLE_CANONICAL_PATH_PR23_POLICY,
-        TAKEOVER_DISPATCH_DECISION_IS_DETERMINISTIC_PR23_POLICY,
         REPLACED_SESSION_CANNOT_WIN_TAKEOVER_DISPATCH_PR23_POLICY,
+        REUSE_DISPATCH_PR23_SENTINEL,
         STALE_EXECUTION_CONTEXT_CANNOT_ALTER_TAKEOVER_DECISION_PR23_POLICY,
-        TakeoverRouteOutcome,
+        TAKEOVER_DISPATCH_CONSULTS_REGISTRY_FIRST_PR23_POLICY,
+        TAKEOVER_DISPATCH_DECISION_IS_DETERMINISTIC_PR23_POLICY,
+        ReuseDispatchResolution,
+        ReuseDispatchResolutionKind,
         TakeoverDispatchDecision,
+        TakeoverRouteOutcome,
+        resolve_reuse_dispatch_surface,
         resolve_takeover_or_fallback_route,
     )
 
@@ -72,17 +72,17 @@ except ImportError:
 
 try:
     from core.attached_runtime_session_registry import (
+        ATTACHED_RUNTIME_REGISTRY_TAKEOVER_DISPATCH_PR23_SENTINEL,
+        REGISTRY_IS_CANONICAL_TAKEOVER_DISPATCH_AUTHORITY_PR23_POLICY,
+        REGISTRY_REPLACED_SESSION_IS_INELIGIBLE_FOR_TAKEOVER_PR23_POLICY,
+        REGISTRY_TAKEOVER_ELIGIBILITY_REQUIRES_ACTIVE_STATE_PR23_POLICY,
         AttachedSessionRegistry,
-        RegistryEntryState,
         InvalidationReason,
-        register_session,
+        RegistryEntryState,
         detach_session,
         invalidate_session,
         lookup_active_session,
-        ATTACHED_RUNTIME_REGISTRY_TAKEOVER_DISPATCH_PR23_SENTINEL,
-        REGISTRY_IS_CANONICAL_TAKEOVER_DISPATCH_AUTHORITY_PR23_POLICY,
-        REGISTRY_TAKEOVER_ELIGIBILITY_REQUIRES_ACTIVE_STATE_PR23_POLICY,
-        REGISTRY_REPLACED_SESSION_IS_INELIGIBLE_FOR_TAKEOVER_PR23_POLICY,
+        register_session,
     )
 
     _REGISTRY_AVAILABLE = True
@@ -102,8 +102,8 @@ except ImportError:
 
 try:
     from core.android_execution_signal_reconciler import (
-        RECONCILER_PR23_SENTINEL,
         RECONCILER_FALLBACK_CONTEXT_IS_DETERMINISTIC_PR23_POLICY,
+        RECONCILER_PR23_SENTINEL,
         RECONCILER_STALE_SESSION_IS_BLOCKED_BEFORE_TRACKER_MUTATION_PR23_POLICY,
     )
 
@@ -113,8 +113,8 @@ except ImportError:
 
 try:
     from core.attached_runtime_reuse_binding import (
-        establish_reuse_binding,
         AttachedRuntimeReuseBindingRuntime,
+        establish_reuse_binding,
     )
 
     _REUSE_BINDING_AVAILABLE = True
@@ -125,30 +125,18 @@ except ImportError:
 # Skip markers
 # ---------------------------------------------------------------------------
 
-_SKIP_REUSE = pytest.mark.skipif(
-    not _REUSE_DISPATCH_AVAILABLE, reason="attached_runtime_reuse_dispatch unavailable"
-)
-_SKIP_REGISTRY = pytest.mark.skipif(
-    not _REGISTRY_AVAILABLE, reason="attached_runtime_session_registry unavailable"
-)
-_SKIP_INGRESS = pytest.mark.skipif(
-    not _INGRESS_AVAILABLE, reason="android_delegated_signal_ingress unavailable"
-)
+_SKIP_REUSE = pytest.mark.skipif(not _REUSE_DISPATCH_AVAILABLE, reason="attached_runtime_reuse_dispatch unavailable")
+_SKIP_REGISTRY = pytest.mark.skipif(not _REGISTRY_AVAILABLE, reason="attached_runtime_session_registry unavailable")
+_SKIP_INGRESS = pytest.mark.skipif(not _INGRESS_AVAILABLE, reason="android_delegated_signal_ingress unavailable")
 _SKIP_RECONCILER = pytest.mark.skipif(
     not _RECONCILER_AVAILABLE, reason="android_execution_signal_reconciler unavailable"
 )
 _SKIP_ALL = pytest.mark.skipif(
-    not (
-        _REUSE_DISPATCH_AVAILABLE
-        and _REGISTRY_AVAILABLE
-        and _REUSE_BINDING_AVAILABLE
-    ),
+    not (_REUSE_DISPATCH_AVAILABLE and _REGISTRY_AVAILABLE and _REUSE_BINDING_AVAILABLE),
     reason="one or more PR-23 core modules unavailable",
 )
 _SKIP_RUNTIME = pytest.mark.skipif(
-    not (
-        _REUSE_DISPATCH_AVAILABLE and _REGISTRY_AVAILABLE
-    ),
+    not (_REUSE_DISPATCH_AVAILABLE and _REGISTRY_AVAILABLE),
     reason="core.runtime re-export test requires reuse_dispatch and registry",
 )
 
@@ -344,7 +332,10 @@ class TestGroupF_TakeoverRouteOutcomeEnum:
 
     @_SKIP_REUSE
     def test_from_string_known_value(self):
-        assert TakeoverRouteOutcome.from_string("active_attached_takeover") == TakeoverRouteOutcome.active_attached_takeover
+        assert (
+            TakeoverRouteOutcome.from_string("active_attached_takeover")
+            == TakeoverRouteOutcome.active_attached_takeover
+        )
 
     @_SKIP_REUSE
     def test_from_string_fallback_default(self):
@@ -412,6 +403,7 @@ class TestGroupG_TakeoverDispatchDecisionHelpers:
             device_id="d3",
         )
         import uuid
+
         uuid.UUID(d.decision_id)  # should not raise
 
 
@@ -434,8 +426,7 @@ class TestGroupH_ActiveSessionTakeover:
         )
 
         assert decision.is_takeover(), (
-            f"Expected active_attached_takeover but got {decision.outcome!r}: "
-            f"{decision.reject_reason!r}"
+            f"Expected active_attached_takeover but got {decision.outcome!r}: " f"{decision.reject_reason!r}"
         )
         assert decision.reject_reason == ""
         assert decision.reuse_resolution is not None
@@ -446,9 +437,7 @@ class TestGroupH_ActiveSessionTakeover:
         reg = _make_registry(session_id="sess-h2", device_id="dev-h2")
         rt = _make_reuse_binding("sess-h2", "dev-h2")
 
-        decision = resolve_takeover_or_fallback_route(
-            "sess-h2", "dev-h2", reuse_runtime=rt, registry=reg
-        )
+        decision = resolve_takeover_or_fallback_route("sess-h2", "dev-h2", reuse_runtime=rt, registry=reg)
         assert decision.outcome == TakeoverRouteOutcome.active_attached_takeover
 
     @_SKIP_ALL
@@ -456,9 +445,7 @@ class TestGroupH_ActiveSessionTakeover:
         reg = _make_registry(session_id="sess-h3", device_id="dev-h3")
         rt = _make_reuse_binding("sess-h3", "dev-h3")
 
-        decision = resolve_takeover_or_fallback_route(
-            "sess-h3", "dev-h3", reuse_runtime=rt, registry=reg
-        )
+        decision = resolve_takeover_or_fallback_route("sess-h3", "dev-h3", reuse_runtime=rt, registry=reg)
         assert decision.reuse_resolution is not None
         assert decision.reuse_resolution.session_id == "sess-h3"
 
@@ -471,39 +458,25 @@ class TestGroupH_ActiveSessionTakeover:
 class TestGroupI_ReplacedSessionFallback:
     @_SKIP_ALL
     def test_replaced_session_produces_delegated_fallback(self):
-        reg = _make_registry(
-            session_id="sess-i", device_id="dev-i", state=RegistryEntryState.replaced
-        )
+        reg = _make_registry(session_id="sess-i", device_id="dev-i", state=RegistryEntryState.replaced)
         # Give the replaced session an eligible reuse binding — it should still lose.
         rt = _make_reuse_binding("sess-i", "dev-i")
 
-        decision = resolve_takeover_or_fallback_route(
-            "sess-i", "dev-i", reuse_runtime=rt, registry=reg
-        )
+        decision = resolve_takeover_or_fallback_route("sess-i", "dev-i", reuse_runtime=rt, registry=reg)
 
-        assert decision.is_fallback(), (
-            f"Replaced session MUST NOT win takeover; got {decision.outcome!r}"
-        )
+        assert decision.is_fallback(), f"Replaced session MUST NOT win takeover; got {decision.outcome!r}"
 
     @_SKIP_ALL
     def test_replaced_session_reject_reason_mentions_registry(self):
-        reg = _make_registry(
-            session_id="sess-i2", device_id="dev-i2", state=RegistryEntryState.replaced
-        )
-        decision = resolve_takeover_or_fallback_route(
-            "sess-i2", "dev-i2", registry=reg
-        )
+        reg = _make_registry(session_id="sess-i2", device_id="dev-i2", state=RegistryEntryState.replaced)
+        decision = resolve_takeover_or_fallback_route("sess-i2", "dev-i2", registry=reg)
         assert "registry gate" in decision.reject_reason or "non-active" in decision.reject_reason
 
     @_SKIP_ALL
     def test_replaced_session_reuse_resolution_is_none(self):
         """When the registry gate blocks, we return early before reuse resolution."""
-        reg = _make_registry(
-            session_id="sess-i3", device_id="dev-i3", state=RegistryEntryState.replaced
-        )
-        decision = resolve_takeover_or_fallback_route(
-            "sess-i3", "dev-i3", registry=reg
-        )
+        reg = _make_registry(session_id="sess-i3", device_id="dev-i3", state=RegistryEntryState.replaced)
+        decision = resolve_takeover_or_fallback_route("sess-i3", "dev-i3", registry=reg)
         # The registry gate fires before reuse resolution; reuse_resolution is None.
         assert decision.reuse_resolution is None
 
@@ -516,24 +489,16 @@ class TestGroupI_ReplacedSessionFallback:
 class TestGroupJ_DetachedSessionFallback:
     @_SKIP_ALL
     def test_detached_session_produces_delegated_fallback(self):
-        reg = _make_registry(
-            session_id="sess-j", device_id="dev-j", state=RegistryEntryState.detached
-        )
+        reg = _make_registry(session_id="sess-j", device_id="dev-j", state=RegistryEntryState.detached)
         rt = _make_reuse_binding("sess-j", "dev-j")
 
-        decision = resolve_takeover_or_fallback_route(
-            "sess-j", "dev-j", reuse_runtime=rt, registry=reg
-        )
+        decision = resolve_takeover_or_fallback_route("sess-j", "dev-j", reuse_runtime=rt, registry=reg)
         assert decision.is_fallback()
 
     @_SKIP_ALL
     def test_detached_session_reject_reason_is_set(self):
-        reg = _make_registry(
-            session_id="sess-j2", device_id="dev-j2", state=RegistryEntryState.detached
-        )
-        decision = resolve_takeover_or_fallback_route(
-            "sess-j2", "dev-j2", registry=reg
-        )
+        reg = _make_registry(session_id="sess-j2", device_id="dev-j2", state=RegistryEntryState.detached)
+        decision = resolve_takeover_or_fallback_route("sess-j2", "dev-j2", registry=reg)
         assert decision.reject_reason != ""
 
 
@@ -545,24 +510,16 @@ class TestGroupJ_DetachedSessionFallback:
 class TestGroupK_InvalidatedSessionFallback:
     @_SKIP_ALL
     def test_invalidated_session_produces_delegated_fallback(self):
-        reg = _make_registry(
-            session_id="sess-k", device_id="dev-k", state=RegistryEntryState.invalidated
-        )
+        reg = _make_registry(session_id="sess-k", device_id="dev-k", state=RegistryEntryState.invalidated)
         rt = _make_reuse_binding("sess-k", "dev-k")
 
-        decision = resolve_takeover_or_fallback_route(
-            "sess-k", "dev-k", reuse_runtime=rt, registry=reg
-        )
+        decision = resolve_takeover_or_fallback_route("sess-k", "dev-k", reuse_runtime=rt, registry=reg)
         assert decision.is_fallback()
 
     @_SKIP_ALL
     def test_invalidated_session_reuse_resolution_is_none(self):
-        reg = _make_registry(
-            session_id="sess-k2", device_id="dev-k2", state=RegistryEntryState.invalidated
-        )
-        decision = resolve_takeover_or_fallback_route(
-            "sess-k2", "dev-k2", registry=reg
-        )
+        reg = _make_registry(session_id="sess-k2", device_id="dev-k2", state=RegistryEntryState.invalidated)
+        decision = resolve_takeover_or_fallback_route("sess-k2", "dev-k2", registry=reg)
         assert decision.reuse_resolution is None
 
 
@@ -578,9 +535,7 @@ class TestGroupL_AbsentRegistryNoBinding:
         reg = AttachedSessionRegistry()
         rt = AttachedRuntimeReuseBindingRuntime()  # empty — no binding
 
-        decision = resolve_takeover_or_fallback_route(
-            "sess-l-unknown", "dev-l-unknown", reuse_runtime=rt, registry=reg
-        )
+        decision = resolve_takeover_or_fallback_route("sess-l-unknown", "dev-l-unknown", reuse_runtime=rt, registry=reg)
         assert decision.is_fallback()
 
     @_SKIP_ALL
@@ -588,9 +543,7 @@ class TestGroupL_AbsentRegistryNoBinding:
         reg = AttachedSessionRegistry()
         rt = AttachedRuntimeReuseBindingRuntime()
 
-        decision = resolve_takeover_or_fallback_route(
-            "sess-l2", "dev-l2", reuse_runtime=rt, registry=reg
-        )
+        decision = resolve_takeover_or_fallback_route("sess-l2", "dev-l2", reuse_runtime=rt, registry=reg)
         assert decision.reject_reason != ""
 
     @_SKIP_ALL
@@ -598,9 +551,7 @@ class TestGroupL_AbsentRegistryNoBinding:
         reg = AttachedSessionRegistry()
         rt = AttachedRuntimeReuseBindingRuntime()
 
-        decision = resolve_takeover_or_fallback_route(
-            "sess-l3", "dev-l3", reuse_runtime=rt, registry=reg
-        )
+        decision = resolve_takeover_or_fallback_route("sess-l3", "dev-l3", reuse_runtime=rt, registry=reg)
         assert decision.reuse_resolution is not None
         assert decision.reuse_resolution.resolution_kind == ReuseDispatchResolutionKind.no_binding
 
@@ -622,9 +573,7 @@ class TestGroupM_AbsentRegistryWithEligibleBinding:
         reg = AttachedSessionRegistry()  # no entry for this session
         rt = _make_reuse_binding("sess-m", "dev-m")
 
-        decision = resolve_takeover_or_fallback_route(
-            "sess-m", "dev-m", reuse_runtime=rt, registry=reg
-        )
+        decision = resolve_takeover_or_fallback_route("sess-m", "dev-m", reuse_runtime=rt, registry=reg)
         assert decision.is_takeover(), (
             f"Absent registry entry with eligible binding should produce takeover; "
             f"got {decision.outcome!r}: {decision.reject_reason!r}"
@@ -635,9 +584,7 @@ class TestGroupM_AbsentRegistryWithEligibleBinding:
         reg = AttachedSessionRegistry()
         rt = _make_reuse_binding("sess-m2", "dev-m2")
 
-        decision = resolve_takeover_or_fallback_route(
-            "sess-m2", "dev-m2", reuse_runtime=rt, registry=reg
-        )
+        decision = resolve_takeover_or_fallback_route("sess-m2", "dev-m2", reuse_runtime=rt, registry=reg)
         assert decision.reject_reason == ""
 
 
@@ -654,24 +601,18 @@ class TestGroupN_DeterministicDecision:
         rt = _make_reuse_binding("sess-n", "dev-n")
 
         outcomes = [
-            resolve_takeover_or_fallback_route(
-                "sess-n", "dev-n", reuse_runtime=rt, registry=reg
-            ).outcome
+            resolve_takeover_or_fallback_route("sess-n", "dev-n", reuse_runtime=rt, registry=reg).outcome
             for _ in range(5)
         ]
         assert all(o == TakeoverRouteOutcome.active_attached_takeover for o in outcomes)
 
     @_SKIP_ALL
     def test_replaced_session_always_produces_fallback(self):
-        reg = _make_registry(
-            session_id="sess-n2", device_id="dev-n2", state=RegistryEntryState.replaced
-        )
+        reg = _make_registry(session_id="sess-n2", device_id="dev-n2", state=RegistryEntryState.replaced)
         rt = _make_reuse_binding("sess-n2", "dev-n2")
 
         outcomes = [
-            resolve_takeover_or_fallback_route(
-                "sess-n2", "dev-n2", reuse_runtime=rt, registry=reg
-            ).outcome
+            resolve_takeover_or_fallback_route("sess-n2", "dev-n2", reuse_runtime=rt, registry=reg).outcome
             for _ in range(5)
         ]
         assert all(o == TakeoverRouteOutcome.delegated_fallback for o in outcomes)
@@ -682,9 +623,7 @@ class TestGroupN_DeterministicDecision:
         rt = AttachedRuntimeReuseBindingRuntime()
 
         outcomes = [
-            resolve_takeover_or_fallback_route(
-                "sess-n3", "dev-n3", reuse_runtime=rt, registry=reg
-            ).outcome
+            resolve_takeover_or_fallback_route("sess-n3", "dev-n3", reuse_runtime=rt, registry=reg).outcome
             for _ in range(5)
         ]
         assert all(o == TakeoverRouteOutcome.delegated_fallback for o in outcomes)
@@ -716,12 +655,8 @@ class TestGroupO_StaleContextCannotWinTakeover:
         assert old_entry.attachment_state == RegistryEntryState.replaced
 
         # Despite having an eligible reuse binding, the old session MUST fail.
-        decision = resolve_takeover_or_fallback_route(
-            "sess-o", "dev-o", reuse_runtime=rt, registry=reg
-        )
-        assert decision.is_fallback(), (
-            "Replaced session with stale reuse binding MUST NOT win takeover"
-        )
+        decision = resolve_takeover_or_fallback_route("sess-o", "dev-o", reuse_runtime=rt, registry=reg)
+        assert decision.is_fallback(), "Replaced session with stale reuse binding MUST NOT win takeover"
         assert decision.reuse_resolution is None  # gate fired before reuse lookup
 
     @_SKIP_ALL
@@ -737,12 +672,8 @@ class TestGroupO_StaleContextCannotWinTakeover:
         register_session(session_id="sess-o-new2", device_id="dev-o2", registry=reg)
 
         # New session is active; it should win.
-        decision = resolve_takeover_or_fallback_route(
-            "sess-o-new2", "dev-o2", reuse_runtime=rt, registry=reg
-        )
-        assert decision.is_takeover(), (
-            f"New (active) session should win takeover; got {decision.outcome!r}"
-        )
+        decision = resolve_takeover_or_fallback_route("sess-o-new2", "dev-o2", reuse_runtime=rt, registry=reg)
+        assert decision.is_takeover(), f"New (active) session should win takeover; got {decision.outcome!r}"
 
 
 # ===========================================================================
@@ -754,9 +685,7 @@ class TestGroupP_SupersededSessionBlocked:
     @_SKIP_ALL
     def test_superseded_session_delegated_fallback_regardless_of_reuse(self):
         """Consistency test: replaced session → fallback in all call variants."""
-        reg = _make_registry(
-            session_id="sess-p", device_id="dev-p", state=RegistryEntryState.replaced
-        )
+        reg = _make_registry(session_id="sess-p", device_id="dev-p", state=RegistryEntryState.replaced)
         rt = _make_reuse_binding("sess-p", "dev-p")
 
         # With reuse binding provided
@@ -772,9 +701,7 @@ class TestGroupP_SupersededSessionBlocked:
 
     @_SKIP_ALL
     def test_invalidated_session_delegated_fallback_regardless_of_reuse(self):
-        reg = _make_registry(
-            session_id="sess-p2", device_id="dev-p2", state=RegistryEntryState.invalidated
-        )
+        reg = _make_registry(session_id="sess-p2", device_id="dev-p2", state=RegistryEntryState.invalidated)
         rt = _make_reuse_binding("sess-p2", "dev-p2")
 
         d = resolve_takeover_or_fallback_route("sess-p2", "dev-p2", reuse_runtime=rt, registry=reg)
@@ -782,9 +709,7 @@ class TestGroupP_SupersededSessionBlocked:
 
     @_SKIP_ALL
     def test_detached_session_delegated_fallback_regardless_of_reuse(self):
-        reg = _make_registry(
-            session_id="sess-p3", device_id="dev-p3", state=RegistryEntryState.detached
-        )
+        reg = _make_registry(session_id="sess-p3", device_id="dev-p3", state=RegistryEntryState.detached)
         rt = _make_reuse_binding("sess-p3", "dev-p3")
 
         d = resolve_takeover_or_fallback_route("sess-p3", "dev-p3", reuse_runtime=rt, registry=reg)

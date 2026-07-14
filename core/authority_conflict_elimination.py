@@ -374,9 +374,9 @@ class ConflictResolutionRecord:
             "runtime_fact": self.runtime_fact,
             "canonical_layer": self.canonical_layer,
             "competing_layer": self.competing_layer,
-            "resolution_kind": self.resolution_kind.value
-            if hasattr(self.resolution_kind, "value")
-            else str(self.resolution_kind),
+            "resolution_kind": (
+                self.resolution_kind.value if hasattr(self.resolution_kind, "value") else str(self.resolution_kind)
+            ),
             "resolution_note": self.resolution_note,
             "resolved_in_pr": self.resolved_in_pr,
             "resolved_at": self.resolved_at,
@@ -514,14 +514,11 @@ class AuthorityConflictEliminationRuntime:
     """
 
     def __init__(self) -> None:
-        self._violation_log: Deque[Dict[str, Any]] = deque(
-            maxlen=_RING_BUFFER_SIZE
-        )
+        self._violation_log: Deque[Dict[str, Any]] = deque(maxlen=_RING_BUFFER_SIZE)
         self._lock = threading.Lock()
         self._total_violations = 0
         logger.debug(
-            "AuthorityConflictEliminationRuntime: initialised "
-            "(layer=%d, conflicts=%d)",
+            "AuthorityConflictEliminationRuntime: initialised " "(layer=%d, conflicts=%d)",
             AUTHORITY_CONFLICT_ELIMINATION_LAYER_POSITION,
             len(_CONFLICT_RESOLUTIONS),
         )
@@ -547,9 +544,7 @@ class AuthorityConflictEliminationRuntime:
                     runtime_fact=entry.get("runtime_fact", ""),
                     canonical_layer=entry.get("canonical_layer", ""),
                     competing_layer=entry.get("competing_layer", ""),
-                    resolution_kind=entry.get(
-                        "resolution_kind", ConflictResolutionKind.NARROWED
-                    ),
+                    resolution_kind=entry.get("resolution_kind", ConflictResolutionKind.NARROWED),
                     resolution_note=entry.get("resolution_note", ""),
                     resolved_in_pr=entry.get("resolved_in_pr", "PR-514"),
                 )
@@ -594,8 +589,7 @@ class AuthorityConflictEliminationRuntime:
             self._violation_log.append(violation)
             self._total_violations += 1
         logger.warning(
-            "AuthorityConflictElimination: competing-authority violation — "
-            "layer=%r fact=%r canonical=%r",
+            "AuthorityConflictElimination: competing-authority violation — " "layer=%r fact=%r canonical=%r",
             layer_name,
             fact_name,
             canonical_source,
@@ -643,9 +637,7 @@ _SINGLETON: Optional[AuthorityConflictEliminationRuntime] = None
 _SINGLETON_LOCK = threading.Lock()
 
 
-def get_authority_conflict_elimination_runtime() -> (
-    AuthorityConflictEliminationRuntime
-):
+def get_authority_conflict_elimination_runtime() -> AuthorityConflictEliminationRuntime:
     """Return the global :class:`AuthorityConflictEliminationRuntime` singleton."""
     global _SINGLETON  # noqa: PLW0603
     if _SINGLETON is None:
@@ -706,6 +698,7 @@ def enrich_projection_with_runtime_authority(
         from core.projection_surface_bridge import (
             enrich_runtime_projection,
         )
+
         return enrich_runtime_projection(projection_dict)
     except Exception as exc:  # pragma: no cover
         logger.debug(

@@ -38,26 +38,26 @@ E) User-visible default output (desktop_presence_runtime integration)
 
 import time
 from typing import Any, Dict, Optional
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from core.android_v2_canonical_default_runtime_path import (
-    ANDROID_V2_CANONICAL_DEFAULT_PATH_IS_ACTIVE,
     ANDROID_V2_CANONICAL_DEFAULT_PATH_AUTHORITY,
-    AndroidV2PathKind,
+    ANDROID_V2_CANONICAL_DEFAULT_PATH_IS_ACTIVE,
     AndroidPresenceRuntimeField,
     AndroidV2PathClassification,
+    AndroidV2PathKind,
     build_android_presence_participation_for_default_path,
     build_android_presence_runtime_field,
     classify_android_v2_path,
 )
 from core.desktop_presence_system import build_desktop_presence_system_view
 
-
 # ---------------------------------------------------------------------------
 # Group A – Sentinels and policy invariants
 # ---------------------------------------------------------------------------
+
 
 class TestGroupASentinels:
     """Group A: Verify the machine-checkable sentinels that formally declare
@@ -98,6 +98,7 @@ class TestGroupASentinels:
 # ---------------------------------------------------------------------------
 # Group B – Default path behavior change
 # ---------------------------------------------------------------------------
+
 
 class TestGroupBDefaultPathBehaviorChange:
     """Group B: Prove that the default path has changed.
@@ -169,6 +170,7 @@ class TestGroupBDefaultPathBehaviorChange:
 # ---------------------------------------------------------------------------
 # Group C – Default capability activation
 # ---------------------------------------------------------------------------
+
 
 class TestGroupCDefaultCapabilityActivation:
     """Group C: Prove that when android device state is present, the canonical
@@ -263,6 +265,7 @@ class TestGroupCDefaultCapabilityActivation:
 # Group D – Canonical-vs-compat path distinction
 # ---------------------------------------------------------------------------
 
+
 class TestGroupDCanonicalVsCompatPathDistinction:
     """Group D: Verify that canonical default path and compat/fallback paths
     are formally distinguished and that compat/fallback do NOT masquerade as
@@ -325,6 +328,7 @@ class TestGroupDCanonicalVsCompatPathDistinction:
 # ---------------------------------------------------------------------------
 # Group E – User-visible default output integration
 # ---------------------------------------------------------------------------
+
 
 class TestGroupEUserVisibleDefaultOutput:
     """Group E: Prove that the android_presence_participation data is now
@@ -436,9 +440,9 @@ class TestGroupEUserVisibleDefaultOutput:
         if "android_presence_runtime" not in result:
             pytest.skip("android_presence_runtime not present in result")
 
-        assert result["android_presence_runtime"]["path_kind"] == "canonical_default", (
-            "path_kind must be 'canonical_default' — not compat_bridge or fallback"
-        )
+        assert (
+            result["android_presence_runtime"]["path_kind"] == "canonical_default"
+        ), "path_kind must be 'canonical_default' — not compat_bridge or fallback"
 
     def test_build_android_presence_runtime_field_returns_canonical_path_kind_independently(self):
         """Independent of handle_request(), build_android_presence_runtime_field()

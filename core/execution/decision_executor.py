@@ -150,12 +150,28 @@ class PolicyGate:
 
     # PR-SANDBOX-A: 危险命令模式（保守策略A — PolicyGate安全扩展）
     _DANGEROUS_COMMAND_PATTERNS = [
-        "rm -rf", "dd if=", "mkfs", "fdisk", "format",
-        ":(){ :|:& };:",           # fork bomb
-        "chmod 777 /", "> /dev/sda", ">/dev/sda",
-        "mv / /dev/null", "shutdown", "reboot", "halt", "poweroff",
-        "iptables -f", "ufw disable", "userdel ", "groupdel ",
-        "kill -9 -1", "kill -9 1", "curl http", "wget http",
+        "rm -rf",
+        "dd if=",
+        "mkfs",
+        "fdisk",
+        "format",
+        ":(){ :|:& };:",  # fork bomb
+        "chmod 777 /",
+        "> /dev/sda",
+        ">/dev/sda",
+        "mv / /dev/null",
+        "shutdown",
+        "reboot",
+        "halt",
+        "poweroff",
+        "iptables -f",
+        "ufw disable",
+        "userdel ",
+        "groupdel ",
+        "kill -9 -1",
+        "kill -9 1",
+        "curl http",
+        "wget http",
     ]
 
     def allows(self, target: str) -> bool:
@@ -223,6 +239,7 @@ class DecisionExecutor:
         if self._policy is None:
             try:
                 from core.unified_config import config as _cfg  # type: ignore[import]
+
                 enabled: bool = bool(_cfg.get("enable_system_actions", False))
                 allowlist: List[str] = list(_cfg.get("execution_app_allowlist", []))
             except Exception as exc:
@@ -236,6 +253,7 @@ class DecisionExecutor:
         """Return the configured assist-app target (may be None)."""
         try:
             from core.unified_config import config as _cfg  # type: ignore[import]
+
             return _cfg.get("execution_assist_app") or None
         except Exception:
             return None
@@ -245,11 +263,13 @@ class DecisionExecutor:
         """Return the platform system API, with safe fallback."""
         try:
             from core.system_api import get_system_api  # type: ignore[import]
+
             return get_system_api()
         except Exception as exc:
             logger.debug("DecisionExecutor: system_api unavailable: %s", exc)
             try:
                 from core.system_api.platform_api import NoOpSystemAPI
+
                 return NoOpSystemAPI()
             except Exception:
                 return None
@@ -314,9 +334,7 @@ class DecisionExecutor:
 
         # ── 2. Fast-path: observe / hint → no-op ────────────────────────────
         if action_level_str in ("observe", "hint"):
-            logger.debug(
-                "DecisionExecutor: action_level=%s → noop", action_level_str
-            )
+            logger.debug("DecisionExecutor: action_level=%s → noop", action_level_str)
             return ExecutionResult(
                 action_taken="noop",
                 success=True,
@@ -331,7 +349,8 @@ class DecisionExecutor:
         if entry_mode == "cross_device" and not force_local_execution:
             _trace_id = _extract_trace_id(state_continuum)
             logger.info(
-                "DecisionExecutor: execution skipped | entry_mode=%s trace_id=%s skipped_reason=entry_mode=cross_device",
+                "DecisionExecutor: execution skipped | entry_mode=%s trace_id=%s "
+                "skipped_reason=entry_mode=cross_device",
                 entry_mode,
                 _trace_id,
             )
@@ -387,9 +406,7 @@ class DecisionExecutor:
         if assist_app and policy.allows(assist_app):
             focused = api.focus_window(assist_app)
             if focused:
-                logger.debug(
-                    "DecisionExecutor: assist → focused window %r", assist_app
-                )
+                logger.debug("DecisionExecutor: assist → focused window %r", assist_app)
                 return ExecutionResult(
                     action_taken="focus_window",
                     target=assist_app,
@@ -399,7 +416,8 @@ class DecisionExecutor:
             result = api.launch_app(assist_app)
             logger.debug(
                 "DecisionExecutor: assist → launch_app %r success=%s",
-                assist_app, result.success,
+                assist_app,
+                result.success,
             )
             return ExecutionResult(
                 action_taken="launch_app",
@@ -439,9 +457,7 @@ class DecisionExecutor:
         target = _extract_execution_target(state_continuum) or self._get_assist_app()
 
         if not target:
-            logger.debug(
-                "DecisionExecutor: execute → no target in state or config, skipping"
-            )
+            logger.debug("DecisionExecutor: execute → no target in state or config, skipping")
             return ExecutionResult(
                 action_taken="noop",
                 success=True,
@@ -462,7 +478,9 @@ class DecisionExecutor:
         result = api.launch_app(target)
         logger.debug(
             "DecisionExecutor: execute → launch_app %r success=%s error=%s",
-            target, result.success, result.error,
+            target,
+            result.success,
+            result.error,
         )
         return ExecutionResult(
             action_taken="launch_app",

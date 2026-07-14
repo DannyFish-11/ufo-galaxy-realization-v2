@@ -511,13 +511,9 @@ class ConversationContinuityVerdict:
         Copy of the module-level authority sentinel.
     """
 
-    verdict_id: str = field(
-        default_factory=lambda: f"ccv_{uuid.uuid4().hex[:12]}"
-    )
+    verdict_id: str = field(default_factory=lambda: f"ccv_{uuid.uuid4().hex[:12]}")
     generated_at: float = field(default_factory=time.time)
-    continuity_class: ConversationContinuityClass = (
-        ConversationContinuityClass.continuity_lost
-    )
+    continuity_class: ConversationContinuityClass = ConversationContinuityClass.continuity_lost
     conversation_session_id: str = ""
     session_confirmed: bool = False
     history_visible: bool = False
@@ -583,9 +579,7 @@ class ConversationContinuityVerdict:
             partial_recovery_only=bool(d.get("partial_recovery_only", False)),
             reason=str(d.get("reason", "")),
             policy_references=list(d.get("policy_references", [])),
-            continuity_sentinel=str(
-                d.get("continuity_sentinel", CONVERSATION_CONTINUITY_TRUTH_AUTHORITY)
-            ),
+            continuity_sentinel=str(d.get("continuity_sentinel", CONVERSATION_CONTINUITY_TRUTH_AUTHORITY)),
         )
 
 
@@ -631,9 +625,7 @@ class ConversationContinuityContract:
       and caps at ``partial_continuity`` at best.
     """
 
-    def evaluate(
-        self, evidence: ConversationContinuityEvidence
-    ) -> ConversationContinuityVerdict:
+    def evaluate(self, evidence: ConversationContinuityEvidence) -> ConversationContinuityVerdict:
         """Evaluate evidence and produce a structured continuity verdict.
 
         Parameters
@@ -663,8 +655,7 @@ class ConversationContinuityContract:
         verdict.policy_references = policies
 
         logger.debug(
-            "ConversationContinuityContract.evaluate: "
-            "session_id=%r class=%s reason=%r",
+            "ConversationContinuityContract.evaluate: " "session_id=%r class=%s reason=%r",
             evidence.conversation_session_id,
             cc.value,
             reason,
@@ -675,9 +666,7 @@ class ConversationContinuityContract:
     # Internal classification logic
     # ------------------------------------------------------------------
 
-    def _classify(
-        self, e: ConversationContinuityEvidence
-    ) -> "tuple[ConversationContinuityClass, str, List[str]]":
+    def _classify(self, e: ConversationContinuityEvidence) -> "tuple[ConversationContinuityClass, str, List[str]]":
         """Apply classification rules and return (class, reason, policies)."""
         policies: List[str] = []
 
@@ -693,9 +682,7 @@ class ConversationContinuityContract:
             and not e.process_death_observed
             and not e.partial_recovery_only
         ):
-            policies.append(
-                "AUTHORITATIVE_CONTINUITY_REQUIRES_REBIND_AND_SESSION_POLICY"
-            )
+            policies.append("AUTHORITATIVE_CONTINUITY_REQUIRES_REBIND_AND_SESSION_POLICY")
             return (
                 ConversationContinuityClass.authoritative_continuity_restored,
                 (
@@ -794,8 +781,7 @@ class ConversationContinuityContract:
                     "rebinding is required before the conversation can resume.  "
                     "State presence alone does NOT constitute conversation continuity."
                     + (
-                        "  process_death_observed=True: all prior bindings are "
-                        "invalidated."
+                        "  process_death_observed=True: all prior bindings are " "invalidated."
                         if e.process_death_observed
                         else ""
                     )

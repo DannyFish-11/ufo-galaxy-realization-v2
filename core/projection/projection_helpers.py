@@ -67,6 +67,7 @@ def build_oneapi_projection_summary() -> Optional[Dict[str, Any]]:
     """
     try:
         from core.oneapi_system_position import build_oneapi_integration_summary
+
         return build_oneapi_integration_summary().to_dict()
     except Exception as exc:
         logger.debug("build_oneapi_projection_summary: unavailable: %s", exc)

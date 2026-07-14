@@ -515,9 +515,7 @@ class ObservabilitySurface:
             "evidence_kind": self.evidence_kind.value,
             "is_uplink_path": self.is_uplink_path,
             "may_not_write_canonical_truth": self.may_not_write_canonical_truth,
-            "distributed_subject_contract_v1_field": (
-                self.distributed_subject_contract_v1_field
-            ),
+            "distributed_subject_contract_v1_field": (self.distributed_subject_contract_v1_field),
             "notes": self.notes,
         }
 
@@ -577,18 +575,13 @@ class CrossSubjectObservabilitySnapshot:
 #: Every surface that produces or consumes diagnostics / evidence /
 #: visibility outputs across V2 ↔ Android is classified here.
 OBSERVABILITY_SURFACE_REGISTRY: List[ObservabilitySurface] = [
-
     # =========================================================================
     # LOCAL_VISIBLE — on-device bounded subject surfaces
     # =========================================================================
-
     ObservabilitySurface(
         surface_id="android_runtime_controller_local",
         module_path="android:RuntimeController.kt",
-        surface_name=(
-            "Android RuntimeController (on-device local diagnostics — "
-            "local_visible_diagnostics)"
-        ),
+        surface_name=("Android RuntimeController (on-device local diagnostics — " "local_visible_diagnostics)"),
         visibility_level=VisibilityLevel.local_visible,
         evidence_kind=EvidenceContractKind.diagnostics_evidence,
         is_uplink_path=False,
@@ -602,14 +595,10 @@ OBSERVABILITY_SURFACE_REGISTRY: List[ObservabilitySurface] = [
             "without explicit uplink through the declared path."
         ),
     ),
-
     ObservabilitySurface(
         surface_id="android_local_loop_executor",
         module_path="android:LocalLoopExecutor.kt",
-        surface_name=(
-            "Android LocalLoopExecutor (on-device execution trace — "
-            "local_visible)"
-        ),
+        surface_name=("Android LocalLoopExecutor (on-device execution trace — " "local_visible)"),
         visibility_level=VisibilityLevel.local_visible,
         evidence_kind=EvidenceContractKind.diagnostics_evidence,
         is_uplink_path=False,
@@ -621,13 +610,10 @@ OBSERVABILITY_SURFACE_REGISTRY: List[ObservabilitySurface] = [
             "only.  V2 does not see these unless uplinked."
         ),
     ),
-
     ObservabilitySurface(
         surface_id="android_offline_task_queue_evidence",
         module_path="android:OfflineTaskQueue.kt",
-        surface_name=(
-            "Android OfflineTaskQueue (continuity evidence — local_visible)"
-        ),
+        surface_name=("Android OfflineTaskQueue (continuity evidence — local_visible)"),
         visibility_level=VisibilityLevel.local_visible,
         evidence_kind=EvidenceContractKind.continuity_evidence,
         is_uplink_path=False,
@@ -640,13 +626,10 @@ OBSERVABILITY_SURFACE_REGISTRY: List[ObservabilitySurface] = [
             "makes the legality determination after uplink."
         ),
     ),
-
     ObservabilitySurface(
         surface_id="android_local_execution_mode_gate",
         module_path="android:LocalExecutionModeGate.kt",
-        surface_name=(
-            "Android LocalExecutionModeGate (local mode decision — local_visible)"
-        ),
+        surface_name=("Android LocalExecutionModeGate (local mode decision — local_visible)"),
         visibility_level=VisibilityLevel.local_visible,
         evidence_kind=EvidenceContractKind.participant_evidence,
         is_uplink_path=False,
@@ -659,14 +642,10 @@ OBSERVABILITY_SURFACE_REGISTRY: List[ObservabilitySurface] = [
             "and canonical governance validation."
         ),
     ),
-
     ObservabilitySurface(
         surface_id="android_continuity_integration_local",
         module_path="android:AndroidContinuityIntegration.kt",
-        surface_name=(
-            "Android AndroidContinuityIntegration (local continuity handling — "
-            "local_visible)"
-        ),
+        surface_name=("Android AndroidContinuityIntegration (local continuity handling — " "local_visible)"),
         visibility_level=VisibilityLevel.local_visible,
         evidence_kind=EvidenceContractKind.continuity_evidence,
         is_uplink_path=False,
@@ -679,18 +658,13 @@ OBSERVABILITY_SURFACE_REGISTRY: List[ObservabilitySurface] = [
             "legality is determined separately."
         ),
     ),
-
     # =========================================================================
     # RUNTIME_VISIBLE — V2 runtime infrastructure ingress surfaces
     # =========================================================================
-
     ObservabilitySurface(
         surface_id="galaxy_gateway_android_handlers",
         module_path="galaxy_gateway.android.handlers",
-        surface_name=(
-            "galaxy_gateway.android.handlers (Android ingress gateway — "
-            "runtime_visible uplink entry)"
-        ),
+        surface_name=("galaxy_gateway.android.handlers (Android ingress gateway — " "runtime_visible uplink entry)"),
         visibility_level=VisibilityLevel.runtime_visible,
         evidence_kind=EvidenceContractKind.participant_evidence,
         is_uplink_path=True,
@@ -705,7 +679,6 @@ OBSERVABILITY_SURFACE_REGISTRY: List[ObservabilitySurface] = [
             "in distributed_subject_contract_v1 with this formalised path."
         ),
     ),
-
     ObservabilitySurface(
         surface_id="android_participant_truth_ingress",
         module_path="core.android_participant_truth_ingress",
@@ -727,7 +700,6 @@ OBSERVABILITY_SURFACE_REGISTRY: List[ObservabilitySurface] = [
             "treated as canonical truth."
         ),
     ),
-
     ObservabilitySurface(
         surface_id="android_evaluator_artifact_ingress_runtime",
         module_path="core.android_evaluator_artifact_ingress",
@@ -747,13 +719,11 @@ OBSERVABILITY_SURFACE_REGISTRY: List[ObservabilitySurface] = [
             "does not constitute closure or canonical acceptance."
         ),
     ),
-
     ObservabilitySurface(
         surface_id="android_participant_evidence_ingress",
         module_path="core.android_participant_evidence_ingress",
         surface_name=(
-            "android_participant_evidence_ingress (Android participant evidence "
-            "ingress — runtime_visible)"
+            "android_participant_evidence_ingress (Android participant evidence " "ingress — runtime_visible)"
         ),
         visibility_level=VisibilityLevel.runtime_visible,
         evidence_kind=EvidenceContractKind.participant_evidence,
@@ -767,7 +737,6 @@ OBSERVABILITY_SURFACE_REGISTRY: List[ObservabilitySurface] = [
             "whether and how to promote them."
         ),
     ),
-
     ObservabilitySurface(
         surface_id="v2_android_truth_ssot_build",
         module_path="core.v2_android_truth_ssot",
@@ -788,13 +757,11 @@ OBSERVABILITY_SURFACE_REGISTRY: List[ObservabilitySurface] = [
             "canonical truth."
         ),
     ),
-
     ObservabilitySurface(
         surface_id="routes_observability_execution_evidence",
         module_path="core.routes.observability",
         surface_name=(
-            "core.routes.observability (execution evidence state endpoint — "
-            "runtime_visible diagnostics surface)"
+            "core.routes.observability (execution evidence state endpoint — " "runtime_visible diagnostics surface)"
         ),
         visibility_level=VisibilityLevel.runtime_visible,
         evidence_kind=EvidenceContractKind.diagnostics_evidence,
@@ -809,18 +776,13 @@ OBSERVABILITY_SURFACE_REGISTRY: List[ObservabilitySurface] = [
             "This endpoint MUST NOT be used as an acceptance or closure gate input."
         ),
     ),
-
     # =========================================================================
     # OPERATOR_VISIBLE — operator dashboard and surface projections
     # =========================================================================
-
     ObservabilitySurface(
         surface_id="operator_surface_projections",
         module_path="core.operator_surface",
-        surface_name=(
-            "operator_surface (operator console / status board / topology — "
-            "operator_visible projection)"
-        ),
+        surface_name=("operator_surface (operator console / status board / topology — " "operator_visible projection)"),
         visibility_level=VisibilityLevel.operator_visible,
         evidence_kind=EvidenceContractKind.diagnostics_evidence,
         is_uplink_path=False,
@@ -834,13 +796,10 @@ OBSERVABILITY_SURFACE_REGISTRY: List[ObservabilitySurface] = [
             "feed back into canonical truth."
         ),
     ),
-
     ObservabilitySurface(
         surface_id="routes_operator_endpoints",
         module_path="core.routes.operator",
-        surface_name=(
-            "core.routes.operator (operator REST endpoints — operator_visible)"
-        ),
+        surface_name=("core.routes.operator (operator REST endpoints — operator_visible)"),
         visibility_level=VisibilityLevel.operator_visible,
         evidence_kind=EvidenceContractKind.diagnostics_evidence,
         is_uplink_path=False,
@@ -853,13 +812,11 @@ OBSERVABILITY_SURFACE_REGISTRY: List[ObservabilitySurface] = [
             "and MUST NOT redefine them."
         ),
     ),
-
     ObservabilitySurface(
         surface_id="operator_execution_observability_surface",
         module_path="core.operator_execution_observability_surface",
         surface_name=(
-            "operator_execution_observability_surface (operator execution "
-            "evidence snapshot — operator_visible)"
+            "operator_execution_observability_surface (operator execution " "evidence snapshot — operator_visible)"
         ),
         visibility_level=VisibilityLevel.operator_visible,
         evidence_kind=EvidenceContractKind.execution_artifact,
@@ -874,14 +831,10 @@ OBSERVABILITY_SURFACE_REGISTRY: List[ObservabilitySurface] = [
             "takeover tracking.  Read-only; MUST NOT feed back into truth."
         ),
     ),
-
     ObservabilitySurface(
         surface_id="routes_projection_explanation",
         module_path="core.routes.projection",
-        surface_name=(
-            "core.routes.projection (explanation fields — operator_visible "
-            "runtime-truth projection)"
-        ),
+        surface_name=("core.routes.projection (explanation fields — operator_visible " "runtime-truth projection)"),
         visibility_level=VisibilityLevel.operator_visible,
         evidence_kind=EvidenceContractKind.diagnostics_evidence,
         is_uplink_path=False,
@@ -895,7 +848,6 @@ OBSERVABILITY_SURFACE_REGISTRY: List[ObservabilitySurface] = [
             "MUST NOT reverse-inject explanation text into authority truth."
         ),
     ),
-
     ObservabilitySurface(
         surface_id="diagnostics_failure_explanation_convergence_surface",
         module_path="core.diagnostics_failure_explanation_convergence",
@@ -916,13 +868,11 @@ OBSERVABILITY_SURFACE_REGISTRY: List[ObservabilitySurface] = [
             "the PR-10V2 taxonomy."
         ),
     ),
-
     ObservabilitySurface(
         surface_id="android_delegated_runtime_audit_operator",
         module_path="core.android_delegated_runtime_audit",
         surface_name=(
-            "android_delegated_runtime_audit (Android delegated audit — "
-            "operator_visible post-hoc forensic)"
+            "android_delegated_runtime_audit (Android delegated audit — " "operator_visible post-hoc forensic)"
         ),
         visibility_level=VisibilityLevel.operator_visible,
         evidence_kind=EvidenceContractKind.diagnostics_evidence,
@@ -937,17 +887,14 @@ OBSERVABILITY_SURFACE_REGISTRY: List[ObservabilitySurface] = [
             "decision or canonical truth."
         ),
     ),
-
     # =========================================================================
     # PRODUCT_VISIBLE — outward-facing final consumers
     # =========================================================================
-
     ObservabilitySurface(
         surface_id="outward_runtime_truth_compile",
         module_path="core.outward_runtime_truth",
         surface_name=(
-            "outward_runtime_truth.compile_outward_truth (Stage 2 outward "
-            "truth — product_visible canonical output)"
+            "outward_runtime_truth.compile_outward_truth (Stage 2 outward " "truth — product_visible canonical output)"
         ),
         visibility_level=VisibilityLevel.product_visible,
         evidence_kind=EvidenceContractKind.runtime_truth,
@@ -962,13 +909,11 @@ OBSERVABILITY_SURFACE_REGISTRY: List[ObservabilitySurface] = [
             "canonical center module."
         ),
     ),
-
     ObservabilitySurface(
         surface_id="final_acceptance_surface_boundary",
         module_path="core.final_acceptance_surface_boundary",
         surface_name=(
-            "final_acceptance_surface_boundary (final acceptance layer — "
-            "product_visible outward consumer)"
+            "final_acceptance_surface_boundary (final acceptance layer — " "product_visible outward consumer)"
         ),
         visibility_level=VisibilityLevel.product_visible,
         evidence_kind=EvidenceContractKind.runtime_truth,
@@ -982,14 +927,10 @@ OBSERVABILITY_SURFACE_REGISTRY: List[ObservabilitySurface] = [
             "acceptance_closure truth."
         ),
     ),
-
     ObservabilitySurface(
         surface_id="unified_panel_aggregation",
         module_path="core.unified_panel_aggregation",
-        surface_name=(
-            "unified_panel_aggregation (unified panel payload — "
-            "product_visible outward aggregation)"
-        ),
+        surface_name=("unified_panel_aggregation (unified panel payload — " "product_visible outward aggregation)"),
         visibility_level=VisibilityLevel.product_visible,
         evidence_kind=EvidenceContractKind.diagnostics_evidence,
         is_uplink_path=False,
@@ -1002,14 +943,10 @@ OBSERVABILITY_SURFACE_REGISTRY: List[ObservabilitySurface] = [
             "canonical truth."
         ),
     ),
-
     ObservabilitySurface(
         surface_id="desktop_projection_outward",
         module_path="desktop_projection",
-        surface_name=(
-            "desktop_projection (desktop projection surface — "
-            "product_visible outward)"
-        ),
+        surface_name=("desktop_projection (desktop projection surface — " "product_visible outward)"),
         visibility_level=VisibilityLevel.product_visible,
         evidence_kind=EvidenceContractKind.diagnostics_evidence,
         is_uplink_path=False,
@@ -1088,9 +1025,7 @@ def get_surfaces_by_visibility(
 # ---------------------------------------------------------------------------
 
 
-def build_cross_subject_observability_snapshot() -> (
-    CrossSubjectObservabilitySnapshot
-):
+def build_cross_subject_observability_snapshot() -> CrossSubjectObservabilitySnapshot:
     """Build an aggregate observability snapshot for operator / CI visibility.
 
     Returns
@@ -1112,43 +1047,22 @@ def build_cross_subject_observability_snapshot() -> (
             RUNTIME_TRUTH_IS_V2_CANONICAL_CENTER_ONLY_POLICY,
         ),
         total_surfaces=len(registry),
-        local_visible_count=sum(
-            1 for s in registry
-            if s.visibility_level == VisibilityLevel.local_visible
-        ),
-        runtime_visible_count=sum(
-            1 for s in registry
-            if s.visibility_level == VisibilityLevel.runtime_visible
-        ),
-        operator_visible_count=sum(
-            1 for s in registry
-            if s.visibility_level == VisibilityLevel.operator_visible
-        ),
-        product_visible_count=sum(
-            1 for s in registry
-            if s.visibility_level == VisibilityLevel.product_visible
-        ),
+        local_visible_count=sum(1 for s in registry if s.visibility_level == VisibilityLevel.local_visible),
+        runtime_visible_count=sum(1 for s in registry if s.visibility_level == VisibilityLevel.runtime_visible),
+        operator_visible_count=sum(1 for s in registry if s.visibility_level == VisibilityLevel.operator_visible),
+        product_visible_count=sum(1 for s in registry if s.visibility_level == VisibilityLevel.product_visible),
         uplink_path_surfaces=uplink_surfaces,
         participant_evidence_count=sum(
-            1 for s in registry
-            if s.evidence_kind == EvidenceContractKind.participant_evidence
+            1 for s in registry if s.evidence_kind == EvidenceContractKind.participant_evidence
         ),
         diagnostics_evidence_count=sum(
-            1 for s in registry
-            if s.evidence_kind == EvidenceContractKind.diagnostics_evidence
+            1 for s in registry if s.evidence_kind == EvidenceContractKind.diagnostics_evidence
         ),
-        execution_artifact_count=sum(
-            1 for s in registry
-            if s.evidence_kind == EvidenceContractKind.execution_artifact
-        ),
+        execution_artifact_count=sum(1 for s in registry if s.evidence_kind == EvidenceContractKind.execution_artifact),
         continuity_evidence_count=sum(
-            1 for s in registry
-            if s.evidence_kind == EvidenceContractKind.continuity_evidence
+            1 for s in registry if s.evidence_kind == EvidenceContractKind.continuity_evidence
         ),
-        runtime_truth_count=sum(
-            1 for s in registry
-            if s.evidence_kind == EvidenceContractKind.runtime_truth
-        ),
+        runtime_truth_count=sum(1 for s in registry if s.evidence_kind == EvidenceContractKind.runtime_truth),
         generated_at=time.time(),
     )
 
@@ -1174,21 +1088,15 @@ def get_canonical_evidence_uplink_path() -> Tuple[str, ...]:
     return (
         "Android/participant evidence (LOCAL_VISIBLE: RuntimeController.kt, "
         "LocalLoopExecutor.kt, AndroidContinuityIntegration.kt)",
-        "Declared uplink channel: GalaxyConnectionService.kt / "
-        "GalaxyWebSocketClient.kt",
+        "Declared uplink channel: GalaxyConnectionService.kt / " "GalaxyWebSocketClient.kt",
         "galaxy_gateway.android.handlers (RUNTIME_VISIBLE ingress gateway)",
-        "core.android_evaluator_artifact_ingress → "
-        "AndroidEvaluatorArtifactRegistry (EXECUTION_ARTIFACT store)",
-        "core.android_participant_truth_ingress → "
-        "failure/participant signals (DIAGNOSTICS_EVIDENCE ingress)",
+        "core.android_evaluator_artifact_ingress → " "AndroidEvaluatorArtifactRegistry (EXECUTION_ARTIFACT store)",
+        "core.android_participant_truth_ingress → " "failure/participant signals (DIAGNOSTICS_EVIDENCE ingress)",
         "core.android_participant_evidence_ingress → "
         "participant readiness/posture/busy (PARTICIPANT_EVIDENCE ingress)",
-        "core.v2_android_truth_ssot.build_v2_android_truth_block "
-        "(SSOT build — RUNTIME_TRUTH promotion boundary)",
+        "core.v2_android_truth_ssot.build_v2_android_truth_block " "(SSOT build — RUNTIME_TRUTH promotion boundary)",
         "core.canonical_session_truth (merge + record)",
         "Stage 1: core.projection.runtime_truth_compiler.compile_runtime_truth()",
-        "Stage 2: core.outward_runtime_truth.compile_outward_truth() "
-        "(PRODUCT_VISIBLE boundary)",
-        "Stage 3: core.routes.projection (OPERATOR_VISIBLE / PRODUCT_VISIBLE "
-        "projection surfaces)",
+        "Stage 2: core.outward_runtime_truth.compile_outward_truth() " "(PRODUCT_VISIBLE boundary)",
+        "Stage 3: core.routes.projection (OPERATOR_VISIBLE / PRODUCT_VISIBLE " "projection surfaces)",
     )

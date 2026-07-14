@@ -204,37 +204,27 @@ CANONICAL_ADAPTER_REGISTRY: Dict[str, Dict[str, str]] = {
         "module": "core.message_interop",
         "produces": INTERNAL_RESULT_CONTRACT,
         "boundary": EDGE_ADAPTER_BOUNDARY,
-        "description": (
-            "Converts raw device results, NATS results, and bridge responses "
-            "into ResultEnvelope."
-        ),
+        "description": ("Converts raw device results, NATS results, and bridge responses " "into ResultEnvelope."),
     },
     "envelope_from_command_request": {
         "module": "core.schemas.task_envelope",
         "produces": INTERNAL_DISPATCH_CONTRACT,
         "boundary": EDGE_ADAPTER_BOUNDARY,
         "description": (
-            "Adapter helper — builds TaskEnvelope from legacy "
-            "CommandDispatchRequest / UnifiedCommandRequest."
+            "Adapter helper — builds TaskEnvelope from legacy " "CommandDispatchRequest / UnifiedCommandRequest."
         ),
     },
     "envelope_from_relay_request": {
         "module": "core.schemas.task_envelope",
         "produces": INTERNAL_DISPATCH_CONTRACT,
         "boundary": EDGE_ADAPTER_BOUNDARY,
-        "description": (
-            "Adapter helper — builds TaskEnvelope from a ProxyRelay "
-            "RelayRequest."
-        ),
+        "description": ("Adapter helper — builds TaskEnvelope from a ProxyRelay " "RelayRequest."),
     },
     "envelope_from_mcp_call": {
         "module": "core.schemas.task_envelope",
         "produces": INTERNAL_DISPATCH_CONTRACT,
         "boundary": EDGE_ADAPTER_BOUNDARY,
-        "description": (
-            "Adapter helper — builds TaskEnvelope from an MCP tool-call "
-            "request."
-        ),
+        "description": ("Adapter helper — builds TaskEnvelope from an MCP tool-call " "request."),
     },
 }
 

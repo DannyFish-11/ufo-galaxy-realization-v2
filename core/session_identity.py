@@ -45,9 +45,7 @@ def build_canonical_session_identity(
 
     if payload is not None:
         conversation_session_id = normalize_conversation_session_id(payload) or ""
-        runtime_attachment_session_id = (
-            normalize_runtime_attachment_session_id(payload) or ""
-        )
+        runtime_attachment_session_id = normalize_runtime_attachment_session_id(payload) or ""
 
     if not conversation_session_id:
         conversation_session_id = (
@@ -77,9 +75,7 @@ def build_canonical_session_identity(
     # 跨设备统一上下文:把设备本地/离线自建的 session_id 沿别名链解析到 canonical 主线。
     # 一旦手机的本地会话经 /api/v1/sessions/reconcile 认领到桌面主线,此后无论从哪条
     # 路径(在线 goal_execution / 面板 / 离线补录)带着该本地 id 进来,都归并到同一条主线。
-    conversation_session_id = get_session_manager().resolve_session_alias(
-        conversation_session_id
-    )
+    conversation_session_id = get_session_manager().resolve_session_alias(conversation_session_id)
 
     if create_session:
         # 同步 ensure（此前调异步 ensure_session → 协程被丢弃、会话其实从未确保）。
@@ -90,9 +86,7 @@ def build_canonical_session_identity(
         )
 
     control_session_id = (
-        f"control_{runtime_session_id[:12]}"
-        if runtime_session_id
-        else f"control_{uuid.uuid4().hex[:12]}"
+        f"control_{runtime_session_id[:12]}" if runtime_session_id else f"control_{uuid.uuid4().hex[:12]}"
     )
 
     return CanonicalSessionIdentity(

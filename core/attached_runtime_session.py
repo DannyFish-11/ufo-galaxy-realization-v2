@@ -208,8 +208,7 @@ ATTACHMENT_LIFECYCLE_ACTION_GOVERNANCE_POLICY: str = (
 )
 
 ATTACHED_RUNTIME_SESSION_PR7_SENTINEL: str = (
-    "ATTACHED_RUNTIME_SESSION_PR7::canonical-attached-runtime-session-semantics-"
-    "post-533-main-repo-pr7-v1"
+    "ATTACHED_RUNTIME_SESSION_PR7::canonical-attached-runtime-session-semantics-" "post-533-main-repo-pr7-v1"
 )
 
 ATTACHED_RUNTIME_SESSION_PR_G_SENTINEL: str = (
@@ -533,8 +532,7 @@ class AttachedRuntimeSessionRecord:
         :data:`DISABLED_SESSION_NOT_ELIGIBLE_FOR_EXECUTION_POLICY`.
         """
         return (
-            self.attachment_state == AttachmentState.attached
-            and self.source_runtime_posture == _POSTURE_JOIN_RUNTIME
+            self.attachment_state == AttachmentState.attached and self.source_runtime_posture == _POSTURE_JOIN_RUNTIME
         )
 
     # ------------------------------------------------------------------
@@ -582,10 +580,7 @@ class AttachedRuntimeSessionRecord:
         return cls(
             record_id=data.get("record_id", str(uuid.uuid4())),
             device_id=data.get("device_id", ""),
-            session_id=(
-                data.get("runtime_attachment_session_id")
-                or data.get("session_id", "")
-            ),
+            session_id=(data.get("runtime_attachment_session_id") or data.get("session_id", "")),
             source_runtime_posture=data.get("source_runtime_posture", _POSTURE_JOIN_RUNTIME),
             coordination_role=data.get("coordination_role", ""),
             android_host_role=data.get("android_host_role", ""),
@@ -696,9 +691,7 @@ class AttachedRuntimeSessionRuntime:
     # Query
     # ------------------------------------------------------------------
 
-    def get_latest_for_device(
-        self, device_id: str
-    ) -> Optional[AttachedRuntimeSessionRecord]:
+    def get_latest_for_device(self, device_id: str) -> Optional[AttachedRuntimeSessionRecord]:
         """Return the most recent record for *device_id*, or None."""
         for record in reversed(self._buffer):
             if record.device_id == device_id:
@@ -819,6 +812,7 @@ def attach_runtime_session(
     if not resolved_runtime_attachment_session_id:
         try:
             from core.attached_runtime_session_registry import lookup_session_by_device
+
             _reg_entry = lookup_session_by_device(device_id)
             if _reg_entry is not None:
                 resolved_runtime_attachment_session_id = _reg_entry.runtime_attachment_session_id
@@ -933,10 +927,7 @@ def apply_lifecycle_signal(
     lifecycle_action = classify_signal_lifecycle_action(record, signal)
 
     # Terminal: invalidated sessions cannot transition except via a fresh attach
-    if (
-        current == AttachmentState.invalidated
-        and lifecycle_action == AttachmentLifecycleAction.retire
-    ):
+    if current == AttachmentState.invalidated and lifecycle_action == AttachmentLifecycleAction.retire:
         return record
 
     if lifecycle_action == AttachmentLifecycleAction.no_change:

@@ -24,7 +24,6 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from core.device_types import DeviceType, resolve_device_type
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Enums (mirroring proto enums)
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -637,7 +636,8 @@ class AgentMessageModel(BaseModel):
 
     def to_node_message(self) -> dict:
         """Convert to node_protocol.Message-compatible dict."""
-        from core.node_protocol import MessageType as NMT, MessagePriority
+        from core.node_protocol import MessagePriority
+        from core.node_protocol import MessageType as NMT
 
         _type_map = {
             AgentMessageType.TASK_DISPATCH: NMT.REQUEST,
@@ -657,7 +657,10 @@ class AgentMessageModel(BaseModel):
                 "ttl": 30,
             },
             "action": self.type.value,
-            "payload": self.model_dump(exclude_none=True, exclude={"message_id", "type", "source", "target", "timestamp", "trace_id", "correlation_id"}),
+            "payload": self.model_dump(
+                exclude_none=True,
+                exclude={"message_id", "type", "source", "target", "timestamp", "trace_id", "correlation_id"},
+            ),
             "metadata": {"trace_id": self.trace_id},
         }
 
@@ -738,13 +741,8 @@ def envelope_from_task_dispatch(task: "TaskDispatchModel") -> Any:
             "arguments_json": task.mcp_payload.arguments_json,
         }
 
-    trace_id: str = (
-        task.context.get("trace_id")
-        or f"trace_{uuid.uuid4().hex[:12]}"
-    )
-    priority: int = _PRIORITY_TO_INT.get(
-        task.priority.value if task.priority else "normal", 5
-    )
+    trace_id: str = task.context.get("trace_id") or f"trace_{uuid.uuid4().hex[:12]}"
+    priority: int = _PRIORITY_TO_INT.get(task.priority.value if task.priority else "normal", 5)
     metadata: Dict[str, Any] = {
         "task_type": task.task_type.value,
         "parent_task_id": task.parent_task_id,
@@ -783,11 +781,7 @@ def task_dispatch_from_envelope(envelope: Any) -> "TaskDispatchModel":
         task_type=TaskType.DEVICE_CMD,
         device_payload=DeviceCommandPayloadModel(
             command=envelope.tool_name,
-            params={
-                k: str(v)
-                for k, v in envelope.args.items()
-                if isinstance(v, (str, int, float, bool))
-            },
+            params={k: str(v) for k, v in envelope.args.items() if isinstance(v, (str, int, float, bool))},
             target_device_id=target,
         ),
         timeout_ms=int(envelope.timeout * 1000),

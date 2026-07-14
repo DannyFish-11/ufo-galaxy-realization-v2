@@ -43,8 +43,7 @@ class SessionSchema(BaseModel):
     context: Dict[str, Any] = Field(
         default_factory=dict,
         description=(
-            "Session context payload. May include conversation "
-            "history, user preferences, agent state, etc."
+            "Session context payload. May include conversation " "history, user preferences, agent state, etc."
         ),
     )
 
@@ -77,8 +76,7 @@ class SessionMigrateSchema(BaseModel):
     context: Dict[str, Any] = Field(
         default_factory=dict,
         description=(
-            "Optional context overrides to apply during migration. "
-            "Merged with the existing session context."
+            "Optional context overrides to apply during migration. " "Merged with the existing session context."
         ),
     )
 

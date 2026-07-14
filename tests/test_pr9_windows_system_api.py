@@ -27,6 +27,7 @@ Test groups
   Q) WindowsSystemAPI — duration_ms is populated.
   R) WindowsSystemAPI — dispatch() to_dict round-trip.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -34,10 +35,6 @@ from typing import Any, Dict, List, Optional
 from unittest.mock import MagicMock
 
 import pytest
-
-# ---------------------------------------------------------------------------
-# Helpers / stubs
-# ---------------------------------------------------------------------------
 
 from core.system_api.platform_api import (
     AppLaunchResult,
@@ -61,6 +58,10 @@ from core.system_api.windows_system_api import (
     reset_windows_system_api,
 )
 
+# ---------------------------------------------------------------------------
+# Helpers / stubs
+# ---------------------------------------------------------------------------
+
 
 class _StubAdapter:
     """Minimal in-memory stub that implements the full SystemAPI surface."""
@@ -81,6 +82,7 @@ class _StubAdapter:
 
     def register_hotkey(self, hotkey_id, modifiers, vk_code, callback=None):
         from core.system_api.platform_api import HotkeyHandle
+
         return HotkeyHandle(hotkey_id=hotkey_id, modifiers=modifiers, vk_code=vk_code, active=True)
 
     def unregister_hotkey(self, handle):
@@ -425,9 +427,7 @@ class TestNotifications:
         self.facade = _make_facade()
 
     def test_send_notification(self):
-        resp = self.facade.dispatch(
-            "send_notification", {"title": "Hello", "body": "World"}
-        )
+        resp = self.facade.dispatch("send_notification", {"title": "Hello", "body": "World"})
         assert resp.success is True
         assert resp.data.get("notification_id") == 7
 

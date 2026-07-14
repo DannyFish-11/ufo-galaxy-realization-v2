@@ -56,36 +56,12 @@ long_term_memory, cognitive_field_engine:
 
 from __future__ import annotations
 
-# ── PR-25: Reflection Engine ────────────────────────────────────────────
-from core.cognitive.reflection_engine import (
-    ReflectionEngine,
-    ReflectionRecord,
-    get_reflection_engine,
-    reset_reflection_engine,
-)
-
-# ── PR-26: Pattern Miner ────────────────────────────────────────────────
-from core.cognitive.pattern_miner import (
-    AbstractionLevel,
-    BehaviorPattern,
-    PatternMiner,
-    get_pattern_miner,
-    reset_pattern_miner,
-)
-
 # ── PR-27: Adaptive Predictor ───────────────────────────────────────────
 from core.cognitive.adaptive_predictor import (
     AdaptivePredictor,
     ExecutionRecommendation,
     get_adaptive_predictor,
     reset_adaptive_predictor,
-)
-
-# ── PR-25/26/27: Evolution System Bootstrap ─────────────────────────────
-from core.cognitive.evolution_system import (
-    init_cognitive_evolution,
-    shutdown_cognitive_evolution,
-    get_cognitive_health,
 )
 
 # ── Existing cognitive infrastructure ────────────────────────────────────
@@ -99,16 +75,40 @@ from core.cognitive.decay_controller import (
     get_decay_controller,
     reset_decay_controller,
 )
+
+# ── PR-25/26/27: Evolution System Bootstrap ─────────────────────────────
+from core.cognitive.evolution_system import (
+    get_cognitive_health,
+    init_cognitive_evolution,
+    shutdown_cognitive_evolution,
+)
 from core.cognitive.memory_bias_layer import (
-    MemoryBias,
-    MemoryPlannerGuidance,
-    derive_memory_bias,
-    get_memory_planner_guidance,
-    build_memory_bias_diagnostics,
     FALLBACK_MEMORY_BIAS,
     POSTURE_CONTINUITY,
-    POSTURE_RETRIEVAL,
     POSTURE_NOVELTY,
+    POSTURE_RETRIEVAL,
+    MemoryBias,
+    MemoryPlannerGuidance,
+    build_memory_bias_diagnostics,
+    derive_memory_bias,
+    get_memory_planner_guidance,
+)
+
+# ── PR-26: Pattern Miner ────────────────────────────────────────────────
+from core.cognitive.pattern_miner import (
+    AbstractionLevel,
+    BehaviorPattern,
+    PatternMiner,
+    get_pattern_miner,
+    reset_pattern_miner,
+)
+
+# ── PR-25: Reflection Engine ────────────────────────────────────────────
+from core.cognitive.reflection_engine import (
+    ReflectionEngine,
+    ReflectionRecord,
+    get_reflection_engine,
+    reset_reflection_engine,
 )
 
 __all__ = [

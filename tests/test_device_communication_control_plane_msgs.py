@@ -11,6 +11,7 @@ These tests verify that:
 4. Malformed payloads do not crash the handler
 5. The store reflects the absorbed data after routing
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -25,7 +26,6 @@ from core.android_device_state_store import (
     reset_android_device_state_store,
 )
 from core.device_communication import DeviceCommunication, DeviceConnection, MessageType
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -79,11 +79,13 @@ async def test_device_state_snapshot_is_routed():
         "llama_cpp_available": True,
         "model_id": "mobilevlm_v2_7b",
     }
-    raw = json.dumps({
-        "type": "device_state_snapshot",
-        "message_id": "snap_001",
-        "payload": payload,
-    })
+    raw = json.dumps(
+        {
+            "type": "device_state_snapshot",
+            "message_id": "snap_001",
+            "payload": payload,
+        }
+    )
 
     result = await comm.handle_message(device_id, raw)
     snap = get_device_state_snapshot(device_id)
@@ -99,11 +101,13 @@ async def test_device_state_snapshot_returns_ack():
     device_id = "snap_ack_dev"
     comm.connections[device_id] = _make_connection(device_id)
 
-    raw = json.dumps({
-        "type": "device_state_snapshot",
-        "message_id": "snap_002",
-        "payload": {"model_ready": False},
-    })
+    raw = json.dumps(
+        {
+            "type": "device_state_snapshot",
+            "message_id": "snap_002",
+            "payload": {"model_ready": False},
+        }
+    )
     result = await comm.handle_message(device_id, raw)
     assert result is not None, "Expected ACK DeviceMessage, got None"
     assert result.type == MessageType.ACK
@@ -117,11 +121,13 @@ async def test_device_state_snapshot_ack_has_correlation_id():
     device_id = "snap_corr_dev"
     comm.connections[device_id] = _make_connection(device_id)
 
-    raw = json.dumps({
-        "type": "device_state_snapshot",
-        "message_id": "corr_msg_123",
-        "payload": {},
-    })
+    raw = json.dumps(
+        {
+            "type": "device_state_snapshot",
+            "message_id": "corr_msg_123",
+            "payload": {},
+        }
+    )
     result = await comm.handle_message(device_id, raw)
     assert result is not None
     assert result.correlation_id == "corr_msg_123"
@@ -134,15 +140,17 @@ async def test_device_state_snapshot_with_camelcase_payload():
     device_id = "camel_dev"
     comm.connections[device_id] = _make_connection(device_id)
 
-    raw = json.dumps({
-        "type": "device_state_snapshot",
-        "message_id": "camel_001",
-        "payload": {
-            "llamaCppAvailable": True,
-            "modelReady": True,
-            "localLoopReady": False,
-        },
-    })
+    raw = json.dumps(
+        {
+            "type": "device_state_snapshot",
+            "message_id": "camel_001",
+            "payload": {
+                "llamaCppAvailable": True,
+                "modelReady": True,
+                "localLoopReady": False,
+            },
+        }
+    )
     result = await comm.handle_message(device_id, raw)
     snap = get_device_state_snapshot(device_id)
     assert snap is not None
@@ -157,11 +165,13 @@ async def test_device_state_snapshot_malformed_does_not_crash():
     device_id = "malform_dev"
     comm.connections[device_id] = _make_connection(device_id)
 
-    raw = json.dumps({
-        "type": "device_state_snapshot",
-        "message_id": "bad_001",
-        "payload": "not_a_dict",   # intentionally wrong type
-    })
+    raw = json.dumps(
+        {
+            "type": "device_state_snapshot",
+            "message_id": "bad_001",
+            "payload": "not_a_dict",  # intentionally wrong type
+        }
+    )
     # Must not raise
     result = await comm.handle_message(device_id, raw)
     assert result is not None
@@ -177,21 +187,24 @@ async def test_device_state_snapshot_malformed_does_not_crash():
 async def test_device_execution_event_is_routed():
     """handle_message with type=device_execution_event must absorb into store."""
     from core.android_device_state_store import get_android_device_state_store
+
     comm = _make_comm()
     device_id = "exec_dev"
     comm.connections[device_id] = _make_connection(device_id)
 
-    raw = json.dumps({
-        "type": "device_execution_event",
-        "message_id": "exec_001",
-        "payload": {
-            "flow_id": "flow_test_abc",
-            "task_id": "task_xyz",
-            "phase": "grounding",
-            "step_index": 5,
-            "is_blocking": False,
-        },
-    })
+    raw = json.dumps(
+        {
+            "type": "device_execution_event",
+            "message_id": "exec_001",
+            "payload": {
+                "flow_id": "flow_test_abc",
+                "task_id": "task_xyz",
+                "phase": "grounding",
+                "step_index": 5,
+                "is_blocking": False,
+            },
+        }
+    )
     await comm.handle_message(device_id, raw)
 
     store = get_android_device_state_store()
@@ -210,11 +223,13 @@ async def test_device_execution_event_returns_ack():
     device_id = "exec_ack_dev"
     comm.connections[device_id] = _make_connection(device_id)
 
-    raw = json.dumps({
-        "type": "device_execution_event",
-        "message_id": "exec_002",
-        "payload": {"flow_id": "f1", "phase": "planning"},
-    })
+    raw = json.dumps(
+        {
+            "type": "device_execution_event",
+            "message_id": "exec_002",
+            "payload": {"flow_id": "f1", "phase": "planning"},
+        }
+    )
     result = await comm.handle_message(device_id, raw)
     assert result is not None
     assert result.type == MessageType.ACK
@@ -228,11 +243,13 @@ async def test_device_execution_event_ack_has_correlation_id():
     device_id = "exec_corr_dev"
     comm.connections[device_id] = _make_connection(device_id)
 
-    raw = json.dumps({
-        "type": "device_execution_event",
-        "message_id": "corr_exec_999",
-        "payload": {},
-    })
+    raw = json.dumps(
+        {
+            "type": "device_execution_event",
+            "message_id": "corr_exec_999",
+            "payload": {},
+        }
+    )
     result = await comm.handle_message(device_id, raw)
     assert result is not None
     assert result.correlation_id == "corr_exec_999"
@@ -242,21 +259,24 @@ async def test_device_execution_event_ack_has_correlation_id():
 async def test_device_execution_event_blocking_event():
     """Blocking execution events must be stored with is_blocking=True."""
     from core.android_device_state_store import get_android_device_state_store
+
     comm = _make_comm()
     device_id = "blocking_dev"
     comm.connections[device_id] = _make_connection(device_id)
 
-    raw = json.dumps({
-        "type": "device_execution_event",
-        "message_id": "block_001",
-        "payload": {
-            "flow_id": "flow_blocked",
-            "phase": "gate_decision",
-            "is_blocking": True,
-            "blocking_reason": "policy_gate_triggered",
-            "stagnation_detected": False,
-        },
-    })
+    raw = json.dumps(
+        {
+            "type": "device_execution_event",
+            "message_id": "block_001",
+            "payload": {
+                "flow_id": "flow_blocked",
+                "phase": "gate_decision",
+                "is_blocking": True,
+                "blocking_reason": "policy_gate_triggered",
+                "stagnation_detected": False,
+            },
+        }
+    )
     await comm.handle_message(device_id, raw)
 
     store = get_android_device_state_store()
@@ -271,19 +291,22 @@ async def test_device_execution_event_blocking_event():
 async def test_device_execution_event_stagnation():
     """Stagnation events must be stored with stagnation_detected=True."""
     from core.android_device_state_store import get_android_device_state_store
+
     comm = _make_comm()
     device_id = "stag_dev"
     comm.connections[device_id] = _make_connection(device_id)
 
-    raw = json.dumps({
-        "type": "device_execution_event",
-        "message_id": "stag_001",
-        "payload": {
-            "flow_id": "flow_stagnant",
-            "phase": "stagnation",
-            "stagnation_detected": True,
-        },
-    })
+    raw = json.dumps(
+        {
+            "type": "device_execution_event",
+            "message_id": "stag_001",
+            "payload": {
+                "flow_id": "flow_stagnant",
+                "phase": "stagnation",
+                "stagnation_detected": True,
+            },
+        }
+    )
     await comm.handle_message(device_id, raw)
 
     store = get_android_device_state_store()
@@ -304,10 +327,12 @@ async def test_heartbeat_still_works_after_new_msg_types():
     device_id = "hb_dev"
     comm.connections[device_id] = _make_connection(device_id)
 
-    raw = json.dumps({
-        "type": "heartbeat",
-        "message_id": "hb_001",
-    })
+    raw = json.dumps(
+        {
+            "type": "heartbeat",
+            "message_id": "hb_001",
+        }
+    )
     result = await comm.handle_message(device_id, raw)
     assert result is not None
     assert result.type == MessageType.ACK

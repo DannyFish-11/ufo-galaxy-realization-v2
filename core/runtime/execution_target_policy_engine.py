@@ -307,9 +307,7 @@ def apply_target_selection_policy(
             metadata=dict(metadata or {}),
         )
     except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "apply_target_selection_policy: error applying policy: %s", exc, exc_info=True
-        )
+        logger.warning("apply_target_selection_policy: error applying policy: %s", exc, exc_info=True)
         return build_target_selection_decision(
             policy_kind=TargetSelectionPolicyKind.default_local,
             selected_executor_type="local",
@@ -360,10 +358,7 @@ def _apply_target_selection_policy_impl(
     # ------------------------------------------------------------------
     if prefer_mesh_topology and mesh_session:
         mesh_participants = mesh_session.get("participants") or []
-        active_participants = [
-            p for p in mesh_participants
-            if isinstance(p, dict) and p.get("status") == "active"
-        ]
+        active_participants = [p for p in mesh_participants if isinstance(p, dict) and p.get("status") == "active"]
         if active_participants:
             first = active_participants[0]
             selected_device_id = first.get("device_id")
@@ -380,9 +375,7 @@ def _apply_target_selection_policy_impl(
                     f"mesh_topology: {len(active_participants)} active participant(s); "
                     f"selected first active device={selected_device_id!r}"
                 ),
-                candidates_considered=[
-                    p.get("device_id", "") for p in active_participants
-                ],
+                candidates_considered=[p.get("device_id", "") for p in active_participants],
                 trace_id=trace_id,
                 task_id=task_id,
                 mesh_session_id=mesh_session_id or mesh_session.get("session_id"),
@@ -435,16 +428,13 @@ def _apply_target_selection_policy_impl(
     # ------------------------------------------------------------------
     # 4. Fallback local — no remote candidates available
     # ------------------------------------------------------------------
-    logger.debug(
-        "apply_target_selection_policy: fallback_local (no suitable remote candidate)"
-    )
+    logger.debug("apply_target_selection_policy: fallback_local (no suitable remote candidate)")
     return build_target_selection_decision(
         policy_kind=TargetSelectionPolicyKind.fallback_local,
         selected_executor_type="local",
         decision_reason=(
             "fallback_local: no suitable remote executor found; "
-            "candidates_count=%d readiness_entries=%d"
-            % (len(candidate_device_ids), len(readiness_map))
+            "candidates_count=%d readiness_entries=%d" % (len(candidate_device_ids), len(readiness_map))
         ),
         candidates_considered=list(candidate_device_ids),
         trace_id=trace_id,
@@ -533,9 +523,7 @@ def apply_failure_handling_policy(
             metadata=dict(metadata or {}),
         )
     except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "apply_failure_handling_policy: error applying policy: %s", exc, exc_info=True
-        )
+        logger.warning("apply_failure_handling_policy: error applying policy: %s", exc, exc_info=True)
         return build_failure_handling_decision(
             policy_kind=FailureHandlingPolicyKind.reject_with_reason,
             failure_kind=str(failure_kind or "unknown"),
@@ -577,9 +565,7 @@ def _apply_failure_handling_policy_impl(
     # Non-recoverable → always reject
     # ------------------------------------------------------------------
     if not is_recoverable:
-        default_kind = _DEFAULT_FAILURE_POLICY_MAP.get(
-            failure_kind, FailureHandlingPolicyKind.reject_with_reason.value
-        )
+        default_kind = _DEFAULT_FAILURE_POLICY_MAP.get(failure_kind, FailureHandlingPolicyKind.reject_with_reason.value)
         logger.debug(
             "apply_failure_handling_policy: non-recoverable failure_kind=%s → %s",
             failure_kind,
@@ -589,10 +575,7 @@ def _apply_failure_handling_policy_impl(
             policy_kind=FailureHandlingPolicyKind(default_kind),
             failure_kind=failure_kind,
             is_recoverable=False,
-            decision_reason=(
-                f"non-recoverable failure_kind={failure_kind!r}; "
-                f"policy={default_kind!r}"
-            ),
+            decision_reason=(f"non-recoverable failure_kind={failure_kind!r}; " f"policy={default_kind!r}"),
             prior_executor_type=prior_executor_type,
             prior_device_id=prior_device_id,
             trace_id=trace_id,
@@ -607,9 +590,7 @@ def _apply_failure_handling_policy_impl(
     retry_budget_remaining = allow_retry and (current_retry_count < max_retry_count)
 
     if retry_budget_remaining:
-        default_kind = _DEFAULT_FAILURE_POLICY_MAP.get(
-            failure_kind, FailureHandlingPolicyKind.retry.value
-        )
+        default_kind = _DEFAULT_FAILURE_POLICY_MAP.get(failure_kind, FailureHandlingPolicyKind.retry.value)
         # If the default policy for this failure_kind is not retry, honour it
         # but only if retry is consistent with the failure kind's semantics.
         # For clarity: if the default is wait_and_requeue, use that; otherwise retry.
@@ -649,9 +630,7 @@ def _apply_failure_handling_policy_impl(
     # Recoverable, retry budget exhausted: try fallback_local
     # ------------------------------------------------------------------
     if allow_fallback_local:
-        logger.debug(
-            "apply_failure_handling_policy: retry_budget_exhausted → fallback_local"
-        )
+        logger.debug("apply_failure_handling_policy: retry_budget_exhausted → fallback_local")
         return build_failure_handling_decision(
             policy_kind=FailureHandlingPolicyKind.fallback_local,
             failure_kind=failure_kind,
@@ -672,9 +651,7 @@ def _apply_failure_handling_policy_impl(
     # ------------------------------------------------------------------
     # Recoverable, retry budget exhausted, no fallback: reject
     # ------------------------------------------------------------------
-    logger.debug(
-        "apply_failure_handling_policy: retry_budget_exhausted fallback_disabled → reject"
-    )
+    logger.debug("apply_failure_handling_policy: retry_budget_exhausted fallback_disabled → reject")
     return build_failure_handling_decision(
         policy_kind=FailureHandlingPolicyKind.reject_with_reason,
         failure_kind=failure_kind,
@@ -769,9 +746,7 @@ def apply_degraded_readiness_policy(
             metadata=dict(metadata or {}),
         )
     except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "apply_degraded_readiness_policy: error applying policy: %s", exc, exc_info=True
-        )
+        logger.warning("apply_degraded_readiness_policy: error applying policy: %s", exc, exc_info=True)
         return build_failure_handling_decision(
             policy_kind=FailureHandlingPolicyKind.reject_with_reason,
             failure_kind="readiness_degraded",
@@ -816,9 +791,7 @@ def _apply_degraded_readiness_policy_impl(
 
     # Degraded and alternative is available → fallback_local
     if alternative_available:
-        logger.debug(
-            "apply_degraded_readiness_policy: degraded + alternative_available → fallback_local"
-        )
+        logger.debug("apply_degraded_readiness_policy: degraded + alternative_available → fallback_local")
         return build_failure_handling_decision(
             policy_kind=FailureHandlingPolicyKind.fallback_local,
             failure_kind="readiness_degraded",
@@ -837,9 +810,7 @@ def _apply_degraded_readiness_policy_impl(
 
     # Degraded, no alternative, degraded execution allowed → accept
     if allow_degraded_execution:
-        logger.debug(
-            "apply_degraded_readiness_policy: degraded + no_alternative + allow_degraded → accept"
-        )
+        logger.debug("apply_degraded_readiness_policy: degraded + no_alternative + allow_degraded → accept")
         return build_failure_handling_decision(
             policy_kind=FailureHandlingPolicyKind.wait_and_requeue,
             failure_kind="readiness_degraded",
@@ -859,9 +830,7 @@ def _apply_degraded_readiness_policy_impl(
         )
 
     # Degraded, no alternative, degraded execution not allowed → reject
-    logger.debug(
-        "apply_degraded_readiness_policy: degraded + no_alternative + no_allow_degraded → reject"
-    )
+    logger.debug("apply_degraded_readiness_policy: degraded + no_alternative + no_allow_degraded → reject")
     return build_failure_handling_decision(
         policy_kind=FailureHandlingPolicyKind.reject_with_reason,
         failure_kind="readiness_degraded",

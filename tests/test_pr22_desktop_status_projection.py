@@ -32,7 +32,6 @@ from typing import Any, Dict, Optional
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers — minimal plan / source registry stubs
 # ---------------------------------------------------------------------------
@@ -149,18 +148,20 @@ def _source_registry_snapshot(
         }
     ]
     if cam_active:
-        sources.append({
-            "source_id": "builtin:webcam",
-            "source_type": "webcam",
-            "modality": "video",
-            "is_active": True,
-            "is_primary_audio": False,
-            "is_primary_video": True,
-            "health_status": "healthy",
-            "quality_score": 0.85,
-            "latency_ms": 10.0,
-            "display_name": "Built-in Webcam",
-        })
+        sources.append(
+            {
+                "source_id": "builtin:webcam",
+                "source_type": "webcam",
+                "modality": "video",
+                "is_active": True,
+                "is_primary_audio": False,
+                "is_primary_video": True,
+                "health_status": "healthy",
+                "quality_score": 0.85,
+                "latency_ms": 10.0,
+                "display_name": "Built-in Webcam",
+            }
+        )
     return {"snapshot_at": 0.0, "sources": sources}
 
 
@@ -171,19 +172,21 @@ def _source_registry_snapshot(
 
 class TestTextOnlyProjection:
     def test_build_returns_valid_object(self):
-        from contracts.desktop_status_projection import build_desktop_status_projection, DesktopStatusProjection
+        from contracts.desktop_status_projection import DesktopStatusProjection, build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_minimal_plan())
         assert isinstance(proj, DesktopStatusProjection)
 
     def test_projection_has_all_sub_contracts(self):
         from contracts.desktop_status_projection import (
-            build_desktop_status_projection,
-            PerceptionProjection,
-            ModelRoutingProjection,
             ExecutionProjection,
-            LifecycleProjection,
             ExplainabilityProjection,
+            LifecycleProjection,
+            ModelRoutingProjection,
+            PerceptionProjection,
+            build_desktop_status_projection,
         )
+
         proj = build_desktop_status_projection(unified_control_plan=_minimal_plan())
         assert isinstance(proj.perception, PerceptionProjection)
         assert isinstance(proj.model_routing, ModelRoutingProjection)
@@ -193,6 +196,7 @@ class TestTextOnlyProjection:
 
     def test_text_only_no_multimodal(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_minimal_plan())
         assert proj.perception.request_multimodal_present is False
         assert proj.perception.active_modalities == []
@@ -200,39 +204,46 @@ class TestTextOnlyProjection:
 
     def test_text_only_no_fallback(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_minimal_plan())
         assert proj.explainability.has_fallback is False
         assert proj.explainability.fallback_kinds == []
 
     def test_projection_valid_with_no_plan(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection()
         assert proj is not None
         assert proj.projection_id.startswith("dsp_")
 
     def test_projection_valid_with_none_plan(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=None)
         assert proj is not None
 
     def test_schema_version_present(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_minimal_plan())
         assert proj.schema_version == "1.0"
 
     def test_projected_at_is_numeric(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_minimal_plan())
         assert isinstance(proj.projected_at, float)
         assert proj.projected_at > 0
 
     def test_execution_path_local(self):
-        from contracts.desktop_status_projection import build_desktop_status_projection, ExecutionPathKind
+        from contracts.desktop_status_projection import ExecutionPathKind, build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_minimal_plan())
         assert proj.execution.execution_path == ExecutionPathKind.local
 
     def test_lifecycle_stage_succeed_on_silent(self):
-        from contracts.desktop_status_projection import build_desktop_status_projection, LifecycleStage
+        from contracts.desktop_status_projection import LifecycleStage, build_desktop_status_projection
+
         proj = build_desktop_status_projection(
             unified_control_plan=_minimal_plan(),
             tristate="silent",
@@ -241,6 +252,7 @@ class TestTextOnlyProjection:
 
     def test_tristate_propagated(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection(
             unified_control_plan=_minimal_plan(),
             tristate="manifest",
@@ -249,6 +261,7 @@ class TestTextOnlyProjection:
 
     def test_runtime_session_id_propagated(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection(
             unified_control_plan=_minimal_plan(),
             runtime_session_id="sess_abc123",
@@ -264,17 +277,20 @@ class TestTextOnlyProjection:
 class TestMultimodalProjection:
     def test_active_modalities_populated(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_multimodal_plan())
         assert "audio" in proj.perception.active_modalities
         assert "video" in proj.perception.active_modalities
 
     def test_request_multimodal_present(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_multimodal_plan())
         assert proj.perception.request_multimodal_present is True
 
     def test_source_registry_audio_source(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         snap = _source_registry_snapshot(mic_active=True)
         proj = build_desktop_status_projection(
             unified_control_plan=_minimal_plan(),
@@ -285,6 +301,7 @@ class TestMultimodalProjection:
 
     def test_source_registry_video_source(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         snap = _source_registry_snapshot(mic_active=True, cam_active=True)
         proj = build_desktop_status_projection(
             unified_control_plan=_minimal_plan(),
@@ -295,6 +312,7 @@ class TestMultimodalProjection:
 
     def test_continuous_perception_active_with_active_sources(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         snap = _source_registry_snapshot(mic_active=True)
         proj = build_desktop_status_projection(
             unified_control_plan=_minimal_plan(),
@@ -304,6 +322,7 @@ class TestMultimodalProjection:
 
     def test_no_sources_gives_inactive_perception(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection(
             unified_control_plan=_minimal_plan(),
             source_registry_snapshot={"sources": []},
@@ -313,6 +332,7 @@ class TestMultimodalProjection:
 
     def test_active_modalities_from_source_registry(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         snap = _source_registry_snapshot(mic_active=True, cam_active=True)
         plan = _minimal_plan()
         # Clear modalities from plan so they come from registry
@@ -326,6 +346,7 @@ class TestMultimodalProjection:
 
     def test_source_count_matches_registry(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         snap = _source_registry_snapshot(mic_active=True, cam_active=True)
         proj = build_desktop_status_projection(
             unified_control_plan=_minimal_plan(),
@@ -343,6 +364,7 @@ class TestMultimodalProjection:
 class TestModelRoutingProjection:
     def test_selected_provider_and_model(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         plan = _minimal_plan()
         plan["chosen_model"] = "claude-3-5-sonnet"
         plan["chosen_provider"] = "anthropic"
@@ -352,11 +374,13 @@ class TestModelRoutingProjection:
 
     def test_native_multimodal_flag(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_multimodal_plan())
         assert proj.model_routing.is_native_multimodal is True
 
     def test_non_native_multimodal(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         plan = _minimal_plan()
         plan["chosen_model"] = "gpt-4-turbo"
         plan["chosen_provider"] = "openai"
@@ -366,12 +390,14 @@ class TestModelRoutingProjection:
 
     def test_route_reason_propagated(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_multimodal_plan())
         assert proj.model_routing.route_reason is not None
         assert len(proj.model_routing.route_reason) > 0
 
     def test_route_summary_contains_provider_and_model(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         plan = _minimal_plan()
         plan["chosen_model"] = "gpt-4o"
         plan["chosen_provider"] = "openai"
@@ -383,13 +409,15 @@ class TestModelRoutingProjection:
         assert "native-MM" in proj.model_routing.route_summary
 
     def test_no_model_gives_unknown_health(self):
-        from contracts.desktop_status_projection import build_desktop_status_projection, ProjectionHealthSeverity
+        from contracts.desktop_status_projection import ProjectionHealthSeverity, build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_minimal_plan())
         # No chosen_model/provider → unknown health
         assert proj.model_routing.health_severity == ProjectionHealthSeverity.unknown
 
     def test_model_available_health_ok(self):
-        from contracts.desktop_status_projection import build_desktop_status_projection, ProjectionHealthSeverity
+        from contracts.desktop_status_projection import ProjectionHealthSeverity, build_desktop_status_projection
+
         plan = _minimal_plan()
         plan["chosen_model"] = "gpt-4o"
         plan["chosen_provider"] = "openai"
@@ -404,32 +432,38 @@ class TestModelRoutingProjection:
 
 class TestExecutionProjection:
     def test_local_execution_path(self):
-        from contracts.desktop_status_projection import build_desktop_status_projection, ExecutionPathKind
+        from contracts.desktop_status_projection import ExecutionPathKind, build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_minimal_plan())
         assert proj.execution.execution_path == ExecutionPathKind.local
 
     def test_cross_device_execution_path(self):
-        from contracts.desktop_status_projection import build_desktop_status_projection, ExecutionPathKind
+        from contracts.desktop_status_projection import ExecutionPathKind, build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_cross_device_plan())
         assert proj.execution.execution_path == ExecutionPathKind.cross_device
 
     def test_remote_execution_mode_agent_runtime(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_cross_device_plan())
         assert proj.execution.remote_execution_mode == "agent_runtime"
 
     def test_target_device_ids_populated(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_cross_device_plan())
         assert "phone_001" in proj.execution.target_device_ids
 
     def test_orchestration_active_false_for_single_remote(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_cross_device_plan())
         assert proj.execution.orchestration_active is False
 
     def test_orchestration_active_true_for_hybrid(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         plan = _cross_device_plan()
         plan["unified_execution_decision"]["execution_path"] = "hybrid"
         plan["unified_execution_decision"]["orchestration_active"] = True
@@ -439,16 +473,19 @@ class TestExecutionProjection:
 
     def test_execution_reason_propagated(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_cross_device_plan())
         assert proj.execution.execution_reason == "remote device preferred for this task"
 
     def test_delegation_point_propagated(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_cross_device_plan())
         assert proj.execution.delegation_point == "single_remote"
 
     def test_command_only_remote_mode(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         plan = _cross_device_plan()
         plan["unified_execution_decision"]["remote_execution_mode"] = "command_only"
         plan["chosen_execution_decision"]["remote_execution_mode"] = "command_only"
@@ -464,17 +501,20 @@ class TestExecutionProjection:
 class TestFallbackProjection:
     def test_has_fallback_true(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_fallback_plan())
         assert proj.explainability.has_fallback is True
 
     def test_fallback_kinds_populated(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_fallback_plan())
         assert "native_multimodal_to_text" in proj.explainability.fallback_kinds
         assert "remote_to_local" in proj.explainability.fallback_kinds
 
     def test_fallback_reasons_populated(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_fallback_plan())
         reasons = proj.explainability.fallback_reasons
         assert len(reasons) > 0
@@ -484,12 +524,14 @@ class TestFallbackProjection:
 
     def test_degradation_summary_present(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_fallback_plan())
         assert proj.explainability.degradation_summary is not None
         assert len(proj.explainability.degradation_summary) > 0
 
     def test_lifecycle_stage_degrade(self):
-        from contracts.desktop_status_projection import build_desktop_status_projection, LifecycleStage
+        from contracts.desktop_status_projection import LifecycleStage, build_desktop_status_projection
+
         proj = build_desktop_status_projection(
             unified_control_plan=_fallback_plan(),
             tristate="silent",
@@ -497,12 +539,14 @@ class TestFallbackProjection:
         assert proj.lifecycle.stage == LifecycleStage.degrade
 
     def test_explainability_health_degraded(self):
-        from contracts.desktop_status_projection import build_desktop_status_projection, ProjectionHealthSeverity
+        from contracts.desktop_status_projection import ProjectionHealthSeverity, build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_fallback_plan())
         assert proj.explainability.health_severity == ProjectionHealthSeverity.degraded
 
     def test_top_level_fallback_reason_surfaced(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         plan = _minimal_plan()
         plan["fallback_reason"] = "provider timeout"
         proj = build_desktop_status_projection(unified_control_plan=plan)
@@ -511,11 +555,13 @@ class TestFallbackProjection:
 
     def test_authority_chain_clear_for_subject_authority(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_minimal_plan())
         assert proj.explainability.authority_chain_clear is True
 
     def test_authority_chain_not_clear_for_unknown(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         plan = _minimal_plan()
         plan["decision_authority"] = "unknown"
         proj = build_desktop_status_projection(unified_control_plan=plan)
@@ -530,6 +576,7 @@ class TestFallbackProjection:
 class TestGracefulDegradation:
     def test_no_sources_still_valid(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection(
             unified_control_plan=_minimal_plan(),
             source_registry_snapshot=None,
@@ -539,7 +586,8 @@ class TestGracefulDegradation:
         assert proj.perception.continuous_perception_active is False
 
     def test_unavailable_source_health_degraded(self):
-        from contracts.desktop_status_projection import build_desktop_status_projection, ProjectionHealthSeverity
+        from contracts.desktop_status_projection import ProjectionHealthSeverity, build_desktop_status_projection
+
         snap = _source_registry_snapshot(mic_active=False, mic_health="unavailable")
         proj = build_desktop_status_projection(
             unified_control_plan=_minimal_plan(),
@@ -548,7 +596,8 @@ class TestGracefulDegradation:
         assert proj.perception.health_severity == ProjectionHealthSeverity.degraded
 
     def test_degraded_source_health_advisory(self):
-        from contracts.desktop_status_projection import build_desktop_status_projection, ProjectionHealthSeverity
+        from contracts.desktop_status_projection import ProjectionHealthSeverity, build_desktop_status_projection
+
         snap = _source_registry_snapshot(mic_active=True, mic_health="degraded")
         proj = build_desktop_status_projection(
             unified_control_plan=_minimal_plan(),
@@ -557,7 +606,8 @@ class TestGracefulDegradation:
         assert proj.perception.health_severity == ProjectionHealthSeverity.advisory
 
     def test_unavailable_provider_health_critical(self):
-        from contracts.desktop_status_projection import build_desktop_status_projection, ProjectionHealthSeverity
+        from contracts.desktop_status_projection import ProjectionHealthSeverity, build_desktop_status_projection
+
         plan = _minimal_plan()
         plan["chosen_model"] = "gpt-4o"
         plan["chosen_provider"] = "openai"
@@ -572,6 +622,7 @@ class TestGracefulDegradation:
 
     def test_source_warning_for_unavailable_provider(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         plan = _minimal_plan()
         plan["chosen_model"] = "gpt-4o"
         plan["chosen_provider"] = "openai"
@@ -586,23 +637,26 @@ class TestGracefulDegradation:
 
     def test_empty_plan_still_valid(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan={})
         assert proj is not None
         assert proj.projection_id.startswith("dsp_")
 
     def test_malformed_plan_falls_back_gracefully(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         # Deliberately pass a partially broken plan (wrong types in sub-dicts)
         plan = {
             "chosen_execution_decision": "not_a_dict",  # wrong type
-            "fallback_decision_record": [1, 2, 3],      # wrong type
+            "fallback_decision_record": [1, 2, 3],  # wrong type
             "canonical_perception": None,
         }
         proj = build_desktop_status_projection(unified_control_plan=plan)
         assert proj is not None
 
     def test_failed_lifecycle_stage(self):
-        from contracts.desktop_status_projection import build_desktop_status_projection, LifecycleStage
+        from contracts.desktop_status_projection import LifecycleStage, build_desktop_status_projection
+
         plan = _minimal_plan()
         plan["lifecycle_target"] = "failed"
         proj = build_desktop_status_projection(
@@ -621,6 +675,7 @@ class TestShellConsumesProjection:
     def test_desktop_presence_runtime_has_build_method(self):
         """DesktopPresenceRuntime.build_desktop_status_projection exists."""
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         runtime = DesktopPresenceRuntime()
         assert hasattr(runtime, "build_desktop_status_projection")
         assert callable(runtime.build_desktop_status_projection)
@@ -628,6 +683,7 @@ class TestShellConsumesProjection:
     def test_shell_builds_projection_from_openclawd_result(self):
         """Shell can build a projection from a mock OpenClawd result dict."""
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         runtime = DesktopPresenceRuntime()
 
         mock_result = {
@@ -670,6 +726,7 @@ class TestShellConsumesProjection:
     def test_shell_projection_has_correct_provider(self):
         """Shell projection exposes the provider from the control plan."""
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         runtime = DesktopPresenceRuntime()
         mock_result = {
             "success": True,
@@ -702,6 +759,7 @@ class TestShellConsumesProjection:
     def test_shell_builds_projection_without_result(self):
         """Shell projection is valid when result dict is None."""
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         runtime = DesktopPresenceRuntime()
         dsp = runtime.build_desktop_status_projection(result=None, tristate="silent")
         assert dsp is not None
@@ -710,6 +768,7 @@ class TestShellConsumesProjection:
     def test_shell_projection_does_not_reconstruct_routing(self):
         """Shell consumes provider/model from projection, not from ad hoc logic."""
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         runtime = DesktopPresenceRuntime()
         mock_result = {
             "metadata": {
@@ -748,12 +807,14 @@ class TestShellConsumesProjection:
 class TestSerialisation:
     def test_to_dict_is_json_serialisable(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_minimal_plan())
         d = proj.to_dict()
         assert json.dumps(d) is not None
 
     def test_to_json_is_valid_string(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_minimal_plan())
         s = proj.to_json()
         assert isinstance(s, str)
@@ -761,7 +822,8 @@ class TestSerialisation:
         assert "projection_id" in parsed
 
     def test_from_dict_round_trip(self):
-        from contracts.desktop_status_projection import build_desktop_status_projection, DesktopStatusProjection
+        from contracts.desktop_status_projection import DesktopStatusProjection, build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_minimal_plan())
         d = proj.to_dict()
         proj2 = DesktopStatusProjection.from_dict(d)
@@ -773,11 +835,13 @@ class TestSerialisation:
 
     def test_from_dict_with_empty_dict(self):
         from contracts.desktop_status_projection import DesktopStatusProjection
+
         proj = DesktopStatusProjection.from_dict({})
         assert proj is not None
 
     def test_multimodal_plan_round_trip(self):
-        from contracts.desktop_status_projection import build_desktop_status_projection, DesktopStatusProjection
+        from contracts.desktop_status_projection import DesktopStatusProjection, build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_multimodal_plan())
         d = proj.to_dict()
         proj2 = DesktopStatusProjection.from_dict(d)
@@ -785,7 +849,8 @@ class TestSerialisation:
         assert "audio" in proj2.perception.active_modalities
 
     def test_fallback_plan_round_trip(self):
-        from contracts.desktop_status_projection import build_desktop_status_projection, DesktopStatusProjection
+        from contracts.desktop_status_projection import DesktopStatusProjection, build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_fallback_plan())
         d = proj.to_dict()
         proj2 = DesktopStatusProjection.from_dict(d)
@@ -794,10 +859,20 @@ class TestSerialisation:
 
     def test_json_contains_all_top_level_keys(self):
         from contracts.desktop_status_projection import build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_minimal_plan())
         d = proj.to_dict()
-        for key in ("projection_id", "projected_at", "overall_health", "schema_version",
-                    "perception", "model_routing", "execution", "lifecycle", "explainability"):
+        for key in (
+            "projection_id",
+            "projected_at",
+            "overall_health",
+            "schema_version",
+            "perception",
+            "model_routing",
+            "execution",
+            "lifecycle",
+            "explainability",
+        ):
             assert key in d, f"Missing key: {key}"
 
 
@@ -808,43 +883,74 @@ class TestSerialisation:
 
 class TestProjectionSummary:
     def test_summary_is_dict(self):
-        from contracts.desktop_status_projection import build_desktop_status_projection, desktop_status_projection_summary
+        from contracts.desktop_status_projection import (
+            build_desktop_status_projection,
+            desktop_status_projection_summary,
+        )
+
         proj = build_desktop_status_projection(unified_control_plan=_minimal_plan())
         s = desktop_status_projection_summary(proj)
         assert isinstance(s, dict)
 
     def test_summary_none_for_none_projection(self):
         from contracts.desktop_status_projection import desktop_status_projection_summary
+
         assert desktop_status_projection_summary(None) is None
 
     def test_summary_contains_expected_keys(self):
-        from contracts.desktop_status_projection import build_desktop_status_projection, desktop_status_projection_summary
+        from contracts.desktop_status_projection import (
+            build_desktop_status_projection,
+            desktop_status_projection_summary,
+        )
+
         proj = build_desktop_status_projection(unified_control_plan=_minimal_plan())
         s = desktop_status_projection_summary(proj)
         for key in (
-            "projection_id", "overall_health", "lifecycle_stage", "tristate",
-            "selected_provider", "selected_model", "is_native_multimodal",
-            "execution_path", "remote_execution_mode", "orchestration_active",
-            "continuous_perception_active", "active_modalities",
-            "has_fallback", "fallback_kinds", "degradation_summary",
+            "projection_id",
+            "overall_health",
+            "lifecycle_stage",
+            "tristate",
+            "selected_provider",
+            "selected_model",
+            "is_native_multimodal",
+            "execution_path",
+            "remote_execution_mode",
+            "orchestration_active",
+            "continuous_perception_active",
+            "active_modalities",
+            "has_fallback",
+            "fallback_kinds",
+            "degradation_summary",
         ):
             assert key in s, f"Missing summary key: {key}"
 
     def test_summary_json_serialisable(self):
-        from contracts.desktop_status_projection import build_desktop_status_projection, desktop_status_projection_summary
+        from contracts.desktop_status_projection import (
+            build_desktop_status_projection,
+            desktop_status_projection_summary,
+        )
+
         proj = build_desktop_status_projection(unified_control_plan=_fallback_plan())
         s = desktop_status_projection_summary(proj)
         assert json.dumps(s) is not None
 
     def test_summary_execution_path_matches_projection(self):
-        from contracts.desktop_status_projection import build_desktop_status_projection, desktop_status_projection_summary
+        from contracts.desktop_status_projection import (
+            build_desktop_status_projection,
+            desktop_status_projection_summary,
+        )
+
         proj = build_desktop_status_projection(unified_control_plan=_cross_device_plan())
         s = desktop_status_projection_summary(proj)
         assert s["execution_path"] == "cross_device"
         assert s["remote_execution_mode"] == "agent_runtime"
 
     def test_summary_fallback_reflects_degradation(self):
-        from contracts.desktop_status_projection import build_desktop_status_projection, desktop_status_projection_summary
+        from contracts.desktop_status_projection import (
+            build_desktop_status_projection,
+            desktop_status_projection_summary,
+        )
+
         proj = build_desktop_status_projection(unified_control_plan=_fallback_plan())
         s = desktop_status_projection_summary(proj)
         assert s["has_fallback"] is True
@@ -859,7 +965,8 @@ class TestProjectionSummary:
 
 class TestOverallHealthRollup:
     def test_ok_for_clean_text_flow_with_model(self):
-        from contracts.desktop_status_projection import build_desktop_status_projection, ProjectionHealthSeverity
+        from contracts.desktop_status_projection import ProjectionHealthSeverity, build_desktop_status_projection
+
         plan = _minimal_plan()
         plan["chosen_model"] = "gpt-4o"
         plan["chosen_provider"] = "openai"
@@ -874,7 +981,8 @@ class TestOverallHealthRollup:
         )
 
     def test_degraded_for_fallback_plan(self):
-        from contracts.desktop_status_projection import build_desktop_status_projection, ProjectionHealthSeverity
+        from contracts.desktop_status_projection import ProjectionHealthSeverity, build_desktop_status_projection
+
         proj = build_desktop_status_projection(unified_control_plan=_fallback_plan())
         assert proj.overall_health in (
             ProjectionHealthSeverity.degraded,
@@ -882,7 +990,8 @@ class TestOverallHealthRollup:
         )
 
     def test_critical_for_unavailable_provider(self):
-        from contracts.desktop_status_projection import build_desktop_status_projection, ProjectionHealthSeverity
+        from contracts.desktop_status_projection import ProjectionHealthSeverity, build_desktop_status_projection
+
         plan = _minimal_plan()
         plan["chosen_model"] = "gpt-4o"
         plan["chosen_provider"] = "openai"

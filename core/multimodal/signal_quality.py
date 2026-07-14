@@ -1,4 +1,5 @@
 """Signal quality and freshness metadata for multimodal perception signals."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -32,9 +33,7 @@ class SignalQuality:
         return self.flag in (QualityFlag.OK, QualityFlag.DEGRADED)
 
     @classmethod
-    def ok(
-        cls, freshness_ms: float = 0.0, confidence: float = 1.0
-    ) -> "SignalQuality":
+    def ok(cls, freshness_ms: float = 0.0, confidence: float = 1.0) -> "SignalQuality":
         return cls(flag=QualityFlag.OK, freshness_ms=freshness_ms, confidence=confidence)
 
     @classmethod
@@ -42,9 +41,7 @@ class SignalQuality:
         return cls(flag=QualityFlag.MISSING, confidence=0.0, message=reason)
 
     @classmethod
-    def degraded(
-        cls, reason: Optional[str] = None, confidence: float = 0.5
-    ) -> "SignalQuality":
+    def degraded(cls, reason: Optional[str] = None, confidence: float = 0.5) -> "SignalQuality":
         return cls(flag=QualityFlag.DEGRADED, confidence=confidence, message=reason)
 
     @classmethod

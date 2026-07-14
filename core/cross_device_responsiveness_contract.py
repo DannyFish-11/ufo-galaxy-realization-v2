@@ -600,7 +600,11 @@ def classify_responsiveness(inp: ResponsivenessInput) -> ResponsivenessContract:
     """
     try:
         return _classify_impl(inp)
-    except Exception as exc:  # noqa: BLE001  # intentional: top-level safety wrapper; BaseException subclasses (KeyboardInterrupt, SystemExit) are NOT caught
+    except (
+        Exception
+        # intentional: top-level safety wrapper; BaseException subclasses
+        # (KeyboardInterrupt, SystemExit) are NOT caught
+    ) as exc:  # noqa: BLE001
         logger.warning(
             "classify_responsiveness: unexpected error during classification — %s; "
             "returning unavailable (fail-conservative)",
@@ -608,12 +612,9 @@ def classify_responsiveness(inp: ResponsivenessInput) -> ResponsivenessContract:
         )
         return ResponsivenessContract(
             level=ResponsivenessLevel.unavailable,
-            execution_domain=inp.execution_domain
-            if isinstance(inp, ResponsivenessInput)
-            else ExecutionDomain.REMOTE,
+            execution_domain=inp.execution_domain if isinstance(inp, ResponsivenessInput) else ExecutionDomain.REMOTE,
             rationale=(
-                f"classification raised an unexpected error ({exc!r}); "
-                "defaulting to unavailable (fail-conservative)"
+                f"classification raised an unexpected error ({exc!r}); " "defaulting to unavailable (fail-conservative)"
             ),
             downgrade_reasons=[f"classifier_exception: {exc!r}"],
             is_bounded_near_real_time=False,
@@ -645,10 +646,7 @@ def _classify_impl(inp: ResponsivenessInput) -> ResponsivenessContract:
             return ResponsivenessContract(
                 level=ResponsivenessLevel.unavailable,
                 execution_domain=domain,
-                rationale=(
-                    "Local device is not ready (readiness=missing or health=0); "
-                    "cannot execute."
-                ),
+                rationale=("Local device is not ready (readiness=missing or health=0); " "cannot execute."),
                 downgrade_reasons=downgrade_reasons,
                 is_bounded_near_real_time=False,
                 participant_id=pid,
@@ -693,9 +691,7 @@ def _classify_impl(inp: ResponsivenessInput) -> ResponsivenessContract:
             )
 
         if health >= _HEALTH_BOUNDED_DEFERRED_MIN and evidence:
-            downgrade_reasons.append(
-                f"health={health:.2f} < {_HEALTH_NEAR_INTERACTIVE_MIN} threshold"
-            )
+            downgrade_reasons.append(f"health={health:.2f} < {_HEALTH_NEAR_INTERACTIVE_MIN} threshold")
             return ResponsivenessContract(
                 level=ResponsivenessLevel.bounded_deferred,
                 execution_domain=domain,
@@ -716,9 +712,7 @@ def _classify_impl(inp: ResponsivenessInput) -> ResponsivenessContract:
         if not evidence:
             downgrade_reasons.append("evidence_absent_on_local_device")
         if health < _HEALTH_BOUNDED_DEFERRED_MIN:
-            downgrade_reasons.append(
-                f"health={health:.2f} < {_HEALTH_BOUNDED_DEFERRED_MIN} threshold"
-            )
+            downgrade_reasons.append(f"health={health:.2f} < {_HEALTH_BOUNDED_DEFERRED_MIN} threshold")
         return ResponsivenessContract(
             level=ResponsivenessLevel.eventual,
             execution_domain=domain,
@@ -808,9 +802,7 @@ def _classify_impl(inp: ResponsivenessInput) -> ResponsivenessContract:
 
     # Degraded health (< bounded_deferred min) → degraded or eventual.
     if health < _HEALTH_BOUNDED_DEFERRED_MIN:
-        downgrade_reasons.append(
-            f"health={health:.2f} < {_HEALTH_BOUNDED_DEFERRED_MIN} threshold"
-        )
+        downgrade_reasons.append(f"health={health:.2f} < {_HEALTH_BOUNDED_DEFERRED_MIN} threshold")
         if readiness is ParticipantReadinessState.partial:
             downgrade_reasons.append("participant_partial_ready")
             return ResponsivenessContract(
@@ -903,9 +895,7 @@ def _classify_impl(inp: ResponsivenessInput) -> ResponsivenessContract:
                 trace_id=inp.trace_id,
             )
         # Ready but health < 0.8 → bounded_deferred.
-        downgrade_reasons.append(
-            f"health={health:.2f} < {_HEALTH_NEAR_INTERACTIVE_MIN} threshold"
-        )
+        downgrade_reasons.append(f"health={health:.2f} < {_HEALTH_NEAR_INTERACTIVE_MIN} threshold")
         return ResponsivenessContract(
             level=ResponsivenessLevel.bounded_deferred,
             execution_domain=domain,
@@ -989,8 +979,7 @@ def responsiveness_for_participant(
         readiness_enum = ParticipantReadinessState(participant_readiness)
     except (ValueError, KeyError):
         logger.warning(
-            "responsiveness_for_participant: unknown readiness value %r; "
-            "defaulting to missing (fail-conservative)",
+            "responsiveness_for_participant: unknown readiness value %r; " "defaulting to missing (fail-conservative)",
             participant_readiness,
         )
         readiness_enum = ParticipantReadinessState.missing
@@ -999,8 +988,7 @@ def responsiveness_for_participant(
         domain_enum = ExecutionDomain(execution_domain)
     except (ValueError, KeyError):
         logger.warning(
-            "responsiveness_for_participant: unknown domain value %r; "
-            "defaulting to remote (conservative)",
+            "responsiveness_for_participant: unknown domain value %r; " "defaulting to remote (conservative)",
             execution_domain,
         )
         domain_enum = ExecutionDomain.REMOTE

@@ -46,22 +46,22 @@ H) Health-check timeout → canonical registry
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import MagicMock, patch, AsyncMock
 from typing import Optional
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from core.nodes.node_fabric_registry import (
+    NodeRole,
+    NodeStatus,
     get_node_fabric_registry,
     reset_node_fabric_registry,
-    NodeStatus,
-    NodeRole,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_launcher(node_configs=None):
     """Return a NodeSystemLauncher with mocked service_manager and config."""
@@ -73,6 +73,7 @@ def _make_launcher(node_configs=None):
     launcher.config = MagicMock()
     launcher.config.web_ui_port = 9000
     from pathlib import Path
+
     launcher.nodes_dir = Path("/tmp/nonexistent_nodes_dir")
     launcher.node_configs = node_configs or {}
     return launcher
@@ -90,31 +91,38 @@ def _reset_fabric():
 # A) Sentinel
 # ---------------------------------------------------------------------------
 
+
 class TestSentinel:
     def test_sentinel_importable(self):
         from launcher.node_startup import CANONICAL_FABRIC_REGISTRY_LIFECYCLE_HOOKS
+
         assert isinstance(CANONICAL_FABRIC_REGISTRY_LIFECYCLE_HOOKS, str)
 
     def test_sentinel_non_empty(self):
         from launcher.node_startup import CANONICAL_FABRIC_REGISTRY_LIFECYCLE_HOOKS
+
         assert len(CANONICAL_FABRIC_REGISTRY_LIFECYCLE_HOOKS) > 0
 
     def test_sentinel_contains_canonical_registry(self):
         from launcher.node_startup import CANONICAL_FABRIC_REGISTRY_LIFECYCLE_HOOKS
+
         assert "NodeFabricRegistry" in CANONICAL_FABRIC_REGISTRY_LIFECYCLE_HOOKS
 
     def test_sentinel_contains_lifecycle_hooks(self):
         from launcher.node_startup import CANONICAL_FABRIC_REGISTRY_LIFECYCLE_HOOKS
+
         assert "lifecycle" in CANONICAL_FABRIC_REGISTRY_LIFECYCLE_HOOKS.lower()
 
     def test_sentinel_v1_marker(self):
         from launcher.node_startup import CANONICAL_FABRIC_REGISTRY_LIFECYCLE_HOOKS
+
         assert "V1" in CANONICAL_FABRIC_REGISTRY_LIFECYCLE_HOOKS
 
 
 # ---------------------------------------------------------------------------
 # B) _register_node_in_canonical_registry — happy path (HEALTHY)
 # ---------------------------------------------------------------------------
+
 
 class TestRegisterNodeHappyPath:
     def test_healthy_status_registers_node(self):
@@ -167,6 +175,7 @@ class TestRegisterNodeHappyPath:
 # C) _register_node_in_canonical_registry — failure path (OFFLINE)
 # ---------------------------------------------------------------------------
 
+
 class TestRegisterNodeFailurePath:
     def test_offline_status_registers_node(self):
         launcher = _make_launcher()
@@ -196,6 +205,7 @@ class TestRegisterNodeFailurePath:
 # ---------------------------------------------------------------------------
 # D) node_configs metadata
 # ---------------------------------------------------------------------------
+
 
 class TestNodeConfigsMetadata:
     def test_dependencies_stored(self):
@@ -268,15 +278,14 @@ class TestNodeConfigsMetadata:
 # E) Graceful import failure
 # ---------------------------------------------------------------------------
 
+
 class TestGracefulImportFailure:
     def test_no_raise_on_import_error(self):
         launcher = _make_launcher()
         with patch.dict("sys.modules", {"core.nodes.node_fabric_registry": None}):
             # Should not raise even if module is unavailable
             try:
-                launcher._register_node_in_canonical_registry(
-                    "Node_Import_A", 8110, "healthy"
-                )
+                launcher._register_node_in_canonical_registry("Node_Import_A", 8110, "healthy")
             except Exception as exc:
                 pytest.fail(f"Unexpected exception: {exc}")
 
@@ -284,6 +293,7 @@ class TestGracefulImportFailure:
 # ---------------------------------------------------------------------------
 # F) stop_node
 # ---------------------------------------------------------------------------
+
 
 class TestStopNode:
     def test_stop_node_marks_offline_in_registry(self):
@@ -318,14 +328,16 @@ class TestStopNode:
 # G) start_node process failure → canonical registry
 # ---------------------------------------------------------------------------
 
+
 class TestStartNodeProcessFailure:
     def test_process_start_failure_registers_offline(self):
         """When service_manager.start_service returns False, node is OFFLINE."""
-        from launcher.node_startup import NodeSystemLauncher
-        from pathlib import Path
         import sys
-        import types
         import tempfile
+        import types
+        from pathlib import Path
+
+        from launcher.node_startup import NodeSystemLauncher
 
         # Create a real node dir with main.py for the launcher to find
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -342,8 +354,7 @@ class TestStartNodeProcessFailure:
             launcher.config.web_ui_port = 9000
             launcher.nodes_dir = Path(tmpdir)
             launcher.node_configs = {
-                node_name: {"port": 8130, "group": "core", "dependencies": [],
-                            "startup_policy": "active"}
+                node_name: {"port": 8130, "group": "core", "dependencies": [], "startup_policy": "active"}
             }
 
             # Stub aiohttp if not installed
@@ -371,14 +382,16 @@ class TestStartNodeProcessFailure:
 # H) Health-check timeout → canonical registry
 # ---------------------------------------------------------------------------
 
+
 class TestHealthCheckTimeout:
     def test_health_check_timeout_registers_offline(self):
         """After health-check timeout, node is registered as OFFLINE."""
-        from launcher.node_startup import NodeSystemLauncher
-        from pathlib import Path
         import sys
-        import types
         import tempfile
+        import types
+        from pathlib import Path
+
+        from launcher.node_startup import NodeSystemLauncher
 
         with tempfile.TemporaryDirectory() as tmpdir:
             node_name = "Node_HCTimeout_A"
@@ -395,24 +408,27 @@ class TestHealthCheckTimeout:
             launcher.config.web_ui_port = 9000
             launcher.nodes_dir = Path(tmpdir)
             launcher.node_configs = {
-                node_name: {"port": 8140, "group": "core", "dependencies": [],
-                            "startup_policy": "active"}
+                node_name: {"port": 8140, "group": "core", "dependencies": [], "startup_policy": "active"}
             }
 
             # Build a minimal aiohttp stub that makes all health requests fail
             class _FakeGetCtx:
                 async def __aenter__(self):
                     raise Exception("connection refused")
+
                 async def __aexit__(self, *a):
                     pass
 
             class _FakeSession:
                 def __init__(self, *a, **kw):
                     pass
+
                 async def __aenter__(self):
                     return self
+
                 async def __aexit__(self, *a):
                     pass
+
                 def get(self, *a, **kw):
                     return _FakeGetCtx()
 

@@ -3,6 +3,7 @@
 Wraps an *aiortc* RTCPeerConnection to receive video frames from a
 remote camera source.  Falls back gracefully when aiortc is not installed.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -34,6 +35,7 @@ except Exception as exc:
 # State enum
 # ---------------------------------------------------------------------------
 
+
 class WebRTCSessionState(str, Enum):
     IDLE = "idle"
     CONNECTING = "connecting"
@@ -45,6 +47,7 @@ class WebRTCSessionState(str, Enum):
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class WebRTCSessionConfig:
@@ -59,6 +62,7 @@ class WebRTCSessionConfig:
 # ---------------------------------------------------------------------------
 # Session
 # ---------------------------------------------------------------------------
+
 
 class WebRTCCameraSession:
     """Manages a WebRTC peer connection to receive camera video frames.
@@ -101,18 +105,12 @@ class WebRTCCameraSession:
         """Return (frame | None, SignalQuality)."""
         if self._latest_frame is None:
             return None, self._quality
-        age_ms = (
-            (time.monotonic() - self._last_frame_ts) * 1000.0
-            if self._last_frame_ts is not None
-            else float("inf")
-        )
+        age_ms = (time.monotonic() - self._last_frame_ts) * 1000.0 if self._last_frame_ts is not None else float("inf")
         if age_ms > self.config.frame_stale_threshold_ms:
             return self._latest_frame, SignalQuality.stale(freshness_ms=age_ms)
         return self._latest_frame, SignalQuality.ok(freshness_ms=age_ms)
 
-    async def connect(
-        self, offer_sdp: str, offer_type: str = "offer"
-    ) -> Optional[str]:
+    async def connect(self, offer_sdp: str, offer_type: str = "offer") -> Optional[str]:
         """Set the remote offer and return the local answer SDP.
 
         Returns None when aiortc is unavailable or connection fails.
@@ -122,8 +120,8 @@ class WebRTCCameraSession:
             logger.warning("aiortc not available; WebRTC camera ingest disabled")
             return None
 
-        from aiortc import RTCPeerConnection, RTCSessionDescription
-
+        # 模块顶部探测 import 成功即已绑定 RTCPeerConnection/RTCSessionDescription;
+        # 上面的 _AIORTC_AVAILABLE 守卫保证走到这里时名字必然可用。
         self._state = WebRTCSessionState.CONNECTING
         try:
             self._pc = RTCPeerConnection()
@@ -144,9 +142,7 @@ class WebRTCCameraSession:
                     self._state = WebRTCSessionState.FAILED
                     self._quality = SignalQuality.degraded("connection " + conn_state)
 
-            await self._pc.setRemoteDescription(
-                RTCSessionDescription(sdp=offer_sdp, type=offer_type)
-            )
+            await self._pc.setRemoteDescription(RTCSessionDescription(sdp=offer_sdp, type=offer_type))
             answer = await self._pc.createAnswer()
             await self._pc.setLocalDescription(answer)
             return self._pc.localDescription.sdp

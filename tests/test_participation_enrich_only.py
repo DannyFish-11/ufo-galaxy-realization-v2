@@ -50,23 +50,22 @@ Test classes
 
 from __future__ import annotations
 
-import sys
 import os
+import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.device_participation import (
-    ParticipationSummary,
-    get_device_participation,
     DEVICE_PARTICIPATION_AUTHORITY,
     PARTICIPATION_BUILDS_ON_READINESS,
-    PARTICIPATION_ENRICH_ONLY,
     PARTICIPATION_CANNOT_OVERRIDE_CANONICAL_TRUTH,
+    PARTICIPATION_ENRICH_ONLY,
     PARTICIPATION_TRUTH_SOURCE,
+    ParticipationSummary,
+    get_device_participation,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -119,6 +118,7 @@ class TestParticipationEnrichOnlySentinels(unittest.TestCase):
 
     def test_sentinels_in_exports(self):
         from core.device_participation import __all__ as exports
+
         self.assertIn("PARTICIPATION_ENRICH_ONLY", exports)
         self.assertIn("PARTICIPATION_CANNOT_OVERRIDE_CANONICAL_TRUTH", exports)
 
@@ -131,19 +131,23 @@ class TestParticipationEnrichOnlySentinels(unittest.TestCase):
 class TestRegisteredSourcedFromReadiness(unittest.TestCase):
     def test_registered_false_when_readiness_says_false(self):
         rs = _make_readiness(registered=False, routable=False)
-        with patch("core.device_participation._get_canonical_readiness", return_value=rs), \
-             patch("core.device_participation._get_selector_status", return_value=None), \
-             patch("core.device_participation._get_mesh_membership", return_value=None), \
-             patch("core.device_participation._get_mesh_session", return_value=None):
+        with (
+            patch("core.device_participation._get_canonical_readiness", return_value=rs),
+            patch("core.device_participation._get_selector_status", return_value=None),
+            patch("core.device_participation._get_mesh_membership", return_value=None),
+            patch("core.device_participation._get_mesh_session", return_value=None),
+        ):
             ps = get_device_participation("dev1")
         self.assertFalse(ps.registered)
 
     def test_registered_true_when_readiness_says_true(self):
         rs = _make_readiness(registered=True)
-        with patch("core.device_participation._get_canonical_readiness", return_value=rs), \
-             patch("core.device_participation._get_selector_status", return_value=None), \
-             patch("core.device_participation._get_mesh_membership", return_value=None), \
-             patch("core.device_participation._get_mesh_session", return_value=None):
+        with (
+            patch("core.device_participation._get_canonical_readiness", return_value=rs),
+            patch("core.device_participation._get_selector_status", return_value=None),
+            patch("core.device_participation._get_mesh_membership", return_value=None),
+            patch("core.device_participation._get_mesh_session", return_value=None),
+        ):
             ps = get_device_participation("dev1")
         self.assertTrue(ps.registered)
 
@@ -153,10 +157,12 @@ class TestRegisteredSourcedFromReadiness(unittest.TestCase):
         sel = MagicMock()
         sel.orchestration_eligible = True
         sel.to_dict = lambda: {"orchestration_eligible": True}
-        with patch("core.device_participation._get_canonical_readiness", return_value=rs), \
-             patch("core.device_participation._get_selector_status", return_value=sel), \
-             patch("core.device_participation._get_mesh_membership", return_value=None), \
-             patch("core.device_participation._get_mesh_session", return_value=None):
+        with (
+            patch("core.device_participation._get_canonical_readiness", return_value=rs),
+            patch("core.device_participation._get_selector_status", return_value=sel),
+            patch("core.device_participation._get_mesh_membership", return_value=None),
+            patch("core.device_participation._get_mesh_session", return_value=None),
+        ):
             ps = get_device_participation("dev1")
         self.assertFalse(ps.registered)
 
@@ -169,19 +175,23 @@ class TestRegisteredSourcedFromReadiness(unittest.TestCase):
 class TestRoutableSourcedFromReadiness(unittest.TestCase):
     def test_routable_false_when_readiness_says_false(self):
         rs = _make_readiness(registered=True, routable=False)
-        with patch("core.device_participation._get_canonical_readiness", return_value=rs), \
-             patch("core.device_participation._get_selector_status", return_value=None), \
-             patch("core.device_participation._get_mesh_membership", return_value=None), \
-             patch("core.device_participation._get_mesh_session", return_value=None):
+        with (
+            patch("core.device_participation._get_canonical_readiness", return_value=rs),
+            patch("core.device_participation._get_selector_status", return_value=None),
+            patch("core.device_participation._get_mesh_membership", return_value=None),
+            patch("core.device_participation._get_mesh_session", return_value=None),
+        ):
             ps = get_device_participation("dev1")
         self.assertFalse(ps.routable)
 
     def test_routable_true_when_readiness_says_true(self):
         rs = _make_readiness(registered=True, routable=True)
-        with patch("core.device_participation._get_canonical_readiness", return_value=rs), \
-             patch("core.device_participation._get_selector_status", return_value=None), \
-             patch("core.device_participation._get_mesh_membership", return_value=None), \
-             patch("core.device_participation._get_mesh_session", return_value=None):
+        with (
+            patch("core.device_participation._get_canonical_readiness", return_value=rs),
+            patch("core.device_participation._get_selector_status", return_value=None),
+            patch("core.device_participation._get_mesh_membership", return_value=None),
+            patch("core.device_participation._get_mesh_session", return_value=None),
+        ):
             ps = get_device_participation("dev1")
         self.assertTrue(ps.routable)
 
@@ -193,10 +203,12 @@ class TestRoutableSourcedFromReadiness(unittest.TestCase):
         mesh.authority_scope = None
         mesh.routing_intent = None
         mesh.to_dict = lambda: {"member_device_id": "dev1"}
-        with patch("core.device_participation._get_canonical_readiness", return_value=rs), \
-             patch("core.device_participation._get_selector_status", return_value=None), \
-             patch("core.device_participation._get_mesh_membership", return_value=mesh), \
-             patch("core.device_participation._get_mesh_session", return_value=None):
+        with (
+            patch("core.device_participation._get_canonical_readiness", return_value=rs),
+            patch("core.device_participation._get_selector_status", return_value=None),
+            patch("core.device_participation._get_mesh_membership", return_value=mesh),
+            patch("core.device_participation._get_mesh_session", return_value=None),
+        ):
             ps = get_device_participation("dev1")
         # routable must still be False despite mesh membership
         self.assertFalse(ps.routable)
@@ -210,19 +222,23 @@ class TestRoutableSourcedFromReadiness(unittest.TestCase):
 class TestRuntimePresentSourcedFromReadiness(unittest.TestCase):
     def test_runtime_present_false_when_offline(self):
         rs = _make_readiness(registered=True, online=False, routable=True)
-        with patch("core.device_participation._get_canonical_readiness", return_value=rs), \
-             patch("core.device_participation._get_selector_status", return_value=None), \
-             patch("core.device_participation._get_mesh_membership", return_value=None), \
-             patch("core.device_participation._get_mesh_session", return_value=None):
+        with (
+            patch("core.device_participation._get_canonical_readiness", return_value=rs),
+            patch("core.device_participation._get_selector_status", return_value=None),
+            patch("core.device_participation._get_mesh_membership", return_value=None),
+            patch("core.device_participation._get_mesh_session", return_value=None),
+        ):
             ps = get_device_participation("dev1")
         self.assertFalse(ps.runtime_present)
 
     def test_runtime_present_true_when_online(self):
         rs = _make_readiness(registered=True, online=True, routable=True)
-        with patch("core.device_participation._get_canonical_readiness", return_value=rs), \
-             patch("core.device_participation._get_selector_status", return_value=None), \
-             patch("core.device_participation._get_mesh_membership", return_value=None), \
-             patch("core.device_participation._get_mesh_session", return_value=None):
+        with (
+            patch("core.device_participation._get_canonical_readiness", return_value=rs),
+            patch("core.device_participation._get_selector_status", return_value=None),
+            patch("core.device_participation._get_mesh_membership", return_value=None),
+            patch("core.device_participation._get_mesh_session", return_value=None),
+        ):
             ps = get_device_participation("dev1")
         self.assertTrue(ps.runtime_present)
 
@@ -238,10 +254,12 @@ class TestOrchestrationEligibilityGatedOnReadiness(unittest.TestCase):
         sel = MagicMock()
         sel.orchestration_eligible = True
         sel.to_dict = lambda: {"orchestration_eligible": True}
-        with patch("core.device_participation._get_canonical_readiness", return_value=rs), \
-             patch("core.device_participation._get_selector_status", return_value=sel), \
-             patch("core.device_participation._get_mesh_membership", return_value=None), \
-             patch("core.device_participation._get_mesh_session", return_value=None):
+        with (
+            patch("core.device_participation._get_canonical_readiness", return_value=rs),
+            patch("core.device_participation._get_selector_status", return_value=sel),
+            patch("core.device_participation._get_mesh_membership", return_value=None),
+            patch("core.device_participation._get_mesh_session", return_value=None),
+        ):
             ps = get_device_participation("dev1")
         self.assertFalse(ps.orchestration_eligible)
 
@@ -250,10 +268,12 @@ class TestOrchestrationEligibilityGatedOnReadiness(unittest.TestCase):
         sel = MagicMock()
         sel.orchestration_eligible = True
         sel.to_dict = lambda: {"orchestration_eligible": True}
-        with patch("core.device_participation._get_canonical_readiness", return_value=rs), \
-             patch("core.device_participation._get_selector_status", return_value=sel), \
-             patch("core.device_participation._get_mesh_membership", return_value=None), \
-             patch("core.device_participation._get_mesh_session", return_value=None):
+        with (
+            patch("core.device_participation._get_canonical_readiness", return_value=rs),
+            patch("core.device_participation._get_selector_status", return_value=sel),
+            patch("core.device_participation._get_mesh_membership", return_value=None),
+            patch("core.device_participation._get_mesh_session", return_value=None),
+        ):
             ps = get_device_participation("dev1")
         self.assertFalse(ps.orchestration_eligible)
 
@@ -262,10 +282,12 @@ class TestOrchestrationEligibilityGatedOnReadiness(unittest.TestCase):
         sel = MagicMock()
         sel.orchestration_eligible = True
         sel.to_dict = lambda: {"orchestration_eligible": True}
-        with patch("core.device_participation._get_canonical_readiness", return_value=rs), \
-             patch("core.device_participation._get_selector_status", return_value=sel), \
-             patch("core.device_participation._get_mesh_membership", return_value=None), \
-             patch("core.device_participation._get_mesh_session", return_value=None):
+        with (
+            patch("core.device_participation._get_canonical_readiness", return_value=rs),
+            patch("core.device_participation._get_selector_status", return_value=sel),
+            patch("core.device_participation._get_mesh_membership", return_value=None),
+            patch("core.device_participation._get_mesh_session", return_value=None),
+        ):
             ps = get_device_participation("dev1")
         self.assertTrue(ps.orchestration_eligible)
 
@@ -283,10 +305,12 @@ class TestMeshSessionEnrichesRolesNotTruth(unittest.TestCase):
         mesh.authority_scope = None
         mesh.routing_intent = None
         mesh.to_dict = lambda: {}
-        with patch("core.device_participation._get_canonical_readiness", return_value=rs), \
-             patch("core.device_participation._get_selector_status", return_value=None), \
-             patch("core.device_participation._get_mesh_membership", return_value=mesh), \
-             patch("core.device_participation._get_mesh_session", return_value=None):
+        with (
+            patch("core.device_participation._get_canonical_readiness", return_value=rs),
+            patch("core.device_participation._get_selector_status", return_value=None),
+            patch("core.device_participation._get_mesh_membership", return_value=mesh),
+            patch("core.device_participation._get_mesh_session", return_value=None),
+        ):
             ps = get_device_participation("dev1")
         # Mesh enriches roles but cannot set registered=True
         self.assertFalse(ps.registered)
@@ -300,10 +324,12 @@ class TestMeshSessionEnrichesRolesNotTruth(unittest.TestCase):
         session.participants = []
         session.primary_device_id = "other"
         session.source_device_id = "other"
-        with patch("core.device_participation._get_canonical_readiness", return_value=rs), \
-             patch("core.device_participation._get_selector_status", return_value=None), \
-             patch("core.device_participation._get_mesh_membership", return_value=None), \
-             patch("core.device_participation._get_mesh_session", return_value=session):
+        with (
+            patch("core.device_participation._get_canonical_readiness", return_value=rs),
+            patch("core.device_participation._get_selector_status", return_value=None),
+            patch("core.device_participation._get_mesh_membership", return_value=None),
+            patch("core.device_participation._get_mesh_session", return_value=session),
+        ):
             ps = get_device_participation("dev1")
         # Session enriches session_id but routable stays False
         self.assertFalse(ps.routable)

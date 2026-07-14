@@ -105,20 +105,19 @@ from typing import Any, Dict, List
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Module availability guards
 # ---------------------------------------------------------------------------
 
 try:
     from core.v2_readiness_governance_evidence_surface import (
-        V2_READINESS_GOVERNANCE_EVIDENCE_SURFACE_AUTHORITY,
-        V2_READINESS_GOVERNANCE_EVIDENCE_SURFACE_PR6V2_SENTINEL,
-        CANONICAL_EVIDENCE_IS_GATE_INPUT_POLICY,
         ADVISORY_EVIDENCE_IS_NOT_GATE_INPUT_POLICY,
+        CANONICAL_EVIDENCE_IS_GATE_INPUT_POLICY,
         COMPANION_REPO_EVIDENCE_IS_CLASSIFIED_BY_V2_POLICY,
         EVIDENCE_SURFACE_IS_PROJECTION_ONLY_POLICY,
         EVIDENCE_SURFACE_IS_REVIEWER_FRIENDLY_POLICY,
+        V2_READINESS_GOVERNANCE_EVIDENCE_SURFACE_AUTHORITY,
+        V2_READINESS_GOVERNANCE_EVIDENCE_SURFACE_PR6V2_SENTINEL,
         EvidenceClassification,
         EvidenceDimensionEntry,
         EvidenceSurfaceReport,
@@ -226,9 +225,15 @@ def test_B02_evidence_dimension_entry_to_dict_keys():
     )
     d = entry.to_dict()
     required_keys = [
-        "dimension_id", "display_name", "classification", "evidence_status",
-        "evidence_summary", "code_reference", "test_reference",
-        "raw_evidence", "notes",
+        "dimension_id",
+        "display_name",
+        "classification",
+        "evidence_status",
+        "evidence_summary",
+        "code_reference",
+        "test_reference",
+        "raw_evidence",
+        "notes",
     ]
     for k in required_keys:
         assert k in d, f"missing key: {k}"
@@ -312,10 +317,18 @@ def test_C02_evidence_surface_report_to_dict_keys():
     )
     d = report.to_dict()
     required_keys = [
-        "report_id", "generated_at", "authority", "dimensions",
-        "canonical_count", "advisory_count", "companion_repo_count",
-        "present_count", "absent_count", "unavailable_count",
-        "all_canonical_present", "deferred_notes",
+        "report_id",
+        "generated_at",
+        "authority",
+        "dimensions",
+        "canonical_count",
+        "advisory_count",
+        "companion_repo_count",
+        "present_count",
+        "absent_count",
+        "unavailable_count",
+        "all_canonical_present",
+        "deferred_notes",
     ]
     for k in required_keys:
         assert k in d, f"missing key: {k}"
@@ -417,9 +430,7 @@ def test_D04_report_authority_matches_sentinel():
 @_skip_if_unavailable
 def test_D05_report_has_at_least_six_dimensions():
     report = build_evidence_surface_report()
-    assert len(report.dimensions) >= 6, (
-        f"Expected at least 6 evidence dimensions, got {len(report.dimensions)}"
-    )
+    assert len(report.dimensions) >= 6, f"Expected at least 6 evidence dimensions, got {len(report.dimensions)}"
 
 
 @_skip_if_unavailable
@@ -539,9 +550,9 @@ def test_E06_advisory_entries_correctly_classified():
     for dim_id in advisory_ids:
         entry = _find_dimension(report, dim_id)
         if entry is not None:
-            assert entry.classification != EvidenceClassification.canonical.value, (
-                f"Advisory dimension {dim_id!r} incorrectly classified as canonical"
-            )
+            assert (
+                entry.classification != EvidenceClassification.canonical.value
+            ), f"Advisory dimension {dim_id!r} incorrectly classified as canonical"
 
 
 @_skip_if_unavailable
@@ -606,6 +617,7 @@ def test_G01_delegated_flow_readiness_gate_authority_importable():
         from core.delegated_flow_readiness_gate import (
             DELEGATED_FLOW_READINESS_GATE_AUTHORITY,
         )
+
         assert DELEGATED_FLOW_READINESS_GATE_AUTHORITY
     except ImportError:
         pytest.skip("core.delegated_flow_readiness_gate not available")
@@ -616,6 +628,7 @@ def test_G02_delegated_flow_acceptance_gate_authority_importable():
         from core.delegated_flow_acceptance_gate import (
             DELEGATED_FLOW_ACCEPTANCE_GATE_AUTHORITY,
         )
+
         assert DELEGATED_FLOW_ACCEPTANCE_GATE_AUTHORITY
     except ImportError:
         pytest.skip("core.delegated_flow_acceptance_gate not available")
@@ -626,6 +639,7 @@ def test_G03_post_graduation_governance_authority_importable():
         from core.delegated_flow_post_graduation_governance import (
             DELEGATED_FLOW_POST_GRADUATION_GOVERNANCE_AUTHORITY,
         )
+
         assert DELEGATED_FLOW_POST_GRADUATION_GOVERNANCE_AUTHORITY
     except ImportError:
         pytest.skip("core.delegated_flow_post_graduation_governance not available")
@@ -636,6 +650,7 @@ def test_G04_android_evaluator_artifact_ingress_policy_importable():
         from core.android_evaluator_artifact_ingress import (
             GOVERNANCE_ARTIFACT_IS_CANONICAL_GATE_INPUT_POLICY,
         )
+
         assert GOVERNANCE_ARTIFACT_IS_CANONICAL_GATE_INPUT_POLICY
     except ImportError:
         pytest.skip("core.android_evaluator_artifact_ingress not available")
@@ -646,6 +661,7 @@ def test_G05_takeover_tracking_authority_importable():
         from core.takeover_tracking import (
             TAKEOVER_TRACKING_AUTHORITY,
         )
+
         assert TAKEOVER_TRACKING_AUTHORITY
     except ImportError:
         pytest.skip("core.takeover_tracking not available")
@@ -656,6 +672,7 @@ def test_G06_recovery_closure_validator_authority_importable():
         from core.recovery_durability_closure_validator import (
             RECOVERY_DURABILITY_CLOSURE_AUTHORITY,
         )
+
         assert RECOVERY_DURABILITY_CLOSURE_AUTHORITY
     except ImportError:
         pytest.skip("core.recovery_durability_closure_validator not available")
@@ -671,8 +688,7 @@ def test_H01_code_references_have_core_prefix():
     report = build_evidence_surface_report()
     for entry in report.dimensions:
         assert entry.code_reference.startswith("core."), (
-            f"dimension {entry.dimension_id!r} code_reference does not start with 'core.': "
-            f"{entry.code_reference!r}"
+            f"dimension {entry.dimension_id!r} code_reference does not start with 'core.': " f"{entry.code_reference!r}"
         )
 
 
@@ -681,8 +697,7 @@ def test_H02_test_references_contain_test_keyword():
     report = build_evidence_surface_report()
     for entry in report.dimensions:
         assert "test" in entry.test_reference.lower(), (
-            f"dimension {entry.dimension_id!r} test_reference does not reference a test: "
-            f"{entry.test_reference!r}"
+            f"dimension {entry.dimension_id!r} test_reference does not reference a test: " f"{entry.test_reference!r}"
         )
 
 
@@ -692,18 +707,15 @@ def test_H03_canonical_dimensions_evidence_status_not_absent():
     report = build_evidence_surface_report()
     for entry in report.dimensions:
         if entry.classification == EvidenceClassification.canonical.value:
-            assert entry.evidence_status != "absent", (
-                f"Canonical dimension {entry.dimension_id!r} has evidence_status 'absent'"
-            )
+            assert (
+                entry.evidence_status != "absent"
+            ), f"Canonical dimension {entry.dimension_id!r} has evidence_status 'absent'"
 
 
 @_skip_if_unavailable
 def test_H04_all_canonical_present_field_correct():
     report = build_evidence_surface_report()
-    canonical_dims = [
-        d for d in report.dimensions
-        if d.classification == EvidenceClassification.canonical.value
-    ]
+    canonical_dims = [d for d in report.dimensions if d.classification == EvidenceClassification.canonical.value]
     manual_check = all(d.evidence_status == "present" for d in canonical_dims)
     assert report.all_canonical_present == manual_check
 

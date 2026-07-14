@@ -102,8 +102,8 @@ Group F — Artifact export and alignment with real code surfaces
 from __future__ import annotations
 
 import json
-import sys
 import os
+import sys
 from typing import Any, Dict
 
 import pytest
@@ -114,22 +114,21 @@ if _PROJECT_ROOT not in sys.path:
 
 import core.dual_repo_system_completeness_review as _mod
 from core.dual_repo_system_completeness_review import (
+    ARCHITECTURE_COMPLETE_DOES_NOT_IMPLY_RUNTIME_CLOSED_POLICY,
     COMPLETENESS_REVIEW_AUTHORITY,
     COMPLETENESS_REVIEW_SENTINEL,
-    HONEST_DEFERRED_MUST_NOT_BE_LABELED_COMPLETE_POLICY,
-    ARCHITECTURE_COMPLETE_DOES_NOT_IMPLY_RUNTIME_CLOSED_POLICY,
     CROSS_REPO_EVIDENCE_REQUIRES_WIRE_LAYER_POLICY,
+    HONEST_DEFERRED_MUST_NOT_BE_LABELED_COMPLETE_POLICY,
     CompletenessDimension,
-    CompletenessLabel,
-    CompletenessVerdict,
     CompletenessEntry,
+    CompletenessLabel,
     CompletenessReviewReport,
+    CompletenessVerdict,
     DualRepoSystemCompletenessReviewer,
     build_completeness_review,
     get_completeness_review,
     reset_completeness_review,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -239,14 +238,9 @@ class TestModuleLevel:
 
     def test_A15_verdict_has_blocking_gaps(self):
         assert CompletenessVerdict.critical_evidence_gaps.has_blocking_gaps is True
-        assert (
-            CompletenessVerdict.structural_only_runtime_not_closed.has_blocking_gaps
-            is True
-        )
+        assert CompletenessVerdict.structural_only_runtime_not_closed.has_blocking_gaps is True
         assert CompletenessVerdict.fully_closed.has_blocking_gaps is False
-        assert (
-            CompletenessVerdict.partial_closure_gaps_present.has_blocking_gaps is False
-        )
+        assert CompletenessVerdict.partial_closure_gaps_present.has_blocking_gaps is False
 
     def test_A16_verdict_from_string_valid(self):
         v = CompletenessVerdict.from_string("fully_closed")
@@ -401,9 +395,7 @@ class TestCompletenessReviewReport:
 
     def test_C07_is_fully_closed_mirrors_verdict(self):
         r_closed = CompletenessReviewReport(verdict=CompletenessVerdict.fully_closed)
-        r_partial = CompletenessReviewReport(
-            verdict=CompletenessVerdict.partial_closure_gaps_present
-        )
+        r_partial = CompletenessReviewReport(verdict=CompletenessVerdict.partial_closure_gaps_present)
         assert r_closed.is_fully_closed is True
         assert r_partial.is_fully_closed is False
 
@@ -439,9 +431,7 @@ class TestLiveProbe:
 
     def test_D06_each_entry_non_empty_summary(self, live_report):
         for entry in live_report.dimensions:
-            assert entry.summary, (
-                f"Dimension {entry.dimension.value} has empty summary"
-            )
+            assert entry.summary, f"Dimension {entry.dimension.value} has empty summary"
 
     def test_D07_valid_verdict(self, live_report):
         assert isinstance(live_report.verdict, CompletenessVerdict)
@@ -470,9 +460,7 @@ class TestLiveProbe:
     def test_D13_all_label_values_valid(self, live_report):
         valid_labels = set(CompletenessLabel)
         for entry in live_report.dimensions:
-            assert entry.label in valid_labels, (
-                f"Dimension {entry.dimension.value} has invalid label {entry.label!r}"
-            )
+            assert entry.label in valid_labels, f"Dimension {entry.dimension.value} has invalid label {entry.label!r}"
 
     def test_D14_blocking_gaps_is_list(self, live_report):
         assert isinstance(live_report.blocking_gaps, list)
@@ -547,8 +535,7 @@ class TestHonestLabeling:
         assert entry is not None
         completed_text = " ".join(entry.completed_items).lower()
         assert "reconciliation" in completed_text, (
-            "cross_repo_evidence completed_items must mention the closed "
-            "ReconciliationSignal wire path"
+            "cross_repo_evidence completed_items must mention the closed " "ReconciliationSignal wire path"
         )
 
     def test_E03_cross_repo_completed_mentions_handoff(self, live_report):
@@ -556,8 +543,7 @@ class TestHonestLabeling:
         assert entry is not None
         completed_text = " ".join(entry.completed_items).lower()
         assert "handoff" in completed_text, (
-            "cross_repo_evidence completed_items must mention the closed "
-            "HandoffEnvelopeV2 response path"
+            "cross_repo_evidence completed_items must mention the closed " "HandoffEnvelopeV2 response path"
         )
 
     def test_E04_cross_repo_no_stale_missing_wire_gaps(self, live_report):
@@ -601,9 +587,7 @@ class TestHonestLabeling:
         )
 
     def test_E08_governance_complete_when_ci_enforced(self, live_report):
-        entry = live_report.get_dimension(
-            CompletenessDimension.governance_release_readiness
-        )
+        entry = live_report.get_dimension(CompletenessDimension.governance_release_readiness)
         assert entry is not None
         assert entry.label == CompletenessLabel.complete, (
             "governance_release_readiness must be complete when release gate "
@@ -611,31 +595,23 @@ class TestHonestLabeling:
         )
 
     def test_E09_governance_completed_mentions_ci_enforcement(self, live_report):
-        entry = live_report.get_dimension(
-            CompletenessDimension.governance_release_readiness
-        )
+        entry = live_report.get_dimension(CompletenessDimension.governance_release_readiness)
         assert entry is not None
         completed_text = " ".join(entry.completed_items).lower()
-        assert (
-            "is_enforcing=true" in completed_text
-            and "governance_gate_enforcement.yml" in completed_text
-        ), (
-            "governance completed_items must mention enforced release gate "
-            "status and CI workflow wiring"
+        assert "is_enforcing=true" in completed_text and "governance_gate_enforcement.yml" in completed_text, (
+            "governance completed_items must mention enforced release gate " "status and CI workflow wiring"
         )
 
     def test_E10_real_device_deferred_items_non_empty(self, live_report):
         entry = live_report.get_dimension(CompletenessDimension.real_device_multi_device)
         assert entry is not None
         assert len(entry.deferred_items) > 0, (
-            "real_device_multi_device must have deferred items "
-            "(real-device CI, multi-device reconnect ordering)"
+            "real_device_multi_device must have deferred items " "(real-device CI, multi-device reconnect ordering)"
         )
 
     def test_E11_verdict_not_fully_closed(self, live_report):
         assert live_report.verdict != CompletenessVerdict.fully_closed, (
-            "System verdict MUST NOT be 'fully_closed': "
-            "runtime proof and real-device evidence/CI gaps still remain"
+            "System verdict MUST NOT be 'fully_closed': " "runtime proof and real-device evidence/CI gaps still remain"
         )
 
     def test_E12_blocking_gaps_non_empty(self, live_report):
@@ -677,17 +653,20 @@ class TestArtifactExport:
         assert isinstance(j, str)
         parsed = json.loads(j)
         for key in [
-            "report_id", "dimensions", "verdict",
-            "blocking_gaps", "deferred_acknowledged",
-            "summary", "generated_at", "reviewer_version",
+            "report_id",
+            "dimensions",
+            "verdict",
+            "blocking_gaps",
+            "deferred_acknowledged",
+            "summary",
+            "generated_at",
+            "reviewer_version",
         ]:
             assert key in parsed, f"Key {key!r} missing from to_json() output"
 
     def test_F02_code_references_is_list(self, live_report):
         for entry in live_report.dimensions:
-            assert isinstance(entry.code_references, list), (
-                f"code_references for {entry.dimension.value} is not a list"
-            )
+            assert isinstance(entry.code_references, list), f"code_references for {entry.dimension.value} is not a list"
 
     def test_F03_architecture_label_at_least_structure_only(self, live_report):
         entry = live_report.get_dimension(CompletenessDimension.architecture_structure)
@@ -710,18 +689,14 @@ class TestArtifactExport:
 
     def test_F06_summary_mentions_system_final_acceptance_verdict(self, live_report):
         assert "system_final_acceptance_verdict" in live_report.summary, (
-            "summary must reference core.system_final_acceptance_verdict "
-            "as a key code surface for reviewers"
+            "summary must reference core.system_final_acceptance_verdict " "as a key code surface for reviewers"
         )
 
     def test_F07_summary_mentions_dual_repo_system_reality_audit(self, live_report):
         assert "dual_repo_system_reality_audit" in live_report.summary, (
-            "summary must reference core.dual_repo_system_reality_audit "
-            "as a key code surface for reviewers"
+            "summary must reference core.dual_repo_system_reality_audit " "as a key code surface for reviewers"
         )
 
     def test_F08_all_dimension_names_in_summary(self, live_report):
         for dim in CompletenessDimension.all_dimensions():
-            assert dim.value in live_report.summary, (
-                f"summary must include dimension name {dim.value!r}"
-            )
+            assert dim.value in live_report.summary, f"summary must include dimension name {dim.value!r}"

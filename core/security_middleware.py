@@ -16,6 +16,7 @@
 """
 
 import logging  # auto: ensure module logger is defined
+
 _logger = logging.getLogger(__name__)
 
 
@@ -23,18 +24,19 @@ import logging
 import time
 import uuid
 from collections import defaultdict, deque
-from typing import Any, Dict, List, Optional, Set
-
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Set
 
 logger = logging.getLogger("Galaxy.SecurityMiddleware")
 
 
 # ───────────────────── 审计日志 ─────────────────────
 
+
 @dataclass
 class AuditEntry:
     """审计日志条目"""
+
     request_id: str
     timestamp: float
     method: str
@@ -101,23 +103,17 @@ class AuditLogger:
         return {
             "total_requests": self._total_count,
             "error_requests": self._error_count,
-            "top_paths": dict(sorted(
-                self._by_path.items(), key=lambda x: x[1], reverse=True
-            )[:10]),
+            "top_paths": dict(sorted(self._by_path.items(), key=lambda x: x[1], reverse=True)[:10]),
             "status_distribution": dict(self._by_status),
-            "top_ips": dict(sorted(
-                self._by_ip.items(), key=lambda x: x[1], reverse=True
-            )[:10]),
+            "top_ips": dict(sorted(self._by_ip.items(), key=lambda x: x[1], reverse=True)[:10]),
         }
 
     def get_entries_by_ip(self, ip: str, limit: int = 50) -> List[Dict]:
-        return [
-            e.to_dict() for e in self._entries
-            if e.client_ip == ip
-        ][-limit:]
+        return [e.to_dict() for e in self._entries if e.client_ip == ip][-limit:]
 
 
 # ───────────────────── IP 黑名单 ─────────────────────
+
 
 class IPBlockList:
     """IP 黑名单管理"""
@@ -125,8 +121,8 @@ class IPBlockList:
     def __init__(self):
         self._blocked: Set[str] = set()
         self._auto_block: Dict[str, List[float]] = defaultdict(list)
-        self._threshold = 50       # 1 分钟内的最大失败请求数
-        self._window = 60          # 检测窗口（秒）
+        self._threshold = 50  # 1 分钟内的最大失败请求数
+        self._window = 60  # 检测窗口（秒）
         self._block_duration = 300  # 自动封禁时长（秒）
         self._auto_blocked: Dict[str, float] = {}  # ip → unblock_time
 
@@ -168,23 +164,19 @@ class IPBlockList:
             self._auto_blocked[ip] = now + self._block_duration
             self._auto_block[ip].clear()
             logger.warning(
-                f"[安全] IP 自动封禁 {self._block_duration}s: {ip} "
-                f"({self._threshold} 次失败请求/{self._window}s)"
+                f"[安全] IP 自动封禁 {self._block_duration}s: {ip} " f"({self._threshold} 次失败请求/{self._window}s)"
             )
 
     def get_blocked_list(self) -> Dict:
         now = time.time()
         return {
             "permanent": list(self._blocked),
-            "auto_blocked": {
-                ip: round(expire - now, 0)
-                for ip, expire in self._auto_blocked.items()
-                if expire > now
-            },
+            "auto_blocked": {ip: round(expire - now, 0) for ip, expire in self._auto_blocked.items() if expire > now},
         }
 
 
 # ───────────────────── 速率限制 ─────────────────────
+
 
 class RateLimiter:
     """
@@ -231,10 +223,7 @@ class RateLimiter:
     def cleanup(self):
         """清理长时间未使用的桶"""
         now = time.time()
-        stale = [
-            ip for ip, bucket in self._buckets.items()
-            if now - bucket["last_refill"] > self._cleanup_interval
-        ]
+        stale = [ip for ip, bucket in self._buckets.items() if now - bucket["last_refill"] > self._cleanup_interval]
         for ip in stale:
             del self._buckets[ip]
 
@@ -247,6 +236,7 @@ class RateLimiter:
 
 
 # ───────────────────── 输入验证 ─────────────────────
+
 
 class InputValidator:
     """
@@ -295,6 +285,7 @@ class InputValidator:
 
     def __init__(self, strict: bool = False):
         import re
+
         self._strict = strict
         self._sql_re = [re.compile(p) for p in self.SQL_INJECTION_PATTERNS]
         self._xss_re = [re.compile(p) for p in self.XSS_PATTERNS]
@@ -355,12 +346,9 @@ class InputValidator:
         return None
 
     def _record_violation(self, threat_type: str, value: str, context: str):
-        self._violations.append({
-            "type": threat_type,
-            "value": value[:100],
-            "context": context,
-            "timestamp": time.time()
-        })
+        self._violations.append(
+            {"type": threat_type, "value": value[:100], "context": context, "timestamp": time.time()}
+        )
         logger.warning(f"[安全] 输入验证检测到 {threat_type}: {context} = {value[:50]}...")
 
     def get_violations(self, limit: int = 50) -> List[Dict]:
@@ -370,13 +358,11 @@ class InputValidator:
         violations_by_type: Dict[str, int] = defaultdict(int)
         for v in self._violations:
             violations_by_type[v["type"]] += 1
-        return {
-            "total_violations": len(self._violations),
-            "by_type": dict(violations_by_type)
-        }
+        return {"total_violations": len(self._violations), "by_type": dict(violations_by_type)}
 
 
 # ───────────────────── FastAPI 中间件 ─────────────────────
+
 
 def create_audit_middleware(app, audit_logger: Optional[AuditLogger] = None):
     """
@@ -501,6 +487,7 @@ def create_rate_limit_middleware(app, rate_limiter: Optional[RateLimiter] = None
     创建速率限制中间件
     """
     import os
+
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
@@ -521,7 +508,12 @@ def create_rate_limit_middleware(app, rate_limiter: Optional[RateLimiter] = None
     # 防护意义(不存在"限制自己攻自己"这种威胁模型)，反而会误伤本应用自己的
     # 正常轮询/交互。默认放行本机回环地址；GALAXY_RATE_LIMIT_LOOPBACK=1 可
     # 强制对回环地址也限流(如需要测试限流本身的行为)。
-    _rate_limit_loopback = os.environ.get("GALAXY_RATE_LIMIT_LOOPBACK", "0").strip().lower() in ("1", "true", "yes", "on")
+    _rate_limit_loopback = os.environ.get("GALAXY_RATE_LIMIT_LOOPBACK", "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
     _LOOPBACK_IPS = ("127.0.0.1", "::1", "localhost")
 
     class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -540,7 +532,7 @@ def create_rate_limit_middleware(app, rate_limiter: Optional[RateLimiter] = None
                 return JSONResponse(
                     status_code=429,
                     content={"error": "rate_limited", "message": "Too many requests"},
-                    headers={"Retry-After": "60"}
+                    headers={"Retry-After": "60"},
                 )
 
             response = await call_next(request)
@@ -562,11 +554,12 @@ def create_input_validation_middleware(app, validator: Optional[InputValidator] 
 
     检查请求体中的注入攻击模式。
     """
+    import json as json_module
     import os
+
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
-    import json as json_module
 
     if validator is None:
         validator = InputValidator()
@@ -602,8 +595,8 @@ def create_input_validation_middleware(app, validator: Optional[InputValidator] 
                                         content={
                                             "error": "input_validation_failed",
                                             "threat_type": threat,
-                                            "message": f"Potential {threat} detected in request"
-                                        }
+                                            "message": f"Potential {threat} detected in request",
+                                        },
                                     )
                     except (json_module.JSONDecodeError, UnicodeDecodeError):
                         pass  # 让后续处理器处理格式错误
@@ -617,8 +610,8 @@ def create_input_validation_middleware(app, validator: Optional[InputValidator] 
                         content={
                             "error": "input_validation_failed",
                             "threat_type": threat,
-                            "message": f"Potential {threat} detected in query parameter"
-                        }
+                            "message": f"Potential {threat} detected in query parameter",
+                        },
                     )
 
             return await call_next(request)
@@ -628,6 +621,7 @@ def create_input_validation_middleware(app, validator: Optional[InputValidator] 
 
 
 # ───────────────────── 安全管理器 ─────────────────────
+
 
 class SecurityManager:
     """
@@ -641,12 +635,9 @@ class SecurityManager:
         self.audit = AuditLogger()
         self.ip_block = IPBlockList()
         self.rate_limiter = RateLimiter(
-            requests_per_minute=config.get("rate_limit_rpm", 120),
-            burst_size=config.get("rate_limit_burst", 30)
+            requests_per_minute=config.get("rate_limit_rpm", 120), burst_size=config.get("rate_limit_burst", 30)
         )
-        self.input_validator = InputValidator(
-            strict=config.get("strict_validation", False)
-        )
+        self.input_validator = InputValidator(strict=config.get("strict_validation", False))
 
     def setup_middleware(self, app, include_rate_limit: bool = True):
         """为 FastAPI 应用安装所有安全中间件

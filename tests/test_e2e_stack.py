@@ -39,8 +39,8 @@ All tests are self-contained and require only the packages already installed
 in the project's virtual environment (fastapi, httpx, pydantic, pytest).
 """
 
-import sys
 import os
+import sys
 import uuid
 from typing import Any, Dict
 
@@ -59,6 +59,7 @@ if PROJECT_ROOT not in sys.path:
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="module")
 def api_client() -> TestClient:
@@ -83,6 +84,7 @@ def api_client() -> TestClient:
 # ---------------------------------------------------------------------------
 # 1. Device registration and capability sync
 # ---------------------------------------------------------------------------
+
 
 class TestDeviceRegistrationAndCapabilitySync:
     """
@@ -128,13 +130,9 @@ class TestDeviceRegistrationAndCapabilitySync:
         assert r.status_code == 200, r.text
         data = r.json()
         # The endpoint returns either {"devices": [...]} or a list directly
-        devices: list = (
-            data if isinstance(data, list) else data.get("devices", [])
-        )
+        devices: list = data if isinstance(data, list) else data.get("devices", [])
         ids = [d.get("device_id") for d in devices]
-        assert device_id in ids, (
-            f"Device {device_id!r} not found in device list. ids={ids[:10]}"
-        )
+        assert device_id in ids, f"Device {device_id!r} not found in device list. ids={ids[:10]}"
 
     def test_capability_registry_is_queryable(self) -> None:
         """
@@ -145,9 +143,7 @@ class TestDeviceRegistrationAndCapabilitySync:
 
         reg = CapabilityRegistry.get_instance()
         schemas = reg.to_tool_schemas()
-        assert isinstance(schemas, list), (
-            f"to_tool_schemas() should return list, got {type(schemas)}"
-        )
+        assert isinstance(schemas, list), f"to_tool_schemas() should return list, got {type(schemas)}"
 
     def test_register_capability_and_retrieve(self) -> None:
         """
@@ -155,7 +151,7 @@ class TestDeviceRegistrationAndCapabilitySync:
         registry, exercising the CapabilityRegistry.register / _items path
         without any external service.
         """
-        from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
+        from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
 
         reg = CapabilityRegistry.get_instance()
         name = f"e2e_tool_{uuid.uuid4().hex[:8]}"
@@ -179,6 +175,7 @@ class TestDeviceRegistrationAndCapabilitySync:
 # ---------------------------------------------------------------------------
 # 2. Command routing with trace
 # ---------------------------------------------------------------------------
+
 
 class TestCommandRoutingWithTrace:
     """
@@ -207,9 +204,7 @@ class TestCommandRoutingWithTrace:
         )
         # Acceptable: 200 (sync result) or 202 (queued) or 404/400 if device
         # not online — all mean the route was reached and processed.
-        assert r.status_code in (200, 202, 400, 404, 422), (
-            f"Unexpected status {r.status_code}: {r.text}"
-        )
+        assert r.status_code in (200, 202, 400, 404, 422), f"Unexpected status {r.status_code}: {r.text}"
         # If we got a request_id, verify it is a non-empty string
         data = r.json()
         if "request_id" in data:
@@ -224,9 +219,7 @@ class TestCommandRoutingWithTrace:
         # Stats should include at minimum one numeric/dict field
         assert isinstance(data, dict), f"Expected dict, got {type(data)}"
 
-    def test_observability_gateway_reflects_router(
-        self, api_client: TestClient
-    ) -> None:
+    def test_observability_gateway_reflects_router(self, api_client: TestClient) -> None:
         """GET /api/v1/observability/gateway must return the gateway summary dict."""
         r = api_client.get("/api/v1/observability/gateway")
         assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
@@ -239,6 +232,7 @@ class TestCommandRoutingWithTrace:
 # ---------------------------------------------------------------------------
 # 3. Observability endpoints contract
 # ---------------------------------------------------------------------------
+
 
 class TestObservabilityEndpoints:
     """
@@ -290,6 +284,7 @@ class TestObservabilityEndpoints:
 # 4. Dashboard live-status aggregated endpoint
 # ---------------------------------------------------------------------------
 
+
 class TestDashboardLiveStatusEndpoint:
     """终态(用户裁决):dashboard/ 整体删除。/api/v1/observability/live-status
     是退役 dashboard 后端(PR-95)的聚合端点,全仓库无其它定义/消费——随
@@ -297,7 +292,6 @@ class TestDashboardLiveStatusEndpoint:
 
     def test_dashboard_backend_retired(self):
         import pathlib
+
         root = pathlib.Path(__file__).parent.parent
-        assert not (root / "dashboard").exists(), (
-            "dashboard/ 已按用户裁决整体退役删除,不得复活"
-        )
+        assert not (root / "dashboard").exists(), "dashboard/ 已按用户裁决整体退役删除,不得复活"

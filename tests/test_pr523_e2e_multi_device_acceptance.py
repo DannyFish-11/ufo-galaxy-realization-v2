@@ -51,7 +51,7 @@ import os
 import sys
 import unittest
 from typing import Any, Dict, List, Optional
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -281,8 +281,8 @@ class TestC_S1_LocalExecution(unittest.TestCase):
     def test_C1_entry_unification_record_local_path(self):
         """C1. EntryUnificationRecord can represent a local (canonical) entry."""
         from core.multi_device_control_integrity import (
-            build_entry_unification_record,
             EntryUnificationKind,
+            build_entry_unification_record,
         )
 
         record = build_entry_unification_record(
@@ -298,8 +298,8 @@ class TestC_S1_LocalExecution(unittest.TestCase):
     def test_C2_dispatch_authority_record_local_path(self):
         """C2. DispatchAuthorityRecord local path is marked as canonical."""
         from core.multi_device_control_integrity import (
-            build_dispatch_authority_record,
             DispatchPathKind,
+            build_dispatch_authority_record,
         )
 
         record = build_dispatch_authority_record(
@@ -314,8 +314,8 @@ class TestC_S1_LocalExecution(unittest.TestCase):
     def test_C3_control_semantic_record_local_is_local(self):
         """C3. ControlSemanticRecord for local execution has is_local=True."""
         from core.multi_device_control_integrity import (
-            build_control_semantic_record,
             ControlSemanticKind,
+            build_control_semantic_record,
         )
 
         record = build_control_semantic_record(
@@ -331,8 +331,8 @@ class TestC_S1_LocalExecution(unittest.TestCase):
     def test_C4_result_surface_record_local_full_surface(self):
         """C4. ResultSurfaceRecord can represent a fully surfaced local result."""
         from core.multi_device_control_integrity import (
-            build_result_surface_record,
             ResultSurfaceKind,
+            build_result_surface_record,
         )
 
         record = build_result_surface_record(
@@ -366,10 +366,10 @@ class TestC_S1_LocalExecution(unittest.TestCase):
         """C6. record_integrity_event records a canonical local entry event."""
         _reset_integrity_runtime()
         from core.multi_device_control_integrity import (
-            build_entry_unification_record,
             EntryUnificationKind,
-            record_integrity_event,
+            build_entry_unification_record,
             get_multi_device_integrity_runtime,
+            record_integrity_event,
         )
 
         record = build_entry_unification_record(
@@ -395,8 +395,8 @@ class TestD_S2_CrossDeviceDispatch(unittest.TestCase):
     def test_D1_entry_unification_record_cross_device_canonical(self):
         """D1. Cross-device entry through canonical path is marked CANONICAL."""
         from core.multi_device_control_integrity import (
-            build_entry_unification_record,
             EntryUnificationKind,
+            build_entry_unification_record,
         )
 
         record = build_entry_unification_record(
@@ -410,8 +410,8 @@ class TestD_S2_CrossDeviceDispatch(unittest.TestCase):
     def test_D2_dispatch_authority_record_cross_device_canonical(self):
         """D2. Cross-device dispatch via CommandRouter is canonical."""
         from core.multi_device_control_integrity import (
-            build_dispatch_authority_record,
             DispatchPathKind,
+            build_dispatch_authority_record,
         )
 
         record = build_dispatch_authority_record(
@@ -426,8 +426,8 @@ class TestD_S2_CrossDeviceDispatch(unittest.TestCase):
     def test_D3_control_semantic_record_remote_dispatch(self):
         """D3. Cross-device dispatch from A to B yields REMOTE_DISPATCH kind."""
         from core.multi_device_control_integrity import (
-            build_control_semantic_record,
             ControlSemanticKind,
+            build_control_semantic_record,
         )
 
         record = build_control_semantic_record(
@@ -478,6 +478,7 @@ class TestD_S2_CrossDeviceDispatch(unittest.TestCase):
     def test_D6_cross_device_rest_ingress_sentinel_in_devices_route(self):
         """D6. CROSS_DEVICE_REST_INGRESS_CANONICAL sentinel is present in devices.py."""
         import inspect
+
         import core.routes.devices as devices_mod
 
         src = inspect.getsource(devices_mod)
@@ -502,8 +503,8 @@ class TestE_S3_MultiCandidateSelection(unittest.TestCase):
     def test_E1_formation_truth_record_multi_device(self):
         """E1. FormationTruthRecord can describe a multi-device formation."""
         from core.multi_device_control_integrity import (
-            build_formation_truth_record,
             FormationTruthConsistency,
+            build_formation_truth_record,
         )
 
         record = build_formation_truth_record(
@@ -522,8 +523,8 @@ class TestE_S3_MultiCandidateSelection(unittest.TestCase):
     def test_E2_formation_truth_is_consistent_when_descriptor_attached(self):
         """E2. Consistent formation truth is_consistent returns True."""
         from core.multi_device_control_integrity import (
-            build_formation_truth_record,
             FormationTruthConsistency,
+            build_formation_truth_record,
         )
 
         record = build_formation_truth_record(
@@ -543,8 +544,9 @@ class TestE_S3_MultiCandidateSelection(unittest.TestCase):
 
     def test_E4_device_formation_group_has_required_fields(self):
         """E4. DeviceFormationGroup has source_device_id and members."""
-        from core.device_formation.formation_group import DeviceFormationGroup
         import dataclasses
+
+        from core.device_formation.formation_group import DeviceFormationGroup
 
         field_names = {f.name for f in dataclasses.fields(DeviceFormationGroup)}
         for required in [
@@ -624,8 +626,8 @@ class TestF_S4_FormationMembership(unittest.TestCase):
         _reset_integrity_runtime()
         from core.multi_device_control_integrity import (
             build_formation_truth_record,
-            record_integrity_event,
             get_multi_device_integrity_runtime,
+            record_integrity_event,
         )
 
         record = build_formation_truth_record(
@@ -682,8 +684,8 @@ class TestG_S5_TakeoverDelegation(unittest.TestCase):
     def test_G1_control_semantic_record_takeover_kind(self):
         """G1. ControlSemanticRecord with is_takeover=True and TAKEOVER kind."""
         from core.multi_device_control_integrity import (
-            build_control_semantic_record,
             ControlSemanticKind,
+            build_control_semantic_record,
         )
 
         record = build_control_semantic_record(
@@ -710,7 +712,7 @@ class TestG_S5_TakeoverDelegation(unittest.TestCase):
 
     def test_G3_takeover_record_is_semantically_clear(self):
         """G3. Takeover record with explicit source+target is semantically clear."""
-        from core.multi_device_control_integrity import build_control_semantic_record, ControlSemanticKind
+        from core.multi_device_control_integrity import ControlSemanticKind, build_control_semantic_record
 
         record = build_control_semantic_record(
             task_id="takeover-task-001",
@@ -725,10 +727,10 @@ class TestG_S5_TakeoverDelegation(unittest.TestCase):
         """G4. Takeover control semantic record is visible in integrity snapshot."""
         _reset_integrity_runtime()
         from core.multi_device_control_integrity import (
-            build_control_semantic_record,
-            record_integrity_event,
-            get_multi_device_integrity_runtime,
             ControlSemanticKind,
+            build_control_semantic_record,
+            get_multi_device_integrity_runtime,
+            record_integrity_event,
         )
 
         record = build_control_semantic_record(
@@ -752,8 +754,8 @@ class TestG_S5_TakeoverDelegation(unittest.TestCase):
     def test_G6_control_semantic_kind_hybrid_for_multi_target(self):
         """G6. HYBRID kind is emitted when multiple target devices are selected."""
         from core.multi_device_control_integrity import (
-            build_control_semantic_record,
             ControlSemanticKind,
+            build_control_semantic_record,
         )
 
         record = build_control_semantic_record(
@@ -819,8 +821,8 @@ class TestH_S6_DegradedParticipation(unittest.TestCase):
     def test_H5_formation_truth_record_inconsistent_when_descriptor_missing(self):
         """H5. FormationTruthRecord marks inconsistent when consistency is not CONSISTENT."""
         from core.multi_device_control_integrity import (
-            build_formation_truth_record,
             FormationTruthConsistency,
+            build_formation_truth_record,
         )
 
         record = build_formation_truth_record(
@@ -835,8 +837,8 @@ class TestH_S6_DegradedParticipation(unittest.TestCase):
     def test_H6_result_surface_record_partial_when_not_all_surfaces_updated(self):
         """H6. ResultSurfaceRecord is partial when not all surfaces updated."""
         from core.multi_device_control_integrity import (
-            build_result_surface_record,
             ResultSurfaceKind,
+            build_result_surface_record,
         )
 
         record = build_result_surface_record(
@@ -875,8 +877,8 @@ class TestH_S6_DegradedParticipation(unittest.TestCase):
     def test_H8_entry_unification_record_legacy_path_marked(self):
         """H8. Legacy entry path is clearly marked in EntryUnificationRecord."""
         from core.multi_device_control_integrity import (
-            build_entry_unification_record,
             EntryUnificationKind,
+            build_entry_unification_record,
         )
 
         record = build_entry_unification_record(
@@ -921,8 +923,8 @@ class TestI_S7_CanonicalResultSurface(unittest.TestCase):
 
     def test_I2_surface_cross_device_result_updates_chain(self):
         """I2. surface_cross_device_result adds a record to CrossDeviceChainSingleton."""
-        from core.cross_device_result_surface import surface_cross_device_result
         from core.cross_device_execution_chain import get_cross_device_chain
+        from core.cross_device_result_surface import surface_cross_device_result
 
         raw = {"success": True, "task_id": "surface-task-002"}
         surface_cross_device_result(
@@ -975,8 +977,8 @@ class TestI_S7_CanonicalResultSurface(unittest.TestCase):
 
     def test_I6_result_surface_record_for_failure_marks_failed(self):
         """I6. Failure raw result produces a result envelope with success=False."""
-        from core.cross_device_result_surface import surface_cross_device_result
         from core.cross_device_execution_chain import get_cross_device_chain
+        from core.cross_device_result_surface import surface_cross_device_result
 
         record = surface_cross_device_result(
             {"success": False, "error": "device unreachable", "task_id": "surface-task-006"},
@@ -1000,8 +1002,8 @@ class TestI_S7_CanonicalResultSurface(unittest.TestCase):
 
     def test_I8_chain_snapshot_reflects_surfaced_execution(self):
         """I8. CrossDeviceChain snapshot reflects the surfaced execution."""
-        from core.cross_device_result_surface import surface_cross_device_result
         from core.cross_device_execution_chain import get_cross_device_chain
+        from core.cross_device_result_surface import surface_cross_device_result
 
         surface_cross_device_result(
             {"success": True, "task_id": "surface-task-007"},
@@ -1017,8 +1019,8 @@ class TestI_S7_CanonicalResultSurface(unittest.TestCase):
         _reset_integrity_runtime()
         from core.multi_device_control_integrity import (
             build_result_surface_record,
-            record_integrity_event,
             get_multi_device_integrity_runtime,
+            record_integrity_event,
         )
 
         record = build_result_surface_record(
@@ -1059,8 +1061,8 @@ class TestJ_S8_ProjectionRuntimeView(unittest.TestCase):
     def test_J3_enrich_multi_device_projection_returns_enrichment(self):
         """J3. enrich_multi_device_projection() returns a MultiDeviceCanonicalEnrichment."""
         from core.multi_device_projection_canonicalization import (
-            enrich_multi_device_projection,
             MultiDeviceCanonicalEnrichment,
+            enrich_multi_device_projection,
         )
 
         enrichment = enrich_multi_device_projection()
@@ -1082,8 +1084,8 @@ class TestJ_S8_ProjectionRuntimeView(unittest.TestCase):
     def test_J5_surfacing_state_is_valid_enum_value(self):
         """J5. Enrichment surfacing_state is a recognised CanonicalProjectionSurfacingState."""
         from core.multi_device_projection_canonicalization import (
-            enrich_multi_device_projection,
             CanonicalProjectionSurfacingState,
+            enrich_multi_device_projection,
         )
 
         enrichment = enrich_multi_device_projection()
@@ -1105,6 +1107,7 @@ class TestJ_S8_ProjectionRuntimeView(unittest.TestCase):
     def test_J7_projection_canonicalization_integrated_in_projection_routes(self):
         """J7. MULTI_DEVICE_PROJECTION_CANONICALIZATION_INTEGRATED importable from projection routes."""
         import inspect
+
         import core.routes.projection as proj_mod
 
         src = inspect.getsource(proj_mod)
@@ -1112,11 +1115,11 @@ class TestJ_S8_ProjectionRuntimeView(unittest.TestCase):
 
     def test_J8_canonical_enrichment_state_full_when_chain_and_graph_available(self):
         """J8. Surfacing state is FULL when chain and graph are available."""
-        from core.multi_device_projection_canonicalization import (
-            enrich_multi_device_projection,
-            CanonicalProjectionSurfacingState,
-        )
         from core.cross_device_execution_chain import get_cross_device_chain
+        from core.multi_device_projection_canonicalization import (
+            CanonicalProjectionSurfacingState,
+            enrich_multi_device_projection,
+        )
         from core.task_graph_runtime import get_task_graph_runtime
 
         # Ensure both singletons exist
@@ -1146,8 +1149,8 @@ class TestK_OperatorAuditVisibility(unittest.TestCase):
     def test_K1_build_integrity_snapshot_returns_snapshot(self):
         """K1. build_integrity_snapshot() returns a MultiDeviceIntegritySnapshot."""
         from core.multi_device_control_integrity import (
-            build_integrity_snapshot,
             MultiDeviceIntegritySnapshot,
+            build_integrity_snapshot,
         )
 
         snap = build_integrity_snapshot()
@@ -1164,10 +1167,10 @@ class TestK_OperatorAuditVisibility(unittest.TestCase):
     def test_K3_snapshot_reflects_entry_events(self):
         """K3. Integrity snapshot reflects recorded entry events."""
         from core.multi_device_control_integrity import (
-            build_entry_unification_record,
             EntryUnificationKind,
-            record_integrity_event,
+            build_entry_unification_record,
             build_integrity_snapshot,
+            record_integrity_event,
         )
 
         record = build_entry_unification_record(
@@ -1183,10 +1186,10 @@ class TestK_OperatorAuditVisibility(unittest.TestCase):
     def test_K4_snapshot_reflects_dispatch_events(self):
         """K4. Integrity snapshot reflects recorded dispatch events."""
         from core.multi_device_control_integrity import (
-            build_dispatch_authority_record,
             DispatchPathKind,
-            record_integrity_event,
+            build_dispatch_authority_record,
             build_integrity_snapshot,
+            record_integrity_event,
         )
 
         record = build_dispatch_authority_record(
@@ -1202,10 +1205,10 @@ class TestK_OperatorAuditVisibility(unittest.TestCase):
     def test_K5_snapshot_reflects_control_events(self):
         """K5. Integrity snapshot reflects recorded control semantic events."""
         from core.multi_device_control_integrity import (
-            build_control_semantic_record,
             ControlSemanticKind,
-            record_integrity_event,
+            build_control_semantic_record,
             build_integrity_snapshot,
+            record_integrity_event,
         )
 
         record = build_control_semantic_record(
@@ -1221,9 +1224,9 @@ class TestK_OperatorAuditVisibility(unittest.TestCase):
     def test_K6_snapshot_reflects_result_events(self):
         """K6. Integrity snapshot reflects recorded result surface events."""
         from core.multi_device_control_integrity import (
+            build_integrity_snapshot,
             build_result_surface_record,
             record_integrity_event,
-            build_integrity_snapshot,
         )
 
         record = build_result_surface_record(
@@ -1257,10 +1260,10 @@ class TestK_OperatorAuditVisibility(unittest.TestCase):
     def test_K9_integrity_runtime_event_count_cumulative(self):
         """K9. Integrity runtime event counters are cumulative across multiple records."""
         from core.multi_device_control_integrity import (
-            build_entry_unification_record,
             EntryUnificationKind,
-            record_integrity_event,
+            build_entry_unification_record,
             get_multi_device_integrity_runtime,
+            record_integrity_event,
         )
 
         rt = get_multi_device_integrity_runtime()

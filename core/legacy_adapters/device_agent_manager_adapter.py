@@ -71,6 +71,7 @@ class LegacyDeviceAgentManagerAdapter:
         if self._legacy is None:
             try:
                 from core.device_agent_manager import DeviceAgentManager
+
                 self._legacy = DeviceAgentManager()
             except Exception as exc:
                 logger.error(
@@ -84,13 +85,13 @@ class LegacyDeviceAgentManagerAdapter:
         """Lazily obtain the unified device manager singleton."""
         if self._unified is None:
             from core.unified.device_manager import get_unified_device_manager
+
             self._unified = get_unified_device_manager()
         return self._unified
 
     def _log_delegation(self, method: str) -> None:
         logger.debug(
-            "legacy_device_agent_manager → unified | method=%s "
-            "entry_path=legacy via_legacy_adapter=True",
+            "legacy_device_agent_manager → unified | method=%s " "entry_path=legacy via_legacy_adapter=True",
             method,
         )
 

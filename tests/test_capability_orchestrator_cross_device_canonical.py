@@ -17,13 +17,16 @@ async def test_builtin_cross_device_prefers_canonical_device_router_path():
         type=CapabilityType.BUILTIN,
     )
 
-    with patch(
-        "galaxy_gateway.device_router.device_router.route_task",
-        new_callable=AsyncMock,
-    ) as mock_route, patch(
-        "galaxy_gateway.cross_device_coordinator.cross_device_coordinator.execute_cross_device_task",
-        new_callable=AsyncMock,
-    ) as mock_legacy:
+    with (
+        patch(
+            "galaxy_gateway.device_router.device_router.route_task",
+            new_callable=AsyncMock,
+        ) as mock_route,
+        patch(
+            "galaxy_gateway.cross_device_coordinator.cross_device_coordinator.execute_cross_device_task",
+            new_callable=AsyncMock,
+        ) as mock_legacy,
+    ):
         mock_route.return_value = {"success": True, "message": "ok", "via": "device_router"}
         result = await orch._execute_builtin(cap, {"message": "sync", "device_id": "android-1"})
 
@@ -49,13 +52,16 @@ async def test_builtin_cross_device_keeps_compatibility_fallback_explicit():
         type=CapabilityType.BUILTIN,
     )
 
-    with patch(
-        "galaxy_gateway.device_router.device_router.route_task",
-        new_callable=AsyncMock,
-    ) as mock_route, patch(
-        "galaxy_gateway.cross_device_coordinator.cross_device_coordinator.execute_cross_device_task",
-        new_callable=AsyncMock,
-    ) as mock_legacy:
+    with (
+        patch(
+            "galaxy_gateway.device_router.device_router.route_task",
+            new_callable=AsyncMock,
+        ) as mock_route,
+        patch(
+            "galaxy_gateway.cross_device_coordinator.cross_device_coordinator.execute_cross_device_task",
+            new_callable=AsyncMock,
+        ) as mock_legacy,
+    ):
         mock_route.side_effect = RuntimeError("router unavailable")
         mock_legacy.return_value = {"success": True, "message": "compat"}
         result = await orch._execute_builtin(cap, {"command": "sync", "device_id": "android-2"})
@@ -87,13 +93,16 @@ async def test_builtin_cross_device_propagates_canonical_failure_without_fallbac
         type=CapabilityType.BUILTIN,
     )
 
-    with patch(
-        "galaxy_gateway.device_router.device_router.route_task",
-        new_callable=AsyncMock,
-    ) as mock_route, patch(
-        "galaxy_gateway.cross_device_coordinator.cross_device_coordinator.execute_cross_device_task",
-        new_callable=AsyncMock,
-    ) as mock_legacy:
+    with (
+        patch(
+            "galaxy_gateway.device_router.device_router.route_task",
+            new_callable=AsyncMock,
+        ) as mock_route,
+        patch(
+            "galaxy_gateway.cross_device_coordinator.cross_device_coordinator.execute_cross_device_task",
+            new_callable=AsyncMock,
+        ) as mock_legacy,
+    ):
         mock_route.return_value = {"success": False, "error": "no_available_device"}
         result = await orch._execute_builtin(cap, {"command": "sync"})
 

@@ -27,6 +27,7 @@ class WebSocketAdapter(TransportAdapter):
         if self._ws is None:
             try:
                 from galaxy_gateway import connection_manager
+
                 self._ws = connection_manager
             except Exception:
                 pass

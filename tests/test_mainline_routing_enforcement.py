@@ -33,7 +33,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ===========================================================================
 # A) Sentinels
 # ===========================================================================
@@ -359,8 +358,7 @@ class TestEnforceConfirmedNoWarn:
 
         warning_records = [r for r in caplog.records if r.levelno >= logging.WARNING]
         assert not warning_records, (
-            "Expected no warning for confirmed capability gate, "
-            f"got: {[r.message for r in warning_records]}"
+            "Expected no warning for confirmed capability gate, " f"got: {[r.message for r in warning_records]}"
         )
 
 
@@ -418,8 +416,7 @@ class TestAndroidLocalAISentinel:
         from core.android_runtime_host import ANDROID_LOCAL_AI_DEFAULT_CAPABILITY_FLAG
 
         assert ANDROID_LOCAL_AI_DEFAULT_CAPABILITY_FLAG is False, (
-            "Android local AI must default to OFF.  "
-            "ANDROID_LOCAL_AI_DEFAULT_CAPABILITY_FLAG must be False."
+            "Android local AI must default to OFF.  " "ANDROID_LOCAL_AI_DEFAULT_CAPABILITY_FLAG must be False."
         )
 
 
@@ -451,9 +448,9 @@ class TestOpenclawdCallSitePresent:
         openclawd_path = repo_root / "core" / "openclawd.py"
         source = openclawd_path.read_text(encoding="utf-8")
 
-        assert "mainline_routing_enforcement" in source, (
-            "core/openclawd.py must import from core.mainline_routing_enforcement."
-        )
+        assert (
+            "mainline_routing_enforcement" in source
+        ), "core/openclawd.py must import from core.mainline_routing_enforcement."
 
 
 # ===========================================================================

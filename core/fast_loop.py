@@ -14,6 +14,7 @@ Windows 默认的 Proactor 循环开销大(真机:面板首开的并发请求把
   子进程验证;失败立即还原默认策略——**宁可慢,不能哑**。
 - **可关**:``GALAXY_FAST_LOOP=0`` 直接跳过。缺包/任何异常都静默退回默认。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -34,10 +35,14 @@ def active_loop_name() -> str:
 
 def _probe_subprocess_support() -> bool:
     """在新策略下真实拉一个子进程验证支持(约几十毫秒,一次性循环)。"""
+
     async def _probe() -> bool:
         proc = await asyncio.create_subprocess_exec(
-            sys.executable, "-c", "pass",
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            sys.executable,
+            "-c",
+            "pass",
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
         return (await proc.wait()) == 0
 
@@ -52,17 +57,22 @@ def install_fast_loop() -> str:
     """尽量换上高性能事件循环。返回生效名;任何失败都安全退回默认策略。"""
     global _installed_name
     if os.environ.get("GALAXY_FAST_LOOP", "1").strip().lower() in (
-        "0", "false", "no", "off",
+        "0",
+        "false",
+        "no",
+        "off",
     ):
         return _installed_name
     original_policy = asyncio.get_event_loop_policy()
     try:
         if sys.platform == "win32":
             import winloop  # type: ignore
+
             winloop.install()
             name = "winloop"
         else:
             import uvloop  # type: ignore
+
             uvloop.install()
             name = "uvloop"
     except Exception as exc:  # noqa: BLE001
@@ -73,7 +83,8 @@ def install_fast_loop() -> str:
     if not _probe_subprocess_support():
         asyncio.set_event_loop_policy(original_policy)
         logger.warning(
-            "%s 子进程探针未通过,还原默认事件循环(宁慢勿哑)", name,
+            "%s 子进程探针未通过,还原默认事件循环(宁慢勿哑)",
+            name,
         )
         return _installed_name
 

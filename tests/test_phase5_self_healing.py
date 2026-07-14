@@ -26,16 +26,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ===========================================================================
 # A) DeviceHealthRegistry — circuit breaker transitions + quarantine
 # ===========================================================================
+
 
 class TestCircuitBreakerTransitions:
     """Unit tests for the circuit-breaker state machine."""
 
     def _make_registry(self, **kwargs):
         from core.control_plane.device_health_registry import DeviceHealthRegistry
+
         return DeviceHealthRegistry(**kwargs)
 
     def test_starts_closed(self):
@@ -46,6 +47,7 @@ class TestCircuitBreakerTransitions:
 
     def test_closed_to_open_after_threshold(self):
         from core.control_plane.device_health_registry import CircuitState
+
         reg = self._make_registry(circuit_failure_threshold=3)
         for _ in range(3):
             reg.record_failure("dev1", error="timeout")
@@ -55,6 +57,7 @@ class TestCircuitBreakerTransitions:
 
     def test_below_threshold_stays_closed(self):
         from core.control_plane.device_health_registry import CircuitState
+
         reg = self._make_registry(circuit_failure_threshold=5)
         for _ in range(4):
             reg.record_failure("dev1")
@@ -64,6 +67,7 @@ class TestCircuitBreakerTransitions:
 
     def test_open_transitions_to_half_open_after_cooldown(self):
         from core.control_plane.device_health_registry import CircuitState
+
         reg = self._make_registry(circuit_failure_threshold=2, circuit_cooldown_seconds=0.05)
         reg.record_failure("dev1")
         reg.record_failure("dev1")
@@ -79,6 +83,7 @@ class TestCircuitBreakerTransitions:
 
     def test_half_open_to_closed_on_success(self):
         from core.control_plane.device_health_registry import CircuitState
+
         reg = self._make_registry(circuit_failure_threshold=2, circuit_cooldown_seconds=0.05)
         reg.record_failure("dev1")
         reg.record_failure("dev1")
@@ -92,6 +97,7 @@ class TestCircuitBreakerTransitions:
 
     def test_half_open_to_open_on_failure(self):
         from core.control_plane.device_health_registry import CircuitState
+
         reg = self._make_registry(circuit_failure_threshold=2, circuit_cooldown_seconds=0.05)
         reg.record_failure("dev1")
         reg.record_failure("dev1")
@@ -105,6 +111,7 @@ class TestCircuitBreakerTransitions:
 
     def test_success_resets_consecutive_failures(self):
         from core.control_plane.device_health_registry import CircuitState
+
         reg = self._make_registry(circuit_failure_threshold=5)
         for _ in range(3):
             reg.record_failure("dev1")
@@ -160,6 +167,7 @@ class TestQuarantineBehaviour:
 
     def _make_registry(self, **kwargs):
         from core.control_plane.device_health_registry import DeviceHealthRegistry
+
         return DeviceHealthRegistry(**kwargs)
 
     def test_quarantine_triggered_after_window_threshold(self):
@@ -195,6 +203,7 @@ class TestQuarantineBehaviour:
 
     def test_unquarantine_resets_circuit_state(self):
         from core.control_plane.device_health_registry import CircuitState
+
         reg = self._make_registry(quarantine_threshold=3, circuit_failure_threshold=3)
         for _ in range(3):
             reg.record_failure("dev1")
@@ -209,6 +218,7 @@ class TestHealthScore:
 
     def _make_registry(self):
         from core.control_plane.device_health_registry import DeviceHealthRegistry
+
         return DeviceHealthRegistry()
 
     def test_perfect_health_on_fresh_device(self):
@@ -245,16 +255,19 @@ class TestHealthScore:
 # B) DeviceScoringEngine — health integration
 # ===========================================================================
 
+
 class TestScoringWithHealth:
     """Verify that the scoring engine incorporates health and rejects
     QUARANTINED / CIRCUIT_OPEN devices."""
 
     def _engine(self):
         from core.control_plane.smart_scheduler import DeviceScoringEngine
+
         return DeviceScoringEngine()
 
     def _device(self, device_id="d1", status="online", health=100.0):
         from core.control_plane.smart_scheduler import DeviceScoreInput, SandboxLevel
+
         return DeviceScoreInput(
             device_id=device_id,
             status=status,
@@ -267,6 +280,7 @@ class TestScoringWithHealth:
 
     def test_quarantined_device_ineligible(self):
         from core.control_plane.smart_scheduler import DeviceStatus
+
         eng = self._engine()
         d = self._device(status=DeviceStatus.QUARANTINED)
         score = eng.score_device(d)
@@ -275,6 +289,7 @@ class TestScoringWithHealth:
 
     def test_circuit_open_device_ineligible(self):
         from core.control_plane.smart_scheduler import DeviceStatus
+
         eng = self._engine()
         d = self._device(status=DeviceStatus.CIRCUIT_OPEN)
         score = eng.score_device(d)
@@ -315,8 +330,8 @@ class TestScoringWithHealth:
 def _bypass_dispatch_gates(monkeypatch):
     from core.canonical_dispatch_slot_authority import (
         CanonicalDispatchSlot,
-        CanonicalDispatchSlotStatus,
         CanonicalDispatchSlotsResult,
+        CanonicalDispatchSlotStatus,
     )
 
     def _approve_all(device_ids, execution_mode, **kwargs):
@@ -353,10 +368,12 @@ class TestCommandRouterRetry:
 
     def _router(self):
         from core.command_router import CommandRouter
+
         return CommandRouter()
 
     def _candidate(self, device_id, health=100.0):
         from core.control_plane.smart_scheduler import DeviceScoreInput, SandboxLevel
+
         return DeviceScoreInput(
             device_id=device_id,
             ping_latency_ms=10.0,
@@ -442,8 +459,8 @@ class TestCommandRouterRetry:
     @pytest.mark.asyncio
     async def test_retry_emits_audit_events(self, _bypass_dispatch_gates):
         """TASK_RETRY_SCHEDULED and TASK_RETRY_SUCCEEDED are emitted."""
-        from core.control_plane.audit_ledger import AuditLedger, EventType
         from core.control_plane._globals import get_audit_ledger
+        from core.control_plane.audit_ledger import AuditLedger, EventType
 
         # Use a fresh ledger so we can inspect events cleanly
         fresh_ledger = AuditLedger()
@@ -458,9 +475,7 @@ class TestCommandRouterRetry:
         router.set_executor(executor)
         candidates = [self._candidate("dev1"), self._candidate("dev2")]
 
-        with patch(
-            "core.control_plane._globals._audit_ledger", fresh_ledger
-        ):
+        with patch("core.control_plane._globals._audit_ledger", fresh_ledger):
             result = await router.route_command(
                 device_id="dev1",
                 command="ping",
@@ -492,9 +507,7 @@ class TestCommandRouterRetry:
         router.set_executor(executor)
         candidates = [self._candidate("dev1"), self._candidate("dev2")]
 
-        with patch(
-            "core.control_plane._globals._audit_ledger", fresh_ledger
-        ):
+        with patch("core.control_plane._globals._audit_ledger", fresh_ledger):
             result = await router.route_command(
                 device_id="dev1",
                 command="ping",
@@ -551,11 +564,13 @@ class TestCommandRouterRetry:
 # D) Audit ledger — Phase 5 event types
 # ===========================================================================
 
+
 class TestPhase5EventTypes:
     """Verify that all new Phase 5 event types exist and can be appended."""
 
     def test_new_event_types_exist(self):
         from core.control_plane.audit_ledger import EventType
+
         assert hasattr(EventType, "DEVICE_HEALTH_CHANGED")
         assert hasattr(EventType, "DEVICE_CIRCUIT_OPEN")
         assert hasattr(EventType, "DEVICE_CIRCUIT_HALF_OPEN")
@@ -598,8 +613,8 @@ class TestPhase5EventTypes:
     def test_globals_wires_circuit_events_to_ledger(self):
         """The get_health_registry() singleton should emit DEVICE_CIRCUIT_OPEN
         into the audit ledger when a device trips the breaker."""
-        from core.control_plane.audit_ledger import AuditLedger, EventType
         import core.control_plane._globals as _g
+        from core.control_plane.audit_ledger import AuditLedger, EventType
 
         # Isolate with fresh singletons
         old_hr = _g._health_registry
@@ -623,18 +638,22 @@ class TestPhase5EventTypes:
 # E) Device Health API — smoke tests
 # ===========================================================================
 
+
 class TestDeviceHealthAPI:
     """Basic route smoke tests using FastAPI TestClient."""
 
     def _app(self):
         from fastapi import FastAPI
+
         from core.routes.device_health import router
+
         app = FastAPI()
         app.include_router(router)
         return app
 
     def test_list_health_returns_list(self):
         from fastapi.testclient import TestClient
+
         import core.control_plane._globals as _g
 
         old_hr = _g._health_registry
@@ -655,6 +674,7 @@ class TestDeviceHealthAPI:
 
     def test_get_health_for_specific_device(self):
         from fastapi.testclient import TestClient
+
         import core.control_plane._globals as _g
 
         old_hr = _g._health_registry
@@ -675,6 +695,7 @@ class TestDeviceHealthAPI:
 
     def test_get_health_404_for_unknown_device(self):
         from fastapi.testclient import TestClient
+
         import core.control_plane._globals as _g
 
         old_hr = _g._health_registry
@@ -688,6 +709,7 @@ class TestDeviceHealthAPI:
 
     def test_unquarantine_device(self):
         from fastapi.testclient import TestClient
+
         import core.control_plane._globals as _g
 
         old_hr = _g._health_registry
@@ -713,6 +735,7 @@ class TestDeviceHealthAPI:
 
     def test_unquarantine_non_quarantined_device_is_noop(self):
         from fastapi.testclient import TestClient
+
         import core.control_plane._globals as _g
 
         old_hr = _g._health_registry

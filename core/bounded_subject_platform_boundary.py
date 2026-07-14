@@ -128,7 +128,6 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from core.final_acceptance_surface_boundary import build_final_acceptance_surface_boundary
 
-
 # ---------------------------------------------------------------------------
 # Authority sentinel
 # ---------------------------------------------------------------------------
@@ -148,8 +147,7 @@ BOUNDED_SUBJECT_PLATFORM_BOUNDARY_AUTHORITY: str = (
 )
 
 BOUNDED_SUBJECT_PLATFORM_BOUNDARY_PR14V2_SENTINEL: str = (
-    "BOUNDED_SUBJECT_PLATFORM_BOUNDARY_PR14V2_SENTINEL::"
-    "package=14v2::profile=bounded-subject-platform-boundary-v1"
+    "BOUNDED_SUBJECT_PLATFORM_BOUNDARY_PR14V2_SENTINEL::" "package=14v2::profile=bounded-subject-platform-boundary-v1"
 )
 
 QUASI_PLATFORM_STATE_DEFINITION: str = (
@@ -246,6 +244,7 @@ BOUNDED_SUBJECT_AGENT_AUTONOMY_CONSTRAINT: str = (
 # Boundary axis enum
 # ---------------------------------------------------------------------------
 
+
 class PlatformBoundaryAxis(str, Enum):
     """The five boundary axes that define the stable quasi-platform state."""
 
@@ -259,6 +258,7 @@ class PlatformBoundaryAxis(str, Enum):
 # ---------------------------------------------------------------------------
 # Boundary axis descriptor
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class BoundaryAxisDescriptor:
@@ -287,6 +287,7 @@ class BoundaryAxisDescriptor:
 # ---------------------------------------------------------------------------
 # Platform boundary snapshot
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class PlatformBoundarySnapshot:
@@ -321,6 +322,7 @@ class PlatformBoundarySnapshot:
 # ---------------------------------------------------------------------------
 # Canonical boundary axis registry
 # ---------------------------------------------------------------------------
+
 
 def _build_canonical_center_axis() -> BoundaryAxisDescriptor:
     return BoundaryAxisDescriptor(
@@ -398,10 +400,7 @@ def _build_participant_governance_axis() -> BoundaryAxisDescriptor:
         ),
         android_v2_consistent=True,
         no_parallel_authority=True,
-        notes=(
-            "Established by PR-Task4 operator governance plane.  "
-            "Participant lifecycle is center-authoritative."
-        ),
+        notes=("Established by PR-Task4 operator governance plane.  " "Participant lifecycle is center-authoritative."),
     )
 
 
@@ -454,8 +453,7 @@ def _build_outward_consumption_axis() -> BoundaryAxisDescriptor:
         android_v2_consistent=True,
         no_parallel_authority=True,
         notes=(
-            "Established by PR-13V2 final_acceptance_surface_boundary.  "
-            "All outward surfaces are consumption-only."
+            "Established by PR-13V2 final_acceptance_surface_boundary.  " "All outward surfaces are consumption-only."
         ),
     )
 
@@ -472,6 +470,7 @@ PLATFORM_BOUNDARY_AXIS_REGISTRY: List[BoundaryAxisDescriptor] = [
 # ---------------------------------------------------------------------------
 # Quasi-platform state evaluation
 # ---------------------------------------------------------------------------
+
 
 def evaluate_quasi_platform_state(
     axes: List[BoundaryAxisDescriptor],
@@ -498,8 +497,7 @@ def evaluate_quasi_platform_state(
             )
         if not axis.code_evidence:
             violations.append(
-                f"axis={axis.axis.value}: code_evidence is empty — "
-                "no real code evidence anchors this boundary axis."
+                f"axis={axis.axis.value}: code_evidence is empty — " "no real code evidence anchors this boundary axis."
             )
     intact = len(violations) == 0
     return intact, violations
@@ -508,6 +506,7 @@ def evaluate_quasi_platform_state(
 # ---------------------------------------------------------------------------
 # Public builders
 # ---------------------------------------------------------------------------
+
 
 def build_platform_boundary_snapshot() -> PlatformBoundarySnapshot:
     """Build a machine-checkable snapshot of all five platform boundary axes.
@@ -539,9 +538,7 @@ def build_quasi_platform_runtime_assertion_report() -> Dict[str, Any]:
     axis_map = {axis.axis: axis for axis in axes}
 
     if len(axes) != 5:
-        violations.append(
-            f"axis_registry_count={len(axes)} expected=5"
-        )
+        violations.append(f"axis_registry_count={len(axes)} expected=5")
     if len(axis_map) != len(axes):
         violations.append("axis_registry_contains_duplicate_axis_entries")
     if sum(1 for axis in axes if axis.axis == PlatformBoundaryAxis.CANONICAL_CENTER) != 1:
@@ -550,19 +547,13 @@ def build_quasi_platform_runtime_assertion_report() -> Dict[str, Any]:
     canonical_axis = axis_map.get(PlatformBoundaryAxis.CANONICAL_CENTER)
     if canonical_axis is None:
         violations.append("canonical_center_axis_missing")
-    elif (
-        "sole canonical governance"
-        not in canonical_axis.policy_sentinel.lower()
-    ):
+    elif "sole canonical governance" not in canonical_axis.policy_sentinel.lower():
         violations.append("canonical_center_policy_anchor_missing")
 
     bounded_subject_axis = axis_map.get(PlatformBoundaryAxis.BOUNDED_SUBJECT)
     if bounded_subject_axis is None:
         violations.append("bounded_subject_axis_missing")
-    elif (
-        "global truth finalization"
-        not in bounded_subject_axis.policy_sentinel.lower()
-    ):
+    elif "global truth finalization" not in bounded_subject_axis.policy_sentinel.lower():
         violations.append("bounded_subject_non_sovereignty_policy_anchor_missing")
 
     observability_axis = axis_map.get(PlatformBoundaryAxis.OBSERVABILITY_EVIDENCE)
@@ -639,8 +630,7 @@ def assert_quasi_platform_state_intact() -> None:
             violations=list(runtime_report.get("violations") or []),
         )
         raise QuasiPlatformStateBoundaryViolation(
-            f"Quasi-platform state boundary not intact: "
-            f"violations={runtime_report['violations']}",
+            f"Quasi-platform state boundary not intact: " f"violations={runtime_report['violations']}",
             snapshot=snapshot,
         )
 
@@ -658,6 +648,7 @@ def get_system_definition() -> str:
 # ---------------------------------------------------------------------------
 # Exception
 # ---------------------------------------------------------------------------
+
 
 class QuasiPlatformStateBoundaryViolation(Exception):
     """Raised when the quasi-platform state boundary is not intact."""

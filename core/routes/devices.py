@@ -29,18 +29,18 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from core.command_router import get_command_router
+from core.routes._models import DeviceRegisterRequest, DeviceStatusUpdate
+from core.routes._shared import COMPAT_MIRROR_WRITE  # noqa: F401  PR-1 annotation import
 from core.routes._shared import (
-    connection_manager,
-    registered_devices,
-    node_status_cache,
     _save_registered_devices,
     broadcast_event,
+    connection_manager,
+    node_status_cache,
+    registered_devices,
 )
-from core.routes._models import DeviceRegisterRequest, DeviceStatusUpdate
-from core.unified.device_manager import get_unified_device_manager
-from core.routes._shared import COMPAT_MIRROR_WRITE  # noqa: F401  PR-1 annotation import
-from core.command_router import get_command_router
 from core.schemas.task_envelope import TaskEnvelope
+from core.unified.device_manager import get_unified_device_manager
 
 logger = logging.getLogger("Galaxy.API")
 
@@ -53,7 +53,8 @@ def _sync_device_to_capability_registry(device_info: Dict) -> int:
     """
     count = 0
     try:
-        from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
+        from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
+
         reg = CapabilityRegistry.get_instance()
 
         device_id = device_info.get("device_id", "")
@@ -69,20 +70,23 @@ def _sync_device_to_capability_registry(device_info: Dict) -> int:
             else:
                 logger.warning(
                     "_sync_device_to_capability_registry: 设备 %s 中存在未知类型能力 %r，已跳过",
-                    device_id, type(cap),
+                    device_id,
+                    type(cap),
                 )
                 continue
             if not cap_name:
                 continue
             key = f"gateway__{device_id}__{cap_name}"
-            reg.register(CapabilityItem(
-                name=key,
-                description=f"[Gateway:{d_name}({d_type})] 设备能力: {cap_name}",
-                source="gateway",
-                source_id=str(device_id),
-                available=True,
-                metadata={"device_name": d_name, "device_type": d_type},
-            ))
+            reg.register(
+                CapabilityItem(
+                    name=key,
+                    description=f"[Gateway:{d_name}({d_type})] 设备能力: {cap_name}",
+                    source="gateway",
+                    source_id=str(device_id),
+                    available=True,
+                    metadata={"device_name": d_name, "device_type": d_type},
+                )
+            )
             count += 1
     except Exception as exc:
         logger.debug("_sync_device_to_capability_registry 失败: %s", exc)
@@ -92,6 +96,7 @@ def _sync_device_to_capability_registry(device_info: Dict) -> int:
 # ---------------------------------------------------------------------------
 # PR-3: Canonical device-existence helper
 # ---------------------------------------------------------------------------
+
 
 def _is_device_registered_canonical(device_id: str) -> bool:
     """Return True if *device_id* is registered in the canonical UDM (SSOT).
@@ -107,7 +112,8 @@ def _is_device_registered_canonical(device_id: str) -> bool:
     except Exception as exc:
         logger.debug(
             "_is_device_registered_canonical: UDM query failed for %s — %s",
-            device_id, exc,
+            device_id,
+            exc,
         )
     # Non-authoritative fallback: compat cache (read-only)
     return device_id in registered_devices
@@ -149,12 +155,16 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         try:
             get_unified_device_manager().register_device_from_dict(req.device_id, device_info)
             logger.info(
-                "设备已写入 UDM (SSOT): %s (%s)", req.device_id, req.device_type,
+                "设备已写入 UDM (SSOT): %s (%s)",
+                req.device_id,
+                req.device_type,
                 extra={"event": "rest_register_udm", "device_id": req.device_id},
             )
         except Exception as exc:
             logger.error(
-                "UDM 写入失败（设备注册继续）: %s — %s", req.device_id, exc,
+                "UDM 写入失败（设备注册继续）: %s — %s",
+                req.device_id,
+                exc,
                 extra={"event": "rest_register_udm_error", "device_id": req.device_id},
             )
 
@@ -170,34 +180,44 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         synced_caps = _sync_device_to_capability_registry(device_info)
         if synced_caps:
             logger.info(
-                "设备 %s 已同步 %d 个能力到 CapabilityRegistry", req.device_id, synced_caps,
+                "设备 %s 已同步 %d 个能力到 CapabilityRegistry",
+                req.device_id,
+                synced_caps,
             )
 
         # PR4: 广播实时事件 — 通知 Dashboard/Windows UI 有新设备注册
         try:
-            await broadcast_event("device_update", {
-                "action": "register",
-                "device_id": req.device_id,
-                "device_name": device_info["device_name"],
-                "device_type": req.device_type,
-                "capabilities": req.capabilities,
-            })
-            if synced_caps:
-                await broadcast_event("capability_update", {
-                    "source": "device_register",
+            await broadcast_event(
+                "device_update",
+                {
+                    "action": "register",
                     "device_id": req.device_id,
-                    "synced_count": synced_caps,
-                })
+                    "device_name": device_info["device_name"],
+                    "device_type": req.device_type,
+                    "capabilities": req.capabilities,
+                },
+            )
+            if synced_caps:
+                await broadcast_event(
+                    "capability_update",
+                    {
+                        "source": "device_register",
+                        "device_id": req.device_id,
+                        "synced_count": synced_caps,
+                    },
+                )
         except Exception as _bc_err:
             logger.debug("设备注册广播事件失败（不影响注册）: %s", _bc_err)
 
-        return JSONResponse({
-            "success": True,
-            "device_id": req.device_id,
-            "message": "设备注册成功",
-            "server_version": "3.0.0",
-            "available_nodes": list(node_status_cache.keys())[:20],
-        })
+        return JSONResponse(
+            {
+                "success": True,
+                "device_id": req.device_id,
+                "message": "设备注册成功",
+                "server_version": "3.0.0",
+                "available_nodes": list(node_status_cache.keys())[:20],
+            }
+        )
 
     @router.post("/api/v1/devices/status")
     async def update_device_status(req: DeviceStatusUpdate):
@@ -214,7 +234,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception as exc:
             logger.debug(
                 "update_device_status: UDM query failed for %s — %s",
-                req.device_id, exc,
+                req.device_id,
+                exc,
             )
 
         if udm_dev is None and req.device_id not in registered_devices:
@@ -233,12 +254,14 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             registered_devices[req.device_id]["status_detail"] = req.status
 
         # 广播状态更新
-        await connection_manager.broadcast_status({
-            "type": "device_status_update",
-            "device_id": req.device_id,
-            "status": req.status,
-            "timestamp": datetime.now().isoformat()
-        })
+        await connection_manager.broadcast_status(
+            {
+                "type": "device_status_update",
+                "device_id": req.device_id,
+                "status": req.status,
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
 
         return {"success": True}
 
@@ -297,7 +320,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             logger.debug("discover_devices: UDM list_devices failed — %s", exc)
             udm_all = []
 
-        for udm_dev in (udm_all or []):
+        for udm_dev in udm_all or []:
             did = udm_dev.device_id
             is_online = connection_manager.is_online(did) or udm_dev.is_online()
             dev_type = str(getattr(udm_dev, "device_type", "") or "")
@@ -311,14 +334,16 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             if capability and capability not in caps:
                 continue
 
-            devices.append({
-                "device_id": did,
-                "device_name": udm_dev.device_name,
-                "device_type": dev_type,
-                "capabilities": caps,
-                "status": effective_status,
-                "online": is_online,
-            })
+            devices.append(
+                {
+                    "device_id": did,
+                    "device_name": udm_dev.device_name,
+                    "device_type": dev_type,
+                    "capabilities": caps,
+                    "status": effective_status,
+                    "online": is_online,
+                }
+            )
             seen.add(did)
 
         # Supplement: registered_devices compat cache (non-authoritative, read-only)
@@ -351,12 +376,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         returns a lightweight summary list.  Existing endpoints are not
         modified; this is purely additive.
         """
-        from contracts.local_runtime_host import summarize_local_runtime_host
+        from contracts.local_runtime_host import from_registered_runtime_device, summarize_local_runtime_host
         from contracts.registered_runtime_device import (
-            from_udm_device,
             build_registered_runtime_device,
+            from_udm_device,
         )
-        from contracts.local_runtime_host import from_registered_runtime_device
 
         results = []
         seen: set = set()
@@ -365,7 +389,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         try:
             udm = get_unified_device_manager()
             udm_devices = udm.list_devices() if hasattr(udm, "list_devices") else []
-            for udm_dev in (udm_devices or []):
+            for udm_dev in udm_devices or []:
                 try:
                     did = str(getattr(udm_dev, "device_id", "") or "")
                     if did and did not in seen:
@@ -441,9 +465,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         modified; this is purely additive.
         """
         from contracts.registered_runtime_device import (
-            from_udm_device,
-            from_device_registry_record,
             RegisteredRuntimeDevice,
+            from_device_registry_record,
+            from_udm_device,
         )
 
         # Prefer UDM SSOT
@@ -458,6 +482,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         # Fall back to legacy device registry
         try:
             from core.device_registry import device_registry as _dr
+
             legacy_dev = _dr.get(device_id)
             if legacy_dev is not None:
                 contract = from_device_registry_record(legacy_dev)
@@ -469,6 +494,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         if device_id in registered_devices:
             raw = registered_devices[device_id]
             from contracts.registered_runtime_device import build_registered_runtime_device
+
             contract = build_registered_runtime_device(
                 device_id=device_id,
                 device_name=str(raw.get("device_name", "")),
@@ -476,9 +502,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 device_type=str(raw.get("device_type", "")),
                 capabilities=list(raw.get("capabilities", [])),
                 status=str(raw.get("status", "offline")),
-                metadata={k: v for k, v in raw.items() if k not in (
-                    "device_id", "device_name", "device_type", "capabilities", "status"
-                )},
+                metadata={
+                    k: v
+                    for k, v in raw.items()
+                    if k not in ("device_id", "device_name", "device_type", "capabilities", "status")
+                },
             )
             return JSONResponse(contract.to_dict())
 
@@ -513,11 +541,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             registered_devices[device_id]["last_seen"] = datetime.now().isoformat()  # COMPAT_MIRROR_WRITE
             registered_devices[device_id]["status"] = "registered"  # COMPAT_MIRROR_WRITE
 
-        await connection_manager.broadcast_status({
-            "type": "device_heartbeat",
-            "device_id": device_id,
-            "timestamp": datetime.now().isoformat(),
-        })
+        await connection_manager.broadcast_status(
+            {
+                "type": "device_heartbeat",
+                "device_id": device_id,
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
 
         return JSONResponse({"success": True, "device_id": device_id})
 
@@ -550,18 +580,23 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             del registered_devices[device_id]  # COMPAT_MIRROR_WRITE (removal)
             _save_registered_devices(registered_devices)
 
-        await connection_manager.broadcast_status({
-            "type": "device_unregistered",
-            "device_id": device_id,
-            "timestamp": datetime.now().isoformat(),
-        })
+        await connection_manager.broadcast_status(
+            {
+                "type": "device_unregistered",
+                "device_id": device_id,
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
 
         # PR4: 广播统一 device_update 事件，UI 可据此移除设备卡片
         try:
-            await broadcast_event("device_update", {
-                "action": "unregister",
-                "device_id": device_id,
-            })
+            await broadcast_event(
+                "device_update",
+                {
+                    "action": "unregister",
+                    "device_id": device_id,
+                },
+            )
         except Exception as _bc_err:
             logger.debug("设备注销广播事件失败: %s", _bc_err)
 
@@ -577,7 +612,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     # PR-518/GAP-517-001: canonical entry sentinel — this route now routes
     # through CommandRouter.route_envelope() instead of calling
     # CrossDeviceCoordinator.execute_cross_device_task() directly.
-    CROSS_DEVICE_REST_INGRESS_CANONICAL = (
+    CROSS_DEVICE_REST_INGRESS_CANONICAL = (  # noqa: F841 行内政策哨兵
         "DEVICES_ROUTE::CROSS_DEVICE_CANONICAL_INGRESS_V1: "
         "/api/v1/devices/cross-device normalises requests to TaskEnvelope "
         "and routes through CommandRouter.route_envelope(). "
@@ -626,9 +661,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             return JSONResponse(result)
         except Exception as e:
             logger.error(f"跨设备任务失败: {e}")
-            return JSONResponse(
-                {"success": False, "error": str(e)}, status_code=500
-            )
+            return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
     # ─────── 单设备命令 (AIP v3.0) ─────────
 
@@ -662,18 +695,23 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
         sent = await connection_manager.send_to_device(device_id, message)
         if sent:
-            return JSONResponse({
-                "success": True,
-                "command_id": command_id,
-                "device_id": device_id,
-                "message": f"命令 {req.command} 已发送",
-            })
+            return JSONResponse(
+                {
+                    "success": True,
+                    "command_id": command_id,
+                    "device_id": device_id,
+                    "message": f"命令 {req.command} 已发送",
+                }
+            )
 
-        return JSONResponse({
-            "success": False,
-            "command_id": command_id,
-            "error": "设备离线或发送失败",
-        }, status_code=503)
+        return JSONResponse(
+            {
+                "success": False,
+                "command_id": command_id,
+                "error": "设备离线或发送失败",
+            },
+            status_code=503,
+        )
 
     # ─────── 并行多设备命令 ─────────
 
@@ -690,7 +728,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     # PR-532/GAP-517-002: canonical entry sentinel — this route now routes
     # through CommandRouter.route_envelope() and uses CommandRouter fan-out
     # instead of dispatching raw per-device messages directly.
-    PARALLEL_DEVICE_REST_INGRESS_CANONICAL = (
+    PARALLEL_DEVICE_REST_INGRESS_CANONICAL = (  # noqa: F841 行内政策哨兵
         "DEVICES_ROUTE::PARALLEL_DEVICE_CANONICAL_INGRESS_V1: "
         "/api/v1/devices/parallel normalises requests to a top-level "
         "TaskEnvelope and routes through CommandRouter.route_envelope(), "
@@ -744,9 +782,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             return JSONResponse(result)
         except Exception as e:
             logger.error(f"并行设备命令失败: {e}")
-            return JSONResponse(
-                {"success": False, "error": str(e)}, status_code=500
-            )
+            return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
     # ─────── 主动设备发现 ─────────
 
@@ -755,33 +791,38 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """触发主动设备发现（mDNS/UPnP 扫描）"""
         try:
             from core.device_orchestrator import get_device_orchestrator
+
             orchestrator = get_device_orchestrator()
             devices = await orchestrator.discover_devices()
-            return JSONResponse({
-                "success": True,
-                "discovered": devices if isinstance(devices, list) else [],
-                "message": "设备发现完成",
-            })
+            return JSONResponse(
+                {
+                    "success": True,
+                    "discovered": devices if isinstance(devices, list) else [],
+                    "message": "设备发现完成",
+                }
+            )
         except ImportError:
             # Fallback: 返回已注册设备
             devices = []
             for did, info in registered_devices.items():
-                devices.append({
-                    "device_id": did,
-                    "device_type": info.get("device_type", "unknown"),
-                    "device_name": info.get("device_name", did),
-                    "online": connection_manager.is_online(did),
-                })
-            return JSONResponse({
-                "success": True,
-                "discovered": devices,
-                "message": "使用注册表回退（device_orchestrator 不可用）",
-            })
+                devices.append(
+                    {
+                        "device_id": did,
+                        "device_type": info.get("device_type", "unknown"),
+                        "device_name": info.get("device_name", did),
+                        "online": connection_manager.is_online(did),
+                    }
+                )
+            return JSONResponse(
+                {
+                    "success": True,
+                    "discovered": devices,
+                    "message": "使用注册表回退（device_orchestrator 不可用）",
+                }
+            )
         except Exception as e:
             logger.error(f"设备发现失败: {e}")
-            return JSONResponse(
-                {"success": False, "error": str(e)}, status_code=500
-            )
+            return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
     # ─────── 设备遥测 ─────────
 
@@ -800,15 +841,14 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception as exc:
             logger.debug(
                 "get_device_telemetry: UDM query failed for %s — %s",
-                device_id, exc,
+                device_id,
+                exc,
             )
 
         if udm_dev is None and device_id not in registered_devices:
             raise HTTPException(status_code=404, detail="设备未注册")
 
-        is_online = connection_manager.is_online(device_id) or (
-            udm_dev is not None and udm_dev.is_online()
-        )
+        is_online = connection_manager.is_online(device_id) or (udm_dev is not None and udm_dev.is_online())
 
         if udm_dev is not None:
             # Prefer UDM canonical data
@@ -868,14 +908,16 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         }
 
         sent = await connection_manager.send_to_device(req.source_device, transfer_msg)
-        return JSONResponse({
-            "success": sent,
-            "transfer_id": transfer_id,
-            "source": req.source_device,
-            "target": req.target_device,
-            "file": req.file_path,
-            "message": "传输请求已发送" if sent else "源设备离线",
-        })
+        return JSONResponse(
+            {
+                "success": sent,
+                "transfer_id": transfer_id,
+                "source": req.source_device,
+                "target": req.target_device,
+                "file": req.file_path,
+                "message": "传输请求已发送" if sent else "源设备离线",
+            }
+        )
 
     @router.get("/api/v1/devices/{device_id}/runtime-host")
     async def get_device_runtime_host(device_id: str):
@@ -886,11 +928,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         returns it as JSON.  Existing device endpoints are not modified; this
         is purely additive.
         """
-        from contracts.local_runtime_host import from_registered_runtime_device, LocalRuntimeHost
+        from contracts.local_runtime_host import LocalRuntimeHost, from_registered_runtime_device
         from contracts.registered_runtime_device import (
-            from_udm_device,
-            from_device_registry_record,
             build_registered_runtime_device,
+            from_device_registry_record,
+            from_udm_device,
         )
 
         rrd = None
@@ -907,6 +949,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         if rrd is None:
             try:
                 from core.device_registry import device_registry as _dr
+
                 legacy_dev = _dr.get(device_id)
                 if legacy_dev is not None:
                     rrd = from_device_registry_record(legacy_dev)

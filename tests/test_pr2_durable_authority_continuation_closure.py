@@ -123,7 +123,6 @@ from typing import Any, Dict, List
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -142,16 +141,13 @@ def _session_id() -> str:
 
 
 def _make_stores(tmp_dir: str):
-    from core.mesh.mesh_session_persistence import MeshSessionPersistenceStore
     from core.mesh.body_mesh_persistence import BodyMeshPersistenceStore
+    from core.mesh.mesh_session_persistence import MeshSessionPersistenceStore
     from core.task_lifecycle_persistence import TaskLifecyclePersistenceStore
+
     ms_store = MeshSessionPersistenceStore(store_dir=tmp_dir)
-    bm_store = BodyMeshPersistenceStore(
-        store_path=os.path.join(tmp_dir, "bm.json")
-    )
-    tl_store = TaskLifecyclePersistenceStore(
-        store_path=os.path.join(tmp_dir, "tl.json")
-    )
+    bm_store = BodyMeshPersistenceStore(store_path=os.path.join(tmp_dir, "bm.json"))
+    tl_store = TaskLifecyclePersistenceStore(store_path=os.path.join(tmp_dir, "tl.json"))
     return ms_store, bm_store, tl_store
 
 
@@ -175,6 +171,7 @@ def _record(
 
 def _save_snapshot(tl_store, records: List[Dict[str, Any]]) -> None:
     from core.task_lifecycle_persistence import save_task_lifecycle_snapshot
+
     save_task_lifecycle_snapshot(records, store=tl_store)
 
 
@@ -190,6 +187,7 @@ def _make_coordinator(tmp_dir: str, records: List[Dict[str, Any]]):
     ms_store, bm_store, tl_store = _make_stores(tmp_dir)
     _save_snapshot(tl_store, records)
     from core.runtime_restart_recovery import RuntimeRestartRecoveryCoordinator
+
     return RuntimeRestartRecoveryCoordinator(
         mesh_session_store=ms_store,
         body_mesh_store=bm_store,
@@ -206,31 +204,37 @@ def _make_coordinator(tmp_dir: str, records: List[Dict[str, Any]]):
 class TestGroupA_DurableTruthAuthorityChainModule:
     def setup_method(self):
         from core.durable_truth_authority_chain import reset_durable_truth_authority_chain
+
         reset_durable_truth_authority_chain()
 
     def teardown_method(self):
         from core.durable_truth_authority_chain import reset_durable_truth_authority_chain
+
         reset_durable_truth_authority_chain()
 
     def test_A01_module_importable_authority_sentinel_present(self):
         from core.durable_truth_authority_chain import (
             DURABLE_TRUTH_AUTHORITY_CHAIN_IS_AUTHORITY,
         )
+
         assert isinstance(DURABLE_TRUTH_AUTHORITY_CHAIN_IS_AUTHORITY, str)
         assert DURABLE_TRUTH_AUTHORITY_CHAIN_IS_AUTHORITY
 
     def test_A02_durable_truth_is_authority_policy_non_empty(self):
         from core.durable_truth_authority_chain import DURABLE_TRUTH_IS_AUTHORITY_POLICY
+
         assert isinstance(DURABLE_TRUTH_IS_AUTHORITY_POLICY, str)
         assert "durable" in DURABLE_TRUTH_IS_AUTHORITY_POLICY.lower()
 
     def test_A03_ring_buffer_is_read_cache_policy_non_empty(self):
         from core.durable_truth_authority_chain import RING_BUFFER_IS_READ_CACHE_POLICY
+
         assert isinstance(RING_BUFFER_IS_READ_CACHE_POLICY, str)
         assert "read" in RING_BUFFER_IS_READ_CACHE_POLICY.lower()
 
     def test_A04_authority_chain_legs_policy_mentions_all_three_legs(self):
         from core.durable_truth_authority_chain import AUTHORITY_CHAIN_LEGS_POLICY
+
         p = AUTHORITY_CHAIN_LEGS_POLICY
         assert "session" in p.lower()
         assert "lifecycle" in p.lower()
@@ -238,26 +242,31 @@ class TestGroupA_DurableTruthAuthorityChainModule:
 
     def test_A05_convergence_requires_all_legs_policy_non_empty(self):
         from core.durable_truth_authority_chain import CONVERGENCE_REQUIRES_ALL_LEGS_POLICY
+
         assert isinstance(CONVERGENCE_REQUIRES_ALL_LEGS_POLICY, str)
         assert CONVERGENCE_REQUIRES_ALL_LEGS_POLICY
 
     def test_A06_pr2_sentinel_non_empty(self):
         from core.durable_truth_authority_chain import DURABLE_TRUTH_AUTHORITY_CHAIN_PR2_SENTINEL
+
         assert isinstance(DURABLE_TRUTH_AUTHORITY_CHAIN_PR2_SENTINEL, str)
         assert DURABLE_TRUTH_AUTHORITY_CHAIN_PR2_SENTINEL
 
     def test_A07_convergence_result_importable(self):
         from core.durable_truth_authority_chain import DurableTruthConvergenceResult
+
         r = DurableTruthConvergenceResult()
         assert r.converged is False
         assert isinstance(r.check_id, str)
 
     def test_A08_convergence_result_to_dict_required_keys(self):
         from core.durable_truth_authority_chain import DurableTruthConvergenceResult
+
         r = DurableTruthConvergenceResult()
         d = r.to_dict()
         for key in (
-            "check_id", "converged",
+            "check_id",
+            "converged",
             "session_truth_leg_healthy",
             "task_lifecycle_leg_healthy",
             "result_continuity_leg_healthy",
@@ -267,11 +276,13 @@ class TestGroupA_DurableTruthAuthorityChainModule:
 
     def test_A09_chain_instantiates(self):
         from core.durable_truth_authority_chain import DurableTruthAuthorityChain
+
         chain = DurableTruthAuthorityChain()
         assert chain is not None
 
     def test_A10_get_chain_returns_singleton(self):
         from core.durable_truth_authority_chain import get_durable_truth_authority_chain
+
         c1 = get_durable_truth_authority_chain()
         c2 = get_durable_truth_authority_chain()
         assert c1 is c2
@@ -281,6 +292,7 @@ class TestGroupA_DurableTruthAuthorityChainModule:
             get_durable_truth_authority_chain,
             reset_durable_truth_authority_chain,
         )
+
         c1 = get_durable_truth_authority_chain()
         reset_durable_truth_authority_chain()
         c2 = get_durable_truth_authority_chain()
@@ -294,26 +306,29 @@ class TestGroupA_DurableTruthAuthorityChainModule:
 
 class TestGroupB_ConvergenceCheck:
     def setup_method(self):
+        from core.durable_result_idempotency import reset_durable_result_id_store
         from core.durable_truth_authority_chain import reset_durable_truth_authority_chain
         from core.session_truth_snapshot import reset_session_truth_snapshot_store
-        from core.durable_result_idempotency import reset_durable_result_id_store
+
         reset_durable_truth_authority_chain()
         reset_session_truth_snapshot_store()
         reset_durable_result_id_store()
 
     def teardown_method(self):
+        from core.durable_result_idempotency import reset_durable_result_id_store
         from core.durable_truth_authority_chain import reset_durable_truth_authority_chain
         from core.session_truth_snapshot import reset_session_truth_snapshot_store
-        from core.durable_result_idempotency import reset_durable_result_id_store
+
         reset_durable_truth_authority_chain()
         reset_session_truth_snapshot_store()
         reset_durable_result_id_store()
 
     def test_B01_all_legs_healthy_converged_true(self, tmp_path):
+        from core.durable_result_idempotency import DurableResultIdSet
         from core.durable_truth_authority_chain import DurableTruthAuthorityChain
         from core.session_truth_snapshot import SessionTruthSnapshotStore
         from core.task_lifecycle_persistence import TaskLifecyclePersistenceStore
-        from core.durable_result_idempotency import DurableResultIdSet
+
         st_store = SessionTruthSnapshotStore(store_path=str(tmp_path / "st.json"))
         tl_store = TaskLifecyclePersistenceStore(store_path=str(tmp_path / "tl.json"))
         ri_store = DurableResultIdSet(store_path=str(tmp_path / "ri.json"))
@@ -330,9 +345,9 @@ class TestGroupB_ConvergenceCheck:
         assert result.degradation_reasons == []
 
     def test_B02_unhealthy_session_truth_leg_converged_false(self, tmp_path):
+        from core.durable_result_idempotency import DurableResultIdSet
         from core.durable_truth_authority_chain import DurableTruthAuthorityChain
         from core.task_lifecycle_persistence import TaskLifecyclePersistenceStore
-        from core.durable_result_idempotency import DurableResultIdSet
 
         class BreakingStore:
             def load(self):
@@ -351,9 +366,9 @@ class TestGroupB_ConvergenceCheck:
         assert len(result.degradation_reasons) >= 1
 
     def test_B03_unhealthy_task_lifecycle_leg_converged_false(self, tmp_path):
+        from core.durable_result_idempotency import DurableResultIdSet
         from core.durable_truth_authority_chain import DurableTruthAuthorityChain
         from core.session_truth_snapshot import SessionTruthSnapshotStore
-        from core.durable_result_idempotency import DurableResultIdSet
 
         class BreakingStore:
             def load(self):
@@ -391,10 +406,11 @@ class TestGroupB_ConvergenceCheck:
         assert result.result_continuity_leg_healthy is False
 
     def test_B05_verify_durable_truth_convergence_convenience(self, tmp_path):
+        from core.durable_result_idempotency import DurableResultIdSet
         from core.durable_truth_authority_chain import verify_durable_truth_convergence
         from core.session_truth_snapshot import SessionTruthSnapshotStore
         from core.task_lifecycle_persistence import TaskLifecyclePersistenceStore
-        from core.durable_result_idempotency import DurableResultIdSet
+
         st_store = SessionTruthSnapshotStore(store_path=str(tmp_path / "st.json"))
         tl_store = TaskLifecyclePersistenceStore(store_path=str(tmp_path / "tl.json"))
         ri_store = DurableResultIdSet(store_path=str(tmp_path / "ri.json"))
@@ -424,18 +440,21 @@ class TestGroupB_ConvergenceCheck:
         result = chain.convergence_check()
         assert result.converged is False
         # Two legs are healthy
-        healthy = sum([
-            result.session_truth_leg_healthy,
-            result.task_lifecycle_leg_healthy,
-            result.result_continuity_leg_healthy,
-        ])
+        healthy = sum(
+            [
+                result.session_truth_leg_healthy,
+                result.task_lifecycle_leg_healthy,
+                result.result_continuity_leg_healthy,
+            ]
+        )
         assert healthy == 2
 
     def test_B07_check_id_unique_per_invocation(self, tmp_path):
+        from core.durable_result_idempotency import DurableResultIdSet
         from core.durable_truth_authority_chain import DurableTruthAuthorityChain
         from core.session_truth_snapshot import SessionTruthSnapshotStore
         from core.task_lifecycle_persistence import TaskLifecyclePersistenceStore
-        from core.durable_result_idempotency import DurableResultIdSet
+
         st_store = SessionTruthSnapshotStore(store_path=str(tmp_path / "st.json"))
         tl_store = TaskLifecyclePersistenceStore(store_path=str(tmp_path / "tl.json"))
         ri_store = DurableResultIdSet(store_path=str(tmp_path / "ri.json"))
@@ -450,6 +469,7 @@ class TestGroupB_ConvergenceCheck:
 
     def test_B08_to_dict_contains_authority_key(self, tmp_path):
         from core.durable_truth_authority_chain import DurableTruthConvergenceResult
+
         r = DurableTruthConvergenceResult()
         d = r.to_dict()
         assert "authority" in d
@@ -464,21 +484,25 @@ class TestGroupB_ConvergenceCheck:
 class TestGroupC_ContinuationRebindRegistryModule:
     def setup_method(self):
         from core.continuation_rebind_registry import reset_continuation_rebind_registry
+
         reset_continuation_rebind_registry()
 
     def teardown_method(self):
         from core.continuation_rebind_registry import reset_continuation_rebind_registry
+
         reset_continuation_rebind_registry()
 
     def test_C01_module_importable_authority_sentinel_present(self):
         from core.continuation_rebind_registry import (
             CONTINUATION_REBIND_REGISTRY_IS_AUTHORITY,
         )
+
         assert isinstance(CONTINUATION_REBIND_REGISTRY_IS_AUTHORITY, str)
         assert CONTINUATION_REBIND_REGISTRY_IS_AUTHORITY
 
     def test_C02_closed_loop_policy_describes_five_steps(self):
         from core.continuation_rebind_registry import CONTINUATION_REBIND_CLOSED_LOOP_POLICY
+
         p = CONTINUATION_REBIND_CLOSED_LOOP_POLICY
         assert "register" in p.lower() or "pre-restart" in p.lower()
         assert "restart" in p.lower()
@@ -486,20 +510,24 @@ class TestGroupC_ContinuationRebindRegistryModule:
 
     def test_C03_same_task_id_policy_non_empty(self):
         from core.continuation_rebind_registry import REBIND_MUST_USE_SAME_TASK_ID_POLICY
+
         assert REBIND_MUST_USE_SAME_TASK_ID_POLICY
 
     def test_C04_idempotent_policy_non_empty(self):
         from core.continuation_rebind_registry import REBIND_IS_IDEMPOTENT_POLICY
+
         assert REBIND_IS_IDEMPOTENT_POLICY
 
     def test_C05_rebind_state_enum_values(self):
         from core.continuation_rebind_registry import RebindState
+
         assert RebindState.pending_rebind
         assert RebindState.rebound
         assert RebindState.completed
 
     def test_C06_rebind_record_instantiates_and_to_dict(self):
         from core.continuation_rebind_registry import ContinuationRebindRecord, RebindState
+
         rec = ContinuationRebindRecord(task_id="t1")
         d = rec.to_dict()
         assert d["task_id"] == "t1"
@@ -508,6 +536,7 @@ class TestGroupC_ContinuationRebindRegistryModule:
 
     def test_C07_rebind_record_round_trips_from_dict(self):
         from core.continuation_rebind_registry import ContinuationRebindRecord, RebindState
+
         rec = ContinuationRebindRecord(task_id="t2", recovery_id="rcv_abc")
         d = rec.to_dict()
         rec2 = ContinuationRebindRecord.from_dict(d)
@@ -517,6 +546,7 @@ class TestGroupC_ContinuationRebindRegistryModule:
 
     def test_C08_singleton_returns_same_instance(self):
         from core.continuation_rebind_registry import get_continuation_rebind_registry
+
         r1 = get_continuation_rebind_registry()
         r2 = get_continuation_rebind_registry()
         assert r1 is r2
@@ -526,6 +556,7 @@ class TestGroupC_ContinuationRebindRegistryModule:
             get_continuation_rebind_registry,
             reset_continuation_rebind_registry,
         )
+
         r1 = get_continuation_rebind_registry()
         reset_continuation_rebind_registry()
         r2 = get_continuation_rebind_registry()
@@ -540,16 +571,20 @@ class TestGroupC_ContinuationRebindRegistryModule:
 class TestGroupD_ContinuationRebindRegistryOps:
     def setup_method(self):
         from core.continuation_rebind_registry import reset_continuation_rebind_registry
+
         reset_continuation_rebind_registry()
 
     def teardown_method(self):
         from core.continuation_rebind_registry import reset_continuation_rebind_registry
+
         reset_continuation_rebind_registry()
 
     def test_D01_register_rebind_pending_creates_record(self):
         from core.continuation_rebind_registry import (
-            get_continuation_rebind_registry, RebindState,
+            RebindState,
+            get_continuation_rebind_registry,
         )
+
         reg = get_continuation_rebind_registry()
         tid = _task_id()
         rec = reg.register_rebind_pending(tid)
@@ -558,8 +593,10 @@ class TestGroupD_ContinuationRebindRegistryOps:
 
     def test_D02_register_rebind_pending_idempotent(self):
         from core.continuation_rebind_registry import (
-            get_continuation_rebind_registry, RebindState,
+            RebindState,
+            get_continuation_rebind_registry,
         )
+
         reg = get_continuation_rebind_registry()
         tid = _task_id()
         rec1 = reg.register_rebind_pending(tid)
@@ -569,8 +606,10 @@ class TestGroupD_ContinuationRebindRegistryOps:
 
     def test_D03_register_new_waiter_transitions_to_rebound(self):
         from core.continuation_rebind_registry import (
-            get_continuation_rebind_registry, RebindState,
+            RebindState,
+            get_continuation_rebind_registry,
         )
+
         reg = get_continuation_rebind_registry()
         tid = _task_id()
         reg.register_rebind_pending(tid)
@@ -581,8 +620,10 @@ class TestGroupD_ContinuationRebindRegistryOps:
 
     def test_D04_mark_completed_closes_loop(self):
         from core.continuation_rebind_registry import (
-            get_continuation_rebind_registry, RebindState,
+            RebindState,
+            get_continuation_rebind_registry,
         )
+
         reg = get_continuation_rebind_registry()
         tid = _task_id()
         reg.register_rebind_pending(tid)
@@ -594,6 +635,7 @@ class TestGroupD_ContinuationRebindRegistryOps:
 
     def test_D05_is_pending_rebind_correct(self):
         from core.continuation_rebind_registry import get_continuation_rebind_registry
+
         reg = get_continuation_rebind_registry()
         tid = _task_id()
         assert not reg.is_pending_rebind(tid)
@@ -604,6 +646,7 @@ class TestGroupD_ContinuationRebindRegistryOps:
 
     def test_D06_is_loop_closed_only_for_completed(self):
         from core.continuation_rebind_registry import get_continuation_rebind_registry
+
         reg = get_continuation_rebind_registry()
         tid = _task_id()
         reg.register_rebind_pending(tid)
@@ -615,11 +658,13 @@ class TestGroupD_ContinuationRebindRegistryOps:
 
     def test_D07_get_record_none_for_unknown(self):
         from core.continuation_rebind_registry import get_continuation_rebind_registry
+
         reg = get_continuation_rebind_registry()
         assert reg.get_record("no_such_task") is None
 
     def test_D08_pending_rebind_count(self):
         from core.continuation_rebind_registry import get_continuation_rebind_registry
+
         reg = get_continuation_rebind_registry()
         t1, t2, t3 = _task_id(), _task_id(), _task_id()
         reg.register_rebind_pending(t1)
@@ -631,6 +676,7 @@ class TestGroupD_ContinuationRebindRegistryOps:
 
     def test_D09_rebound_count(self):
         from core.continuation_rebind_registry import get_continuation_rebind_registry
+
         reg = get_continuation_rebind_registry()
         t1, t2 = _task_id(), _task_id()
         reg.register_rebind_pending(t1)
@@ -642,6 +688,7 @@ class TestGroupD_ContinuationRebindRegistryOps:
 
     def test_D10_completed_count(self):
         from core.continuation_rebind_registry import get_continuation_rebind_registry
+
         reg = get_continuation_rebind_registry()
         tid = _task_id()
         reg.register_rebind_pending(tid)
@@ -652,6 +699,7 @@ class TestGroupD_ContinuationRebindRegistryOps:
 
     def test_D11_list_pending_task_ids(self):
         from core.continuation_rebind_registry import get_continuation_rebind_registry
+
         reg = get_continuation_rebind_registry()
         t1, t2 = _task_id(), _task_id()
         reg.register_rebind_pending(t1)
@@ -663,6 +711,7 @@ class TestGroupD_ContinuationRebindRegistryOps:
 
     def test_D12_snapshot_json_serialisable_correct_counts(self):
         from core.continuation_rebind_registry import get_continuation_rebind_registry
+
         reg = get_continuation_rebind_registry()
         t1, t2 = _task_id(), _task_id()
         reg.register_rebind_pending(t1)
@@ -678,12 +727,14 @@ class TestGroupD_ContinuationRebindRegistryOps:
 
     def test_D13_register_new_waiter_unknown_task_returns_none(self):
         from core.continuation_rebind_registry import get_continuation_rebind_registry
+
         reg = get_continuation_rebind_registry()
         result = reg.register_new_waiter("no_such_task")
         assert result is None
 
     def test_D14_mark_completed_unknown_task_returns_none(self):
         from core.continuation_rebind_registry import get_continuation_rebind_registry
+
         reg = get_continuation_rebind_registry()
         result = reg.mark_completed("no_such_task")
         assert result is None
@@ -697,30 +748,35 @@ class TestGroupD_ContinuationRebindRegistryOps:
 class TestGroupE_RecoveryReportPR2Fields:
     def test_E01_report_has_continuation_rebinds_registered_field(self):
         from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         r = RuntimeRecoveryReport()
         assert hasattr(r, "continuation_rebinds_registered")
         assert r.continuation_rebinds_registered == 0
 
     def test_E02_report_has_durable_truth_converged_field(self):
         from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         r = RuntimeRecoveryReport()
         assert hasattr(r, "durable_truth_converged")
         assert r.durable_truth_converged is False
 
     def test_E03_report_has_participants_consolidated_field(self):
         from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         r = RuntimeRecoveryReport()
         assert hasattr(r, "participants_consolidated")
         assert isinstance(r.participants_consolidated, dict)
 
     def test_E04_report_has_result_continuity_guard_active_field(self):
         from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         r = RuntimeRecoveryReport()
         assert hasattr(r, "result_continuity_guard_active")
         assert r.result_continuity_guard_active is False
 
     def test_E05_to_dict_includes_pr2_fields(self):
         from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         r = RuntimeRecoveryReport()
         d = r.to_dict()
         for key in (
@@ -733,11 +789,12 @@ class TestGroupE_RecoveryReportPR2Fields:
 
     def test_E06_pr2_policy_sentinels_non_empty(self):
         from core.runtime_restart_recovery import (
-            DURABLE_TRUTH_AUTHORITY_CONVERGENCE_STEP_POLICY,
             CONTINUATION_REBIND_REGISTRY_INTEGRATION_POLICY,
+            DURABLE_TRUTH_AUTHORITY_CONVERGENCE_STEP_POLICY,
             MULTI_PARTICIPANT_RECOVERY_CONSOLIDATION_POLICY,
             RESULT_CONTINUITY_GUARD_VERIFICATION_POLICY,
         )
+
         for sentinel in (
             DURABLE_TRUTH_AUTHORITY_CONVERGENCE_STEP_POLICY,
             CONTINUATION_REBIND_REGISTRY_INTEGRATION_POLICY,
@@ -755,14 +812,16 @@ class TestGroupE_RecoveryReportPR2Fields:
 
 class TestGroupF_MultiTaskRestartRecovery:
     def setup_method(self):
-        from core.task_envelope_lifecycle_registry import reset_lifecycle_registry
         from core.continuation_rebind_registry import reset_continuation_rebind_registry
+        from core.task_envelope_lifecycle_registry import reset_lifecycle_registry
+
         reset_lifecycle_registry()
         reset_continuation_rebind_registry()
 
     def teardown_method(self):
-        from core.task_envelope_lifecycle_registry import reset_lifecycle_registry
         from core.continuation_rebind_registry import reset_continuation_rebind_registry
+        from core.task_envelope_lifecycle_registry import reset_lifecycle_registry
+
         reset_lifecycle_registry()
         reset_continuation_rebind_registry()
 
@@ -776,6 +835,7 @@ class TestGroupF_MultiTaskRestartRecovery:
         assert report.inflight_tasks_dispatch_actions_taken == 4
 
         from core.task_envelope_lifecycle_registry import get_lifecycle_registry
+
         reg = get_lifecycle_registry()
         for tid in tasks:
             assert reg.is_pending(tid), f"Task {tid} should be pending"
@@ -798,10 +858,7 @@ class TestGroupF_MultiTaskRestartRecovery:
         assert p["dev_C"] == 1
 
     def test_F03_participants_consolidated_counts_per_device(self, tmp_path):
-        records = [
-            _record(f"t{i}", "device_dispatch", target_device_id="dev_X")
-            for i in range(5)
-        ]
+        records = [_record(f"t{i}", "device_dispatch", target_device_id="dev_X") for i in range(5)]
         coord = _make_coordinator(str(tmp_path), records)
         report = coord.run_recovery()
         p = report.participants_consolidated
@@ -866,14 +923,16 @@ class TestGroupF_MultiTaskRestartRecovery:
 
 class TestGroupG_MultiParticipantRecoveryConsistency:
     def setup_method(self):
-        from core.task_envelope_lifecycle_registry import reset_lifecycle_registry
         from core.continuation_rebind_registry import reset_continuation_rebind_registry
+        from core.task_envelope_lifecycle_registry import reset_lifecycle_registry
+
         reset_lifecycle_registry()
         reset_continuation_rebind_registry()
 
     def teardown_method(self):
-        from core.task_envelope_lifecycle_registry import reset_lifecycle_registry
         from core.continuation_rebind_registry import reset_continuation_rebind_registry
+        from core.task_envelope_lifecycle_registry import reset_lifecycle_registry
+
         reset_lifecycle_registry()
         reset_continuation_rebind_registry()
 
@@ -890,10 +949,7 @@ class TestGroupG_MultiParticipantRecoveryConsistency:
         assert p.get("participant_B") == 1
 
     def test_G02_one_participant_three_tasks(self, tmp_path):
-        records = [
-            _record(f"px-t{i}", "device_dispatch", target_device_id="participant_X")
-            for i in range(3)
-        ]
+        records = [_record(f"px-t{i}", "device_dispatch", target_device_id="participant_X") for i in range(3)]
         coord = _make_coordinator(str(tmp_path), records)
         report = coord.run_recovery()
         p = report.participants_consolidated
@@ -902,6 +958,7 @@ class TestGroupG_MultiParticipantRecoveryConsistency:
 
     def test_G03_recovery_idempotent_second_run_no_new_participants(self, tmp_path):
         from core.task_envelope_lifecycle_registry import reset_lifecycle_registry
+
         reset_lifecycle_registry()
         records = [
             _record("g3-t1", "device_dispatch", target_device_id="dev_A"),
@@ -910,6 +967,7 @@ class TestGroupG_MultiParticipantRecoveryConsistency:
         ms_store, bm_store, tl_store = _make_stores(str(tmp_path))
         _save_snapshot(tl_store, records)
         from core.runtime_restart_recovery import RuntimeRestartRecoveryCoordinator
+
         coord = RuntimeRestartRecoveryCoordinator(
             mesh_session_store=ms_store,
             body_mesh_store=bm_store,
@@ -925,6 +983,7 @@ class TestGroupG_MultiParticipantRecoveryConsistency:
 
     def test_G04_result_continuity_guard_active_after_recovery(self, tmp_path):
         from core.durable_result_idempotency import reset_durable_result_id_store
+
         reset_durable_result_id_store()
         try:
             coord = _make_coordinator(str(tmp_path), [])
@@ -942,14 +1001,17 @@ class TestGroupG_MultiParticipantRecoveryConsistency:
 class TestGroupH_DuplicateResultAfterRecovery:
     def setup_method(self):
         from core.durable_result_idempotency import reset_durable_result_id_store
+
         reset_durable_result_id_store()
 
     def teardown_method(self):
         from core.durable_result_idempotency import reset_durable_result_id_store
+
         reset_durable_result_id_store()
 
     def test_H01_first_add_true_second_false(self, tmp_path):
         from core.durable_result_idempotency import DurableResultIdSet
+
         store = DurableResultIdSet(store_path=str(tmp_path / "ri.json"))
         rid = _result_id()
         assert store.add(rid) is True
@@ -957,6 +1019,7 @@ class TestGroupH_DuplicateResultAfterRecovery:
 
     def test_H02_result_before_restart_rejected_after_restart(self, tmp_path):
         from core.durable_result_idempotency import DurableResultIdSet
+
         path = str(tmp_path / "ri.json")
         rid = _result_id()
         # "before restart" process
@@ -969,11 +1032,13 @@ class TestGroupH_DuplicateResultAfterRecovery:
 
     def test_H03_record_then_check_helpers(self, tmp_path, monkeypatch):
         import core.durable_result_idempotency as idem
+
         monkeypatch.setattr(idem, "_DEFAULT_RESULT_ID_STORE_PATH", str(tmp_path / "ri.json"))
         from core.durable_result_idempotency import (
-            record_result_idempotency,
             check_result_idempotency,
+            record_result_idempotency,
         )
+
         rid = _result_id()
         assert check_result_idempotency(rid) is False
         assert record_result_idempotency(rid) is True
@@ -987,6 +1052,7 @@ class TestGroupH_DuplicateResultAfterRecovery:
     def test_H05_duplicate_result_ids_rejected_across_restart(self, tmp_path):
         """Simulate Android reconnect sending the same task_result twice after restart."""
         from core.durable_result_idempotency import DurableResultIdSet
+
         path = str(tmp_path / "ri.json")
         rid = _result_id()
 
@@ -1019,35 +1085,40 @@ except ImportError:
 
 class TestGroupI_DurableTruthAuthorityConvergenceIntegration:
     def setup_method(self):
-        from core.session_truth_snapshot import reset_session_truth_snapshot_store
+        from core.continuation_rebind_registry import reset_continuation_rebind_registry
         from core.durable_result_idempotency import reset_durable_result_id_store
         from core.durable_truth_authority_chain import reset_durable_truth_authority_chain
-        from core.continuation_rebind_registry import reset_continuation_rebind_registry
+        from core.session_truth_snapshot import reset_session_truth_snapshot_store
+
         reset_session_truth_snapshot_store()
         reset_durable_result_id_store()
         reset_durable_truth_authority_chain()
         reset_continuation_rebind_registry()
         if _pydantic_available:
             from core.canonical_session_truth import reset_canonical_session_truth_runtime
+
             reset_canonical_session_truth_runtime()
 
     def teardown_method(self):
-        from core.session_truth_snapshot import reset_session_truth_snapshot_store
+        from core.continuation_rebind_registry import reset_continuation_rebind_registry
         from core.durable_result_idempotency import reset_durable_result_id_store
         from core.durable_truth_authority_chain import reset_durable_truth_authority_chain
-        from core.continuation_rebind_registry import reset_continuation_rebind_registry
+        from core.session_truth_snapshot import reset_session_truth_snapshot_store
+
         reset_session_truth_snapshot_store()
         reset_durable_result_id_store()
         reset_durable_truth_authority_chain()
         reset_continuation_rebind_registry()
         if _pydantic_available:
             from core.canonical_session_truth import reset_canonical_session_truth_runtime
+
             reset_canonical_session_truth_runtime()
 
     def test_I01_ring_buffer_is_read_cache_sentinel_importable(self):
         if not _pydantic_available:
             pytest.skip("pydantic not installed — skipping canonical_session_truth tests")
         from core.canonical_session_truth import SESSION_TRUTH_RING_BUFFER_IS_READ_CACHE_SENTINEL
+
         assert isinstance(SESSION_TRUTH_RING_BUFFER_IS_READ_CACHE_SENTINEL, str)
         assert SESSION_TRUTH_RING_BUFFER_IS_READ_CACHE_SENTINEL
 
@@ -1055,21 +1126,20 @@ class TestGroupI_DurableTruthAuthorityConvergenceIntegration:
         if not _pydantic_available:
             pytest.skip("pydantic not installed — skipping canonical_session_truth tests")
         from core.canonical_session_truth import SESSION_TRUTH_RING_BUFFER_IS_READ_CACHE_SENTINEL
+
         s = SESSION_TRUTH_RING_BUFFER_IS_READ_CACHE_SENTINEL.lower()
         assert "read-cache" in s or "read_cache" in s or "read cache" in s
         assert "durable" in s
 
-    def test_I03_durable_truth_converged_true_after_recovery_with_real_stores(
-        self, tmp_path
-    ):
+    def test_I03_durable_truth_converged_true_after_recovery_with_real_stores(self, tmp_path):
         from core.durable_result_idempotency import reset_durable_result_id_store
+
         reset_durable_result_id_store()
         try:
             coord = _make_coordinator(str(tmp_path), [])
             report = coord.run_recovery()
             assert report.durable_truth_converged is True, (
-                "durable_truth_converged should be True when all stores are accessible. "
-                f"Report: {report.to_dict()}"
+                "durable_truth_converged should be True when all stores are accessible. " f"Report: {report.to_dict()}"
             )
         finally:
             reset_durable_result_id_store()
@@ -1077,17 +1147,19 @@ class TestGroupI_DurableTruthAuthorityConvergenceIntegration:
     def test_I04_broken_session_truth_store_graceful_degradation(self, tmp_path):
         """If session truth store is broken, recovery still completes; converged=False."""
         from core.durable_truth_authority_chain import (
-            DurableTruthAuthorityChain, reset_durable_truth_authority_chain,
+            DurableTruthAuthorityChain,
+            reset_durable_truth_authority_chain,
         )
 
         class BreakingSessionTruthStore:
             def load(self):
                 raise RuntimeError("simulated broken session truth store")
+
             def append(self, record):
                 pass
 
-        from core.task_lifecycle_persistence import TaskLifecyclePersistenceStore
         from core.durable_result_idempotency import DurableResultIdSet
+        from core.task_lifecycle_persistence import TaskLifecyclePersistenceStore
 
         tl_store = TaskLifecyclePersistenceStore(store_path=str(tmp_path / "tl.json"))
         ri_store = DurableResultIdSet(store_path=str(tmp_path / "ri.json"))

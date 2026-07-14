@@ -84,7 +84,6 @@ from core.runtime.runtime_observability_sink import (
     reset_observability_sink,
 )
 
-
 # ===========================================================================
 # A. DeviceLifecycleEventKind enum
 # ===========================================================================
@@ -298,9 +297,7 @@ class TestMeshSessionTransitionEventRoundTrip:
         assert "suspend" in payload
 
     def test_participant_count_round_trip(self):
-        evt = MeshSessionTransitionEvent(
-            session_id="s1", transition_kind="participant_joined", participant_count=3
-        )
+        evt = MeshSessionTransitionEvent(session_id="s1", transition_kind="participant_joined", participant_count=3)
         restored = MeshSessionTransitionEvent.from_dict(evt.to_dict())
         assert restored.participant_count == 3
 
@@ -667,9 +664,7 @@ class TestRuntimeObservabilitySinkBounded:
     def test_bounded_device_events(self):
         sink = RuntimeObservabilitySink(max_events=4)
         for i in range(10):
-            sink.record_device_lifecycle_event(
-                build_device_lifecycle_event(f"dev_{i}", "attach")
-            )
+            sink.record_device_lifecycle_event(build_device_lifecycle_event(f"dev_{i}", "attach"))
         events = sink.list_device_lifecycle_events()
         assert len(events) == 4
         # Most recent 4 should be dev_6..dev_9
@@ -679,9 +674,7 @@ class TestRuntimeObservabilitySinkBounded:
     def test_bounded_dispatch_events(self):
         sink = RuntimeObservabilitySink(max_events=3)
         for i in range(5):
-            sink.record_dispatch_decision_event(
-                build_dispatch_decision_event("local", decision_reason=f"reason_{i}")
-            )
+            sink.record_dispatch_decision_event(build_dispatch_decision_event("local", decision_reason=f"reason_{i}"))
         events = sink.list_dispatch_decision_events()
         assert len(events) == 3
 
@@ -697,13 +690,9 @@ class TestRuntimeObservabilitySinkCounters:
     def test_counters_increment(self):
         sink = RuntimeObservabilitySink(max_events=4)
         for i in range(3):
-            sink.record_device_lifecycle_event(
-                build_device_lifecycle_event(f"dev_{i}", "attach")
-            )
+            sink.record_device_lifecycle_event(build_device_lifecycle_event(f"dev_{i}", "attach"))
         for i in range(2):
-            sink.record_mesh_session_transition_event(
-                build_mesh_session_transition_event(f"sess_{i}", "activate")
-            )
+            sink.record_mesh_session_transition_event(build_mesh_session_transition_event(f"sess_{i}", "activate"))
         sink.record_dispatch_decision_event(build_dispatch_decision_event("local"))
         counters = sink.counters()
         assert counters["device_lifecycle"] == 3
@@ -715,9 +704,7 @@ class TestRuntimeObservabilitySinkCounters:
         # Counters should continue incrementing even when ring-buffer is full.
         sink = RuntimeObservabilitySink(max_events=2)
         for i in range(5):
-            sink.record_device_lifecycle_event(
-                build_device_lifecycle_event(f"dev_{i}", "attach")
-            )
+            sink.record_device_lifecycle_event(build_device_lifecycle_event(f"dev_{i}", "attach"))
         counters = sink.counters()
         assert counters["device_lifecycle"] == 5
         assert len(sink.list_device_lifecycle_events()) == 2
@@ -740,13 +727,9 @@ class TestRuntimeObservabilitySinkSnapshot:
     def test_snapshot_has_all_event_types(self):
         sink = RuntimeObservabilitySink(max_events=16)
         sink.record_device_lifecycle_event(build_device_lifecycle_event("d1", "attach"))
-        sink.record_mesh_session_transition_event(
-            build_mesh_session_transition_event("s1", "create")
-        )
+        sink.record_mesh_session_transition_event(build_mesh_session_transition_event("s1", "create"))
         sink.record_dispatch_decision_event(build_dispatch_decision_event("local"))
-        sink.record_recovery_decision_event(
-            build_recovery_decision_event("terminal_loss")
-        )
+        sink.record_recovery_decision_event(build_recovery_decision_event("terminal_loss"))
         snap = sink.snapshot()
         assert len(snap.device_lifecycle_events) == 1
         assert len(snap.mesh_session_transition_events) == 1
@@ -813,9 +796,7 @@ class TestEmitHelpers:
         assert any(e["device_id"] == "dev_02" for e in events)
 
     def test_emit_mesh_session_transition_event_returns_event(self):
-        evt = emit_mesh_session_transition_event(
-            "sess_001", "activate", prior_status="pending", new_status="active"
-        )
+        evt = emit_mesh_session_transition_event("sess_001", "activate", prior_status="pending", new_status="active")
         assert isinstance(evt, MeshSessionTransitionEvent)
         assert evt.session_id == "sess_001"
         assert evt.transition_kind == "activate"
@@ -1005,9 +986,7 @@ class TestDeviceLifecycleEventToJson:
     """DeviceLifecycleEvent.to_json() round-trips correctly."""
 
     def test_to_json_is_valid_json(self):
-        evt = build_device_lifecycle_event(
-            "dev_01", "attach", reason="test", trace_id="t1"
-        )
+        evt = build_device_lifecycle_event("dev_01", "attach", reason="test", trace_id="t1")
         j = evt.to_json()
         d = json.loads(j)
         assert d["device_id"] == "dev_01"

@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-
 DOC_PATH = Path("audit/PR1188_FINAL_SYSTEM_BODY_CORRECTIVE_PASS_CN_2026.md")
 
 

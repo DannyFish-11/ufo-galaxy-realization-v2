@@ -8,6 +8,7 @@ get_current_phase——但这三个此前【从未定义】,每处 import 都 Im
 try/except 静默吞掉,导致:面板实时对话恒空、AI 说话动画不随播放运转、面板相位
 断线重连恒被拉回"待机"。本测试证明三者现已存在且行为正确。
 """
+
 from __future__ import annotations
 
 import asyncio

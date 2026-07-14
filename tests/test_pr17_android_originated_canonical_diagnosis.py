@@ -92,30 +92,40 @@ def test_pr17_android_originated_causes_surface_in_canonical_diagnosis_paths() -
         "runtime_proof_count": 1,
     }
 
-    with patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions), patch(
-        "core.android_mode_gate_policy.build_mode_state_for_device",
-        return_value=mode_state,
-    ), patch(
-        "core.android_mode_gate_policy.evaluate_android_mode_readiness",
-        return_value=readiness,
-    ), patch(
-        "core.unified_execution_governance.is_takeover_active",
-        return_value=False,
-    ), patch(
-        "core.unified_execution_governance.get_execution_runtime_snapshot",
-        return_value=runtime_snapshot,
-    ), patch(
-        "core.android_evidence_integration_pipeline.get_android_evidence_integration_summary",
-        return_value=integration,
-    ), patch(
-        "core.unified_governance_semantics._OWNERSHIP_TRANSFER_PROOF_QUALITY_AVAILABLE",
-        True,
-    ), patch(
-        "core.unified_governance_semantics.get_latest_ownership_transfer_proof_quality_for_device",
-        return_value=ownership_quality,
-    ), patch(
-        "core.unified_governance_semantics.build_mesh_runtime_state",
-        return_value=mesh_state,
+    with (
+        patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions),
+        patch(
+            "core.android_mode_gate_policy.build_mode_state_for_device",
+            return_value=mode_state,
+        ),
+        patch(
+            "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+            return_value=readiness,
+        ),
+        patch(
+            "core.unified_execution_governance.is_takeover_active",
+            return_value=False,
+        ),
+        patch(
+            "core.unified_execution_governance.get_execution_runtime_snapshot",
+            return_value=runtime_snapshot,
+        ),
+        patch(
+            "core.android_evidence_integration_pipeline.get_android_evidence_integration_summary",
+            return_value=integration,
+        ),
+        patch(
+            "core.unified_governance_semantics._OWNERSHIP_TRANSFER_PROOF_QUALITY_AVAILABLE",
+            True,
+        ),
+        patch(
+            "core.unified_governance_semantics.get_latest_ownership_transfer_proof_quality_for_device",
+            return_value=ownership_quality,
+        ),
+        patch(
+            "core.unified_governance_semantics.build_mesh_runtime_state",
+            return_value=mesh_state,
+        ),
     ):
         state = build_unified_governance_state()
 

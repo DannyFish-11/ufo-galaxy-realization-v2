@@ -97,7 +97,6 @@ from core.cross_repo_contract_finalization import (
     run_drift_vector_gate,
 )
 
-
 # ---------------------------------------------------------------------------
 # A. Module importable; authority and sentinel non-empty
 # ---------------------------------------------------------------------------
@@ -109,9 +108,7 @@ def test_authority_sentinel_non_empty() -> None:
 
 
 def test_authority_sentinel_has_expected_tokens() -> None:
-    assert CROSS_REPO_CONTRACT_FINALIZATION_IS_AUTHORITY.startswith(
-        "CROSS_REPO_CONTRACT_FINALIZATION_IS_AUTHORITY::"
-    )
+    assert CROSS_REPO_CONTRACT_FINALIZATION_IS_AUTHORITY.startswith("CROSS_REPO_CONTRACT_FINALIZATION_IS_AUTHORITY::")
     assert "core.cross_repo_contract_finalization" in CROSS_REPO_CONTRACT_FINALIZATION_IS_AUTHORITY
     assert "PR-7" in CROSS_REPO_CONTRACT_FINALIZATION_IS_AUTHORITY
 
@@ -122,9 +119,7 @@ def test_pr7_sentinel_non_empty() -> None:
 
 
 def test_pr7_sentinel_has_expected_tokens() -> None:
-    assert CROSS_REPO_CONTRACT_FINALIZATION_PR7_SENTINEL.startswith(
-        "CROSS_REPO_CONTRACT_FINALIZATION_PR7_SENTINEL::"
-    )
+    assert CROSS_REPO_CONTRACT_FINALIZATION_PR7_SENTINEL.startswith("CROSS_REPO_CONTRACT_FINALIZATION_PR7_SENTINEL::")
     assert "PR7" in CROSS_REPO_CONTRACT_FINALIZATION_PR7_SENTINEL
     assert "cross-repo-contract-finalization-v1" in CROSS_REPO_CONTRACT_FINALIZATION_PR7_SENTINEL
     assert "core.cross_repo_contract_finalization" in CROSS_REPO_CONTRACT_FINALIZATION_PR7_SENTINEL
@@ -155,9 +150,7 @@ def test_policy_sentinels_have_policy_prefix() -> None:
         DRIFT_VECTORS_MUST_BE_CATALOGUED_AND_ADDRESSED_POLICY,
         FINALIZATION_PASS_MUST_SHRINK_AMBIGUITY_POLICY,
     ]:
-        assert sentinel.startswith("POLICY::"), (
-            f"Sentinel does not start with 'POLICY::': {sentinel!r}"
-        )
+        assert sentinel.startswith("POLICY::"), f"Sentinel does not start with 'POLICY::': {sentinel!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -422,8 +415,7 @@ def test_run_contract_boundary_gate_no_ambiguous_not_fail() -> None:
     # Find a kind that has no AMBIGUOUS boundaries in the catalog
     for kind in ContractBoundaryKind:
         ambiguous_for_kind = [
-            r for r in get_contract_boundary_catalog()
-            if r.kind == kind and r.status == FinalizationStatus.AMBIGUOUS
+            r for r in get_contract_boundary_catalog() if r.kind == kind and r.status == FinalizationStatus.AMBIGUOUS
         ]
         if not ambiguous_for_kind:
             result = run_contract_boundary_gate(kind)
@@ -491,10 +483,7 @@ def test_snapshot_boundary_counts_consistent() -> None:
     snapshot = build_finalization_snapshot()
     assert (
         snapshot.total_boundaries
-        == snapshot.stable_count
-        + snapshot.hardening_count
-        + snapshot.ambiguous_count
-        + snapshot.legacy_only_count
+        == snapshot.stable_count + snapshot.hardening_count + snapshot.ambiguous_count + snapshot.legacy_only_count
     )
 
 
@@ -505,10 +494,7 @@ def test_snapshot_boundary_counts_consistent() -> None:
 
 def test_snapshot_drift_vector_counts_consistent() -> None:
     snapshot = build_finalization_snapshot()
-    assert (
-        snapshot.total_drift_vectors
-        == snapshot.addressed_drift_count + snapshot.unaddressed_drift_count
-    )
+    assert snapshot.total_drift_vectors == snapshot.addressed_drift_count + snapshot.unaddressed_drift_count
 
 
 # ---------------------------------------------------------------------------
@@ -646,10 +632,7 @@ def test_is_contract_finalization_complete_returns_bool() -> None:
 def test_is_contract_finalization_complete_logic() -> None:
     # The result must agree with the computed conditions
     ambiguous = get_ambiguous_boundaries()
-    high_unaddressed = [
-        v for v in get_drift_vector_catalog()
-        if not v.addressed and v.severity == "HIGH"
-    ]
+    high_unaddressed = [v for v in get_drift_vector_catalog() if not v.addressed and v.severity == "HIGH"]
     expected = len(ambiguous) == 0 and len(high_unaddressed) == 0
     assert is_contract_finalization_complete() == expected
 
@@ -671,9 +654,7 @@ def test_snapshot_finalization_complete_agrees_with_gate() -> None:
 
 def test_legacy_only_boundaries_have_retirement_condition() -> None:
     for record in get_boundaries_by_status(FinalizationStatus.LEGACY_ONLY):
-        assert record.retirement_condition, (
-            f"LEGACY_ONLY boundary {record.boundary_id} has empty retirement_condition"
-        )
+        assert record.retirement_condition, f"LEGACY_ONLY boundary {record.boundary_id} has empty retirement_condition"
 
 
 # ---------------------------------------------------------------------------
@@ -684,9 +665,9 @@ def test_legacy_only_boundaries_have_retirement_condition() -> None:
 def test_addressed_drift_vectors_have_evidence() -> None:
     for vector in get_drift_vector_catalog():
         if vector.addressed:
-            assert vector.addressing_evidence, (
-                f"Addressed drift vector {vector.vector_id} has empty addressing_evidence"
-            )
+            assert (
+                vector.addressing_evidence
+            ), f"Addressed drift vector {vector.vector_id} has empty addressing_evidence"
 
 
 # ---------------------------------------------------------------------------
@@ -698,8 +679,7 @@ def test_no_ambiguous_boundaries_in_catalog() -> None:
     """After PR-7 finalization, the catalog must not contain AMBIGUOUS entries."""
     ambiguous = get_ambiguous_boundaries()
     assert len(ambiguous) == 0, (
-        f"Found AMBIGUOUS boundaries in catalog after PR-7: "
-        f"{[r.boundary_id for r in ambiguous]}"
+        f"Found AMBIGUOUS boundaries in catalog after PR-7: " f"{[r.boundary_id for r in ambiguous]}"
     )
 
 
@@ -759,13 +739,9 @@ def test_drift001_is_addressed() -> None:
 
 def test_drift_vectors_no_high_severity_unaddressed() -> None:
     """No HIGH-severity drift vector should remain unaddressed after PR-7."""
-    high_unaddressed = [
-        v for v in get_drift_vector_catalog()
-        if v.severity == "HIGH" and not v.addressed
-    ]
+    high_unaddressed = [v for v in get_drift_vector_catalog() if v.severity == "HIGH" and not v.addressed]
     assert len(high_unaddressed) == 0, (
-        f"Found HIGH-severity unaddressed drift vectors: "
-        f"{[v.vector_id for v in high_unaddressed]}"
+        f"Found HIGH-severity unaddressed drift vectors: " f"{[v.vector_id for v in high_unaddressed]}"
     )
 
 
@@ -776,9 +752,7 @@ def test_boundary_counts_cover_all_kinds() -> None:
     for kind in ContractBoundaryKind:
         if kind is ContractBoundaryKind.aggregate:
             continue  # aggregate is a sentinel kind used only for the drift gate
-        assert kind in kinds_in_catalog, (
-            f"No contract boundary record for kind: {kind.value}"
-        )
+        assert kind in kinds_in_catalog, f"No contract boundary record for kind: {kind.value}"
 
 
 def test_all_gate_ids_are_unique() -> None:

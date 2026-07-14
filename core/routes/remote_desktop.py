@@ -27,6 +27,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     async def remote_desktop_status():
         try:
             from core.remote_desktop import get_remote_desktop_manager
+
             return {"success": True, **get_remote_desktop_manager().status()}
         except Exception as exc:  # noqa: BLE001
             return {"success": False, "error": str(exc)}
@@ -35,6 +36,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     async def remote_desktop_enable():
         try:
             from core.remote_desktop import get_remote_desktop_manager
+
             return get_remote_desktop_manager().enable()
         except Exception as exc:  # noqa: BLE001
             return {"success": False, "error": str(exc)}
@@ -43,6 +45,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     async def remote_desktop_disable():
         try:
             from core.remote_desktop import get_remote_desktop_manager
+
             return get_remote_desktop_manager().disable()
         except Exception as exc:  # noqa: BLE001
             return {"success": False, "error": str(exc)}

@@ -37,6 +37,7 @@ from typing import Any
 
 import pytest
 
+import core.task_graph_runtime as _mod
 from core.task_graph_runtime import (
     GRAPH_RUNTIME_CONVERGENCE_AUTHORITY,
     TASK_GRAPH_RUNTIME_AUTHORITY,
@@ -52,8 +53,6 @@ from core.task_graph_runtime import (
     project_workflow_to_graph,
     reset_task_graph_runtime,
 )
-import core.task_graph_runtime as _mod
-
 
 # ===========================================================================
 # Helpers
@@ -126,8 +125,7 @@ def test_A07_replayed_state_value() -> None:
 
 def test_A08_all_new_states_in_enum() -> None:
     values = {s.value for s in GraphNodeState}
-    for expected in ("admitted", "planned", "routed", "partial_result",
-                     "cancelled", "degraded", "replayed"):
+    for expected in ("admitted", "planned", "routed", "partial_result", "cancelled", "degraded", "replayed"):
         assert expected in values
 
 
@@ -320,8 +318,7 @@ def test_H01_snapshot_nodes_by_state_has_admitted_key() -> None:
 def test_H02_snapshot_nodes_by_state_has_all_new_states() -> None:
     rt = _fresh()
     snap = rt.snapshot()
-    for state in ("admitted", "planned", "routed", "partial_result",
-                  "cancelled", "degraded", "replayed"):
+    for state in ("admitted", "planned", "routed", "partial_result", "cancelled", "degraded", "replayed"):
         assert state in snap.nodes_by_state
 
 
@@ -506,6 +503,7 @@ def test_M01_register_canonical_task_no_task_id_auto_generates(caplog) -> None:
     rt = _fresh()
     ct = _make_canonical_task(task_id="")
     import logging
+
     with caplog.at_level(logging.WARNING, logger="Galaxy.TaskGraphRuntime"):
         node = rt.register_canonical_task(ct)
     assert node.task_id.startswith("ctask_")

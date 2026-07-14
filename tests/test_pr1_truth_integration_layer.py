@@ -131,6 +131,7 @@ VALIDATOR_SRC = _read_source("core/target_device_validator.py")
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_udm_device(device_id: str, status: str = "online", capabilities=None):
     """Return a minimal mock UDM device object."""
     dev = MagicMock()
@@ -155,35 +156,42 @@ def _make_ucm_info(device_id: str, routable: bool = True, state: str = "connecte
 # Tests
 # ===========================================================================
 
+
 class TestTruthIntegrationLayerSentinels(unittest.TestCase):
     """Tests 1–6: sentinel strings."""
 
     def test_01_authority_importable(self):
         from core.truth_integration_layer import TRUTH_INTEGRATION_LAYER_AUTHORITY
+
         self.assertIsInstance(TRUTH_INTEGRATION_LAYER_AUTHORITY, str)
         self.assertTrue(len(TRUTH_INTEGRATION_LAYER_AUTHORITY) > 0)
 
     def test_02_authority_contains_til(self):
         from core.truth_integration_layer import TRUTH_INTEGRATION_LAYER_AUTHORITY
+
         self.assertIn("TRUTH_INTEGRATION_LAYER", TRUTH_INTEGRATION_LAYER_AUTHORITY)
 
     def test_03_authority_contains_canonical(self):
         from core.truth_integration_layer import TRUTH_INTEGRATION_LAYER_AUTHORITY
+
         self.assertIn("CANONICAL", TRUTH_INTEGRATION_LAYER_AUTHORITY)
 
     def test_04_conflict_policy_non_empty(self):
         from core.truth_integration_layer import TRUTH_CONFLICT_RESOLUTION_POLICY
+
         self.assertIsInstance(TRUTH_CONFLICT_RESOLUTION_POLICY, str)
         self.assertTrue(len(TRUTH_CONFLICT_RESOLUTION_POLICY) > 0)
 
     def test_05_conflict_policy_mentions_ucm_udm(self):
         from core.truth_integration_layer import TRUTH_CONFLICT_RESOLUTION_POLICY
+
         text = TRUTH_CONFLICT_RESOLUTION_POLICY.upper()
         self.assertIn("UCM", text)
         self.assertIn("UDM", text)
 
     def test_06_conflict_policy_mentions_compat(self):
         from core.truth_integration_layer import TRUTH_CONFLICT_RESOLUTION_POLICY
+
         self.assertIn("compat", TRUTH_CONFLICT_RESOLUTION_POLICY.lower())
 
 
@@ -192,11 +200,13 @@ class TestCanonicalDeviceTruth(unittest.TestCase):
 
     def test_07_importable(self):
         from core.truth_integration_layer import CanonicalDeviceTruth
+
         t = CanonicalDeviceTruth(device_id="dev-1")
         self.assertEqual(t.device_id, "dev-1")
 
     def test_08_to_dict_fields(self):
         from core.truth_integration_layer import CanonicalDeviceTruth
+
         t = CanonicalDeviceTruth(
             device_id="dev-1",
             is_registered=True,
@@ -206,36 +216,50 @@ class TestCanonicalDeviceTruth(unittest.TestCase):
         )
         d = t.to_dict()
         for key in (
-            "device_id", "is_registered", "is_online",
-            "is_connected", "is_routable", "capabilities",
-            "resolution_source", "authority_available",
-            "compat_present", "conflicts",
+            "device_id",
+            "is_registered",
+            "is_online",
+            "is_connected",
+            "is_routable",
+            "capabilities",
+            "resolution_source",
+            "authority_available",
+            "compat_present",
+            "conflicts",
         ):
             self.assertIn(key, d, f"Missing key: {key}")
 
     def test_09_is_available_true(self):
         from core.truth_integration_layer import CanonicalDeviceTruth
+
         t = CanonicalDeviceTruth(
             device_id="dev-1",
-            is_registered=True, is_online=True,
-            is_connected=True, is_routable=True,
+            is_registered=True,
+            is_online=True,
+            is_connected=True,
+            is_routable=True,
         )
         self.assertTrue(t.is_available)
 
     def test_10_is_available_false_if_any_flag_unset(self):
         from core.truth_integration_layer import CanonicalDeviceTruth
+
         # is_routable = False
         t = CanonicalDeviceTruth(
             device_id="dev-1",
-            is_registered=True, is_online=True,
-            is_connected=True, is_routable=False,
+            is_registered=True,
+            is_online=True,
+            is_connected=True,
+            is_routable=False,
         )
         self.assertFalse(t.is_available)
         # is_connected = False
         t2 = CanonicalDeviceTruth(
             device_id="dev-1",
-            is_registered=True, is_online=True,
-            is_connected=False, is_routable=True,
+            is_registered=True,
+            is_online=True,
+            is_connected=False,
+            is_routable=True,
         )
         self.assertFalse(t2.is_available)
 
@@ -245,14 +269,17 @@ class TestResolveFunctions(unittest.TestCase):
 
     def test_11_resolve_device_truth_importable(self):
         from core.truth_integration_layer import resolve_device_truth
+
         self.assertTrue(callable(resolve_device_truth))
 
     def test_12_resolve_all_device_truth_importable(self):
         from core.truth_integration_layer import resolve_all_device_truth
+
         self.assertTrue(callable(resolve_all_device_truth))
 
     def test_13_is_device_available_canonical_importable(self):
         from core.truth_integration_layer import is_device_available_canonical
+
         self.assertTrue(callable(is_device_available_canonical))
 
 
@@ -262,6 +289,7 @@ class TestResolveDeviceTruth(unittest.TestCase):
     def _patch_sources(self, udm=None, ucm=None, compat=None):
         """Context manager: patch _get_udm, _get_ucm, _get_compat_cache."""
         import core.truth_integration_layer as til
+
         patches = []
         patches.append(patch.object(til, "_get_udm", return_value=udm))
         patches.append(patch.object(til, "_get_ucm", return_value=ucm))
@@ -279,8 +307,8 @@ class TestResolveDeviceTruth(unittest.TestCase):
 
     def test_14_ucm_udm_registered_and_connected(self):
         """Device in both UDM and UCM → resolution_source = 'ucm_udm'."""
-        from core.truth_integration_layer import resolve_device_truth
         import core.truth_integration_layer as til
+        from core.truth_integration_layer import resolve_device_truth
 
         udm = MagicMock()
         udm.get_device.return_value = _make_udm_device("dev-a", status="online")
@@ -303,8 +331,8 @@ class TestResolveDeviceTruth(unittest.TestCase):
 
     def test_15_udm_only_no_ucm_record(self):
         """Device in UDM but no UCM connection → is_connected=False, resolution_source='ucm_udm'."""
-        from core.truth_integration_layer import resolve_device_truth
         import core.truth_integration_layer as til
+        from core.truth_integration_layer import resolve_device_truth
 
         udm = MagicMock()
         udm.get_device.return_value = _make_udm_device("dev-b", status="online")
@@ -325,8 +353,8 @@ class TestResolveDeviceTruth(unittest.TestCase):
 
     def test_16_compat_supplement_when_authority_has_no_record(self):
         """Device not in UCM/UDM but in compat → compat_supplement."""
-        from core.truth_integration_layer import resolve_device_truth
         import core.truth_integration_layer as til
+        from core.truth_integration_layer import resolve_device_truth
 
         udm = MagicMock()
         udm.get_device.return_value = None
@@ -350,8 +378,8 @@ class TestResolveDeviceTruth(unittest.TestCase):
 
     def test_17_unknown_device(self):
         """Device not in any source → is_available=False."""
-        from core.truth_integration_layer import resolve_device_truth
         import core.truth_integration_layer as til
+        from core.truth_integration_layer import resolve_device_truth
 
         udm = MagicMock()
         udm.get_device.return_value = None
@@ -371,8 +399,8 @@ class TestResolveDeviceTruth(unittest.TestCase):
 
     def test_18_compat_only_when_authorities_down(self):
         """Both UCM and UDM are None → compat_only source."""
-        from core.truth_integration_layer import resolve_device_truth
         import core.truth_integration_layer as til
+        from core.truth_integration_layer import resolve_device_truth
 
         compat = {"dev-d": {"status": "online", "online": True}}
 
@@ -388,11 +416,11 @@ class TestResolveDeviceTruth(unittest.TestCase):
 
     def test_19_conflict_compat_online_authority_offline(self):
         """Compat says online, authority says not registered → conflict recorded."""
-        from core.truth_integration_layer import resolve_device_truth
         import core.truth_integration_layer as til
+        from core.truth_integration_layer import resolve_device_truth
 
         udm = MagicMock()
-        udm.get_device.return_value = None       # authority: not registered
+        udm.get_device.return_value = None  # authority: not registered
         ucm = MagicMock()
         ucm.get_connection.return_value = None
         ucm.is_device_connected.return_value = False
@@ -413,8 +441,8 @@ class TestResolveDeviceTruth(unittest.TestCase):
 
     def test_20_conflict_authority_registered_compat_offline(self):
         """Authority says registered, compat says offline → conflict recorded."""
-        from core.truth_integration_layer import resolve_device_truth
         import core.truth_integration_layer as til
+        from core.truth_integration_layer import resolve_device_truth
 
         udm = MagicMock()
         udm.get_device.return_value = _make_udm_device("dev-f", status="online")
@@ -439,8 +467,8 @@ class TestResolveDeviceTruth(unittest.TestCase):
 
     def test_21_conflict_does_not_change_authority_verdict(self):
         """Even with compat conflict, authority verdict is preserved."""
-        from core.truth_integration_layer import resolve_device_truth
         import core.truth_integration_layer as til
+        from core.truth_integration_layer import resolve_device_truth
 
         udm = MagicMock()
         udm.get_device.return_value = _make_udm_device("dev-g", status="online")
@@ -465,8 +493,8 @@ class TestResolveDeviceTruth(unittest.TestCase):
 
     def test_22_heartbeat_scenario_routable_updated(self):
         """After heartbeat UCM marks routable=True — truth reflects this."""
-        from core.truth_integration_layer import resolve_device_truth
         import core.truth_integration_layer as til
+        from core.truth_integration_layer import resolve_device_truth
 
         udm = MagicMock()
         udm.get_device.return_value = _make_udm_device("dev-h", status="online")
@@ -499,8 +527,8 @@ class TestResolveDeviceTruth(unittest.TestCase):
 
     def test_23_disconnect_scenario(self):
         """After disconnect UCM has no record → is_connected=False."""
-        from core.truth_integration_layer import resolve_device_truth
         import core.truth_integration_layer as til
+        from core.truth_integration_layer import resolve_device_truth
 
         udm = MagicMock()
         udm.get_device.return_value = _make_udm_device("dev-i", status="online")
@@ -514,15 +542,15 @@ class TestResolveDeviceTruth(unittest.TestCase):
         finally:
             self._stop(patches)
 
-        self.assertTrue(t.is_registered)   # UDM still has it
-        self.assertFalse(t.is_connected)   # UCM: no active connection
+        self.assertTrue(t.is_registered)  # UDM still has it
+        self.assertFalse(t.is_connected)  # UCM: no active connection
         self.assertFalse(t.is_routable)
         self.assertFalse(t.is_available)
 
     def test_24_reconnect_scenario(self):
         """After reconnect UCM gets new record → is_connected=True again."""
-        from core.truth_integration_layer import resolve_device_truth
         import core.truth_integration_layer as til
+        from core.truth_integration_layer import resolve_device_truth
 
         udm = MagicMock()
         udm.get_device.return_value = _make_udm_device("dev-j", status="online")
@@ -546,8 +574,8 @@ class TestResolveAllDeviceTruth(unittest.TestCase):
 
     def test_25_includes_udm_devices(self):
         """UDM devices appear in resolve_all_device_truth output."""
-        from core.truth_integration_layer import resolve_all_device_truth
         import core.truth_integration_layer as til
+        from core.truth_integration_layer import resolve_all_device_truth
 
         dev_a = _make_udm_device("dev-aa")
         udm = MagicMock()
@@ -557,9 +585,11 @@ class TestResolveAllDeviceTruth(unittest.TestCase):
         ucm.get_connection.return_value = None
         ucm.is_device_connected.return_value = False
 
-        with patch.object(til, "_get_udm", return_value=udm), \
-             patch.object(til, "_get_ucm", return_value=ucm), \
-             patch.object(til, "_get_compat_cache", return_value={}):
+        with (
+            patch.object(til, "_get_udm", return_value=udm),
+            patch.object(til, "_get_ucm", return_value=ucm),
+            patch.object(til, "_get_compat_cache", return_value={}),
+        ):
             results = resolve_all_device_truth()
 
         ids = [r.device_id for r in results]
@@ -567,8 +597,8 @@ class TestResolveAllDeviceTruth(unittest.TestCase):
 
     def test_26_includes_ucm_devices(self):
         """UCM devices appear in output even if not in UDM."""
-        from core.truth_integration_layer import resolve_all_device_truth
         import core.truth_integration_layer as til
+        from core.truth_integration_layer import resolve_all_device_truth
 
         udm = MagicMock()
         udm.list_devices.return_value = []
@@ -577,9 +607,11 @@ class TestResolveAllDeviceTruth(unittest.TestCase):
         ucm.get_connection.return_value = None
         ucm.is_device_connected.return_value = False
 
-        with patch.object(til, "_get_udm", return_value=udm), \
-             patch.object(til, "_get_ucm", return_value=ucm), \
-             patch.object(til, "_get_compat_cache", return_value={}):
+        with (
+            patch.object(til, "_get_udm", return_value=udm),
+            patch.object(til, "_get_ucm", return_value=ucm),
+            patch.object(til, "_get_compat_cache", return_value={}),
+        ):
             results = resolve_all_device_truth()
 
         ids = [r.device_id for r in results]
@@ -587,8 +619,8 @@ class TestResolveAllDeviceTruth(unittest.TestCase):
 
     def test_27_supplements_compat_only_devices(self):
         """Compat-only devices appear in output."""
-        from core.truth_integration_layer import resolve_all_device_truth
         import core.truth_integration_layer as til
+        from core.truth_integration_layer import resolve_all_device_truth
 
         udm = MagicMock()
         udm.list_devices.return_value = []
@@ -599,9 +631,11 @@ class TestResolveAllDeviceTruth(unittest.TestCase):
 
         compat = {"dev-cc": {"status": "online"}}
 
-        with patch.object(til, "_get_udm", return_value=udm), \
-             patch.object(til, "_get_ucm", return_value=ucm), \
-             patch.object(til, "_get_compat_cache", return_value=compat):
+        with (
+            patch.object(til, "_get_udm", return_value=udm),
+            patch.object(til, "_get_ucm", return_value=ucm),
+            patch.object(til, "_get_compat_cache", return_value=compat),
+        ):
             results = resolve_all_device_truth()
 
         ids = [r.device_id for r in results]
@@ -609,8 +643,8 @@ class TestResolveAllDeviceTruth(unittest.TestCase):
 
     def test_28_deduplicates_devices(self):
         """Device in both UDM and compat → exactly one entry."""
-        from core.truth_integration_layer import resolve_all_device_truth
         import core.truth_integration_layer as til
+        from core.truth_integration_layer import resolve_all_device_truth
 
         dev = _make_udm_device("dev-dd")
         udm = MagicMock()
@@ -622,9 +656,11 @@ class TestResolveAllDeviceTruth(unittest.TestCase):
 
         compat = {"dev-dd": {"status": "online"}}
 
-        with patch.object(til, "_get_udm", return_value=udm), \
-             patch.object(til, "_get_ucm", return_value=ucm), \
-             patch.object(til, "_get_compat_cache", return_value=compat):
+        with (
+            patch.object(til, "_get_udm", return_value=udm),
+            patch.object(til, "_get_ucm", return_value=ucm),
+            patch.object(til, "_get_compat_cache", return_value=compat),
+        ):
             results = resolve_all_device_truth()
 
         ids = [r.device_id for r in results]
@@ -635,8 +671,8 @@ class TestIsDeviceAvailableCanonical(unittest.TestCase):
     """Tests 29–30."""
 
     def test_29_returns_true_when_available(self):
-        from core.truth_integration_layer import is_device_available_canonical
         import core.truth_integration_layer as til
+        from core.truth_integration_layer import is_device_available_canonical
 
         udm = MagicMock()
         udm.get_device.return_value = _make_udm_device("dev-x", status="online")
@@ -644,16 +680,18 @@ class TestIsDeviceAvailableCanonical(unittest.TestCase):
         ucm.get_connection.return_value = _make_ucm_info("dev-x", routable=True)
         ucm.is_device_connected.return_value = True
 
-        with patch.object(til, "_get_udm", return_value=udm), \
-             patch.object(til, "_get_ucm", return_value=ucm), \
-             patch.object(til, "_get_compat_cache", return_value={}):
+        with (
+            patch.object(til, "_get_udm", return_value=udm),
+            patch.object(til, "_get_ucm", return_value=ucm),
+            patch.object(til, "_get_compat_cache", return_value={}),
+        ):
             result = is_device_available_canonical("dev-x")
 
         self.assertTrue(result)
 
     def test_30_returns_false_when_not_routable(self):
-        from core.truth_integration_layer import is_device_available_canonical
         import core.truth_integration_layer as til
+        from core.truth_integration_layer import is_device_available_canonical
 
         udm = MagicMock()
         udm.get_device.return_value = _make_udm_device("dev-y", status="online")
@@ -661,9 +699,11 @@ class TestIsDeviceAvailableCanonical(unittest.TestCase):
         ucm.get_connection.return_value = _make_ucm_info("dev-y", routable=False)
         ucm.is_device_connected.return_value = True
 
-        with patch.object(til, "_get_udm", return_value=udm), \
-             patch.object(til, "_get_ucm", return_value=ucm), \
-             patch.object(til, "_get_compat_cache", return_value={}):
+        with (
+            patch.object(til, "_get_udm", return_value=udm),
+            patch.object(til, "_get_ucm", return_value=ucm),
+            patch.object(til, "_get_compat_cache", return_value={}),
+        ):
             result = is_device_available_canonical("dev-y")
 
         self.assertFalse(result)
@@ -686,6 +726,7 @@ class TestCompatMirrorSentinels(unittest.TestCase):
         """COMPAT_MIRROR_WRITE value contains 'COMPAT_MIRROR_WRITE'."""
         # Value is on the line: COMPAT_MIRROR_WRITE: str = "COMPAT_MIRROR_WRITE::..."
         import re
+
         match = re.search(r'COMPAT_MIRROR_WRITE\s*:\s*str\s*=\s*"([^"]+)"', SHARED_SRC)
         self.assertIsNotNone(match, "COMPAT_MIRROR_WRITE string value not found in _shared.py")
         value = match.group(1)
@@ -694,6 +735,7 @@ class TestCompatMirrorSentinels(unittest.TestCase):
     def test_34_compat_mirror_write_contains_secondary_after_ucm_udm(self):
         """COMPAT_MIRROR_WRITE value contains 'SECONDARY_AFTER_UCM_UDM'."""
         import re
+
         match = re.search(r'COMPAT_MIRROR_WRITE\s*:\s*str\s*=\s*"([^"]+)"', SHARED_SRC)
         self.assertIsNotNone(match, "COMPAT_MIRROR_WRITE string value not found in _shared.py")
         value = match.group(1)
@@ -705,14 +747,17 @@ class TestReadinessTILSentinel(unittest.TestCase):
 
     def test_35_til_backed_importable(self):
         from core.device_readiness import TRUTH_INTEGRATION_LAYER_BACKED
+
         self.assertIsNotNone(TRUTH_INTEGRATION_LAYER_BACKED)
 
     def test_36_til_backed_is_true(self):
         from core.device_readiness import TRUTH_INTEGRATION_LAYER_BACKED
+
         self.assertTrue(TRUTH_INTEGRATION_LAYER_BACKED)
 
     def test_37_til_backed_in_all(self):
         from core.device_readiness import __all__
+
         self.assertIn("TRUTH_INTEGRATION_LAYER_BACKED", __all__)
 
 
@@ -721,15 +766,15 @@ class TestParticipationTILSentinel(unittest.TestCase):
 
     def test_38_participation_truth_source_importable(self):
         from core.device_participation import PARTICIPATION_TRUTH_SOURCE
+
         self.assertIsInstance(PARTICIPATION_TRUTH_SOURCE, str)
         self.assertTrue(len(PARTICIPATION_TRUTH_SOURCE) > 0)
 
     def test_39_participation_truth_source_references_til(self):
         from core.device_participation import PARTICIPATION_TRUTH_SOURCE
+
         src = PARTICIPATION_TRUTH_SOURCE.upper()
-        self.assertTrue(
-            "TRUTH_INTEGRATION_LAYER" in src or "TIL" in src
-        )
+        self.assertTrue("TRUTH_INTEGRATION_LAYER" in src or "TIL" in src)
 
 
 class TestValidatorTILSentinel(unittest.TestCase):
@@ -737,16 +782,15 @@ class TestValidatorTILSentinel(unittest.TestCase):
 
     def test_40_validator_truth_source_importable(self):
         from core.target_device_validator import VALIDATOR_TRUTH_SOURCE
+
         self.assertIsInstance(VALIDATOR_TRUTH_SOURCE, str)
         self.assertTrue(len(VALIDATOR_TRUTH_SOURCE) > 0)
 
     def test_41_validator_truth_source_mentions_compat_excluded(self):
         from core.target_device_validator import VALIDATOR_TRUTH_SOURCE
+
         self.assertIn("compat", VALIDATOR_TRUTH_SOURCE.lower())
-        self.assertTrue(
-            "exclud" in VALIDATOR_TRUTH_SOURCE.lower()
-            or "not" in VALIDATOR_TRUTH_SOURCE.lower()
-        )
+        self.assertTrue("exclud" in VALIDATOR_TRUTH_SOURCE.lower() or "not" in VALIDATOR_TRUTH_SOURCE.lower())
 
 
 class TestSourceCodeAnnotations(unittest.TestCase):
@@ -759,9 +803,10 @@ class TestSourceCodeAnnotations(unittest.TestCase):
     def test_43_devices_py_imports_compat_mirror_write(self):
         """devices.py imports COMPAT_MIRROR_WRITE from _shared."""
         import re
+
         self.assertIsNotNone(
             re.search(
-                r'from\s+core\.routes\._shared\s+import[^#\n]*COMPAT_MIRROR_WRITE',
+                r"from\s+core\.routes\._shared\s+import[^#\n]*COMPAT_MIRROR_WRITE",
                 DEVICES_SRC,
             ),
             "devices.py must import COMPAT_MIRROR_WRITE from core.routes._shared",
@@ -773,8 +818,8 @@ class TestRobustness(unittest.TestCase):
 
     def test_44_resolve_device_truth_never_raises(self):
         """resolve_device_truth must not raise even when all sources throw."""
-        from core.truth_integration_layer import resolve_device_truth
         import core.truth_integration_layer as til
+        from core.truth_integration_layer import resolve_device_truth
 
         bad_udm = MagicMock()
         bad_udm.get_device.side_effect = RuntimeError("UDM exploded")
@@ -782,9 +827,11 @@ class TestRobustness(unittest.TestCase):
         bad_ucm.get_connection.side_effect = RuntimeError("UCM exploded")
         bad_ucm.is_device_connected.side_effect = RuntimeError("UCM is down")
 
-        with patch.object(til, "_get_udm", return_value=bad_udm), \
-             patch.object(til, "_get_ucm", return_value=bad_ucm), \
-             patch.object(til, "_get_compat_cache", return_value={}):
+        with (
+            patch.object(til, "_get_udm", return_value=bad_udm),
+            patch.object(til, "_get_ucm", return_value=bad_ucm),
+            patch.object(til, "_get_compat_cache", return_value={}),
+        ):
             try:
                 result = resolve_device_truth("dev-z")
             except Exception as exc:
@@ -795,17 +842,19 @@ class TestRobustness(unittest.TestCase):
 
     def test_45_resolve_all_device_truth_never_raises(self):
         """resolve_all_device_truth must not raise even when all sources throw."""
-        from core.truth_integration_layer import resolve_all_device_truth
         import core.truth_integration_layer as til
+        from core.truth_integration_layer import resolve_all_device_truth
 
         bad_udm = MagicMock()
         bad_udm.list_devices.side_effect = RuntimeError("UDM exploded")
         bad_ucm = MagicMock()
         bad_ucm.get_all_devices.side_effect = RuntimeError("UCM exploded")
 
-        with patch.object(til, "_get_udm", return_value=bad_udm), \
-             patch.object(til, "_get_ucm", return_value=bad_ucm), \
-             patch.object(til, "_get_compat_cache", return_value={}):
+        with (
+            patch.object(til, "_get_udm", return_value=bad_udm),
+            patch.object(til, "_get_ucm", return_value=bad_ucm),
+            patch.object(til, "_get_compat_cache", return_value={}),
+        ):
             try:
                 results = resolve_all_device_truth()
             except Exception as exc:

@@ -80,9 +80,7 @@ _DEFAULT_RESULT_ID_STORE_PATH = os.path.join(
 # Authority sentinel
 # ---------------------------------------------------------------------------
 
-DURABLE_RESULT_IDEMPOTENCY_IS_AUTHORITY: str = (
-    "DURABLE_RESULT_IDEMPOTENCY::FILE_BACKED_RESULT_ID_DEDUP_DEFAULT_ON_V1"
-)
+DURABLE_RESULT_IDEMPOTENCY_IS_AUTHORITY: str = "DURABLE_RESULT_IDEMPOTENCY::FILE_BACKED_RESULT_ID_DEDUP_DEFAULT_ON_V1"
 
 # ---------------------------------------------------------------------------
 # DurableResultIdSet
@@ -135,13 +133,9 @@ class DurableResultIdSet:
         self._ids: OrderedDict = OrderedDict()
         # Ensure the directory exists
         try:
-            os.makedirs(
-                os.path.dirname(os.path.abspath(self._store_path)), exist_ok=True
-            )
+            os.makedirs(os.path.dirname(os.path.abspath(self._store_path)), exist_ok=True)
         except Exception as exc:
-            logger.warning(
-                "DurableResultIdSet: could not create store directory: %s", exc
-            )
+            logger.warning("DurableResultIdSet: could not create store directory: %s", exc)
 
     # ------------------------------------------------------------------
     # Public API

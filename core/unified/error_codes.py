@@ -33,7 +33,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Optional
 
-
 # ---------------------------------------------------------------------------
 # Enumerations
 # ---------------------------------------------------------------------------
@@ -42,9 +41,9 @@ from typing import Any, Dict, Optional
 class Retryable(str, Enum):
     """Retryability classification for an error."""
 
-    YES = "yes"          # Transient — safe to retry immediately or after back-off
+    YES = "yes"  # Transient — safe to retry immediately or after back-off
     BACKOFF = "backoff"  # Retry only after an exponential back-off delay
-    NO = "no"            # Permanent / fatal — do not retry
+    NO = "no"  # Permanent / fatal — do not retry
     CONDITIONAL = "conditional"  # Context-dependent (inspect payload for hint)
 
 
@@ -173,165 +172,227 @@ ERROR_CODE_REGISTRY: Dict[str, _ErrorCodeDef] = {
     GalaxyErrorCode.PLAN_DECOMPOSE_FAILED: _ErrorCodeDef(
         GalaxyErrorCode.PLAN_DECOMPOSE_FAILED,
         "Task decomposition failed",
-        Retryable.BACKOFF, ErrorSeverity.ERROR, ErrorDomain.PLANNER,
+        Retryable.BACKOFF,
+        ErrorSeverity.ERROR,
+        ErrorDomain.PLANNER,
     ),
     GalaxyErrorCode.PLAN_NO_CAPABLE_DEVICE: _ErrorCodeDef(
         GalaxyErrorCode.PLAN_NO_CAPABLE_DEVICE,
         "No capable device available for the planned step",
-        Retryable.CONDITIONAL, ErrorSeverity.WARNING, ErrorDomain.PLANNER,
+        Retryable.CONDITIONAL,
+        ErrorSeverity.WARNING,
+        ErrorDomain.PLANNER,
     ),
     GalaxyErrorCode.PLAN_CYCLE_DETECTED: _ErrorCodeDef(
         GalaxyErrorCode.PLAN_CYCLE_DETECTED,
         "Cycle detected in task dependency graph",
-        Retryable.NO, ErrorSeverity.ERROR, ErrorDomain.PLANNER,
+        Retryable.NO,
+        ErrorSeverity.ERROR,
+        ErrorDomain.PLANNER,
     ),
     GalaxyErrorCode.PLAN_TIMEOUT: _ErrorCodeDef(
         GalaxyErrorCode.PLAN_TIMEOUT,
         "Planner exceeded maximum allowed time",
-        Retryable.BACKOFF, ErrorSeverity.WARNING, ErrorDomain.PLANNER,
+        Retryable.BACKOFF,
+        ErrorSeverity.WARNING,
+        ErrorDomain.PLANNER,
     ),
     # Executor
     GalaxyErrorCode.EXEC_DISPATCH_FAILED: _ErrorCodeDef(
         GalaxyErrorCode.EXEC_DISPATCH_FAILED,
         "Task dispatch to executor failed",
-        Retryable.YES, ErrorSeverity.ERROR, ErrorDomain.EXECUTOR,
+        Retryable.YES,
+        ErrorSeverity.ERROR,
+        ErrorDomain.EXECUTOR,
     ),
     GalaxyErrorCode.EXEC_TASK_TIMEOUT: _ErrorCodeDef(
         GalaxyErrorCode.EXEC_TASK_TIMEOUT,
         "Executor task exceeded deadline",
-        Retryable.BACKOFF, ErrorSeverity.WARNING, ErrorDomain.EXECUTOR,
+        Retryable.BACKOFF,
+        ErrorSeverity.WARNING,
+        ErrorDomain.EXECUTOR,
     ),
     GalaxyErrorCode.EXEC_RESOURCE_EXHAUSTED: _ErrorCodeDef(
         GalaxyErrorCode.EXEC_RESOURCE_EXHAUSTED,
         "Executor resource quota exhausted",
-        Retryable.BACKOFF, ErrorSeverity.ERROR, ErrorDomain.EXECUTOR,
+        Retryable.BACKOFF,
+        ErrorSeverity.ERROR,
+        ErrorDomain.EXECUTOR,
     ),
     GalaxyErrorCode.EXEC_PREEMPTED: _ErrorCodeDef(
         GalaxyErrorCode.EXEC_PREEMPTED,
         "Execution preempted by higher-priority task",
-        Retryable.YES, ErrorSeverity.INFO, ErrorDomain.EXECUTOR,
+        Retryable.YES,
+        ErrorSeverity.INFO,
+        ErrorDomain.EXECUTOR,
     ),
     GalaxyErrorCode.EXEC_CANCELLED: _ErrorCodeDef(
         GalaxyErrorCode.EXEC_CANCELLED,
         "Execution cancelled by operator or policy",
-        Retryable.NO, ErrorSeverity.INFO, ErrorDomain.EXECUTOR,
+        Retryable.NO,
+        ErrorSeverity.INFO,
+        ErrorDomain.EXECUTOR,
     ),
     # Gateway
     GalaxyErrorCode.GW_ENVELOPE_INVALID: _ErrorCodeDef(
         GalaxyErrorCode.GW_ENVELOPE_INVALID,
         "Command envelope failed validation",
-        Retryable.NO, ErrorSeverity.ERROR, ErrorDomain.GATEWAY,
+        Retryable.NO,
+        ErrorSeverity.ERROR,
+        ErrorDomain.GATEWAY,
     ),
     GalaxyErrorCode.GW_ROUTE_NOT_FOUND: _ErrorCodeDef(
         GalaxyErrorCode.GW_ROUTE_NOT_FOUND,
         "No matching route in gateway",
-        Retryable.CONDITIONAL, ErrorSeverity.WARNING, ErrorDomain.GATEWAY,
+        Retryable.CONDITIONAL,
+        ErrorSeverity.WARNING,
+        ErrorDomain.GATEWAY,
     ),
     GalaxyErrorCode.GW_AUTH_FAILED: _ErrorCodeDef(
         GalaxyErrorCode.GW_AUTH_FAILED,
         "Gateway authentication / authorisation failed",
-        Retryable.NO, ErrorSeverity.ERROR, ErrorDomain.GATEWAY,
+        Retryable.NO,
+        ErrorSeverity.ERROR,
+        ErrorDomain.GATEWAY,
     ),
     GalaxyErrorCode.GW_RATE_LIMITED: _ErrorCodeDef(
         GalaxyErrorCode.GW_RATE_LIMITED,
         "Gateway rate limit exceeded",
-        Retryable.BACKOFF, ErrorSeverity.WARNING, ErrorDomain.GATEWAY,
+        Retryable.BACKOFF,
+        ErrorSeverity.WARNING,
+        ErrorDomain.GATEWAY,
     ),
     GalaxyErrorCode.GW_PROTOCOL_MISMATCH: _ErrorCodeDef(
         GalaxyErrorCode.GW_PROTOCOL_MISMATCH,
         "Protocol version mismatch at gateway",
-        Retryable.NO, ErrorSeverity.ERROR, ErrorDomain.GATEWAY,
+        Retryable.NO,
+        ErrorSeverity.ERROR,
+        ErrorDomain.GATEWAY,
     ),
     # Device
     GalaxyErrorCode.DEVICE_NOT_FOUND: _ErrorCodeDef(
         GalaxyErrorCode.DEVICE_NOT_FOUND,
         "Target device not found or not registered",
-        Retryable.CONDITIONAL, ErrorSeverity.WARNING, ErrorDomain.DEVICE,
+        Retryable.CONDITIONAL,
+        ErrorSeverity.WARNING,
+        ErrorDomain.DEVICE,
     ),
     GalaxyErrorCode.DEVICE_TIMEOUT: _ErrorCodeDef(
         GalaxyErrorCode.DEVICE_TIMEOUT,
         "Device command timed out",
-        Retryable.BACKOFF, ErrorSeverity.WARNING, ErrorDomain.DEVICE,
+        Retryable.BACKOFF,
+        ErrorSeverity.WARNING,
+        ErrorDomain.DEVICE,
     ),
     GalaxyErrorCode.DEVICE_SEND_FAILED: _ErrorCodeDef(
         GalaxyErrorCode.DEVICE_SEND_FAILED,
         "Failed to send message to device",
-        Retryable.YES, ErrorSeverity.ERROR, ErrorDomain.DEVICE,
+        Retryable.YES,
+        ErrorSeverity.ERROR,
+        ErrorDomain.DEVICE,
     ),
     GalaxyErrorCode.DEVICE_CAPABILITY_MISSING: _ErrorCodeDef(
         GalaxyErrorCode.DEVICE_CAPABILITY_MISSING,
         "Device does not expose required capability",
-        Retryable.NO, ErrorSeverity.WARNING, ErrorDomain.DEVICE,
+        Retryable.NO,
+        ErrorSeverity.WARNING,
+        ErrorDomain.DEVICE,
     ),
     GalaxyErrorCode.DEVICE_OFFLINE: _ErrorCodeDef(
         GalaxyErrorCode.DEVICE_OFFLINE,
         "Device is offline or unreachable",
-        Retryable.BACKOFF, ErrorSeverity.WARNING, ErrorDomain.DEVICE,
+        Retryable.BACKOFF,
+        ErrorSeverity.WARNING,
+        ErrorDomain.DEVICE,
     ),
     # Transport
     GalaxyErrorCode.TRANSPORT_CONNECT_FAILED: _ErrorCodeDef(
         GalaxyErrorCode.TRANSPORT_CONNECT_FAILED,
         "Transport layer connection failed",
-        Retryable.BACKOFF, ErrorSeverity.ERROR, ErrorDomain.TRANSPORT,
+        Retryable.BACKOFF,
+        ErrorSeverity.ERROR,
+        ErrorDomain.TRANSPORT,
     ),
     GalaxyErrorCode.TRANSPORT_PUBLISH_FAILED: _ErrorCodeDef(
         GalaxyErrorCode.TRANSPORT_PUBLISH_FAILED,
         "Failed to publish message over transport",
-        Retryable.YES, ErrorSeverity.ERROR, ErrorDomain.TRANSPORT,
+        Retryable.YES,
+        ErrorSeverity.ERROR,
+        ErrorDomain.TRANSPORT,
     ),
     GalaxyErrorCode.TRANSPORT_SUBSCRIBE_FAILED: _ErrorCodeDef(
         GalaxyErrorCode.TRANSPORT_SUBSCRIBE_FAILED,
         "Failed to subscribe to transport topic",
-        Retryable.BACKOFF, ErrorSeverity.ERROR, ErrorDomain.TRANSPORT,
+        Retryable.BACKOFF,
+        ErrorSeverity.ERROR,
+        ErrorDomain.TRANSPORT,
     ),
     GalaxyErrorCode.TRANSPORT_DISCONNECT: _ErrorCodeDef(
         GalaxyErrorCode.TRANSPORT_DISCONNECT,
         "Unexpected transport disconnect",
-        Retryable.YES, ErrorSeverity.WARNING, ErrorDomain.TRANSPORT,
+        Retryable.YES,
+        ErrorSeverity.WARNING,
+        ErrorDomain.TRANSPORT,
     ),
     # Idempotency
     GalaxyErrorCode.IDEMPOTENCY_DUPLICATE: _ErrorCodeDef(
         GalaxyErrorCode.IDEMPOTENCY_DUPLICATE,
         "Duplicate command detected — idempotency key already processed",
-        Retryable.NO, ErrorSeverity.INFO, ErrorDomain.IDEMPOTENCY,
+        Retryable.NO,
+        ErrorSeverity.INFO,
+        ErrorDomain.IDEMPOTENCY,
     ),
     GalaxyErrorCode.IDEMPOTENCY_CONFLICT: _ErrorCodeDef(
         GalaxyErrorCode.IDEMPOTENCY_CONFLICT,
         "Idempotency key conflict: same key, different payload",
-        Retryable.NO, ErrorSeverity.ERROR, ErrorDomain.IDEMPOTENCY,
+        Retryable.NO,
+        ErrorSeverity.ERROR,
+        ErrorDomain.IDEMPOTENCY,
     ),
     # Arbiter
     GalaxyErrorCode.ARBITER_PREEMPTED: _ErrorCodeDef(
         GalaxyErrorCode.ARBITER_PREEMPTED,
         "Task preempted by global scheduler arbiter",
-        Retryable.YES, ErrorSeverity.INFO, ErrorDomain.ARBITER,
+        Retryable.YES,
+        ErrorSeverity.INFO,
+        ErrorDomain.ARBITER,
     ),
     GalaxyErrorCode.ARBITER_QUOTA_EXCEEDED: _ErrorCodeDef(
         GalaxyErrorCode.ARBITER_QUOTA_EXCEEDED,
         "Scheduler concurrency quota exceeded",
-        Retryable.BACKOFF, ErrorSeverity.WARNING, ErrorDomain.ARBITER,
+        Retryable.BACKOFF,
+        ErrorSeverity.WARNING,
+        ErrorDomain.ARBITER,
     ),
     GalaxyErrorCode.ARBITER_NO_SLOT: _ErrorCodeDef(
         GalaxyErrorCode.ARBITER_NO_SLOT,
         "No scheduling slot available right now",
-        Retryable.BACKOFF, ErrorSeverity.INFO, ErrorDomain.ARBITER,
+        Retryable.BACKOFF,
+        ErrorSeverity.INFO,
+        ErrorDomain.ARBITER,
     ),
     # Release
     GalaxyErrorCode.RELEASE_FEATURE_DISABLED: _ErrorCodeDef(
         GalaxyErrorCode.RELEASE_FEATURE_DISABLED,
         "Feature is disabled via feature flag",
-        Retryable.NO, ErrorSeverity.INFO, ErrorDomain.RELEASE,
+        Retryable.NO,
+        ErrorSeverity.INFO,
+        ErrorDomain.RELEASE,
     ),
     GalaxyErrorCode.RELEASE_ROLLOUT_BLOCKED: _ErrorCodeDef(
         GalaxyErrorCode.RELEASE_ROLLOUT_BLOCKED,
         "Request blocked by staged rollout gate",
-        Retryable.BACKOFF, ErrorSeverity.INFO, ErrorDomain.RELEASE,
+        Retryable.BACKOFF,
+        ErrorSeverity.INFO,
+        ErrorDomain.RELEASE,
     ),
     # Catch-all
     GalaxyErrorCode.INTERNAL_UNKNOWN: _ErrorCodeDef(
         GalaxyErrorCode.INTERNAL_UNKNOWN,
         "Unknown internal error",
-        Retryable.CONDITIONAL, ErrorSeverity.ERROR, ErrorDomain.INTERNAL,
+        Retryable.CONDITIONAL,
+        ErrorSeverity.ERROR,
+        ErrorDomain.INTERNAL,
     ),
 }  # type: ignore[assignment]
 
@@ -391,8 +452,11 @@ class ErrorPayload:
         defn = reg.get(code.value)
         if defn is None:
             defn = _ErrorCodeDef(
-                code.value, code.value,
-                Retryable.CONDITIONAL, ErrorSeverity.ERROR, ErrorDomain.INTERNAL,
+                code.value,
+                code.value,
+                Retryable.CONDITIONAL,
+                ErrorSeverity.ERROR,
+                ErrorDomain.INTERNAL,
             )
         return cls(
             code=defn.code,

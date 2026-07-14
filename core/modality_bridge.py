@@ -20,6 +20,7 @@
 这是笔记本上真正能用的），将来上了真正的全模态服务（vLLM-Omni / MiniCPM-o server）
 再打开。这样"能力声明"（catalog）与"服务现实"（本门控）解耦，不自欺。
 """
+
 from __future__ import annotations
 
 import base64
@@ -40,6 +41,7 @@ def resolve_audio_in() -> str:
     """当前档位的听通路：native / asr_bridge。"""
     try:
         from core.model_catalog import active_effective_io
+
         io = active_effective_io()
         if io.audio_in == "native" and _native_audio_serving_enabled():
             return "native"
@@ -52,6 +54,7 @@ def resolve_audio_out() -> str:
     """当前档位的说通路：native / tts_bridge。"""
     try:
         from core.model_catalog import active_effective_io
+
         io = active_effective_io()
         if io.audio_out == "native" and _native_audio_serving_enabled():
             return "native"
@@ -70,6 +73,7 @@ def _try_sensevoice():
     """离线中文首选:SenseVoiceSmall(非自回归,CPU 快十几倍,中文 CER<5%)。"""
     try:
         from core.asr.sensevoice_asr import SenseVoiceASR
+
         eng = SenseVoiceASR()
         return eng if eng.available() else None
     except Exception as exc:  # noqa: BLE001
@@ -81,6 +85,7 @@ def _try_whisper():
     """兜底:faster-whisper。轻量优先——ambient 转写要快,tiny/base 足够抓关键词。"""
     try:
         from core.asr.whisper_asr import WhisperASR
+
         size = os.getenv("GALAXY_AMBIENT_ASR_SIZE", "base")
         return WhisperASR(model_size=size)
     except Exception as exc:  # noqa: BLE001
@@ -118,6 +123,7 @@ def _decode_audio_to_pcm(audio_bytes: bytes):
     """
     try:
         import io
+
         import av
         import numpy as np
 

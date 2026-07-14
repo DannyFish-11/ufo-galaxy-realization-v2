@@ -442,7 +442,6 @@ FINAL_AUDIT_VERDICT: Dict[str, Any] = {
     "transport_ack_behavior": TRANSPORT_ACK_BEHAVIOR,
     "transport_unknown_type_handling": TRANSPORT_UNKNOWN_TYPE_HANDLING,
     "transport_protocol_overall": TRANSPORT_PROTOCOL_OVERALL,
-
     # Device lifecycle / liveness
     "lifecycle_device_registration": LIFECYCLE_DEVICE_REGISTRATION,
     "lifecycle_heartbeat_v2_side": LIFECYCLE_HEARTBEAT_V2_SIDE,
@@ -452,7 +451,6 @@ FINAL_AUDIT_VERDICT: Dict[str, Any] = {
     "lifecycle_android_boot_startup": LIFECYCLE_ANDROID_BOOT_STARTUP,
     "lifecycle_device_continuous_usability": LIFECYCLE_DEVICE_CONTINUOUS_USABILITY,
     "lifecycle_overall": LIFECYCLE_OVERALL,
-
     # Dispatch / execution / result continuity
     "dispatch_legality_gates_present": DISPATCH_LEGALITY_GATES_PRESENT,
     "dispatch_device_routing": DISPATCH_DEVICE_ROUTING,
@@ -462,7 +460,6 @@ FINAL_AUDIT_VERDICT: Dict[str, Any] = {
     "dispatch_disconnect_reconnect_risk": DISPATCH_DISCONNECT_RECONNECT_RISK,
     "dispatch_durability_across_restart": DISPATCH_DURABILITY_ACROSS_RESTART,
     "dispatch_execution_overall": DISPATCH_EXECUTION_OVERALL,
-
     # Multi-device / cross-location
     "multi_device_single_device_local": MULTI_DEVICE_SINGLE_DEVICE_LOCAL,
     "multi_device_multiple_devices": MULTI_DEVICE_MULTIPLE_DEVICES,
@@ -472,7 +469,6 @@ FINAL_AUDIT_VERDICT: Dict[str, Any] = {
     "multi_device_simultaneous_reconnect_ordering": MULTI_DEVICE_SIMULTANEOUS_RECONNECT_ORDERING,
     "multi_device_cross_repo_evidence_flow": MULTI_DEVICE_CROSS_REPO_EVIDENCE_FLOW,
     "multi_device_overall": MULTI_DEVICE_OVERALL,
-
     # Final verdict
     "final_system_verdict": FINAL_SYSTEM_VERDICT,
     "final_verdict_rationale": FINAL_VERDICT_RATIONALE,
@@ -582,8 +578,7 @@ def assert_final_verdict_invariants() -> None:
 
     # --- Gaps list must be non-empty ---
     assert isinstance(v["gaps_to_complete"], list) and len(v["gaps_to_complete"]) > 0, (
-        "FINAL_AUDIT: gaps_to_complete must be a non-empty list. "
-        "The audit documents remaining gaps."
+        "FINAL_AUDIT: gaps_to_complete must be a non-empty list. " "The audit documents remaining gaps."
     )
     assert len(v["gaps_to_complete"]) == 4, (
         "FINAL_AUDIT: gaps_to_complete must contain exactly 4 items (GAP-1, GAP-2, GAP-3, GAP-5). "

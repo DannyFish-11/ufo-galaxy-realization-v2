@@ -24,13 +24,14 @@ Tests prove:
     rebind, isolate, and closure actions through coherent V2 handling; all
     produce audit records.
 """
+
 from __future__ import annotations
 
 import asyncio
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
 
 # ===========================================================================
 # Section 1: Module imports and sentinel checks
@@ -42,29 +43,34 @@ class TestPR4ModuleImports:
 
     def test_module_importable(self):
         import core.pr4_operator_action_governance as m
+
         assert m is not None
 
     def test_authority_sentinel(self):
         from core.pr4_operator_action_governance import PR4_OPERATOR_ACTION_GOVERNANCE_AUTHORITY
+
         assert "PR4_OPERATOR_ACTION_GOVERNANCE_AUTHORITY" in PR4_OPERATOR_ACTION_GOVERNANCE_AUTHORITY
         assert "V2" in PR4_OPERATOR_ACTION_GOVERNANCE_AUTHORITY
 
     def test_contract_version(self):
         from core.pr4_operator_action_governance import PR4_CONVERGENCE_CONTRACT_VERSION
+
         assert PR4_CONVERGENCE_CONTRACT_VERSION == "4.0.0"
 
     def test_sentinel_constant(self):
         from core.pr4_operator_action_governance import PR4_CONVERGENCE_SENTINEL
+
         assert "PR4_SENTINEL" in PR4_CONVERGENCE_SENTINEL
         assert "4.0.0" in PR4_CONVERGENCE_SENTINEL
 
     def test_policy_sentinels(self):
         from core.pr4_operator_action_governance import (
-            OPERATOR_ACTIONS_MUST_BE_AUDITED_POLICY,
-            OPERATOR_ACTIONS_MUST_NOT_BYPASS_POLICY_GATE_POLICY,
             ANDROID_DIRECTED_ACTIONS_ARE_RUNTIME_OPS_POLICY,
             BOARD_MUST_REFLECT_OPERABLE_TRUTH_POLICY,
+            OPERATOR_ACTIONS_MUST_BE_AUDITED_POLICY,
+            OPERATOR_ACTIONS_MUST_NOT_BYPASS_POLICY_GATE_POLICY,
         )
+
         assert OPERATOR_ACTIONS_MUST_BE_AUDITED_POLICY
         assert OPERATOR_ACTIONS_MUST_NOT_BYPASS_POLICY_GATE_POLICY
         assert ANDROID_DIRECTED_ACTIONS_ARE_RUNTIME_OPS_POLICY
@@ -72,9 +78,10 @@ class TestPR4ModuleImports:
 
     def test_required_enums(self):
         from core.pr4_operator_action_governance import (
-            OperatorActionOrchestrationOutcome,
             AndroidDirectedActionKind,
+            OperatorActionOrchestrationOutcome,
         )
+
         # Check OperatorActionOrchestrationOutcome values
         assert OperatorActionOrchestrationOutcome.success.value == "success"
         assert OperatorActionOrchestrationOutcome.accepted_pending.value == "accepted_pending"
@@ -91,13 +98,14 @@ class TestPR4ModuleImports:
 
     def test_required_dataclasses(self):
         from core.pr4_operator_action_governance import (
-            OperatorActionPreState,
-            OperatorActionPostState,
-            OperatorActionAuditRecord,
             AndroidDirectedActionSpec,
+            OperatorActionAuditRecord,
             OperatorActionBoardProjection,
+            OperatorActionPostState,
+            OperatorActionPreState,
             PR4OperableSurfaceSnapshot,
         )
+
         assert OperatorActionPreState
         assert OperatorActionPostState
         assert OperatorActionAuditRecord
@@ -107,16 +115,17 @@ class TestPR4ModuleImports:
 
     def test_required_functions(self):
         from core.pr4_operator_action_governance import (
-            record_operator_action_audit,
-            get_operator_action_audit_log,
-            clear_operator_action_audit_log,
-            execute_governed_operator_action,
-            build_android_directed_action_spec,
             acknowledge_android_directed_action,
-            get_pending_android_directed_actions,
+            build_android_directed_action_spec,
             build_operator_board_projection,
             build_pr4_operable_surface_snapshot,
+            clear_operator_action_audit_log,
+            execute_governed_operator_action,
+            get_operator_action_audit_log,
+            get_pending_android_directed_actions,
+            record_operator_action_audit,
         )
+
         assert callable(record_operator_action_audit)
         assert callable(get_operator_action_audit_log)
         assert callable(clear_operator_action_audit_log)
@@ -138,10 +147,12 @@ class TestOperatorActionAuditRecord:
 
     def setup_method(self):
         from core.pr4_operator_action_governance import clear_operator_action_audit_log
+
         clear_operator_action_audit_log()
 
     def test_default_fields(self):
         from core.pr4_operator_action_governance import OperatorActionAuditRecord
+
         rec = OperatorActionAuditRecord()
         assert rec.audit_id.startswith("opadit_")
         assert rec.action_id == ""
@@ -152,9 +163,10 @@ class TestOperatorActionAuditRecord:
     def test_to_dict_has_all_required_keys(self):
         from core.pr4_operator_action_governance import (
             OperatorActionAuditRecord,
-            OperatorActionPreState,
             OperatorActionPostState,
+            OperatorActionPreState,
         )
+
         rec = OperatorActionAuditRecord(
             action_id="act_123",
             action_kind="trigger_recovery",
@@ -186,7 +198,9 @@ class TestOperatorActionAuditRecord:
         assert d["android_dispatch_id"] == ""
         assert d["android_ack_received"] is False
         assert d["canonical_entry"] == "/api/v1/operator/action"
-        assert d["canonical_governance_contract"] == "core.v2_unified_state_contract.build_control_plane_surface_contract"
+        assert (
+            d["canonical_governance_contract"] == "core.v2_unified_state_contract.build_control_plane_surface_contract"
+        )
         assert d["routed_subject_ids"] == []
         assert d["participant_ack_state"] == "not_required"
         assert d["truth_convergence_state"] == "not_evaluated"
@@ -195,9 +209,10 @@ class TestOperatorActionAuditRecord:
     def test_record_and_retrieve_audit(self):
         from core.pr4_operator_action_governance import (
             OperatorActionAuditRecord,
-            record_operator_action_audit,
             get_operator_action_audit_log,
+            record_operator_action_audit,
         )
+
         rec = OperatorActionAuditRecord(
             action_id="act_x",
             action_kind="retry_admission",
@@ -211,9 +226,10 @@ class TestOperatorActionAuditRecord:
     def test_audit_log_newest_first(self):
         from core.pr4_operator_action_governance import (
             OperatorActionAuditRecord,
-            record_operator_action_audit,
             get_operator_action_audit_log,
+            record_operator_action_audit,
         )
+
         r1 = OperatorActionAuditRecord(action_id="first", action_kind="trigger_recovery")
         r2 = OperatorActionAuditRecord(action_id="second", action_kind="isolate_device")
         record_operator_action_audit(r1)
@@ -225,9 +241,10 @@ class TestOperatorActionAuditRecord:
     def test_audit_log_filter_by_action_kind(self):
         from core.pr4_operator_action_governance import (
             OperatorActionAuditRecord,
-            record_operator_action_audit,
             get_operator_action_audit_log,
+            record_operator_action_audit,
         )
+
         record_operator_action_audit(OperatorActionAuditRecord(action_kind="trigger_recovery"))
         record_operator_action_audit(OperatorActionAuditRecord(action_kind="isolate_device"))
         log = get_operator_action_audit_log(action_kind="trigger_recovery")
@@ -236,12 +253,11 @@ class TestOperatorActionAuditRecord:
     def test_audit_log_filter_by_outcome(self):
         from core.pr4_operator_action_governance import (
             OperatorActionAuditRecord,
-            record_operator_action_audit,
             get_operator_action_audit_log,
+            record_operator_action_audit,
         )
-        record_operator_action_audit(
-            OperatorActionAuditRecord(action_kind="trigger_recovery", outcome="success")
-        )
+
+        record_operator_action_audit(OperatorActionAuditRecord(action_kind="trigger_recovery", outcome="success"))
         record_operator_action_audit(
             OperatorActionAuditRecord(action_kind="isolate_device", outcome="accepted_pending")
         )
@@ -259,10 +275,12 @@ class TestExecuteGovernedOperatorAction:
 
     def setup_method(self):
         from core.pr4_operator_action_governance import clear_operator_action_audit_log
+
         clear_operator_action_audit_log()
 
     def _run(self, **kwargs):
         from core.pr4_operator_action_governance import execute_governed_operator_action
+
         return execute_governed_operator_action(**kwargs)
 
     def test_retry_admission_produces_success(self):
@@ -389,10 +407,10 @@ class TestExecuteGovernedOperatorAction:
 
     def test_sanctioned_reopen_has_explicit_evidence(self):
         from core.canonical_task import (
+            TaskLifecycle,
             build_canonical_task,
             get_canonical_task_runtime,
             reset_canonical_task_runtime,
-            TaskLifecycle,
         )
 
         reset_canonical_task_runtime()
@@ -457,6 +475,7 @@ class TestExecuteGovernedOperatorAction:
             clear_operator_action_audit_log,
             get_pending_android_directed_actions,
         )
+
         initial_pending = len(get_pending_android_directed_actions())
         result = self._run(
             action_kind="request_capability_revalidation",
@@ -515,6 +534,7 @@ class TestExecuteGovernedOperatorAction:
 
     def test_every_action_produces_audit_record(self):
         from core.pr4_operator_action_governance import get_operator_action_audit_log
+
         action_kinds = [
             "retry_admission",
             "request_capability_revalidation",
@@ -552,9 +572,15 @@ class TestExecuteGovernedOperatorAction:
             operator_user_id="admin",
         )
         required_keys = {
-            "outcome", "affected_entity_ids", "downstream_effects",
-            "error", "rollback_needed", "android_dispatch_id",
-            "audit_id", "_source", "authority",
+            "outcome",
+            "affected_entity_ids",
+            "downstream_effects",
+            "error",
+            "rollback_needed",
+            "android_dispatch_id",
+            "audit_id",
+            "_source",
+            "authority",
         }
         for key in required_keys:
             assert key in result, f"Missing key: {key}"
@@ -574,14 +600,16 @@ class TestAndroidDirectedActionSpec:
             _PENDING_ANDROID_ACTIONS,
             _TERMINAL_ANDROID_ACTIONS,
         )
+
         _PENDING_ANDROID_ACTIONS.clear()
         _TERMINAL_ANDROID_ACTIONS.clear()
 
     def test_build_spec_populates_required_fields(self):
         from core.pr4_operator_action_governance import (
-            build_android_directed_action_spec,
             AndroidDirectedActionKind,
+            build_android_directed_action_spec,
         )
+
         spec = build_android_directed_action_spec(
             action_kind=AndroidDirectedActionKind.isolate_device.value,
             device_id="device_test_01",
@@ -599,10 +627,11 @@ class TestAndroidDirectedActionSpec:
 
     def test_spec_stored_as_pending(self):
         from core.pr4_operator_action_governance import (
+            AndroidDirectedActionKind,
             build_android_directed_action_spec,
             get_pending_android_directed_actions,
-            AndroidDirectedActionKind,
         )
+
         spec = build_android_directed_action_spec(
             action_kind=AndroidDirectedActionKind.revalidate_participation.value,
             device_id="device_rv_01",
@@ -613,11 +642,12 @@ class TestAndroidDirectedActionSpec:
 
     def test_ack_removes_from_pending(self):
         from core.pr4_operator_action_governance import (
-            build_android_directed_action_spec,
-            acknowledge_android_directed_action,
-            get_pending_android_directed_actions,
             AndroidDirectedActionKind,
+            acknowledge_android_directed_action,
+            build_android_directed_action_spec,
+            get_pending_android_directed_actions,
         )
+
         spec = build_android_directed_action_spec(
             action_kind=AndroidDirectedActionKind.force_reattach.value,
             device_id="device_fa_01",
@@ -629,14 +659,15 @@ class TestAndroidDirectedActionSpec:
 
     def test_ack_unknown_dispatch_id_returns_false(self):
         from core.pr4_operator_action_governance import acknowledge_android_directed_action
+
         assert acknowledge_android_directed_action("nonexistent_dispatch_id") is False
 
     def test_timeout_removes_pending_and_records_terminal_state(self):
         from core.pr4_operator_action_governance import (
-            build_android_directed_action_spec,
-            get_pending_android_directed_actions,
-            get_android_directed_action_terminal_state,
             AndroidDirectedActionKind,
+            build_android_directed_action_spec,
+            get_android_directed_action_terminal_state,
+            get_pending_android_directed_actions,
         )
 
         spec = build_android_directed_action_spec(
@@ -653,9 +684,10 @@ class TestAndroidDirectedActionSpec:
 
     def test_spec_to_dict_has_all_keys(self):
         from core.pr4_operator_action_governance import (
-            build_android_directed_action_spec,
             AndroidDirectedActionKind,
+            build_android_directed_action_spec,
         )
+
         spec = build_android_directed_action_spec(
             action_kind=AndroidDirectedActionKind.suspend_device.value,
             device_id="device_sus_01",
@@ -678,12 +710,13 @@ class TestAndroidDirectedActionSpec:
 
     def test_multi_subject_ack_requires_full_subject_coverage(self):
         from core.pr4_operator_action_governance import (
-            build_android_directed_action_spec,
-            acknowledge_android_directed_action,
-            get_pending_android_directed_actions,
-            get_android_directed_action_terminal_state,
             AndroidDirectedActionKind,
+            acknowledge_android_directed_action,
+            build_android_directed_action_spec,
+            get_android_directed_action_terminal_state,
+            get_pending_android_directed_actions,
         )
+
         spec = build_android_directed_action_spec(
             action_kind=AndroidDirectedActionKind.revalidate_participation.value,
             device_id="device_multi_01",
@@ -691,10 +724,13 @@ class TestAndroidDirectedActionSpec:
             target_flow_id="flow_multi_01",
             routed_subject_ids=["participant_alpha"],
         )
-        assert acknowledge_android_directed_action(
-            spec.android_dispatch_id,
-            ack_subject_ids=["device_multi_01"],
-        ) is True
+        assert (
+            acknowledge_android_directed_action(
+                spec.android_dispatch_id,
+                ack_subject_ids=["device_multi_01"],
+            )
+            is True
+        )
         pending = get_pending_android_directed_actions()
         assert any(p.android_dispatch_id == spec.android_dispatch_id for p in pending)
         partial_terminal = get_android_directed_action_terminal_state(spec.android_dispatch_id)
@@ -703,12 +739,15 @@ class TestAndroidDirectedActionSpec:
         assert partial_trace["participant_ack_state"] == "partial_ack"
         assert "flow_multi_01" in partial_trace["pending_subject_ids"]
 
-        assert acknowledge_android_directed_action(
-            spec.android_dispatch_id,
-            ack_subject_ids=["flow_multi_01", "participant_alpha"],
-            truth_convergence_state="canonical_truth_converged",
-            closure_verification_state="verified",
-        ) is True
+        assert (
+            acknowledge_android_directed_action(
+                spec.android_dispatch_id,
+                ack_subject_ids=["flow_multi_01", "participant_alpha"],
+                truth_convergence_state="canonical_truth_converged",
+                closure_verification_state="verified",
+            )
+            is True
+        )
         pending = get_pending_android_directed_actions()
         assert not any(p.android_dispatch_id == spec.android_dispatch_id for p in pending)
         terminal = get_android_directed_action_terminal_state(spec.android_dispatch_id)
@@ -730,10 +769,12 @@ class TestOperatorBoardProjection:
 
     def setup_method(self):
         from core.pr4_operator_action_governance import clear_operator_action_audit_log
+
         clear_operator_action_audit_log()
 
     def test_board_projection_returns_valid_object(self):
         from core.pr4_operator_action_governance import build_operator_board_projection
+
         proj = build_operator_board_projection()
         assert proj is not None
         d = proj.to_dict()
@@ -800,15 +841,18 @@ class TestOperatorBoardProjection:
     def test_board_reflects_last_action(self):
         from core.pr4_operator_action_governance import (
             OperatorActionAuditRecord,
-            record_operator_action_audit,
             build_operator_board_projection,
+            record_operator_action_audit,
         )
-        record_operator_action_audit(OperatorActionAuditRecord(
-            action_id="act_board_test",
-            action_kind="trigger_recovery",
-            outcome="success",
-            affected_entity_ids=["flow_board_001"],
-        ))
+
+        record_operator_action_audit(
+            OperatorActionAuditRecord(
+                action_id="act_board_test",
+                action_kind="trigger_recovery",
+                outcome="success",
+                affected_entity_ids=["flow_board_001"],
+            )
+        )
         proj = build_operator_board_projection()
         assert proj.last_action_id == "act_board_test"
         assert proj.last_action_kind == "trigger_recovery"
@@ -816,27 +860,32 @@ class TestOperatorBoardProjection:
 
     def test_system_health_blocked_when_hard_blocks(self):
         from core.pr4_operator_action_governance import _determine_system_health
+
         assert _determine_system_health(2, 0, 0) == "blocked"
 
     def test_system_health_degraded_when_soft_degraded(self):
         from core.pr4_operator_action_governance import _determine_system_health
+
         assert _determine_system_health(0, 3, 0) == "degraded"
 
     def test_system_health_needs_review_when_manual_decisions(self):
         from core.pr4_operator_action_governance import _determine_system_health
+
         assert _determine_system_health(0, 0, 2) == "needs_review"
 
     def test_system_health_healthy(self):
         from core.pr4_operator_action_governance import _determine_system_health
+
         assert _determine_system_health(0, 0, 0) == "healthy"
 
     def test_board_pending_android_actions_list(self):
         from core.pr4_operator_action_governance import (
-            build_android_directed_action_spec,
-            build_operator_board_projection,
             _PENDING_ANDROID_ACTIONS,
             AndroidDirectedActionKind,
+            build_android_directed_action_spec,
+            build_operator_board_projection,
         )
+
         _PENDING_ANDROID_ACTIONS.clear()
         spec = build_android_directed_action_spec(
             action_kind=AndroidDirectedActionKind.revalidate_participation.value,
@@ -887,10 +936,12 @@ class TestPR4OperableSurfaceSnapshot:
 
     def setup_method(self):
         from core.pr4_operator_action_governance import clear_operator_action_audit_log
+
         clear_operator_action_audit_log()
 
     def test_snapshot_structure(self):
         from core.pr4_operator_action_governance import build_pr4_operable_surface_snapshot
+
         snap = build_pr4_operable_surface_snapshot(recent_audit_limit=5)
         d = snap.to_dict()
         assert "board" in d
@@ -906,24 +957,28 @@ class TestPR4OperableSurfaceSnapshot:
     def test_snapshot_includes_recent_audit(self):
         from core.pr4_operator_action_governance import (
             OperatorActionAuditRecord,
-            record_operator_action_audit,
             build_pr4_operable_surface_snapshot,
+            record_operator_action_audit,
         )
-        record_operator_action_audit(OperatorActionAuditRecord(
-            action_id="act_snap_test",
-            action_kind="acknowledge_blocker",
-        ))
+
+        record_operator_action_audit(
+            OperatorActionAuditRecord(
+                action_id="act_snap_test",
+                action_kind="acknowledge_blocker",
+            )
+        )
         snap = build_pr4_operable_surface_snapshot(recent_audit_limit=5)
         ids = [r.action_id for r in snap.recent_audit_records]
         assert "act_snap_test" in ids
 
     def test_snapshot_pending_count(self):
         from core.pr4_operator_action_governance import (
-            build_android_directed_action_spec,
-            build_pr4_operable_surface_snapshot,
             _PENDING_ANDROID_ACTIONS,
             AndroidDirectedActionKind,
+            build_android_directed_action_spec,
+            build_pr4_operable_surface_snapshot,
         )
+
         _PENDING_ANDROID_ACTIONS.clear()
         build_android_directed_action_spec(
             action_kind=AndroidDirectedActionKind.force_reattach.value,
@@ -953,23 +1008,24 @@ class TestOperatorSurfacePR4Integration:
     """
 
     def setup_method(self):
-        from core.pr4_operator_action_governance import clear_operator_action_audit_log
         from core.operator_surface import reset_operator_surface
+        from core.pr4_operator_action_governance import clear_operator_action_audit_log
+
         clear_operator_action_audit_log()
         reset_operator_surface()
 
     def teardown_method(self):
         from core.operator_surface import reset_operator_surface
+
         reset_operator_surface()
 
     def _execute(self, action_kind: str, **kwargs):
         from core.operator_action_contract import OperatorActionRequest
         from core.operator_surface import get_operator_surface
+
         request = OperatorActionRequest(action_kind=action_kind, **kwargs)
         surface = get_operator_surface()
-        return asyncio.new_event_loop().run_until_complete(
-            surface.execute_operator_action(request)
-        )
+        return asyncio.new_event_loop().run_until_complete(surface.execute_operator_action(request))
 
     def test_trigger_recovery_returns_coherent_result(self):
         """trigger_recovery is state-gated; returns a coherent result regardless."""
@@ -989,6 +1045,7 @@ class TestOperatorSurfacePR4Integration:
         # so we test directly via execute_governed_operator_action which bypasses
         # the policy gate (the gate is in OperatorSurface, not in the orchestrator).
         from core.pr4_operator_action_governance import execute_governed_operator_action
+
         result = execute_governed_operator_action(
             action_kind="trigger_recovery",
             action_id="act_pr4_direct",
@@ -1020,6 +1077,7 @@ class TestOperatorSurfacePR4Integration:
     def test_acknowledge_blocker_when_allowed_uses_pr4(self):
         """When acknowledge_blocker is allowed, it uses PR-4 orchestrator."""
         from core.pr4_operator_action_governance import execute_governed_operator_action
+
         result = execute_governed_operator_action(
             action_kind="acknowledge_blocker",
             action_id="act_ab_direct",
@@ -1032,6 +1090,7 @@ class TestOperatorSurfacePR4Integration:
     def test_retry_admission_produces_pr4_source_when_allowed(self):
         """When retry_admission is allowed, runtime_result references pr4 source."""
         from core.pr4_operator_action_governance import execute_governed_operator_action
+
         result = execute_governed_operator_action(
             action_kind="retry_admission",
             action_id="act_ra_direct",
@@ -1073,6 +1132,7 @@ class TestOperatorSurfacePR4Integration:
         # Run directly through execute_governed_operator_action which always
         # uses PR-4 (no policy gate).
         from core.pr4_operator_action_governance import execute_governed_operator_action
+
         result = execute_governed_operator_action(
             action_kind="trigger_recovery",
             action_id="act_stub_test",
@@ -1080,9 +1140,9 @@ class TestOperatorSurfacePR4Integration:
             flow_id="flow_test_stub",
         )
         # PR-4 orchestrator returns "outcome" not "disposition: governed_intervention_recorded"
-        assert "disposition" not in result or result.get("disposition") != "governed_intervention_recorded", (
-            "PR-4 orchestrator must not return the old stub disposition"
-        )
+        assert (
+            "disposition" not in result or result.get("disposition") != "governed_intervention_recorded"
+        ), "PR-4 orchestrator must not return the old stub disposition"
         assert result.get("_source") == "pr4_operator_action_governance"
 
     def test_request_capability_revalidation_returns_coherent_result(self):
@@ -1115,6 +1175,7 @@ class TestOperatorSurfacePR4Integration:
 def app():
     _app = FastAPI()
     from core.routes.operator import create_router
+
     _app.include_router(create_router())
     return _app
 
@@ -1160,7 +1221,9 @@ class TestPR4Routes:
         assert "runtime_decision_reasoning" in data
         assert "latest_closure_reasoning" in data
         assert data["authority"] == "OPERATOR_ROUTES_V1"
-        assert data["consumption_contract_boundary"]["consumption_layer_role"] == "operator_board_projection_consumer_only"
+        assert (
+            data["consumption_contract_boundary"]["consumption_layer_role"] == "operator_board_projection_consumer_only"
+        )
         assert data["consumption_contract_boundary"]["ui_visible_summary_is_backend_truth"] is False
         fingerprint = data.get("authority_source_fingerprint")
         assert isinstance(fingerprint, dict)
@@ -1267,16 +1330,14 @@ class TestPR4Routes:
         assert resp.status_code == 422
 
     def test_android_directed_ack_unknown_returns_404(self, client):
-        resp = client.post(
-            "/api/v1/operator/actions/android-directed/nonexistent_id_xyz/ack"
-        )
+        resp = client.post("/api/v1/operator/actions/android-directed/nonexistent_id_xyz/ack")
         assert resp.status_code == 404
 
     def test_android_directed_ack_timeout_returns_409(self, client):
         from core.pr4_operator_action_governance import (
+            AndroidDirectedActionKind,
             build_android_directed_action_spec,
             get_pending_android_directed_actions,
-            AndroidDirectedActionKind,
         )
 
         spec = build_android_directed_action_spec(
@@ -1287,26 +1348,23 @@ class TestPR4Routes:
         spec.expires_at = spec.dispatched_at - 1.0
         # Trigger lifecycle sweep so timeout state is materialized.
         get_pending_android_directed_actions()
-        resp = client.post(
-            f"/api/v1/operator/actions/android-directed/{spec.android_dispatch_id}/ack"
-        )
+        resp = client.post(f"/api/v1/operator/actions/android-directed/{spec.android_dispatch_id}/ack")
         assert resp.status_code == 409
         data = resp.json()
         assert data.get("dispatch_state") == "timed_out"
 
     def test_android_directed_ack_existing_returns_200(self, client):
         from core.pr4_operator_action_governance import (
-            build_android_directed_action_spec,
             AndroidDirectedActionKind,
+            build_android_directed_action_spec,
         )
+
         spec = build_android_directed_action_spec(
             action_kind=AndroidDirectedActionKind.force_reattach.value,
             device_id="device_ack_route_01",
             operator_action_id="opact_ack_route",
         )
-        resp = client.post(
-            f"/api/v1/operator/actions/android-directed/{spec.android_dispatch_id}/ack"
-        )
+        resp = client.post(f"/api/v1/operator/actions/android-directed/{spec.android_dispatch_id}/ack")
         assert resp.status_code == 200
         data = resp.json()
         assert data["acked"] is True
@@ -1346,11 +1404,13 @@ class TestPR4CompletionCriteria:
 
     def setup_method(self):
         from core.pr4_operator_action_governance import clear_operator_action_audit_log
+
         clear_operator_action_audit_log()
 
     def test_operators_can_trigger_recovery(self):
         """Criterion: operators can trigger recovery through coherent V2 handling."""
         from core.pr4_operator_action_governance import execute_governed_operator_action
+
         result = execute_governed_operator_action(
             action_kind="trigger_recovery",
             action_id="crit_tr",
@@ -1362,6 +1422,7 @@ class TestPR4CompletionCriteria:
     def test_operators_can_trigger_retry(self):
         """Criterion: operators can trigger retry through coherent V2 handling."""
         from core.pr4_operator_action_governance import execute_governed_operator_action
+
         result = execute_governed_operator_action(
             action_kind="retry_admission",
             action_id="crit_retry",
@@ -1372,6 +1433,7 @@ class TestPR4CompletionCriteria:
     def test_operators_can_trigger_revalidation(self):
         """Criterion: operators can trigger revalidation through coherent V2 handling."""
         from core.pr4_operator_action_governance import execute_governed_operator_action
+
         result = execute_governed_operator_action(
             action_kind="request_capability_revalidation",
             action_id="crit_rv",
@@ -1382,6 +1444,7 @@ class TestPR4CompletionCriteria:
     def test_operators_can_trigger_rebind(self):
         """Criterion: operators can trigger rebind through coherent V2 handling."""
         from core.pr4_operator_action_governance import execute_governed_operator_action
+
         result = execute_governed_operator_action(
             action_kind="rebind_session_continuity",
             action_id="crit_rebind",
@@ -1395,6 +1458,7 @@ class TestPR4CompletionCriteria:
             execute_governed_operator_action,
             get_operator_action_audit_log,
         )
+
         result = execute_governed_operator_action(
             action_kind="acknowledge_blocker",
             action_id="crit_audit",
@@ -1415,6 +1479,7 @@ class TestPR4CompletionCriteria:
     def test_board_reflects_policy_based_availability(self):
         """Criterion: board surfaces reflect policy-based action availability."""
         from core.pr4_operator_action_governance import build_operator_board_projection
+
         proj = build_operator_board_projection()
         # All available_actions must have a reason (not hard-coded optimism)
         for action in proj.available_actions:
@@ -1424,11 +1489,12 @@ class TestPR4CompletionCriteria:
     def test_android_directed_actions_are_real_ops(self):
         """Criterion: Android-directed actions are real runtime operations."""
         from core.pr4_operator_action_governance import (
-            build_android_directed_action_spec,
-            get_pending_android_directed_actions,
             _PENDING_ANDROID_ACTIONS,
             AndroidDirectedActionKind,
+            build_android_directed_action_spec,
+            get_pending_android_directed_actions,
         )
+
         _PENDING_ANDROID_ACTIONS.clear()
         spec = build_android_directed_action_spec(
             action_kind=AndroidDirectedActionKind.revalidate_participation.value,
@@ -1449,6 +1515,7 @@ class TestPR4CompletionCriteria:
             PR4_CONVERGENCE_SENTINEL,
             PR4_OPERATOR_ACTION_GOVERNANCE_AUTHORITY,
         )
+
         assert PR4_CONVERGENCE_CONTRACT_VERSION == "4.0.0"
         assert "4.0.0" in PR4_CONVERGENCE_SENTINEL
         assert "V2" in PR4_OPERATOR_ACTION_GOVERNANCE_AUTHORITY

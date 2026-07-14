@@ -138,7 +138,9 @@ class ErrorMapper:
         )
         logger.debug(
             "ErrorMapper: mapped %s → %s (retryable=%s)",
-            type(exc).__name__, code.value, payload.retryable,
+            type(exc).__name__,
+            code.value,
+            payload.retryable,
         )
         return payload
 
@@ -168,7 +170,10 @@ class ErrorMapper:
         }
         code = _legacy_map.get(error_type.lower(), GalaxyErrorCode.INTERNAL_UNKNOWN)
         return ErrorPayload.from_code(
-            code, message=message, trace_id=trace_id, task_id=task_id,
+            code,
+            message=message,
+            trace_id=trace_id,
+            task_id=task_id,
         )
 
     @staticmethod
@@ -219,7 +224,10 @@ class ErrorMapper:
         else:
             code = GalaxyErrorCode.EXEC_DISPATCH_FAILED
         return ErrorPayload.from_code(
-            code, message=error_msg, trace_id=trace_id, task_id=task_id,
+            code,
+            message=error_msg,
+            trace_id=trace_id,
+            task_id=task_id,
         )
 
     # ------------------------------------------------------------------

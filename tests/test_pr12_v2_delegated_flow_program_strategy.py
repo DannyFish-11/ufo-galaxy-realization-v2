@@ -64,8 +64,8 @@ AW. DelegatedFlowStrategyReport.to_dict() includes governance_report_id and
 from __future__ import annotations
 
 import json
-import sys
 import os
+import sys
 from typing import Any, Dict
 
 import pytest
@@ -76,27 +76,26 @@ if _PROJECT_ROOT not in sys.path:
 
 import core.delegated_flow_program_strategy as _strat_mod
 from core.delegated_flow_program_strategy import (
+    ALL_FIVE_STRATEGY_DIMENSIONS_REQUIRED_FOR_ON_TRACK_POLICY,
     DELEGATED_FLOW_PROGRAM_STRATEGY_AUTHORITY,
     DELEGATED_FLOW_PROGRAM_STRATEGY_PR12V2_SENTINEL,
+    GOVERNANCE_REPORT_IS_PRIMARY_PROGRAM_SIGNAL_POLICY,
+    STRATEGY_EVALUATOR_FAIL_CONSERVATIVE_ON_MISSING_SIGNAL_POLICY,
     STRATEGY_EVALUATOR_IS_PROGRAM_LEVEL_ENTRY_POINT_POLICY,
     STRATEGY_EVALUATOR_IS_PROJECTION_ONLY_POLICY,
-    STRATEGY_EVALUATOR_FAIL_CONSERVATIVE_ON_MISSING_SIGNAL_POLICY,
     STRATEGY_RISK_MUST_BE_OPERATOR_VISIBLE_POLICY,
-    STRATEGY_VERDICT_IS_STABLE_ARTIFACT_POLICY,
-    ALL_FIVE_STRATEGY_DIMENSIONS_REQUIRED_FOR_ON_TRACK_POLICY,
-    GOVERNANCE_REPORT_IS_PRIMARY_PROGRAM_SIGNAL_POLICY,
     STRATEGY_VERDICT_FEEDS_ROADMAP_AND_RELEASE_POLICY_TIGHTENING_POLICY,
-    StrategyDimension,
-    DimensionStrategyStatus,
-    StrategyVerdict,
-    DimensionStrategyResult,
-    DelegatedFlowStrategyReport,
+    STRATEGY_VERDICT_IS_STABLE_ARTIFACT_POLICY,
     DelegatedFlowStrategyEvaluator,
+    DelegatedFlowStrategyReport,
+    DimensionStrategyResult,
+    DimensionStrategyStatus,
+    StrategyDimension,
+    StrategyVerdict,
     evaluate_delegated_flow_strategy,
     get_strategy_evaluator,
     reset_strategy_evaluator,
 )
-
 
 # ===========================================================================
 # Fixtures
@@ -379,10 +378,7 @@ class TestStrategyVerdictIsAtRisk:
         assert StrategyVerdict.strategy_on_track.is_at_risk is False
 
     def test_false_for_unknown(self):
-        assert (
-            StrategyVerdict.strategy_unknown_due_to_missing_program_signal.is_at_risk
-            is False
-        )
+        assert StrategyVerdict.strategy_unknown_due_to_missing_program_signal.is_at_risk is False
 
 
 # ===========================================================================
@@ -392,10 +388,7 @@ class TestStrategyVerdictIsAtRisk:
 
 class TestStrategyVerdictIsUnknown:
     def test_true_for_missing_program_signal(self):
-        assert (
-            StrategyVerdict.strategy_unknown_due_to_missing_program_signal.is_unknown
-            is True
-        )
+        assert StrategyVerdict.strategy_unknown_due_to_missing_program_signal.is_unknown is True
 
     def test_false_for_on_track(self):
         assert StrategyVerdict.strategy_on_track.is_unknown is False
@@ -534,10 +527,7 @@ class TestDelegatedFlowStrategyReportConstruction:
 
     def test_verdict_default_is_unknown(self):
         r = DelegatedFlowStrategyReport()
-        assert (
-            r.verdict
-            == StrategyVerdict.strategy_unknown_due_to_missing_program_signal
-        )
+        assert r.verdict == StrategyVerdict.strategy_unknown_due_to_missing_program_signal
 
 
 # ===========================================================================
@@ -565,9 +555,7 @@ class TestDelegatedFlowStrategyReportToDict:
             assert key in d, f"Missing key: {key}"
 
     def test_verdict_value_in_dict(self):
-        r = DelegatedFlowStrategyReport(
-            verdict=StrategyVerdict.strategy_on_track
-        )
+        r = DelegatedFlowStrategyReport(verdict=StrategyVerdict.strategy_on_track)
         d = r.to_dict()
         assert d["verdict"] == "strategy_on_track"
 
@@ -636,9 +624,7 @@ class TestDelegatedFlowStrategyReportGetDimension:
             dimension=StrategyDimension.governance_trend,
             status=DimensionStrategyStatus.at_risk,
         )
-        r = DelegatedFlowStrategyReport(
-            dimensions={"governance_trend": dim_result}
-        )
+        r = DelegatedFlowStrategyReport(dimensions={"governance_trend": dim_result})
         found = r.get_dimension(StrategyDimension.governance_trend)
         assert found is dim_result
 
@@ -713,9 +699,7 @@ class TestEvaluateWithNoHistory:
     def test_is_on_track_reflects_verdict(self):
         ev = get_strategy_evaluator()
         report = ev.evaluate()
-        assert report.is_on_track == (
-            report.verdict == StrategyVerdict.strategy_on_track
-        )
+        assert report.is_on_track == (report.verdict == StrategyVerdict.strategy_on_track)
 
 
 # ===========================================================================
@@ -777,9 +761,7 @@ class TestEvaluateIsOnTrackConsistency:
     def test_is_on_track_consistent_with_verdict(self):
         ev = get_strategy_evaluator()
         report = ev.evaluate()
-        assert report.is_on_track == (
-            report.verdict == StrategyVerdict.strategy_on_track
-        )
+        assert report.is_on_track == (report.verdict == StrategyVerdict.strategy_on_track)
 
 
 # ===========================================================================
@@ -864,10 +846,7 @@ class TestComputeVerdictGovernanceTrend:
             DimensionStrategyStatus.at_risk,
         )
         verdict = DelegatedFlowStrategyEvaluator._compute_verdict(dims)
-        assert (
-            verdict
-            == StrategyVerdict.strategy_risk_due_to_governance_regression_trend
-        )
+        assert verdict == StrategyVerdict.strategy_risk_due_to_governance_regression_trend
 
 
 # ===========================================================================
@@ -882,10 +861,7 @@ class TestComputeVerdictRegressionPressure:
             DimensionStrategyStatus.at_risk,
         )
         verdict = DelegatedFlowStrategyEvaluator._compute_verdict(dims)
-        assert (
-            verdict
-            == StrategyVerdict.strategy_risk_due_to_governance_regression_trend
-        )
+        assert verdict == StrategyVerdict.strategy_risk_due_to_governance_regression_trend
 
 
 # ===========================================================================
@@ -915,9 +891,7 @@ class TestComputeVerdictCrossSubsystemCoupling:
             DimensionStrategyStatus.at_risk,
         )
         verdict = DelegatedFlowStrategyEvaluator._compute_verdict(dims)
-        assert (
-            verdict == StrategyVerdict.strategy_risk_due_to_cross_subsystem_drift
-        )
+        assert verdict == StrategyVerdict.strategy_risk_due_to_cross_subsystem_drift
 
 
 # ===========================================================================
@@ -982,9 +956,7 @@ class TestCollectRisks:
 
 class TestBuildSummaryOnTrack:
     def test_contains_strategy_on_track_text(self):
-        summary = DelegatedFlowStrategyEvaluator._build_summary(
-            StrategyVerdict.strategy_on_track, []
-        )
+        summary = DelegatedFlowStrategyEvaluator._build_summary(StrategyVerdict.strategy_on_track, [])
         assert "STRATEGY ON TRACK" in summary
 
 
@@ -1074,11 +1046,7 @@ class TestAllPublicNamesInDunder:
 
 class TestPolicySentinelCount:
     def test_at_least_eight_policy_sentinels(self):
-        policy_sentinels = [
-            v
-            for k, v in vars(_strat_mod).items()
-            if isinstance(v, str) and v.startswith("POLICY::")
-        ]
+        policy_sentinels = [v for k, v in vars(_strat_mod).items() if isinstance(v, str) and v.startswith("POLICY::")]
         assert len(policy_sentinels) >= 8
 
 

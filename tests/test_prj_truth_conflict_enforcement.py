@@ -76,7 +76,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # ===========================================================================
 # A. Module importable; sentinels present
 # ===========================================================================
@@ -90,6 +89,7 @@ class TestModuleSentinels:
         from core.truth_conflict_enforcement import (
             TRUTH_CONFLICT_ENFORCEMENT_IS_AUTHORITY,
         )
+
         assert isinstance(TRUTH_CONFLICT_ENFORCEMENT_IS_AUTHORITY, str)
         assert len(TRUTH_CONFLICT_ENFORCEMENT_IS_AUTHORITY) > 0
         assert "PR-J" in TRUTH_CONFLICT_ENFORCEMENT_IS_AUTHORITY
@@ -98,6 +98,7 @@ class TestModuleSentinels:
         from core.truth_conflict_enforcement import (
             TRUTH_CONFLICT_ENFORCEMENT_PRJ_SENTINEL,
         )
+
         assert isinstance(TRUTH_CONFLICT_ENFORCEMENT_PRJ_SENTINEL, str)
         assert "PR-J" in TRUTH_CONFLICT_ENFORCEMENT_PRJ_SENTINEL
         assert "truth-conflict-enforcement" in TRUTH_CONFLICT_ENFORCEMENT_PRJ_SENTINEL
@@ -113,6 +114,7 @@ class TestPolicySentinels:
         from core.truth_conflict_enforcement import (
             CANONICAL_WRITE_PRECEDES_COMPAT_WRITE_POLICY,
         )
+
         assert isinstance(CANONICAL_WRITE_PRECEDES_COMPAT_WRITE_POLICY, str)
         assert "canonical" in CANONICAL_WRITE_PRECEDES_COMPAT_WRITE_POLICY.lower()
         assert "compat" in CANONICAL_WRITE_PRECEDES_COMPAT_WRITE_POLICY.lower()
@@ -121,6 +123,7 @@ class TestPolicySentinels:
         from core.truth_conflict_enforcement import (
             NO_PARALLEL_TRUTH_AUTHORITY_POLICY,
         )
+
         assert isinstance(NO_PARALLEL_TRUTH_AUTHORITY_POLICY, str)
         assert "parallel" in NO_PARALLEL_TRUTH_AUTHORITY_POLICY.lower()
         assert "authority" in NO_PARALLEL_TRUTH_AUTHORITY_POLICY.lower()
@@ -129,6 +132,7 @@ class TestPolicySentinels:
         from core.truth_conflict_enforcement import (
             COMPAT_TRUTH_WRITE_MUST_BE_MIRROR_ONLY_POLICY,
         )
+
         assert isinstance(COMPAT_TRUTH_WRITE_MUST_BE_MIRROR_ONLY_POLICY, str)
         assert "mirror" in COMPAT_TRUTH_WRITE_MUST_BE_MIRROR_ONLY_POLICY.lower()
 
@@ -136,6 +140,7 @@ class TestPolicySentinels:
         from core.truth_conflict_enforcement import (
             TRUTH_REGRESSION_DETECTION_POLICY,
         )
+
         assert isinstance(TRUTH_REGRESSION_DETECTION_POLICY, str)
         assert "regression" in TRUTH_REGRESSION_DETECTION_POLICY.lower()
 
@@ -143,6 +148,7 @@ class TestPolicySentinels:
         from core.truth_conflict_enforcement import (
             TRUTH_CONFLICT_RELAPSE_MUST_BE_FAIL_FAST_POLICY,
         )
+
         assert isinstance(TRUTH_CONFLICT_RELAPSE_MUST_BE_FAIL_FAST_POLICY, str)
         assert "fail" in TRUTH_CONFLICT_RELAPSE_MUST_BE_FAIL_FAST_POLICY.lower()
         assert "relapse" in TRUTH_CONFLICT_RELAPSE_MUST_BE_FAIL_FAST_POLICY.lower()
@@ -156,18 +162,22 @@ class TestPolicySentinels:
 class TestTruthSurfaceEnum:
     def test_device_value(self):
         from core.truth_conflict_enforcement import TruthSurface
+
         assert TruthSurface.device.value == "device"
 
     def test_task_value(self):
         from core.truth_conflict_enforcement import TruthSurface
+
         assert TruthSurface.task.value == "task"
 
     def test_session_value(self):
         from core.truth_conflict_enforcement import TruthSurface
+
         assert TruthSurface.session.value == "session"
 
     def test_all_three_surfaces_present(self):
         from core.truth_conflict_enforcement import TruthSurface
+
         expected = {"device", "task", "session"}
         actual = {s.value for s in TruthSurface}
         assert expected == actual
@@ -181,45 +191,37 @@ class TestTruthSurfaceEnum:
 class TestTruthConflictVerdictEnum:
     def test_canonical_authority_confirmed_value(self):
         from core.truth_conflict_enforcement import TruthConflictVerdict
-        assert (
-            TruthConflictVerdict.CANONICAL_AUTHORITY_CONFIRMED.value
-            == "canonical_authority_confirmed"
-        )
+
+        assert TruthConflictVerdict.CANONICAL_AUTHORITY_CONFIRMED.value == "canonical_authority_confirmed"
 
     def test_compat_mirror_write_valid_value(self):
         from core.truth_conflict_enforcement import TruthConflictVerdict
-        assert (
-            TruthConflictVerdict.COMPAT_MIRROR_WRITE_VALID.value
-            == "compat_mirror_write_valid"
-        )
+
+        assert TruthConflictVerdict.COMPAT_MIRROR_WRITE_VALID.value == "compat_mirror_write_valid"
 
     def test_canonical_write_missing_value(self):
         from core.truth_conflict_enforcement import TruthConflictVerdict
-        assert (
-            TruthConflictVerdict.CANONICAL_WRITE_MISSING.value
-            == "canonical_write_missing"
-        )
+
+        assert TruthConflictVerdict.CANONICAL_WRITE_MISSING.value == "canonical_write_missing"
 
     def test_parallel_authority_detected_value(self):
         from core.truth_conflict_enforcement import TruthConflictVerdict
-        assert (
-            TruthConflictVerdict.PARALLEL_AUTHORITY_DETECTED.value
-            == "parallel_authority_detected"
-        )
+
+        assert TruthConflictVerdict.PARALLEL_AUTHORITY_DETECTED.value == "parallel_authority_detected"
 
     def test_truth_regression_detected_value(self):
         from core.truth_conflict_enforcement import TruthConflictVerdict
-        assert (
-            TruthConflictVerdict.TRUTH_REGRESSION_DETECTED.value
-            == "truth_regression_detected"
-        )
+
+        assert TruthConflictVerdict.TRUTH_REGRESSION_DETECTED.value == "truth_regression_detected"
 
     def test_unknown_value(self):
         from core.truth_conflict_enforcement import TruthConflictVerdict
+
         assert TruthConflictVerdict.UNKNOWN.value == "unknown"
 
     def test_all_six_verdicts_present(self):
         from core.truth_conflict_enforcement import TruthConflictVerdict
+
         expected = {
             "canonical_authority_confirmed",
             "compat_mirror_write_valid",
@@ -243,6 +245,7 @@ class TestTruthOwnershipRecord:
             TruthSurface,
             get_write_authority_for_surface,
         )
+
         record = get_write_authority_for_surface(TruthSurface.device)
         assert record is not None
         d = record.to_dict()
@@ -258,6 +261,7 @@ class TestTruthOwnershipRecord:
             TruthSurface,
             get_write_authority_for_surface,
         )
+
         record = get_write_authority_for_surface(TruthSurface.device)
         assert record is not None
         assert isinstance(record.to_dict()["surface"], str)
@@ -275,6 +279,7 @@ class TestTruthConflictRecord:
             TruthConflictVerdict,
             TruthSurface,
         )
+
         record = TruthConflictRecord(
             surface=TruthSurface.device,
             verdict=TruthConflictVerdict.CANONICAL_AUTHORITY_CONFIRMED,
@@ -296,6 +301,7 @@ class TestTruthConflictRecord:
             TruthConflictVerdict,
             TruthSurface,
         )
+
         record = TruthConflictRecord(
             surface=TruthSurface.task,
             verdict=TruthConflictVerdict.CANONICAL_WRITE_MISSING,
@@ -318,6 +324,7 @@ class TestTruthConflictEnforcementSnapshot:
         from core.truth_conflict_enforcement import (
             build_truth_conflict_enforcement_snapshot,
         )
+
         snapshot = build_truth_conflict_enforcement_snapshot()
         d = snapshot.to_dict()
         required_keys = {
@@ -343,6 +350,7 @@ class TestTruthConflictEnforcementSnapshot:
 class TestGetTruthOwnershipRegistry:
     def test_returns_non_empty_list(self):
         from core.truth_conflict_enforcement import get_truth_ownership_registry
+
         registry = get_truth_ownership_registry()
         assert isinstance(registry, list)
         assert len(registry) > 0
@@ -352,6 +360,7 @@ class TestGetTruthOwnershipRegistry:
             TruthOwnershipRecord,
             get_truth_ownership_registry,
         )
+
         for record in get_truth_ownership_registry():
             assert isinstance(record, TruthOwnershipRecord)
 
@@ -364,14 +373,16 @@ class TestGetTruthOwnershipRegistry:
 class TestOwnershipRecordCanonicalAuthority:
     def test_every_record_has_canonical_write_authority(self):
         from core.truth_conflict_enforcement import get_truth_ownership_registry
+
         for record in get_truth_ownership_registry():
             assert isinstance(record.canonical_write_authority, str)
-            assert len(record.canonical_write_authority) > 0, (
-                f"Surface {record.surface.value} has empty canonical_write_authority"
-            )
+            assert (
+                len(record.canonical_write_authority) > 0
+            ), f"Surface {record.surface.value} has empty canonical_write_authority"
 
     def test_no_duplicate_surfaces(self):
         from core.truth_conflict_enforcement import get_truth_ownership_registry
+
         surfaces = [r.surface for r in get_truth_ownership_registry()]
         assert len(surfaces) == len(set(surfaces)), "Duplicate surfaces in registry"
 
@@ -387,6 +398,7 @@ class TestGetWriteAuthorityForSurface:
             TruthSurface,
             get_write_authority_for_surface,
         )
+
         record = get_write_authority_for_surface(TruthSurface.device)
         assert record is not None
         assert record.surface == TruthSurface.device
@@ -396,6 +408,7 @@ class TestGetWriteAuthorityForSurface:
             TruthSurface,
             get_write_authority_for_surface,
         )
+
         record = get_write_authority_for_surface(TruthSurface.task)
         assert record is not None
         assert record.surface == TruthSurface.task
@@ -405,6 +418,7 @@ class TestGetWriteAuthorityForSurface:
             TruthSurface,
             get_write_authority_for_surface,
         )
+
         record = get_write_authority_for_surface(TruthSurface.session)
         assert record is not None
         assert record.surface == TruthSurface.session
@@ -422,6 +436,7 @@ class TestAssertCanonicalWritePrecedesCompatWrite:
             TruthSurface,
             assert_canonical_write_precedes_compat_write,
         )
+
         result = assert_canonical_write_precedes_compat_write(
             TruthSurface.device,
             canonical_write_confirmed=True,
@@ -436,6 +451,7 @@ class TestAssertCanonicalWritePrecedesCompatWrite:
             TruthSurface,
             assert_canonical_write_precedes_compat_write,
         )
+
         result = assert_canonical_write_precedes_compat_write(
             TruthSurface.device,
             canonical_write_confirmed=False,
@@ -448,6 +464,7 @@ class TestAssertCanonicalWritePrecedesCompatWrite:
             TruthSurface,
             assert_canonical_write_precedes_compat_write,
         )
+
         with pytest.raises(RuntimeError):
             assert_canonical_write_precedes_compat_write(
                 TruthSurface.device,
@@ -460,6 +477,7 @@ class TestAssertCanonicalWritePrecedesCompatWrite:
             TruthSurface,
             assert_canonical_write_precedes_compat_write,
         )
+
         # Should not raise even on violation when strict=False
         result = assert_canonical_write_precedes_compat_write(
             TruthSurface.session,
@@ -474,6 +492,7 @@ class TestAssertCanonicalWritePrecedesCompatWrite:
             TruthSurface,
             assert_canonical_write_precedes_compat_write,
         )
+
         result = assert_canonical_write_precedes_compat_write(
             TruthSurface.task,
             canonical_write_confirmed=True,
@@ -487,6 +506,7 @@ class TestAssertCanonicalWritePrecedesCompatWrite:
             TruthSurface,
             assert_canonical_write_precedes_compat_write,
         )
+
         result = assert_canonical_write_precedes_compat_write(
             TruthSurface.task,
             canonical_write_confirmed=False,
@@ -506,6 +526,7 @@ class TestAssertNoParallelWriteAuthority:
             TruthSurface,
             assert_no_parallel_write_authority,
         )
+
         result = assert_no_parallel_write_authority(
             TruthSurface.device,
             writer_module="UnifiedDeviceManager",
@@ -518,6 +539,7 @@ class TestAssertNoParallelWriteAuthority:
             TruthSurface,
             assert_no_parallel_write_authority,
         )
+
         result = assert_no_parallel_write_authority(
             TruthSurface.device,
             writer_module="some.unknown.legacy_module",
@@ -530,6 +552,7 @@ class TestAssertNoParallelWriteAuthority:
             TruthSurface,
             assert_no_parallel_write_authority,
         )
+
         # registered_devices is in prohibited_write_paths for device surface
         result = assert_no_parallel_write_authority(
             TruthSurface.device,
@@ -542,6 +565,7 @@ class TestAssertNoParallelWriteAuthority:
             TruthSurface,
             assert_no_parallel_write_authority,
         )
+
         with pytest.raises(RuntimeError):
             assert_no_parallel_write_authority(
                 TruthSurface.device,
@@ -555,6 +579,7 @@ class TestAssertNoParallelWriteAuthority:
             TruthSurface,
             assert_no_parallel_write_authority,
         )
+
         # routes.devices is in the allowed compat mirror paths
         result = assert_no_parallel_write_authority(
             TruthSurface.device,
@@ -575,6 +600,7 @@ class TestCheckCompatWriteIsMirrorOnly:
             TruthSurface,
             check_compat_write_is_mirror_only,
         )
+
         result = check_compat_write_is_mirror_only(
             TruthSurface.device,
             compat_path="core.routes.devices",
@@ -587,6 +613,7 @@ class TestCheckCompatWriteIsMirrorOnly:
             TruthSurface,
             check_compat_write_is_mirror_only,
         )
+
         result = check_compat_write_is_mirror_only(
             TruthSurface.device,
             compat_path="some.unknown.new_module",
@@ -598,6 +625,7 @@ class TestCheckCompatWriteIsMirrorOnly:
             TruthSurface,
             check_compat_write_is_mirror_only,
         )
+
         with pytest.raises(RuntimeError):
             check_compat_write_is_mirror_only(
                 TruthSurface.device,
@@ -611,6 +639,7 @@ class TestCheckCompatWriteIsMirrorOnly:
             TruthSurface,
             check_compat_write_is_mirror_only,
         )
+
         result = check_compat_write_is_mirror_only(
             TruthSurface.session,
             compat_path="core.attached_runtime_session.AttachedRuntimeSession",
@@ -629,6 +658,7 @@ class TestBuildTruthConflictEnforcementSnapshot:
             TruthConflictEnforcementSnapshot,
             build_truth_conflict_enforcement_snapshot,
         )
+
         snapshot = build_truth_conflict_enforcement_snapshot()
         assert isinstance(snapshot, TruthConflictEnforcementSnapshot)
 
@@ -636,6 +666,7 @@ class TestBuildTruthConflictEnforcementSnapshot:
         from core.truth_conflict_enforcement import (
             build_truth_conflict_enforcement_snapshot,
         )
+
         snapshot = build_truth_conflict_enforcement_snapshot()
         # A fresh module with no active violations should report healthy
         assert isinstance(snapshot.convergence_healthy, bool)
@@ -645,6 +676,7 @@ class TestBuildTruthConflictEnforcementSnapshot:
             build_truth_conflict_enforcement_snapshot,
             get_truth_ownership_registry,
         )
+
         snapshot = build_truth_conflict_enforcement_snapshot()
         assert snapshot.total_surfaces == len(get_truth_ownership_registry())
 
@@ -652,6 +684,7 @@ class TestBuildTruthConflictEnforcementSnapshot:
         from core.truth_conflict_enforcement import (
             build_truth_conflict_enforcement_snapshot,
         )
+
         snapshot = build_truth_conflict_enforcement_snapshot()
         assert snapshot.surfaces_with_declared_authority == snapshot.total_surfaces
 
@@ -659,6 +692,7 @@ class TestBuildTruthConflictEnforcementSnapshot:
         from core.truth_conflict_enforcement import (
             build_truth_conflict_enforcement_snapshot,
         )
+
         snapshot = build_truth_conflict_enforcement_snapshot()
         assert len(snapshot.policy_sentinels) == 5
 
@@ -666,6 +700,7 @@ class TestBuildTruthConflictEnforcementSnapshot:
         from core.truth_conflict_enforcement import (
             build_truth_conflict_enforcement_snapshot,
         )
+
         snapshot = build_truth_conflict_enforcement_snapshot()
         for sentinel in snapshot.policy_sentinels:
             assert isinstance(sentinel, str)
@@ -680,6 +715,7 @@ class TestBuildTruthConflictEnforcementSnapshot:
 class TestIsTruthConvergenceHealthy:
     def test_returns_bool(self):
         from core.truth_conflict_enforcement import is_truth_convergence_healthy
+
         result = is_truth_convergence_healthy()
         assert isinstance(result, bool)
 
@@ -695,6 +731,7 @@ class TestCanonicalWriteAuthorityContent:
             TruthSurface,
             get_write_authority_for_surface,
         )
+
         record = get_write_authority_for_surface(TruthSurface.device)
         assert record is not None
         assert "UnifiedDeviceManager" in record.canonical_write_authority
@@ -704,6 +741,7 @@ class TestCanonicalWriteAuthorityContent:
             TruthSurface,
             get_write_authority_for_surface,
         )
+
         record = get_write_authority_for_surface(TruthSurface.task)
         assert record is not None
         assert "CanonicalTask" in record.canonical_write_authority
@@ -713,6 +751,7 @@ class TestCanonicalWriteAuthorityContent:
             TruthSurface,
             get_write_authority_for_surface,
         )
+
         record = get_write_authority_for_surface(TruthSurface.session)
         assert record is not None
         assert "CanonicalSessionTruthRuntime" in record.canonical_write_authority
@@ -729,6 +768,7 @@ class TestProhibitedWritePaths:
             TruthSurface,
             get_write_authority_for_surface,
         )
+
         record = get_write_authority_for_surface(TruthSurface.device)
         assert record is not None
         prohibited_text = " ".join(record.prohibited_write_paths)
@@ -739,6 +779,7 @@ class TestProhibitedWritePaths:
             TruthSurface,
             get_write_authority_for_surface,
         )
+
         record = get_write_authority_for_surface(TruthSurface.session)
         assert record is not None
         prohibited_text = " ".join(record.prohibited_write_paths)
@@ -755,6 +796,7 @@ class TestSnapshotToDictKeys:
         from core.truth_conflict_enforcement import (
             build_truth_conflict_enforcement_snapshot,
         )
+
         snapshot = build_truth_conflict_enforcement_snapshot()
         d = snapshot.to_dict()
         expected_keys = {
@@ -783,6 +825,7 @@ class TestNewInvariantsPresent:
             InvariantStatus,
             check_invariant,
         )
+
         record = check_invariant("INV-011")
         assert record is not None
         assert record.invariant_id == "INV-011"
@@ -793,12 +836,14 @@ class TestNewInvariantsPresent:
             InvariantDomain,
             check_invariant,
         )
+
         record = check_invariant("INV-011")
         assert record is not None
         assert record.domain == InvariantDomain.source_of_truth
 
     def test_inv_011_description_references_udm(self):
         from core.runtime_invariant_enforcement import check_invariant
+
         record = check_invariant("INV-011")
         assert record is not None
         assert "UnifiedDeviceManager" in record.description
@@ -808,6 +853,7 @@ class TestNewInvariantsPresent:
             InvariantStatus,
             check_invariant,
         )
+
         record = check_invariant("INV-012")
         assert record is not None
         assert record.invariant_id == "INV-012"
@@ -818,12 +864,14 @@ class TestNewInvariantsPresent:
             InvariantDomain,
             check_invariant,
         )
+
         record = check_invariant("INV-012")
         assert record is not None
         assert record.domain == InvariantDomain.session_transport
 
     def test_inv_012_description_references_canonical_session_truth(self):
         from core.runtime_invariant_enforcement import check_invariant
+
         record = check_invariant("INV-012")
         assert record is not None
         assert "CanonicalSessionTruthRuntime" in record.description
@@ -833,6 +881,7 @@ class TestNewInvariantsPresent:
             InvariantStatus,
             check_invariant,
         )
+
         record = check_invariant("INV-013")
         assert record is not None
         assert record.invariant_id == "INV-013"
@@ -843,24 +892,27 @@ class TestNewInvariantsPresent:
             InvariantDomain,
             check_invariant,
         )
+
         record = check_invariant("INV-013")
         assert record is not None
         assert record.domain == InvariantDomain.task_lifecycle
 
     def test_inv_013_description_references_canonical_task(self):
         from core.runtime_invariant_enforcement import check_invariant
+
         record = check_invariant("INV-013")
         assert record is not None
         assert "CanonicalTask" in record.description
 
     def test_all_three_new_invariants_have_violation_log_prefix(self):
         from core.runtime_invariant_enforcement import check_invariant
+
         for inv_id in ("INV-011", "INV-012", "INV-013"):
             record = check_invariant(inv_id)
             assert record is not None
-            assert f"INVARIANT_VIOLATION::{inv_id}" in record.violation_log_prefix, (
-                f"{inv_id} missing expected violation_log_prefix"
-            )
+            assert (
+                f"INVARIANT_VIOLATION::{inv_id}" in record.violation_log_prefix
+            ), f"{inv_id} missing expected violation_log_prefix"
 
 
 # ===========================================================================
@@ -871,6 +923,7 @@ class TestNewInvariantsPresent:
 class TestNewInfluenceRecordsPresent:
     def test_infl_009_present(self):
         from core.compat_fallback_authority_guard import get_influence_record
+
         record = get_influence_record("INFL-009")
         assert record is not None
         assert record.influence_id == "INFL-009"
@@ -880,24 +933,28 @@ class TestNewInfluenceRecordsPresent:
             CompatInfluenceBoundingStatus,
             get_influence_record,
         )
+
         record = get_influence_record("INFL-009")
         assert record is not None
         assert record.bounding_status == CompatInfluenceBoundingStatus.EXPLICITLY_BOUNDED
 
     def test_infl_009_pr_addressed_is_prj(self):
         from core.compat_fallback_authority_guard import get_influence_record
+
         record = get_influence_record("INFL-009")
         assert record is not None
         assert "PR-J" in record.pr_addressed
 
     def test_infl_009_canonical_path_references_udm(self):
         from core.compat_fallback_authority_guard import get_influence_record
+
         record = get_influence_record("INFL-009")
         assert record is not None
         assert "UnifiedDeviceManager" in record.canonical_path
 
     def test_infl_010_present(self):
         from core.compat_fallback_authority_guard import get_influence_record
+
         record = get_influence_record("INFL-010")
         assert record is not None
         assert record.influence_id == "INFL-010"
@@ -907,18 +964,21 @@ class TestNewInfluenceRecordsPresent:
             CompatInfluenceBoundingStatus,
             get_influence_record,
         )
+
         record = get_influence_record("INFL-010")
         assert record is not None
         assert record.bounding_status == CompatInfluenceBoundingStatus.EXPLICITLY_BOUNDED
 
     def test_infl_010_pr_addressed_is_prj(self):
         from core.compat_fallback_authority_guard import get_influence_record
+
         record = get_influence_record("INFL-010")
         assert record is not None
         assert "PR-J" in record.pr_addressed
 
     def test_infl_010_canonical_path_references_canonical_session_truth(self):
         from core.compat_fallback_authority_guard import get_influence_record
+
         record = get_influence_record("INFL-010")
         assert record is not None
         assert "CanonicalSessionTruthRuntime" in record.canonical_path
@@ -934,6 +994,7 @@ class TestHardeningComplete:
         from core.compat_fallback_authority_guard import (
             build_authority_hardening_snapshot,
         )
+
         snapshot = build_authority_hardening_snapshot()
         assert snapshot.hardening_complete is True, (
             "hardening_complete must be True; "
@@ -946,13 +1007,12 @@ class TestHardeningComplete:
             CompatInfluenceBoundingStatus,
             get_influence_registry,
         )
+
         unbounded = [
-            r for r in get_influence_registry()
-            if r.bounding_status == CompatInfluenceBoundingStatus.UNBOUNDED
+            r for r in get_influence_registry() if r.bounding_status == CompatInfluenceBoundingStatus.UNBOUNDED
         ]
         assert len(unbounded) == 0, (
-            f"Found {len(unbounded)} UNBOUNDED influence records: "
-            f"{[r.influence_id for r in unbounded]}"
+            f"Found {len(unbounded)} UNBOUNDED influence records: " f"{[r.influence_id for r in unbounded]}"
         )
 
     def test_no_scope_limited_records(self):
@@ -960,28 +1020,33 @@ class TestHardeningComplete:
             CompatInfluenceBoundingStatus,
             get_influence_registry,
         )
+
         scope_limited = [
-            r for r in get_influence_registry()
-            if r.bounding_status == CompatInfluenceBoundingStatus.SCOPE_LIMITED
+            r for r in get_influence_registry() if r.bounding_status == CompatInfluenceBoundingStatus.SCOPE_LIMITED
         ]
         assert len(scope_limited) == 0, (
-            f"Found {len(scope_limited)} SCOPE_LIMITED influence records: "
-            f"{[r.influence_id for r in scope_limited]}"
+            f"Found {len(scope_limited)} SCOPE_LIMITED influence records: " f"{[r.influence_id for r in scope_limited]}"
         )
 
     def test_infl_001_through_infl_010_all_present(self):
         from core.compat_fallback_authority_guard import get_influence_registry
+
         registry = get_influence_registry()
         ids = {r.influence_id for r in registry}
         expected_ids = {
-            "INFL-001", "INFL-002", "INFL-003", "INFL-004",
-            "INFL-005", "INFL-006", "INFL-007", "INFL-008",
-            "INFL-009", "INFL-010",
+            "INFL-001",
+            "INFL-002",
+            "INFL-003",
+            "INFL-004",
+            "INFL-005",
+            "INFL-006",
+            "INFL-007",
+            "INFL-008",
+            "INFL-009",
+            "INFL-010",
         }
         for expected_id in expected_ids:
-            assert expected_id in ids, (
-                f"{expected_id} missing from influence registry"
-            )
+            assert expected_id in ids, f"{expected_id} missing from influence registry"
 
 
 # ===========================================================================
@@ -995,24 +1060,26 @@ class TestDeviceSurfaceAllowedPaths:
             TruthSurface,
             get_write_authority_for_surface,
         )
+
         record = get_write_authority_for_surface(TruthSurface.device)
         assert record is not None
         allowed_text = " ".join(record.allowed_compat_mirror_paths)
-        assert "routes" in allowed_text.lower() or "devices" in allowed_text.lower(), (
-            "Device surface allowed_compat_mirror_paths should reference routes/devices"
-        )
+        assert (
+            "routes" in allowed_text.lower() or "devices" in allowed_text.lower()
+        ), "Device surface allowed_compat_mirror_paths should reference routes/devices"
 
     def test_device_allowed_paths_contains_compat_route(self):
         from core.truth_conflict_enforcement import (
             TruthSurface,
             get_write_authority_for_surface,
         )
+
         record = get_write_authority_for_surface(TruthSurface.device)
         assert record is not None
         allowed_text = " ".join(record.allowed_compat_mirror_paths)
-        assert "compat" in allowed_text.lower(), (
-            "Device surface allowed_compat_mirror_paths should reference compat route"
-        )
+        assert (
+            "compat" in allowed_text.lower()
+        ), "Device surface allowed_compat_mirror_paths should reference compat route"
 
 
 # ===========================================================================
@@ -1026,6 +1093,7 @@ class TestTaskSurfaceWriteOrderingGuard:
             TruthSurface,
             assert_canonical_write_precedes_compat_write,
         )
+
         result = assert_canonical_write_precedes_compat_write(
             TruthSurface.task,
             canonical_write_confirmed=True,
@@ -1037,6 +1105,7 @@ class TestTaskSurfaceWriteOrderingGuard:
             TruthSurface,
             assert_canonical_write_precedes_compat_write,
         )
+
         result = assert_canonical_write_precedes_compat_write(
             TruthSurface.task,
             canonical_write_confirmed=True,
@@ -1056,6 +1125,7 @@ class TestSessionSurfaceParallelAuthorityGuard:
             TruthSurface,
             assert_no_parallel_write_authority,
         )
+
         result = assert_no_parallel_write_authority(
             TruthSurface.session,
             writer_module="core.attached_runtime_session.AttachedRuntimeSession",
@@ -1068,6 +1138,7 @@ class TestSessionSurfaceParallelAuthorityGuard:
             TruthSurface,
             assert_no_parallel_write_authority,
         )
+
         result = assert_no_parallel_write_authority(
             TruthSurface.session,
             writer_module="some.legacy.session_store",

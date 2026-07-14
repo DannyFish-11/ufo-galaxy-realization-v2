@@ -14,11 +14,13 @@ import json
 import os
 import tempfile
 import time
+
 import pytest
 
 # ============================================================================
 # 辅助
 # ============================================================================
+
 
 def run_async(coro):
     """同步运行协程的辅助函数"""
@@ -32,6 +34,7 @@ def run_async(coro):
 # ============================================================================
 # 1. ConcurrencyManager 测试
 # ============================================================================
+
 
 class TestConcurrencyManager:
 
@@ -159,6 +162,7 @@ class TestConcurrencyManager:
 # 2. ConfigHotReload 测试
 # ============================================================================
 
+
 class TestConfigHotReload:
 
     def test_basic_get_set(self):
@@ -207,9 +211,7 @@ class TestConfigHotReload:
         """测试从文件加载"""
         from core.config_hot_reload import HotReloadConfigManager
 
-        with tempfile.NamedTemporaryFile(
-            mode='w', suffix='.json', delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump({"name": "test", "version": 1}, f)
             path = f.name
 
@@ -225,9 +227,7 @@ class TestConfigHotReload:
         """测试保存到文件"""
         from core.config_hot_reload import HotReloadConfigManager
 
-        with tempfile.NamedTemporaryFile(
-            mode='w', suffix='.json', delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             path = f.name
 
         try:
@@ -288,11 +288,12 @@ class TestConfigHotReload:
 # 3. SecurityMiddleware 测试
 # ============================================================================
 
+
 class TestSecurityMiddleware:
 
     def test_audit_logger_record(self):
         """测试审计日志记录"""
-        from core.security_middleware import AuditLogger, AuditEntry
+        from core.security_middleware import AuditEntry, AuditLogger
 
         logger = AuditLogger(max_entries=100)
 
@@ -318,7 +319,7 @@ class TestSecurityMiddleware:
 
     def test_audit_logger_error_tracking(self):
         """测试审计日志错误追踪"""
-        from core.security_middleware import AuditLogger, AuditEntry
+        from core.security_middleware import AuditEntry, AuditLogger
 
         logger = AuditLogger()
 
@@ -397,6 +398,7 @@ class TestSecurityMiddleware:
 # 4. HealthIntegration 测试
 # ============================================================================
 
+
 class TestHealthIntegration:
 
     def test_unified_manager_creation(self):
@@ -438,8 +440,8 @@ class TestHealthIntegration:
 
     def test_check_error_rate(self):
         """测试错误率检查"""
-        from core.health_integration import UnifiedHealthManager
         from core.error_framework import ErrorTracker
+        from core.health_integration import UnifiedHealthManager
 
         uhm = UnifiedHealthManager()
         uhm._error_tracker = ErrorTracker()
@@ -450,8 +452,8 @@ class TestHealthIntegration:
 
     def test_check_concurrency(self):
         """测试并发状态检查"""
-        from core.health_integration import UnifiedHealthManager
         from core.concurrency_manager import ConcurrencyManager
+        from core.health_integration import UnifiedHealthManager
 
         uhm = UnifiedHealthManager()
         uhm._concurrency = ConcurrencyManager(global_max_concurrency=10)
@@ -462,11 +464,11 @@ class TestHealthIntegration:
 
     def test_dashboard_with_all_wired(self):
         """测试完整仪表盘（所有子系统连接）"""
+        from core.concurrency_manager import ConcurrencyManager
+        from core.error_framework import ErrorTracker
         from core.health_integration import UnifiedHealthManager
         from core.monitoring import MonitoringManager
         from core.system_load_monitor import SystemLoadMonitor
-        from core.error_framework import ErrorTracker
-        from core.concurrency_manager import ConcurrencyManager
 
         uhm = UnifiedHealthManager()
         uhm.wire(
@@ -500,11 +502,12 @@ class TestHealthIntegration:
 # 5. ErrorFramework 测试
 # ============================================================================
 
+
 class TestErrorFramework:
 
     def test_ufo_error_creation(self):
         """测试错误创建"""
-        from core.error_framework import GalaxyError, ErrorCategory, ErrorSeverity
+        from core.error_framework import ErrorCategory, ErrorSeverity, GalaxyError
 
         err = GalaxyError("test error", category=ErrorCategory.NETWORK)
         assert err.message == "test error"
@@ -513,7 +516,7 @@ class TestErrorFramework:
 
     def test_error_to_dict(self):
         """测试错误序列化"""
-        from core.error_framework import GalaxyError, ErrorCategory
+        from core.error_framework import ErrorCategory, GalaxyError
 
         err = GalaxyError("serialization test", category=ErrorCategory.DATA)
         d = err.to_dict()
@@ -522,9 +525,7 @@ class TestErrorFramework:
 
     def test_error_tracker_recording(self):
         """测试错误追踪记录"""
-        from core.error_framework import (
-            ErrorTracker, GalaxyError, ErrorCategory, ErrorSeverity
-        )
+        from core.error_framework import ErrorCategory, ErrorSeverity, ErrorTracker, GalaxyError
 
         tracker = ErrorTracker()
         err = GalaxyError("test", category=ErrorCategory.NETWORK)
@@ -536,7 +537,7 @@ class TestErrorFramework:
 
     def test_error_rate_calculation(self):
         """测试错误率计算"""
-        from core.error_framework import ErrorTracker, GalaxyError, ErrorCategory
+        from core.error_framework import ErrorCategory, ErrorTracker, GalaxyError
 
         tracker = ErrorTracker()
         for _ in range(10):
@@ -548,9 +549,16 @@ class TestErrorFramework:
     def test_specialized_errors(self):
         """测试特化错误类型"""
         from core.error_framework import (
-            NetworkError, DeviceError, LLMError, AuthError,
-            ConfigError, TimeoutError_, NodeError, DataError,
-            ConcurrencyError, ErrorCategory,
+            AuthError,
+            ConcurrencyError,
+            ConfigError,
+            DataError,
+            DeviceError,
+            ErrorCategory,
+            LLMError,
+            NetworkError,
+            NodeError,
+            TimeoutError_,
         )
 
         assert NetworkError("net").category == ErrorCategory.NETWORK

@@ -27,9 +27,9 @@ from core.unified_governance_semantics import build_unified_governance_state
 from galaxy_gateway.android_bridge import AndroidBridge
 
 from ._dual_runtime_cross_repo_harness import (
-    extract_canonical_android_runtime_messages,
     evidence_declares_real_android_runtime,
     evidence_declares_v2_runtime_participation,
+    extract_canonical_android_runtime_messages,
     load_evidence_or_skip,
 )
 
@@ -127,8 +127,7 @@ def test_cross_repo_evidence_replays_canonical_android_paths_against_v2_runtime(
 
         execution_events = list_recent_execution_events(device_id=device_id, limit=1)
         assert execution_events, (
-            "Canonical dual-runtime replay must absorb Android execution events "
-            "into V2 runtime state."
+            "Canonical dual-runtime replay must absorb Android execution events " "into V2 runtime state."
         )
     finally:
         reset_android_device_state_store()
@@ -199,9 +198,9 @@ def test_cross_repo_dual_runtime_evidence_exercises_closure_audit_readiness_and_
 
         governance_state = build_unified_governance_state(device_ids=[device_id])
         device_view = next((d for d in governance_state["devices"] if d["device_id"] == device_id), None)
-        assert device_view is not None, (
-            "Replayed dual-runtime Android participant must appear in unified governance state."
-        )
+        assert (
+            device_view is not None
+        ), "Replayed dual-runtime Android participant must appear in unified governance state."
         delegated = device_view["governance_precedence"]["delegated_execution"]
         causality = delegated["decision_causality"]
         diagnosis = causality["android_originated_canonical_diagnosis"]

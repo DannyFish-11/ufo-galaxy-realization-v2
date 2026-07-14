@@ -102,10 +102,7 @@ def _make_session(
     device_ids = device_ids or ["dev_a", "dev_b"]
     assignments = []
     if with_assignments:
-        assignments = [
-            MeshSubtaskAssignment(device_id=did, status="pending")
-            for did in device_ids
-        ]
+        assignments = [MeshSubtaskAssignment(device_id=did, status="pending") for did in device_ids]
     return build_mesh_session(
         source_device_id=device_ids[0] if device_ids else "src",
         primary_device_id=device_ids[0] if device_ids else "src",
@@ -143,7 +140,10 @@ def _make_driver(
 class TestGroupA_Sentinels:
     def test_a1_main_sentinel_present(self) -> None:
         assert isinstance(MESH_SESSION_PROGRESSION_DRIVER_SENTINEL, str)
-        assert "MESH-002" in MESH_SESSION_PROGRESSION_DRIVER_SENTINEL or "progression" in MESH_SESSION_PROGRESSION_DRIVER_SENTINEL.lower()
+        assert (
+            "MESH-002" in MESH_SESSION_PROGRESSION_DRIVER_SENTINEL
+            or "progression" in MESH_SESSION_PROGRESSION_DRIVER_SENTINEL.lower()
+        )
 
     def test_a2_session_status_policy_present(self) -> None:
         assert isinstance(SESSION_STATUS_DRIVEN_BY_COORDINATOR_POLICY, str)
@@ -458,25 +458,17 @@ class TestGroupG_FullLifecycle:
         driver.on_participant_ready("alpha")
         driver.on_participant_working("alpha")
         assert driver.session.status == MeshSessionStatus.ACTIVE
-        assert any(
-            a.device_id == "alpha" and a.status == "running"
-            for a in driver.session.subtask_assignments
-        )
+        assert any(a.device_id == "alpha" and a.status == "running" for a in driver.session.subtask_assignments)
 
         driver.on_participant_ready("beta")
         driver.on_participant_working("beta")
-        assert any(
-            a.device_id == "beta" and a.status == "running"
-            for a in driver.session.subtask_assignments
-        )
+        assert any(a.device_id == "beta" and a.status == "running" for a in driver.session.subtask_assignments)
 
         # Phase 3: Results arrive — MERGING
         driver.on_participant_result("alpha", {"output": "alpha_done"})
         driver.on_participant_result("beta", {"output": "beta_done"})
         assert driver.session.status == MeshSessionStatus.MERGING
-        assert all(
-            a.status == "success" for a in driver.session.subtask_assignments
-        )
+        assert all(a.status == "success" for a in driver.session.subtask_assignments)
 
         # Phase 4: Finalize — COMPLETED
         result = driver.finalize()
@@ -725,10 +717,7 @@ class TestGroupL_ThreadSafety:
             except Exception as exc:
                 errors.append(str(exc))
 
-        threads = [
-            threading.Thread(target=emit_mixed, args=(did, i % 2 == 0))
-            for i, did in enumerate(device_ids)
-        ]
+        threads = [threading.Thread(target=emit_mixed, args=(did, i % 2 == 0)) for i, did in enumerate(device_ids)]
         for t in threads:
             t.start()
         for t in threads:
@@ -747,31 +736,28 @@ class TestGroupL_ThreadSafety:
 @pytest.mark.skipif(not _DRIVER_AVAILABLE, reason="driver not available")
 class TestGroupM_ReExports:
     def test_m1_core_mesh_coordinator_re_exports_driver(self) -> None:
-        from core.mesh.mesh_session_coordinator import (
-            MeshSessionProgressionDriver as D,
-            create_progression_driver as cpd,
-            MESH_SESSION_PROGRESSION_DRIVER_SENTINEL as S,
-        )
+        from core.mesh.mesh_session_coordinator import MESH_SESSION_PROGRESSION_DRIVER_SENTINEL as S
+        from core.mesh.mesh_session_coordinator import MeshSessionProgressionDriver as D
+        from core.mesh.mesh_session_coordinator import create_progression_driver as cpd
+
         assert D is MeshSessionProgressionDriver
         assert cpd is create_progression_driver
         assert isinstance(S, str)
 
     def test_m2_core_runtime_re_exports_driver(self) -> None:
-        from core.runtime import (
-            MeshSessionProgressionDriver as D,
-            create_progression_driver as cpd,
-            MESH_SESSION_PROGRESSION_DRIVER_SENTINEL as S,
-        )
+        from core.runtime import MESH_SESSION_PROGRESSION_DRIVER_SENTINEL as S
+        from core.runtime import MeshSessionProgressionDriver as D
+        from core.runtime import create_progression_driver as cpd
+
         assert D is MeshSessionProgressionDriver
         assert cpd is create_progression_driver
         assert isinstance(S, str)
 
     def test_m3_core_runtime_re_exports_policies(self) -> None:
-        from core.runtime import (
-            SESSION_STATUS_DRIVEN_BY_COORDINATOR_POLICY as p1,
-            SUBTASK_ASSIGNMENT_STATUS_DRIVEN_BY_PARTICIPANT_POLICY as p2,
-            MERGE_TRIGGERED_WHEN_BARRIER_RELEASED_POLICY as p3,
-        )
+        from core.runtime import MERGE_TRIGGERED_WHEN_BARRIER_RELEASED_POLICY as p3
+        from core.runtime import SESSION_STATUS_DRIVEN_BY_COORDINATOR_POLICY as p1
+        from core.runtime import SUBTASK_ASSIGNMENT_STATUS_DRIVEN_BY_PARTICIPANT_POLICY as p2
+
         assert isinstance(p1, str)
         assert isinstance(p2, str)
         assert isinstance(p3, str)

@@ -36,7 +36,7 @@ Usage::
 
 from __future__ import annotations
 
-from core.continuum.config import ContinuumConfig, DEFAULT_CONTINUUM_CONFIG
+from core.continuum.config import DEFAULT_CONTINUUM_CONFIG, ContinuumConfig
 from core.continuum.types import (
     ActionLevel,
     ContinuumPhase,
@@ -108,9 +108,7 @@ class ExpressionEngine:
         )
 
     def _liminal(self, state: ContinuumState) -> ExpressionState:
-        motion = _clamp(
-            state.coherence * 0.5 + state.collapse_tendency * 0.3
-        )
+        motion = _clamp(state.coherence * 0.5 + state.collapse_tendency * 0.3)
         intensity = _clamp(state.presence_intensity * 0.65)
         return ExpressionState(
             motion=motion,
@@ -125,9 +123,7 @@ class ExpressionEngine:
         action_level = state.decision.action_level
         decision_contribution = _clamp(state.decision.should_act_score)
 
-        motion = _clamp(
-            state.presence_intensity * 0.6 + decision_contribution * 0.4
-        )
+        motion = _clamp(state.presence_intensity * 0.6 + decision_contribution * 0.4)
         intensity = _clamp(state.presence_intensity)
 
         if action_level in (ActionLevel.EXECUTE, ActionLevel.ASSIST):

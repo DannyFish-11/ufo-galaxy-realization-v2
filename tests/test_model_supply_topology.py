@@ -111,9 +111,7 @@ def bridge():
 
 @pytest.fixture
 def full_inventory(bridge):
-    snaps = [LegacyLLMProviderSnapshot.from_dict(d) for d in [
-        OPENAI_DICT, ANTHROPIC_DICT, GROQ_DICT, DEEPSEEK_DICT
-    ]]
+    snaps = [LegacyLLMProviderSnapshot.from_dict(d) for d in [OPENAI_DICT, ANTHROPIC_DICT, GROQ_DICT, DEEPSEEK_DICT]]
     return bridge.build_inventory(snaps)
 
 
@@ -130,6 +128,7 @@ def full_router(full_inventory):
 # ---------------------------------------------------------------------------
 # Helper: build a minimal NormalizedTopologyEntry
 # ---------------------------------------------------------------------------
+
 
 def _make_entry(
     provider_id: str,
@@ -204,27 +203,18 @@ class TestModelNodeConstruction:
         assert LocalityHint.ANY in node.locality_hints
 
     def test_role_hints_preserved(self):
-        entry = _make_entry(
-            "r_prov", "r_model",
-            roles=[TopologyRole.MULTIMODAL_CORE, TopologyRole.REASONING]
-        )
+        entry = _make_entry("r_prov", "r_model", roles=[TopologyRole.MULTIMODAL_CORE, TopologyRole.REASONING])
         node = node_from_entry(entry)
         assert TopologyRole.MULTIMODAL_CORE in node.role_hints
         assert TopologyRole.REASONING in node.role_hints
 
     def test_primary_role_is_first_hint(self):
-        entry = _make_entry(
-            "prov_role", "model_role",
-            roles=[TopologyRole.EXECUTION, TopologyRole.GENERAL]
-        )
+        entry = _make_entry("prov_role", "model_role", roles=[TopologyRole.EXECUTION, TopologyRole.GENERAL])
         node = node_from_entry(entry)
         assert node.topology_role == TopologyRole.EXECUTION
 
     def test_cross_device_capable_when_role_present(self):
-        entry = _make_entry(
-            "cd_prov", "cd_model",
-            roles=[TopologyRole.CROSS_DEVICE]
-        )
+        entry = _make_entry("cd_prov", "cd_model", roles=[TopologyRole.CROSS_DEVICE])
         node = node_from_entry(entry)
         assert node.is_cross_device_capable is True
 
@@ -355,14 +345,22 @@ class TestModelSupplyGraph:
 class TestModelWeightField:
     def _mm_node(self, node_id="mm_node"):
         entry = _make_entry(
-            node_id, "mm_model", multimodal=True, speed=8, quality=9,
+            node_id,
+            "mm_model",
+            multimodal=True,
+            speed=8,
+            quality=9,
             roles=[TopologyRole.MULTIMODAL_CORE],
         )
         return node_from_entry(entry)
 
     def _exec_node(self, node_id="exec_node"):
         entry = _make_entry(
-            node_id, "exec_model", multimodal=False, speed=10, quality=7,
+            node_id,
+            "exec_model",
+            multimodal=False,
+            speed=10,
+            quality=7,
             roles=[TopologyRole.EXECUTION],
         )
         return node_from_entry(entry)
@@ -423,9 +421,7 @@ class TestModelWeightField:
         entry_b = _make_entry("a_node", "m2", speed=5, quality=5)
         node_a = node_from_entry(entry_a)
         node_b = node_from_entry(entry_b)
-        pairs = apply_weight_fields(
-            [node_a, node_b], TriStatePhase.MANIFEST, RuntimeDomain.LOCAL
-        )
+        pairs = apply_weight_fields([node_a, node_b], TriStatePhase.MANIFEST, RuntimeDomain.LOCAL)
         ids = [n.node_id for n, _ in pairs]
         # If combined weights are equal, 'a_node' should come first
         w0 = pairs[0][1].combined_weight
@@ -513,16 +509,26 @@ class TestTopologyRouter:
 
     def test_manifest_cross_device_includes_cd_specialists(self, bridge):
         """MANIFEST + CROSS_DEVICE must include cross-device capable nodes in support."""
-        snaps = [LegacyLLMProviderSnapshot.from_dict(d) for d in [
-            OPENAI_DICT, ANTHROPIC_DICT, GROQ_DICT,
-        ]]
+        snaps = [
+            LegacyLLMProviderSnapshot.from_dict(d)
+            for d in [
+                OPENAI_DICT,
+                ANTHROPIC_DICT,
+                GROQ_DICT,
+            ]
+        ]
         inventory = bridge.build_inventory(snaps)
 
         # Manually inject a cross-device node
         from core.model_topology.topology_types import (
-            AvailabilityStatus, ModalityCapability, ModelIdentity,
-            NormalizedTopologyEntry, ProviderIdentity, ScoringProfile
+            AvailabilityStatus,
+            ModalityCapability,
+            ModelIdentity,
+            NormalizedTopologyEntry,
+            ProviderIdentity,
+            ScoringProfile,
         )
+
         cd_entry = NormalizedTopologyEntry(
             provider=ProviderIdentity(provider_id="cd_specialist", display_name="CD"),
             model=ModelIdentity(model_id="cd_model", provider_id="cd_specialist"),
@@ -546,8 +552,9 @@ class TestTopologyRouter:
         r2 = TopologyRouter(full_inventory)
         p1 = r1.route(TriStatePhase.LIMINAL, RuntimeDomain.LOCAL)
         p2 = r2.route(TriStatePhase.LIMINAL, RuntimeDomain.LOCAL)
-        assert (p1.primary_model.node_id if p1.primary_model else None) == \
-               (p2.primary_model.node_id if p2.primary_model else None)
+        assert (p1.primary_model.node_id if p1.primary_model else None) == (
+            p2.primary_model.node_id if p2.primary_model else None
+        )
         s1 = [n.node_id for n in p1.support_models]
         s2 = [n.node_id for n in p2.support_models]
         assert s1 == s2
@@ -627,6 +634,7 @@ class TestModuleExports:
             compute_weight_field,
             node_from_entry,
         )
+
         # All must be importable without error
         assert EdgeKind is not None
         assert GraphEdge is not None

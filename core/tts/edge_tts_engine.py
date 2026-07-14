@@ -13,6 +13,7 @@ core.tts.edge_tts_engine — 语音合成（edge-tts）
     - zh-CN-YunjianNeural   (男声，新闻)
     - zh-CN-XiaoyiNeural    (童声)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -49,11 +50,11 @@ class EdgeTTSEngine:
 
     # 中文声音列表
     CHINESE_VOICES = [
-        "zh-CN-XiaoxiaoNeural",   # 女声，温柔
-        "zh-CN-XiaohanNeural",    # 女声，冷静
-        "zh-CN-YunxiNeural",      # 男声，年轻
-        "zh-CN-YunjianNeural",    # 男声，新闻
-        "zh-CN-XiaoyiNeural",     # 童声
+        "zh-CN-XiaoxiaoNeural",  # 女声，温柔
+        "zh-CN-XiaohanNeural",  # 女声，冷静
+        "zh-CN-YunxiNeural",  # 男声，年轻
+        "zh-CN-YunjianNeural",  # 男声，新闻
+        "zh-CN-XiaoyiNeural",  # 童声
     ]
 
     # 语速选项
@@ -106,10 +107,7 @@ class EdgeTTSEngine:
         try:
             import edge_tts
         except ImportError as exc:
-            raise ImportError(
-                "edge-tts is not installed. "
-                "Install it with: pip install edge-tts"
-            ) from exc
+            raise ImportError("edge-tts is not installed. " "Install it with: pip install edge-tts") from exc
 
         _tmp_path = None
         if not output_path:
@@ -234,15 +232,10 @@ class EdgeTTSEngine:
                     except OSError:
                         pass
                 else:
-                    logger.warning(
-                        "No audio player found. Install mpg123 or ffmpeg."
-                    )
+                    logger.warning("No audio player found. Install mpg123 or ffmpeg.")
                     return
             else:
-                logger.warning(
-                    "No audio player found on Linux. "
-                    "Install mpg123: sudo apt-get install mpg123"
-                )
+                logger.warning("No audio player found on Linux. " "Install mpg123: sudo apt-get install mpg123")
                 return
 
         if play_cmd:
@@ -324,6 +317,7 @@ class EdgeTTSEngine:
             声音信息列表。
         """
         import edge_tts
+
         voices_manager = await edge_tts.VoicesManager.create()
         voices = voices_manager.voices
         if language:
@@ -358,7 +352,4 @@ class EdgeTTSEngine:
         logger.debug("TTS rate set to: %s", rate)
 
     def __repr__(self) -> str:
-        return (
-            f"EdgeTTSEngine(voice={self.voice}, "
-            f"rate={self.rate}, volume={self.volume})"
-        )
+        return f"EdgeTTSEngine(voice={self.voice}, " f"rate={self.rate}, volume={self.volume})"

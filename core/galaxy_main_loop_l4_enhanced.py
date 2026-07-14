@@ -35,9 +35,7 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.MainLoopL4Enhanced")
 
-L4_CANONICAL_RUNTIME_SENTINEL = (
-    "L4_CANONICAL_RUNTIME::core.galaxy_main_loop_l4_enhanced"
-)
+L4_CANONICAL_RUNTIME_SENTINEL = "L4_CANONICAL_RUNTIME::core.galaxy_main_loop_l4_enhanced"
 
 # ---------------------------------------------------------------------------
 # 可选增强组件 — 全部以降级方式加载
@@ -45,6 +43,7 @@ L4_CANONICAL_RUNTIME_SENTINEL = (
 
 try:
     from enhancements.perception.environment_scanner import EnvironmentScanner
+
     _PERCEPTION_AVAILABLE = True
 except Exception as _e:  # pragma: no cover - depends on environment
     logger.warning("感知模块不可用: %s", _e)
@@ -57,6 +56,7 @@ try:
         GoalDecomposer,
         GoalType,
     )
+
     _GOAL_DECOMPOSER_AVAILABLE = True
 except Exception as _e:  # pragma: no cover
     logger.warning("目标分解模块不可用: %s", _e)
@@ -67,6 +67,7 @@ except Exception as _e:  # pragma: no cover
 
 try:
     from enhancements.reasoning.autonomous_planner import AutonomousPlanner
+
     _PLANNER_AVAILABLE = True
 except Exception as _e:  # pragma: no cover
     logger.warning("规划模块不可用: %s", _e)
@@ -75,6 +76,7 @@ except Exception as _e:  # pragma: no cover
 
 try:
     from enhancements.reasoning.world_model import WorldModel
+
     _WORLD_MODEL_AVAILABLE = True
 except Exception as _e:  # pragma: no cover
     logger.warning("世界模型模块不可用: %s", _e)
@@ -83,6 +85,7 @@ except Exception as _e:  # pragma: no cover
 
 try:
     from enhancements.reasoning.metacognition_service import MetaCognitionService
+
     _METACOGNITION_AVAILABLE = True
 except Exception as _e:  # pragma: no cover
     logger.warning("元认知模块不可用: %s", _e)
@@ -91,6 +94,7 @@ except Exception as _e:  # pragma: no cover
 
 try:
     from enhancements.reasoning.autonomous_coder import AutonomousCoder
+
     _CODER_AVAILABLE = True
 except Exception as _e:  # pragma: no cover
     logger.warning("自主编码模块不可用: %s", _e)
@@ -99,6 +103,7 @@ except Exception as _e:  # pragma: no cover
 
 try:
     from enhancements.execution.action_executor import ActionExecutor
+
     _EXECUTOR_AVAILABLE = True
 except Exception as _e:  # pragma: no cover
     logger.warning("动作执行模块不可用: %s", _e)
@@ -107,6 +112,7 @@ except Exception as _e:  # pragma: no cover
 
 try:
     from enhancements.monitoring.status_monitor import StatusMonitor
+
     _MONITOR_AVAILABLE = True
 except Exception as _e:  # pragma: no cover
     logger.warning("状态监控模块不可用: %s", _e)
@@ -115,6 +121,7 @@ except Exception as _e:  # pragma: no cover
 
 try:
     from enhancements.safety.safety_manager import SafetyManager
+
     _SAFETY_AVAILABLE = True
 except Exception as _e:  # pragma: no cover
     logger.warning("安全管理模块不可用: %s", _e)
@@ -123,6 +130,7 @@ except Exception as _e:  # pragma: no cover
 
 try:
     from enhancements.learning.learning_optimizer import LearningOptimizer
+
     _LEARNING_AVAILABLE = True
 except Exception as _e:  # pragma: no cover
     logger.warning("学习优化模块不可用: %s", _e)
@@ -132,6 +140,7 @@ except Exception as _e:  # pragma: no cover
 # 事件总线（L4 → UI 进度回调通道）
 try:
     from integration.event_bus import EventType, event_bus, ui_progress_callback
+
     _EVENT_BUS_AVAILABLE = True
 except Exception as _e:  # pragma: no cover
     logger.warning("事件总线不可用: %s", _e)
@@ -144,6 +153,7 @@ except Exception as _e:  # pragma: no cover
 # ---------------------------------------------------------------------------
 # 数据类
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class PendingGoal:
@@ -176,6 +186,7 @@ class PendingGoal:
 # L4 主循环
 # ---------------------------------------------------------------------------
 
+
 class GalaxyMainLoopL4:
     """
     Galaxy L4 增强主循环（规范类）。
@@ -194,9 +205,7 @@ class GalaxyMainLoopL4:
     def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
         self.config: Dict[str, Any] = dict(config or {})
         self.cycle_interval: float = float(self.config.get("cycle_interval", 5.0))
-        self.auto_scan_interval: float = float(
-            self.config.get("auto_scan_interval", 300.0)
-        )
+        self.auto_scan_interval: float = float(self.config.get("auto_scan_interval", 300.0))
 
         # 运行状态
         self.running: bool = False
@@ -206,46 +215,24 @@ class GalaxyMainLoopL4:
         self._last_scan_at: float = 0.0
 
         # 目标队列（UI → L4）
-        self._goal_queue: asyncio.Queue = asyncio.Queue(
-            maxsize=int(self.config.get("max_pending_goals", 1000))
-        )
+        self._goal_queue: asyncio.Queue = asyncio.Queue(maxsize=int(self.config.get("max_pending_goals", 1000)))
 
         # 任务历史（有界，防止无限增长）
         self.task_history: List[Dict[str, Any]] = []
-        self._max_task_history: int = int(
-            self.config.get("max_task_history", 1000)
-        )
+        self._max_task_history: int = int(self.config.get("max_task_history", 1000))
 
         # 增强组件（全部可选，初始化失败时降级为 None）
-        self.environment_scanner = self._safe_init(
-            "environment_scanner", EnvironmentScanner, _PERCEPTION_AVAILABLE
-        )
-        self.goal_decomposer = self._safe_init(
-            "goal_decomposer", GoalDecomposer, _GOAL_DECOMPOSER_AVAILABLE
-        )
-        self.planner = self._safe_init(
-            "planner", AutonomousPlanner, _PLANNER_AVAILABLE
-        )
-        self.world_model = self._safe_init(
-            "world_model", WorldModel, _WORLD_MODEL_AVAILABLE
-        )
-        self.metacognition = self._safe_init(
-            "metacognition", MetaCognitionService, _METACOGNITION_AVAILABLE
-        )
+        self.environment_scanner = self._safe_init("environment_scanner", EnvironmentScanner, _PERCEPTION_AVAILABLE)
+        self.goal_decomposer = self._safe_init("goal_decomposer", GoalDecomposer, _GOAL_DECOMPOSER_AVAILABLE)
+        self.planner = self._safe_init("planner", AutonomousPlanner, _PLANNER_AVAILABLE)
+        self.world_model = self._safe_init("world_model", WorldModel, _WORLD_MODEL_AVAILABLE)
+        self.metacognition = self._safe_init("metacognition", MetaCognitionService, _METACOGNITION_AVAILABLE)
         # AutonomousCoder 构造时会创建沙箱临时目录 — 懒加载，首次使用再实例化
         self.coder = None
-        self.executor = self._safe_init(
-            "executor", ActionExecutor, _EXECUTOR_AVAILABLE
-        )
-        self.monitor = self._safe_init(
-            "monitor", StatusMonitor, _MONITOR_AVAILABLE
-        )
-        self.safety_manager = self._safe_init(
-            "safety_manager", SafetyManager, _SAFETY_AVAILABLE
-        )
-        self.learning_optimizer = self._safe_init(
-            "learning_optimizer", LearningOptimizer, _LEARNING_AVAILABLE
-        )
+        self.executor = self._safe_init("executor", ActionExecutor, _EXECUTOR_AVAILABLE)
+        self.monitor = self._safe_init("monitor", StatusMonitor, _MONITOR_AVAILABLE)
+        self.safety_manager = self._safe_init("safety_manager", SafetyManager, _SAFETY_AVAILABLE)
+        self.learning_optimizer = self._safe_init("learning_optimizer", LearningOptimizer, _LEARNING_AVAILABLE)
 
         logger.info(
             "GalaxyMainLoopL4 initialized (cycle_interval=%.2fs, modules=%s)",
@@ -440,9 +427,7 @@ class GalaxyMainLoopL4:
                     for st in decomposition.subtasks
                 ]
             if callback is not None:
-                callback.on_goal_decomposition_completed(
-                    pending.description, subtasks
-                )
+                callback.on_goal_decomposition_completed(pending.description, subtasks)
 
             # 2. 计划生成
             plan = None
@@ -551,7 +536,7 @@ class GalaxyMainLoopL4:
             record["error"] = error
         self.task_history.append(record)
         if len(self.task_history) > self._max_task_history:
-            self.task_history = self.task_history[-self._max_task_history:]
+            self.task_history = self.task_history[-self._max_task_history :]
 
     # ------------------------------------------------------------------
     # 状态查询

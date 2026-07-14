@@ -57,17 +57,17 @@ ACTIVE_RETURN_MODES
 from __future__ import annotations
 
 from .return_modes import (
-    ReturnMode,
-    MODES_THAT_SUPPRESS_MANIFEST,
-    MODES_THAT_SOFTEN_LIMINAL,
     ACTIVE_RETURN_MODES,
+    MODES_THAT_SOFTEN_LIMINAL,
+    MODES_THAT_SUPPRESS_MANIFEST,
+    ReturnMode,
 )
-from .return_summary import ReturnSummary, IDLE_RETURN_SUMMARY
 from .return_projection_adapter import (
-    build_return_summary,
     attach_return_summary,
+    build_return_summary,
     get_return_hints,
 )
+from .return_summary import IDLE_RETURN_SUMMARY, ReturnSummary
 
 __all__ = [
     # Enums and constants

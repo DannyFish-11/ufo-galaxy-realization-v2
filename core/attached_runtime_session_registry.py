@@ -516,9 +516,7 @@ class InvalidationReason(str, Enum):
 # State transition table
 # ---------------------------------------------------------------------------
 
-_REGISTRY_TRANSITIONS: Dict[
-    tuple[RegistryEntryState, RegistryTransition], RegistryEntryState
-] = {
+_REGISTRY_TRANSITIONS: Dict[tuple[RegistryEntryState, RegistryTransition], RegistryEntryState] = {
     # From active
     (RegistryEntryState.active, RegistryTransition.register): RegistryEntryState.active,
     (RegistryEntryState.active, RegistryTransition.reconnect): RegistryEntryState.active,
@@ -677,11 +675,7 @@ class AttachedSessionRegistryEntry:
 
         state = RegistryEntryState.from_string(str(raw_state))
         reason = InvalidationReason.from_string(str(raw_reason))
-        transition = (
-            RegistryTransition.from_string(str(raw_transition))
-            if raw_transition
-            else None
-        )
+        transition = RegistryTransition.from_string(str(raw_transition)) if raw_transition else None
         prev = RegistryEntryState.from_string(str(raw_prev)) if raw_prev else None
 
         return cls(
@@ -841,10 +835,7 @@ class AttachedSessionRegistry:
         """Refresh lookup indices after an in-place buffer replacement."""
         if entry.is_active():
             self._active_by_device[entry.device_id] = entry.entry_id
-        elif (
-            self._active_by_device.get(entry.device_id) == entry.entry_id
-            and not entry.is_active()
-        ):
+        elif self._active_by_device.get(entry.device_id) == entry.entry_id and not entry.is_active():
             # Remove stale active pointer
             del self._active_by_device[entry.device_id]
         if entry.runtime_attachment_session_id:
@@ -894,9 +885,7 @@ class AttachedSessionRegistry:
             new_reason = InvalidationReason.none
         elif transition == RegistryTransition.detach:
             new_reason = (
-                invalidation_reason
-                if invalidation_reason != InvalidationReason.none
-                else InvalidationReason.detached
+                invalidation_reason if invalidation_reason != InvalidationReason.none else InvalidationReason.detached
             )
         elif transition == RegistryTransition.invalidate:
             new_reason = (
@@ -909,10 +898,7 @@ class AttachedSessionRegistry:
 
         # PR-G: preserve runtime_attachment_session_id through transitions;
         # allow callers to supply an updated value (e.g. on reconnect).
-        resolved_attachment_id = (
-            runtime_attachment_session_id
-            or entry.runtime_attachment_session_id
-        )
+        resolved_attachment_id = runtime_attachment_session_id or entry.runtime_attachment_session_id
 
         # PR-C: preserve durable continuity fields through transitions;
         # allow callers to supply updated values (e.g. on reconnect with new epoch).
@@ -951,15 +937,9 @@ class AttachedSessionRegistry:
             last_transition_at=now,
             metadata={**entry.metadata, **(metadata or {})},
             reconnect_count=(
-                entry.reconnect_count + 1
-                if transition == RegistryTransition.reconnect
-                else entry.reconnect_count
+                entry.reconnect_count + 1 if transition == RegistryTransition.reconnect else entry.reconnect_count
             ),
-            last_reconnect_at=(
-                now
-                if transition == RegistryTransition.reconnect
-                else entry.last_reconnect_at
-            ),
+            last_reconnect_at=(now if transition == RegistryTransition.reconnect else entry.last_reconnect_at),
             durable_session_id=resolved_durable_session_id,
             continuity_epoch=resolved_continuity_epoch,
         )
@@ -992,9 +972,7 @@ class AttachedSessionRegistry:
     # Query API
     # ------------------------------------------------------------------
 
-    def get_active_for_device(
-        self, device_id: str
-    ) -> Optional[AttachedSessionRegistryEntry]:
+    def get_active_for_device(self, device_id: str) -> Optional[AttachedSessionRegistryEntry]:
         """Return the currently active entry for *device_id*, or None."""
         entry_id = self._active_by_device.get(device_id)
         if entry_id is None:
@@ -1094,9 +1072,7 @@ class AttachedSessionRegistry:
         active = sum(1 for e in all_entries if e.attachment_state == RegistryEntryState.active)
         replaced = sum(1 for e in all_entries if e.attachment_state == RegistryEntryState.replaced)
         detached = sum(1 for e in all_entries if e.attachment_state == RegistryEntryState.detached)
-        invalidated = sum(
-            1 for e in all_entries if e.attachment_state == RegistryEntryState.invalidated
-        )
+        invalidated = sum(1 for e in all_entries if e.attachment_state == RegistryEntryState.invalidated)
         return AttachedSessionRegistrySnapshot(
             entries=all_entries,
             active_count=active,
@@ -1575,9 +1551,7 @@ def lookup_session_by_attachment_id(
     """
     if registry is None:
         registry = get_session_registry()
-    return registry.get_by_runtime_attachment_session_id(
-        runtime_attachment_session_id, active_only=active_only
-    )
+    return registry.get_by_runtime_attachment_session_id(runtime_attachment_session_id, active_only=active_only)
 
 
 # ---------------------------------------------------------------------------
@@ -1679,11 +1653,7 @@ def classify_reconnect_outcome(
             if existing.durable_session_id != durable_session_id:
                 # Durable identity mismatch — different session era → new attachment
                 return (_RECONNECT_OUTCOME_NEW_ATTACHMENT, None)
-        if (
-            continuity_epoch >= 0
-            and existing.continuity_epoch > 0
-            and continuity_epoch < existing.continuity_epoch
-        ):
+        if continuity_epoch >= 0 and existing.continuity_epoch > 0 and continuity_epoch < existing.continuity_epoch:
             # Presented era regressed — treat as a new attachment to avoid
             # cross-era continuity confusion on reconnect/resume.
             logger.warning(
@@ -1700,6 +1670,7 @@ def classify_reconnect_outcome(
     # Fallback: no explicit attachment id; treat existing session as continuity resume
     # (backward compatible with older Android clients)
     return (_RECONNECT_OUTCOME_CONTINUITY_RESUME, existing)
+
 
 # ---------------------------------------------------------------------------
 # Core API — update_session_posture  (Android posture gating)

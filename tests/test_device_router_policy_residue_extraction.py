@@ -20,12 +20,8 @@ async def test_route_task_uses_explicit_target_devices_without_local_selection()
         raise AssertionError("_select_devices should not run")
 
     router._select_devices = _unexpected_select  # type: ignore[method-assign]
-    router._analyze_command = AsyncMock(
-        side_effect=AssertionError("_analyze_command should not run")
-    )
-    router.dispatch_task = AsyncMock(
-        return_value={"success": True, "task_id": "t1"}
-    )  # type: ignore[method-assign]
+    router._analyze_command = AsyncMock(side_effect=AssertionError("_analyze_command should not run"))
+    router.dispatch_task = AsyncMock(return_value={"success": True, "task_id": "t1"})  # type: ignore[method-assign]
 
     result = await router.route_task(
         "open settings",

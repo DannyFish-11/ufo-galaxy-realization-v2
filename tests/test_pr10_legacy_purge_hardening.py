@@ -107,32 +107,32 @@ class TestLegacyPurgeRegistry:
 
     def test_registry_non_empty(self):
         from core.legacy_purge_registry import PURGE_REGISTRY
+
         assert len(PURGE_REGISTRY) >= 10, (
-            "PURGE_REGISTRY must have at least 10 entries covering PR-3 "
-            "through PR-10 decisions"
+            "PURGE_REGISTRY must have at least 10 entries covering PR-3 " "through PR-10 decisions"
         )
 
     def test_all_entries_have_asset_path(self):
         from core.legacy_purge_registry import PURGE_REGISTRY
+
         for entry in PURGE_REGISTRY:
             assert entry.asset_path, f"Missing asset_path on entry {entry}"
 
     def test_all_entries_have_pr(self):
         from core.legacy_purge_registry import PURGE_REGISTRY
+
         for entry in PURGE_REGISTRY:
-            assert entry.pr.startswith("PR-"), (
-                f"entry.pr must be 'PR-N' format, got {entry.pr!r}"
-            )
+            assert entry.pr.startswith("PR-"), f"entry.pr must be 'PR-N' format, got {entry.pr!r}"
 
     def test_all_entries_have_rationale(self):
         from core.legacy_purge_registry import PURGE_REGISTRY
+
         for entry in PURGE_REGISTRY:
-            assert len(entry.rationale) >= 20, (
-                f"entry rationale is too short for {entry.asset_path!r}"
-            )
+            assert len(entry.rationale) >= 20, f"entry rationale is too short for {entry.asset_path!r}"
 
     def test_purge_status_enum_values(self):
         from core.legacy_purge_registry import PurgeStatus
+
         expected = {
             "hard_disabled",
             "permanently_isolated",
@@ -145,19 +145,21 @@ class TestLegacyPurgeRegistry:
 
     def test_pr10_entries_present(self):
         from core.legacy_purge_registry import get_entries_by_pr
+
         pr10 = get_entries_by_pr("PR-10")
         assert len(pr10) >= 2, (
-            "Expected at least 2 PR-10 entries "
-            "(start_galaxy.py dead ref removal + wrapper hardening)"
+            "Expected at least 2 PR-10 entries " "(start_galaxy.py dead ref removal + wrapper hardening)"
         )
 
     def test_pr3_entries_present(self):
         from core.legacy_purge_registry import get_entries_by_pr
+
         pr3 = get_entries_by_pr("PR-3")
         assert len(pr3) >= 7, "Expected at least 7 PR-3 hard-disable entries"
 
     def test_get_purge_entry_found(self):
-        from core.legacy_purge_registry import get_purge_entry, PurgeStatus
+        from core.legacy_purge_registry import PurgeStatus, get_purge_entry
+
         entry = get_purge_entry("start_galaxy.py::_start_desktop()")
         assert entry is not None
         assert entry.status == PurgeStatus.DEAD_REFERENCE_REMOVED
@@ -165,30 +167,33 @@ class TestLegacyPurgeRegistry:
 
     def test_get_purge_entry_missing(self):
         from core.legacy_purge_registry import get_purge_entry
+
         assert get_purge_entry("nonexistent/asset.py") is None
 
     def test_get_entries_by_status_hard_disabled(self):
-        from core.legacy_purge_registry import get_entries_by_status, PurgeStatus
+        from core.legacy_purge_registry import PurgeStatus, get_entries_by_status
+
         entries = get_entries_by_status(PurgeStatus.HARD_DISABLED)
         assert len(entries) >= 7, "Expected at least 7 HARD_DISABLED entries"
 
     def test_get_entries_by_status_wrapper_hardened(self):
-        from core.legacy_purge_registry import get_entries_by_status, PurgeStatus
+        from core.legacy_purge_registry import PurgeStatus, get_entries_by_status
+
         entries = get_entries_by_status(PurgeStatus.WRAPPER_HARDENED)
         # start_galaxy.py and start_l4.py have been fully removed (PERMANENTLY_ISOLATED).
         # Other wrapper-hardened entries (e.g. gateway, task-router) must still be present.
         assert len(entries) >= 1, "Expected at least 1 WRAPPER_HARDENED entry"
 
     def test_run_ui_entry_hard_disabled(self):
-        from core.legacy_purge_registry import get_purge_entry, PurgeStatus
-        entry = get_purge_entry(
-            "enhancements/clients/windows_client/run_ui.py"
-        )
+        from core.legacy_purge_registry import PurgeStatus, get_purge_entry
+
+        entry = get_purge_entry("enhancements/clients/windows_client/run_ui.py")
         assert entry is not None
         assert entry.status == PurgeStatus.HARD_DISABLED
 
     def test_dashboard_entry_legacy_marker(self):
-        from core.legacy_purge_registry import get_purge_entry, PurgeStatus
+        from core.legacy_purge_registry import PurgeStatus, get_purge_entry
+
         entry = get_purge_entry("dashboard/")
         assert entry is not None
         assert entry.status == PurgeStatus.LEGACY_MARKER_ADDED
@@ -209,30 +214,30 @@ class TestStartGalaxyFullyRemoved:
         )
 
     def test_canonical_entry_main_py_exists(self):
-        assert (_ROOT / "main.py").exists(), (
-            "main.py (authoritative startup entry) must still exist"
-        )
+        assert (_ROOT / "main.py").exists(), "main.py (authoritative startup entry) must still exist"
 
     def test_canonical_entry_unified_launcher_exists(self):
-        assert (_ROOT / "unified_launcher.py").exists(), (
-            "unified_launcher.py (authoritative startup entry) must still exist"
-        )
+        assert (
+            _ROOT / "unified_launcher.py"
+        ).exists(), "unified_launcher.py (authoritative startup entry) must still exist"
 
     def test_purge_registry_has_start_galaxy_entry(self):
         """start_galaxy.py::_start_desktop() must still appear in the purge registry."""
-        from core.legacy_purge_registry import get_purge_entry, PurgeStatus
+        from core.legacy_purge_registry import PurgeStatus, get_purge_entry
+
         entry = get_purge_entry("start_galaxy.py::_start_desktop()")
         assert entry is not None
         assert entry.status == PurgeStatus.DEAD_REFERENCE_REMOVED
 
     def test_purge_registry_start_galaxy_classified_isolated(self):
         """start_galaxy.py wrapper entry must now be PERMANENTLY_ISOLATED."""
-        from core.legacy_purge_registry import get_purge_entry, PurgeStatus
+        from core.legacy_purge_registry import PurgeStatus, get_purge_entry
+
         entry = get_purge_entry("start_galaxy.py")
         assert entry is not None
-        assert entry.status == PurgeStatus.PERMANENTLY_ISOLATED, (
-            f"start_galaxy.py must be PERMANENTLY_ISOLATED, got {entry.status}"
-        )
+        assert (
+            entry.status == PurgeStatus.PERMANENTLY_ISOLATED
+        ), f"start_galaxy.py must be PERMANENTLY_ISOLATED, got {entry.status}"
 
 
 # ===========================================================================
@@ -251,12 +256,13 @@ class TestStartL4FullyRemoved:
 
     def test_purge_registry_start_l4_classified_isolated(self):
         """start_l4.py wrapper entry must now be PERMANENTLY_ISOLATED."""
-        from core.legacy_purge_registry import get_purge_entry, PurgeStatus
+        from core.legacy_purge_registry import PurgeStatus, get_purge_entry
+
         entry = get_purge_entry("start_l4.py")
         assert entry is not None
-        assert entry.status == PurgeStatus.PERMANENTLY_ISOLATED, (
-            f"start_l4.py must be PERMANENTLY_ISOLATED, got {entry.status}"
-        )
+        assert (
+            entry.status == PurgeStatus.PERMANENTLY_ISOLATED
+        ), f"start_l4.py must be PERMANENTLY_ISOLATED, got {entry.status}"
 
 
 # ===========================================================================
@@ -267,19 +273,22 @@ class TestStartL4FullyRemoved:
 class TestHardDisabledStubsUnchanged:
     """Regression: windows_client hard-disabled stubs still raise RuntimeError."""
 
-    @pytest.mark.parametrize("module_name", [
-        "windows_client.client",
-        "windows_client.ui_sidebar",
-        "windows_client.desktop_automation",
-        "windows_client.windows_mcp_server",
-        "windows_client.main",
-        "windows_client.windows_client_integrated",
-        "windows_client.key_listener",
-    ])
+    @pytest.mark.parametrize(
+        "module_name",
+        [
+            "windows_client.client",
+            "windows_client.ui_sidebar",
+            "windows_client.desktop_automation",
+            "windows_client.windows_mcp_server",
+            "windows_client.main",
+            "windows_client.windows_client_integrated",
+            "windows_client.key_listener",
+        ],
+    )
     def test_module_still_hard_disabled(self, module_name):
-        assert _import_raises_runtime_error(module_name), (
-            f"{module_name} must still raise RuntimeError on import (hard-disabled stub)"
-        )
+        assert _import_raises_runtime_error(
+            module_name
+        ), f"{module_name} must still raise RuntimeError on import (hard-disabled stub)"
 
 
 # ===========================================================================
@@ -293,9 +302,7 @@ class TestRunUiStillHardDisabled:
     def test_run_ui_still_hard_disabled(self):
         assert _import_raises_runtime_error(
             "enhancements.clients.windows_client.run_ui"
-        ), (
-            "enhancements/clients/windows_client/run_ui.py must still be hard-disabled"
-        )
+        ), "enhancements/clients/windows_client/run_ui.py must still be hard-disabled"
 
 
 # ===========================================================================
@@ -321,9 +328,9 @@ class TestLegacyMarkerFiles:
         assert (_ROOT / "enhancements" / "LEGACY_TRANSITION.md").exists()
 
     def test_windows_client_legacy_dir_exists(self):
-        assert (_ROOT / "windows_client" / "_legacy").is_dir(), (
-            "windows_client/_legacy/ directory must exist (PR-3 isolation)"
-        )
+        assert (
+            _ROOT / "windows_client" / "_legacy"
+        ).is_dir(), "windows_client/_legacy/ directory must exist (PR-3 isolation)"
 
 
 # ===========================================================================
@@ -336,6 +343,7 @@ class TestPurgeRegistrySummary:
 
     def test_summary_keys(self):
         from core.legacy_purge_registry import purge_registry_summary
+
         summary = purge_registry_summary()
         assert "total_entries" in summary
         assert "by_status" in summary
@@ -343,32 +351,39 @@ class TestPurgeRegistrySummary:
 
     def test_total_entries_positive(self):
         from core.legacy_purge_registry import purge_registry_summary
+
         summary = purge_registry_summary()
         assert summary["total_entries"] >= 10
 
     def test_by_pr_includes_pr10(self):
         from core.legacy_purge_registry import purge_registry_summary
+
         summary = purge_registry_summary()
         assert "PR-10" in summary["by_pr"]
 
     def test_by_pr_includes_pr3(self):
         from core.legacy_purge_registry import purge_registry_summary
+
         summary = purge_registry_summary()
         assert "PR-3" in summary["by_pr"]
 
     def test_by_status_includes_hard_disabled(self):
         from core.legacy_purge_registry import purge_registry_summary
+
         summary = purge_registry_summary()
         assert "hard_disabled" in summary["by_status"]
 
     def test_by_status_includes_dead_reference_removed(self):
         from core.legacy_purge_registry import purge_registry_summary
+
         summary = purge_registry_summary()
         assert "dead_reference_removed" in summary["by_status"]
 
     def test_summary_serializable(self):
         import json
+
         from core.legacy_purge_registry import purge_registry_summary
+
         summary = purge_registry_summary()
         # Should not raise
         json.dumps(summary)
@@ -449,8 +464,7 @@ class TestArchitectureBaselineUpdated:
     def test_references_pr010(self):
         text = _file_text("docs/ARCHITECTURE_BASELINE.md")
         assert "PR-010" in text or "PR-10" in text, (
-            "docs/ARCHITECTURE_BASELINE.md must reference PR-010/PR-10 "
-            "as the consolidation pass"
+            "docs/ARCHITECTURE_BASELINE.md must reference PR-010/PR-10 " "as the consolidation pass"
         )
 
     def test_authority_chain_present(self):

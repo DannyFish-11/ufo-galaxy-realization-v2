@@ -48,6 +48,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     def _get_engine():
         if not _engine_holder:
             from core.opencode_engine import OpenCodeEngine
+
             _engine_holder.append(OpenCodeEngine())
         return _engine_holder[0]
 

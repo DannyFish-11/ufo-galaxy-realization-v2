@@ -48,8 +48,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from core.config_schema import (
-    ConfigDefaults,
     SECRET_KEYS,
+    ConfigDefaults,
     classify_key,
 )
 
@@ -89,6 +89,7 @@ class ConfigStoreError(RuntimeError):
 # ---------------------------------------------------------------------------
 # Store
 # ---------------------------------------------------------------------------
+
 
 class ConfigStore:
     """
@@ -283,8 +284,7 @@ class ConfigStore:
         for key in data:
             if classify_key(key) == "config":
                 raise NonSecretInSecretsError(
-                    f"Key '{key}' is a non-secret config value and must not be "
-                    "stored in runtime/secrets.env."
+                    f"Key '{key}' is a non-secret config value and must not be " "stored in runtime/secrets.env."
                 )
         with self._lock:
             self._secrets_path.parent.mkdir(parents=True, exist_ok=True)
@@ -303,9 +303,7 @@ class ConfigStore:
             try:
                 with open(self._secrets_path, "w", encoding="utf-8") as fh:
                     fh.write(self._render_dotenv(existing, header=header))
-                logger.info(
-                    "runtime/secrets.env written (%d keys total)", len(existing)
-                )
+                logger.info("runtime/secrets.env written (%d keys total)", len(existing))
             except OSError as exc:
                 raise ConfigStoreError(f"Cannot write runtime/secrets.env: {exc}") from exc
 

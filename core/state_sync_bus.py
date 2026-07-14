@@ -34,6 +34,7 @@ Usage::
         payload={"device_type": "android"},
     ))
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -46,8 +47,9 @@ logger = logging.getLogger("Galaxy.StateSyncBus")
 
 # PR-AIPV3: AIP v3 unified message emission
 try:
-    from core.schemas.aip_v3 import StateEventMsg  # noqa: F401
     from core.nats_bus import get_nats_bus  # noqa: F401
+    from core.schemas.aip_v3 import StateEventMsg  # noqa: F401
+
     _AIPV3_AVAILABLE = True
 except ImportError:
     _AIPV3_AVAILABLE = False
@@ -318,7 +320,7 @@ class StateSynchronizationBus:
         try:
             from core.capability_bus import get_capability_bus  # noqa: PLC0415
 
-            bus = get_capability_bus()
+            get_capability_bus()
             capability_name = event.payload.get("capability_name", "")
             if capability_name:
                 # Capability is already registered via CapabilityBus.publish

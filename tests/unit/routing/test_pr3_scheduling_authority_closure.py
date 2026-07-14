@@ -24,9 +24,9 @@ Covers:
 
 from __future__ import annotations
 
-import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # ===========================================================================
 # A) GAP-512-004 closure: CommandRouter capability graph enforcement
@@ -62,9 +62,7 @@ class TestCommandRouterCapabilityGraphEnforcement:
                 blocked_device_ids=[],
                 block_reason="",
                 blocked_slots=[],
-                approved_slots=[
-                    SimpleNamespace(device_id=d, slot_approved=True) for d in ids
-                ],
+                approved_slots=[SimpleNamespace(device_id=d, slot_approved=True) for d in ids],
             )
 
         with patch(
@@ -76,9 +74,9 @@ class TestCommandRouterCapabilityGraphEnforcement:
     @pytest.mark.asyncio
     async def test_confirmed_target_proceeds_unchanged(self):
         """When the capability graph confirms the target, routing proceeds unchanged."""
+        from core.capability_network_runtime_policy import RoutableExecutor
         from core.command_router import CommandRouter
         from core.schemas.task_envelope import TaskEnvelope
-        from core.capability_network_runtime_policy import RoutableExecutor
 
         async def fake_exec(device_id, command, params):
             return {"success": True, "result": "ok", "device_id": device_id}
@@ -113,9 +111,9 @@ class TestCommandRouterCapabilityGraphEnforcement:
     @pytest.mark.asyncio
     async def test_unconfirmed_target_filtered_when_confirmed_exists(self):
         """Unconfirmed targets are removed when confirmed ones exist in the graph."""
+        from core.capability_network_runtime_policy import RoutableExecutor
         from core.command_router import CommandRouter
         from core.schemas.task_envelope import TaskEnvelope
-        from core.capability_network_runtime_policy import RoutableExecutor
 
         dispatched_device_ids = []
 
@@ -219,9 +217,9 @@ class TestCommandRouterCapabilityGraphEnforcement:
         所需能力时，不静默放行到不具能力的原始目标，而是回退到能力图中的可用替代
         （有替代→重定向；无替代→CAPABILITY_MISMATCH 拒绝）。此前"proceed with original"
         的契约已被该更安全的重定向语义取代。"""
+        from core.capability_network_runtime_policy import RoutableExecutor
         from core.command_router import CommandRouter
         from core.schemas.task_envelope import TaskEnvelope
-        from core.capability_network_runtime_policy import RoutableExecutor
 
         async def fake_exec(device_id, command, params):
             return {"success": True, "result": "ok", "device_id": device_id}
@@ -394,9 +392,9 @@ class TestQueryCapableDeviceExecutors:
     def _register_mixed_entries(self) -> "CapabilityAssimilationLayer":
         """Register one WORKER node and one DEVICE node, then return the layer."""
         from core.capability_assimilation import (
+            NodeParticipantKind,
             get_capability_assimilation_layer,
             reset_capability_assimilation_layer,
-            NodeParticipantKind,
         )
 
         reset_capability_assimilation_layer()
@@ -420,8 +418,8 @@ class TestQueryCapableDeviceExecutors:
 
     def test_returns_only_device_kind_entries(self):
         """query_capable_device_executors returns only DEVICE-kind entries."""
-        from core.capability_network_runtime_policy import query_capable_device_executors
         from core.capability_assimilation import reset_capability_assimilation_layer
+        from core.capability_network_runtime_policy import query_capable_device_executors
 
         self._register_mixed_entries()
         try:
@@ -435,12 +433,12 @@ class TestQueryCapableDeviceExecutors:
 
     def test_capability_filter_applied_to_device_entries(self):
         """query_capable_device_executors filters by required_capabilities."""
-        from core.capability_network_runtime_policy import query_capable_device_executors
         from core.capability_assimilation import (
+            NodeParticipantKind,
             get_capability_assimilation_layer,
             reset_capability_assimilation_layer,
-            NodeParticipantKind,
         )
+        from core.capability_network_runtime_policy import query_capable_device_executors
 
         reset_capability_assimilation_layer()
         layer = get_capability_assimilation_layer()
@@ -466,12 +464,12 @@ class TestQueryCapableDeviceExecutors:
 
     def test_returns_empty_when_no_device_entries(self):
         """query_capable_device_executors returns empty list when no devices assimilated."""
-        from core.capability_network_runtime_policy import query_capable_device_executors
         from core.capability_assimilation import (
+            NodeParticipantKind,
             get_capability_assimilation_layer,
             reset_capability_assimilation_layer,
-            NodeParticipantKind,
         )
+        from core.capability_network_runtime_policy import query_capable_device_executors
 
         reset_capability_assimilation_layer()
         layer = get_capability_assimilation_layer()
@@ -491,12 +489,12 @@ class TestQueryCapableDeviceExecutors:
 
     def test_query_routable_executors_includes_device_kind(self):
         """The generic query_routable_executors includes DEVICE-kind entries too."""
-        from core.capability_network_runtime_policy import query_routable_executors
         from core.capability_assimilation import (
+            NodeParticipantKind,
             get_capability_assimilation_layer,
             reset_capability_assimilation_layer,
-            NodeParticipantKind,
         )
+        from core.capability_network_runtime_policy import query_routable_executors
 
         reset_capability_assimilation_layer()
         layer = get_capability_assimilation_layer()
@@ -528,20 +526,16 @@ class TestQueryCapableDeviceExecutors:
         in one canonical scheduling comparison framework (AC1 of PR-3).
         """
         from core.capability_assimilation import (
+            NodeParticipantKind,
             get_capability_assimilation_layer,
             reset_capability_assimilation_layer,
-            NodeParticipantKind,
         )
 
         reset_capability_assimilation_layer()
         layer = get_capability_assimilation_layer()
 
-        layer.assimilate(
-            "node_x", capabilities=["compute"], participant_kind=NodeParticipantKind.WORKER
-        )
-        layer.assimilate(
-            "device_x", capabilities=["screen"], participant_kind=NodeParticipantKind.DEVICE
-        )
+        layer.assimilate("node_x", capabilities=["compute"], participant_kind=NodeParticipantKind.WORKER)
+        layer.assimilate("device_x", capabilities=["screen"], participant_kind=NodeParticipantKind.DEVICE)
 
         try:
             records = layer.list_online_records()

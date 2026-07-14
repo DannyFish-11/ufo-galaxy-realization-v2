@@ -34,6 +34,7 @@ Usage::
     recent = registry.list_recent(limit=50)
     stats = registry.get_decision_stats()
 """
+
 from __future__ import annotations
 
 import logging
@@ -51,9 +52,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Sentinel
 # ---------------------------------------------------------------------------
-DEVICE_ACTIVATION_REGISTRY_SENTINEL = (
-    "DEVICE_ACTIVATION_REGISTRY::OBSERVE_ONLY_DECISION_TRACING"
-)
+DEVICE_ACTIVATION_REGISTRY_SENTINEL = "DEVICE_ACTIVATION_REGISTRY::OBSERVE_ONLY_DECISION_TRACING"
 
 
 # ---------------------------------------------------------------------------
@@ -101,9 +100,7 @@ class ResolutionRecord:
             "trace_id": self.trace_id,
             "correlation_id": self.correlation_id,
             "timestamp": self.timestamp,
-            "timestamp_iso": time.strftime(
-                "%Y-%m-%dT%H:%M:%S", time.localtime(self.timestamp)
-            ),
+            "timestamp_iso": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(self.timestamp)),
             "source_event": self.source_event,
             "source_module": self.source_module,
             "device": {
@@ -369,10 +366,7 @@ class DeviceActivationRegistry:
 
     def get_unresolved(self, limit: int = 50) -> List[ResolutionRecord]:
         """Return records where no mapping was found."""
-        return [
-            r for r in self._records
-            if r.selected_node is None
-        ][-limit:]
+        return [r for r in self._records if r.selected_node is None][-limit:]
 
     def export_json(self, limit: int = 1_000) -> List[Dict[str, Any]]:
         """Export recent records as JSON-serializable dicts."""
@@ -388,14 +382,10 @@ class DeviceActivationRegistry:
                 self._node_stats[record.selected_node]["starts"] += 1
 
         if record.activation_policy:
-            self._policy_stats[record.activation_policy] = (
-                self._policy_stats.get(record.activation_policy, 0) + 1
-            )
+            self._policy_stats[record.activation_policy] = self._policy_stats.get(record.activation_policy, 0) + 1
 
         if record.device_type:
-            self._device_type_stats[record.device_type] = (
-                self._device_type_stats.get(record.device_type, 0) + 1
-            )
+            self._device_type_stats[record.device_type] = self._device_type_stats.get(record.device_type, 0) + 1
 
 
 # ---------------------------------------------------------------------------

@@ -427,6 +427,7 @@ def _call_continuity_coordinator_scenario(
             ContinuityEventKind,
             FlowContinuityCoordinator,
         )
+
         coordinator = FlowContinuityCoordinator(capacity=32)
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.from_string(event_kind),
@@ -440,9 +441,7 @@ def _call_continuity_coordinator_scenario(
             "detail": artifact.detail,
         }
     except Exception as exc:
-        logger.warning(
-            "RecoveryClosureValidator: scenario %r failed: %s", event_kind, exc
-        )
+        logger.warning("RecoveryClosureValidator: scenario %r failed: %s", event_kind, exc)
         return {"decision": "fail_closed", "artifact_id": "", "policy_reference": "", "detail": str(exc)}
 
 
@@ -469,6 +468,7 @@ def _call_signal_guard_scenario(
             check_signal_guard,
             record_seen_signal,
         )
+
         runtime = RecoveryReadinessRuntime()
         if prior_signal_id:
             prior_key = build_idempotency_key(
@@ -501,9 +501,10 @@ def _call_delegated_flow_recovery_scenario(
     try:
         from core.delegated_flow_recovery_coordinator import (
             DelegatedFlowRecoveryCoordinator,
-            RecoveryTriggerContext,
             RecoveryTrigger,
+            RecoveryTriggerContext,
         )
+
         coordinator = DelegatedFlowRecoveryCoordinator(capacity=32)
         ctx = RecoveryTriggerContext(
             flow_id=flow_id,
@@ -546,11 +547,7 @@ def _build_rs01_v2_restart_durable_flow() -> RecoveryScenarioEntry:
     # recovery_completed=False MUST give require_review (not yet done)
     expected = "require_review"
     obs = evidence["decision"]
-    status = (
-        RecoveryScenarioStatus.closed
-        if obs == expected
-        else RecoveryScenarioStatus.fail_closed
-    )
+    status = RecoveryScenarioStatus.closed if obs == expected else RecoveryScenarioStatus.fail_closed
     return RecoveryScenarioEntry(
         scenario_id="RS-01",
         scenario_name="V2 restart — recovery not yet completed → require_review",
@@ -578,11 +575,7 @@ def _build_rs02_v2_restart_no_durable_flow() -> RecoveryScenarioEntry:
     )
     expected = "new_attachment"
     obs = evidence["decision"]
-    status = (
-        RecoveryScenarioStatus.closed
-        if obs == expected
-        else RecoveryScenarioStatus.advisory
-    )
+    status = RecoveryScenarioStatus.closed if obs == expected else RecoveryScenarioStatus.advisory
     return RecoveryScenarioEntry(
         scenario_id="RS-02",
         scenario_name="V2 restart — recovery done, no durable flow → new_attachment",
@@ -611,11 +604,7 @@ def _build_rs03_transport_reconnect_preserved() -> RecoveryScenarioEntry:
     )
     obs = evidence["decision"]
     expected_set = {"continuity_resume", "new_attachment", "fail_closed"}
-    status = (
-        RecoveryScenarioStatus.closed
-        if obs in expected_set
-        else RecoveryScenarioStatus.advisory
-    )
+    status = RecoveryScenarioStatus.closed if obs in expected_set else RecoveryScenarioStatus.advisory
     return RecoveryScenarioEntry(
         scenario_id="RS-03",
         scenario_name="Transport reconnect — attachment ID present → bounded decision",
@@ -644,11 +633,7 @@ def _build_rs04_transport_reconnect_no_attachment() -> RecoveryScenarioEntry:
     )
     obs = evidence["decision"]
     expected_set = {"require_review", "new_attachment", "fail_closed"}
-    status = (
-        RecoveryScenarioStatus.closed
-        if obs in expected_set
-        else RecoveryScenarioStatus.advisory
-    )
+    status = RecoveryScenarioStatus.closed if obs in expected_set else RecoveryScenarioStatus.advisory
     return RecoveryScenarioEntry(
         scenario_id="RS-04",
         scenario_name="Transport reconnect — no attachment ID → require_review or safe default",
@@ -678,11 +663,7 @@ def _build_rs05_stale_identity() -> RecoveryScenarioEntry:
     )
     obs = evidence["decision"]
     expected = "reject_stale_identity"
-    status = (
-        RecoveryScenarioStatus.closed
-        if obs == expected
-        else RecoveryScenarioStatus.advisory
-    )
+    status = RecoveryScenarioStatus.closed if obs == expected else RecoveryScenarioStatus.advisory
     return RecoveryScenarioEntry(
         scenario_id="RS-05",
         scenario_name="Stale identity signal → reject_stale_identity (non-destructive)",
@@ -721,16 +702,10 @@ def _build_rs06_duplicate_signal() -> RecoveryScenarioEntry:
     obs = evidence["decision"]
     # Novel signal with no prior tracker record → continuity_resume (pass through)
     expected = "continuity_resume"
-    status = (
-        RecoveryScenarioStatus.closed
-        if obs == expected
-        else RecoveryScenarioStatus.advisory
-    )
+    status = RecoveryScenarioStatus.closed if obs == expected else RecoveryScenarioStatus.advisory
     return RecoveryScenarioEntry(
         scenario_id="RS-06",
-        scenario_name=(
-            "Novel signal (no prior ack record) → continuity_resume (pass through)"
-        ),
+        scenario_name=("Novel signal (no prior ack record) → continuity_resume (pass through)"),
         event_kind="duplicate_signal",
         decision_path="FlowContinuityCoordinator.decide_duplicate_signal",
         expected_decision=expected,
@@ -761,11 +736,7 @@ def _build_rs07_partial_result() -> RecoveryScenarioEntry:
     )
     obs = evidence["decision"]
     expected = "preserve_partial_and_wait"
-    status = (
-        RecoveryScenarioStatus.closed
-        if obs == expected
-        else RecoveryScenarioStatus.advisory
-    )
+    status = RecoveryScenarioStatus.closed if obs == expected else RecoveryScenarioStatus.advisory
     return RecoveryScenarioEntry(
         scenario_id="RS-07",
         scenario_name="Partial-result signal → preserve_partial_and_wait",
@@ -797,11 +768,7 @@ def _build_rs08_delegated_flow_resume() -> RecoveryScenarioEntry:
     )
     obs = evidence["action"]
     expected = "resume_in_place"
-    status = (
-        RecoveryScenarioStatus.closed
-        if obs == expected
-        else RecoveryScenarioStatus.advisory
-    )
+    status = RecoveryScenarioStatus.closed if obs == expected else RecoveryScenarioStatus.advisory
     return RecoveryScenarioEntry(
         scenario_id="RS-08",
         scenario_name="Delegated flow recovery — continuity_resume → resume_in_place",
@@ -838,21 +805,13 @@ def _build_rs09_delegated_flow_checkpoint_replay() -> RecoveryScenarioEntry:
     )
     obs = evidence["action"]
     expected = "replay_from_checkpoint"
-    status = (
-        RecoveryScenarioStatus.closed
-        if obs == expected
-        else RecoveryScenarioStatus.advisory
-    )
+    status = RecoveryScenarioStatus.closed if obs == expected else RecoveryScenarioStatus.advisory
     return RecoveryScenarioEntry(
         scenario_id="RS-09",
-        scenario_name=(
-            "Delegated flow recovery — checkpoint available, binding released "
-            "→ replay_from_checkpoint"
-        ),
+        scenario_name=("Delegated flow recovery — checkpoint available, binding released " "→ replay_from_checkpoint"),
         event_kind="android_binding_lost",
         decision_path=(
-            "DelegatedFlowRecoveryCoordinator.decide → "
-            "checkpoint_available=True → replay_from_checkpoint"
+            "DelegatedFlowRecoveryCoordinator.decide → " "checkpoint_available=True → replay_from_checkpoint"
         ),
         expected_decision=expected,
         observed_decision=obs,
@@ -879,22 +838,12 @@ def _build_rs10_delegated_flow_redispatch() -> RecoveryScenarioEntry:
     )
     obs = evidence["action"]
     expected = "redispatch_runtime"
-    status = (
-        RecoveryScenarioStatus.closed
-        if obs == expected
-        else RecoveryScenarioStatus.advisory
-    )
+    status = RecoveryScenarioStatus.closed if obs == expected else RecoveryScenarioStatus.advisory
     return RecoveryScenarioEntry(
         scenario_id="RS-10",
-        scenario_name=(
-            "Delegated flow recovery — binding released, no checkpoint "
-            "→ redispatch_runtime"
-        ),
+        scenario_name=("Delegated flow recovery — binding released, no checkpoint " "→ redispatch_runtime"),
         event_kind="android_binding_lost",
-        decision_path=(
-            "DelegatedFlowRecoveryCoordinator.decide → binding_state=released → "
-            "redispatch_runtime"
-        ),
+        decision_path=("DelegatedFlowRecoveryCoordinator.decide → binding_state=released → " "redispatch_runtime"),
         expected_decision=expected,
         observed_decision=obs,
         status=status,
@@ -919,21 +868,13 @@ def _build_rs11_delegated_flow_partial_preserve() -> RecoveryScenarioEntry:
     )
     obs = evidence["action"]
     expected = "preserve_partial_then_resume"
-    status = (
-        RecoveryScenarioStatus.closed
-        if obs == expected
-        else RecoveryScenarioStatus.advisory
-    )
+    status = RecoveryScenarioStatus.closed if obs == expected else RecoveryScenarioStatus.advisory
     return RecoveryScenarioEntry(
         scenario_id="RS-11",
-        scenario_name=(
-            "Delegated flow recovery — partial result detected "
-            "→ preserve_partial_then_resume"
-        ),
+        scenario_name=("Delegated flow recovery — partial result detected " "→ preserve_partial_then_resume"),
         event_kind="android_result_received",
         decision_path=(
-            "DelegatedFlowRecoveryCoordinator.decide → has_partial_result=True "
-            "→ preserve_partial_then_resume"
+            "DelegatedFlowRecoveryCoordinator.decide → has_partial_result=True " "→ preserve_partial_then_resume"
         ),
         expected_decision=expected,
         observed_decision=obs,
@@ -959,18 +900,12 @@ def _build_rs12_signal_guard_duplicate() -> RecoveryScenarioEntry:
     )
     obs = evidence["decision"]
     expected = "duplicate"
-    status = (
-        RecoveryScenarioStatus.closed
-        if obs == expected
-        else RecoveryScenarioStatus.fail_closed
-    )
+    status = RecoveryScenarioStatus.closed if obs == expected else RecoveryScenarioStatus.fail_closed
     return RecoveryScenarioEntry(
         scenario_id="RS-12",
         scenario_name="Signal guard — duplicate signal_id → duplicate (reject)",
         event_kind="inbound_android_signal",
-        decision_path=(
-            "attached_runtime_recovery_readiness.guard_inbound_signal → duplicate"
-        ),
+        decision_path=("attached_runtime_recovery_readiness.guard_inbound_signal → duplicate"),
         expected_decision=expected,
         observed_decision=obs,
         status=status,
@@ -987,6 +922,7 @@ def _build_rs12_signal_guard_duplicate() -> RecoveryScenarioEntry:
 def _build_rs13_signal_guard_stale() -> RecoveryScenarioEntry:
     """RS-13: Inbound signal guard — stale emission_seq → stale."""
     from core.attached_runtime_recovery_readiness import STALE_EMISSION_SEQ_THRESHOLD
+
     stale_seq = 100
     current_seq = stale_seq + STALE_EMISSION_SEQ_THRESHOLD + 1
     # Record the current high-water mark first
@@ -999,18 +935,12 @@ def _build_rs13_signal_guard_stale() -> RecoveryScenarioEntry:
     )
     obs = evidence["decision"]
     expected = "stale"
-    status = (
-        RecoveryScenarioStatus.closed
-        if obs == expected
-        else RecoveryScenarioStatus.fail_closed
-    )
+    status = RecoveryScenarioStatus.closed if obs == expected else RecoveryScenarioStatus.fail_closed
     return RecoveryScenarioEntry(
         scenario_id="RS-13",
         scenario_name="Signal guard — emission_seq far behind max → stale (reject)",
         event_kind="inbound_android_signal",
-        decision_path=(
-            "attached_runtime_recovery_readiness.guard_inbound_signal → stale"
-        ),
+        decision_path=("attached_runtime_recovery_readiness.guard_inbound_signal → stale"),
         expected_decision=expected,
         observed_decision=obs,
         status=status,
@@ -1036,21 +966,12 @@ def _build_rs14_signal_guard_replay() -> RecoveryScenarioEntry:
     )
     obs = evidence["decision"]
     expected = "replay"
-    status = (
-        RecoveryScenarioStatus.closed
-        if obs == expected
-        else RecoveryScenarioStatus.fail_closed
-    )
+    status = RecoveryScenarioStatus.closed if obs == expected else RecoveryScenarioStatus.fail_closed
     return RecoveryScenarioEntry(
         scenario_id="RS-14",
-        scenario_name=(
-            "Signal guard — same emission_seq, different signal_id "
-            "→ replay (reject)"
-        ),
+        scenario_name=("Signal guard — same emission_seq, different signal_id " "→ replay (reject)"),
         event_kind="inbound_android_signal",
-        decision_path=(
-            "attached_runtime_recovery_readiness.guard_inbound_signal → replay"
-        ),
+        decision_path=("attached_runtime_recovery_readiness.guard_inbound_signal → replay"),
         expected_decision=expected,
         observed_decision=obs,
         status=status,
@@ -1075,20 +996,12 @@ def _build_rs15_signal_guard_accept() -> RecoveryScenarioEntry:
     )
     obs = evidence["decision"]
     expected = "accept"
-    status = (
-        RecoveryScenarioStatus.closed
-        if obs == expected
-        else RecoveryScenarioStatus.fail_closed
-    )
+    status = RecoveryScenarioStatus.closed if obs == expected else RecoveryScenarioStatus.fail_closed
     return RecoveryScenarioEntry(
         scenario_id="RS-15",
-        scenario_name=(
-            "Signal guard — new signal_id, emission_seq > max → accept"
-        ),
+        scenario_name=("Signal guard — new signal_id, emission_seq > max → accept"),
         event_kind="inbound_android_signal",
-        decision_path=(
-            "attached_runtime_recovery_readiness.guard_inbound_signal → accept"
-        ),
+        decision_path=("attached_runtime_recovery_readiness.guard_inbound_signal → accept"),
         expected_decision=expected,
         observed_decision=obs,
         status=status,
@@ -1113,9 +1026,10 @@ def _build_rs16_offline_queue_ordering_deferred() -> RecoveryScenarioEntry:
     """
     try:
         from core.offline_replay_ordering_contract import (
-            build_offline_replay_ordering_report,
             OfflineReplayContractVerdict,
+            build_offline_replay_ordering_report,
         )
+
         rpt = build_offline_replay_ordering_report()
         obs = rpt.verdict.value
         # The baseline report always yields contract_not_yet_evidenced;
@@ -1128,11 +1042,7 @@ def _build_rs16_offline_queue_ordering_deferred() -> RecoveryScenarioEntry:
                 "defined (advisory; live drain evidence pending)"
             ),
             event_kind="android_offline_queue_drain",
-            decision_path=(
-                "core.offline_replay_ordering_contract."
-                "build_offline_replay_ordering_report → "
-                + obs
-            ),
+            decision_path=("core.offline_replay_ordering_contract." "build_offline_replay_ordering_report → " + obs),
             expected_decision=OfflineReplayContractVerdict.contract_not_yet_evidenced.value,
             observed_decision=obs,
             status=RecoveryScenarioStatus.advisory,
@@ -1157,10 +1067,7 @@ def _build_rs16_offline_queue_ordering_deferred() -> RecoveryScenarioEntry:
         # deferred rather than masking the gap.
         return RecoveryScenarioEntry(
             scenario_id="RS-16",
-            scenario_name=(
-                "Offline task queue replay — ordering contract "
-                "(module unavailable)"
-            ),
+            scenario_name=("Offline task queue replay — ordering contract " "(module unavailable)"),
             event_kind="android_offline_queue_drain",
             decision_path="(contract module unavailable)",
             expected_decision="(deferred)",
@@ -1190,9 +1097,10 @@ def _build_rs17_duplicate_recovery_suppression() -> RecoveryScenarioEntry:
     try:
         from core.delegated_flow_recovery_coordinator import (
             DelegatedFlowRecoveryCoordinator,
-            RecoveryTriggerContext,
             RecoveryTrigger,
+            RecoveryTriggerContext,
         )
+
         coordinator = DelegatedFlowRecoveryCoordinator(capacity=32)
         ctx1 = RecoveryTriggerContext(
             flow_id=flow_id,
@@ -1210,17 +1118,10 @@ def _build_rs17_duplicate_recovery_suppression() -> RecoveryScenarioEntry:
         artifact2 = coordinator.decide(ctx2)
         obs = artifact2.action.value
         expected = "suppress_duplicate_recovery"
-        status = (
-            RecoveryScenarioStatus.closed
-            if obs == expected
-            else RecoveryScenarioStatus.advisory
-        )
+        status = RecoveryScenarioStatus.closed if obs == expected else RecoveryScenarioStatus.advisory
         return RecoveryScenarioEntry(
             scenario_id="RS-17",
-            scenario_name=(
-                "Duplicate recovery attempt — same flow_id in-progress "
-                "→ suppress_duplicate_recovery"
-            ),
+            scenario_name=("Duplicate recovery attempt — same flow_id in-progress " "→ suppress_duplicate_recovery"),
             event_kind="v2_restart / delegated_flow_recovery",
             decision_path=(
                 "DelegatedFlowRecoveryCoordinator.begin_attempt (registers attempt) "
@@ -1330,11 +1231,9 @@ def build_recovery_closure_report() -> RecoveryClosureReport:
         elif entry.status == RecoveryScenarioStatus.fail_closed:
             report.fail_closed_count += 1
 
-    report.all_closed = (
-        report.fail_closed_count == 0
-        and (report.closed_count + report.advisory_count + report.deferred_count)
-        == len(report.scenarios)
-    )
+    report.all_closed = report.fail_closed_count == 0 and (
+        report.closed_count + report.advisory_count + report.deferred_count
+    ) == len(report.scenarios)
     return report
 
 
@@ -1351,6 +1250,7 @@ def _singleton_lock():
     global _SINGLETON_LOCK_OBJ  # noqa: PLW0603
     if _SINGLETON_LOCK_OBJ is None:
         import threading
+
         _SINGLETON_LOCK_OBJ = threading.Lock()
     return _SINGLETON_LOCK_OBJ
 

@@ -35,8 +35,8 @@ Coverage
 from __future__ import annotations
 
 import json
-import sys
 import os
+import sys
 
 import pytest
 from fastapi import FastAPI
@@ -60,7 +60,6 @@ from core.operator_surface import (
     reset_operator_surface,
 )
 from core.routes.operator import create_router
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -86,6 +85,7 @@ def _reset():
     reset_operator_surface()
     try:
         from core.delegated_flow_entity import reset_delegated_flow_entity_runtime
+
         reset_delegated_flow_entity_runtime()
     except Exception:
         pass
@@ -94,6 +94,7 @@ def _reset():
     reset_operator_surface()
     try:
         from core.delegated_flow_entity import reset_delegated_flow_entity_runtime
+
         reset_delegated_flow_entity_runtime()
     except Exception:
         pass
@@ -105,22 +106,28 @@ def _reset():
 
 
 def _absorb_two_devices():
-    absorb_device_state_snapshot("dev_alpha", {
-        "model_ready": True,
-        "local_loop_ready": True,
-        "llama_cpp_available": True,
-        "accessibility_ready": True,
-        "overlay_ready": True,
-        "model_id": "mobilevlm_v2_7b",
-        "offline_queue_depth": 3,
-    })
-    absorb_device_state_snapshot("dev_beta", {
-        "model_ready": False,
-        "local_loop_ready": False,
-        "llama_cpp_available": False,
-        "model_id": "mobilevlm_lite",
-        "offline_queue_depth": 0,
-    })
+    absorb_device_state_snapshot(
+        "dev_alpha",
+        {
+            "model_ready": True,
+            "local_loop_ready": True,
+            "llama_cpp_available": True,
+            "accessibility_ready": True,
+            "overlay_ready": True,
+            "model_id": "mobilevlm_v2_7b",
+            "offline_queue_depth": 3,
+        },
+    )
+    absorb_device_state_snapshot(
+        "dev_beta",
+        {
+            "model_ready": False,
+            "local_loop_ready": False,
+            "llama_cpp_available": False,
+            "model_id": "mobilevlm_lite",
+            "offline_queue_depth": 0,
+        },
+    )
 
 
 # ===========================================================================
@@ -172,15 +179,15 @@ def test_04_snapshot_ecosystem_counts_agree_with_ecosystem_route(client):
 
     snap_eco = snap_data.get("android_ecosystem", {})
 
-    assert snap_eco.get("total_devices_with_snapshot") == eco_data.get("total_devices_with_snapshot"), (
-        "total_devices_with_snapshot must agree between snapshot and ecosystem route"
-    )
-    assert snap_eco.get("model_ready_count") == eco_data.get("model_ready_count"), (
-        "model_ready_count must agree between snapshot and ecosystem route"
-    )
-    assert snap_eco.get("local_ai_ready_count") == eco_data.get("local_ai_ready_count"), (
-        "local_ai_ready_count must agree between snapshot and ecosystem route"
-    )
+    assert snap_eco.get("total_devices_with_snapshot") == eco_data.get(
+        "total_devices_with_snapshot"
+    ), "total_devices_with_snapshot must agree between snapshot and ecosystem route"
+    assert snap_eco.get("model_ready_count") == eco_data.get(
+        "model_ready_count"
+    ), "model_ready_count must agree between snapshot and ecosystem route"
+    assert snap_eco.get("local_ai_ready_count") == eco_data.get(
+        "local_ai_ready_count"
+    ), "local_ai_ready_count must agree between snapshot and ecosystem route"
 
 
 # ===========================================================================
@@ -192,9 +199,7 @@ def test_05_snapshot_to_dict_has_active_flow_count():
     """Snapshot to_dict() output must include the 'active_flow_count' key."""
     snap = get_operator_surface().operator_snapshot()
     d = snap.to_dict()
-    assert "active_flow_count" in d, (
-        "OperatorSnapshot.to_dict() must include 'active_flow_count'"
-    )
+    assert "active_flow_count" in d, "OperatorSnapshot.to_dict() must include 'active_flow_count'"
 
 
 def test_06_snapshot_active_flow_count_zero_when_no_flows():
@@ -212,9 +217,7 @@ def test_07_flow_projection_to_dict_has_authority_key():
     """FlowOperatorProjection.to_dict() must carry '_authority' key."""
     proj = FlowOperatorProjection(flow_id="test_flow_01")
     d = proj.to_dict()
-    assert "_authority" in d, (
-        "FlowOperatorProjection.to_dict() must include '_authority' provenance key"
-    )
+    assert "_authority" in d, "FlowOperatorProjection.to_dict() must include '_authority' provenance key"
 
 
 def test_08_flow_projection_authority_matches_sentinel():
@@ -232,9 +235,7 @@ def test_08_flow_projection_authority_matches_sentinel():
 def test_09_list_flows_response_has_authority(client):
     """GET /api/v1/operator/flows response must include 'authority' key."""
     data = client.get("/api/v1/operator/flows").json()
-    assert "authority" in data, (
-        "GET /api/v1/operator/flows must include 'authority' key in response"
-    )
+    assert "authority" in data, "GET /api/v1/operator/flows must include 'authority' key in response"
     assert data["authority"] == "OPERATOR_ROUTES_V1"
 
 
@@ -252,9 +253,9 @@ def test_10_snapshot_json_serialisable_with_devices(client):
     # Re-serialise to confirm the response is fully clean
     json.dumps(data)  # must not raise
     assert "android_ecosystem" in data
-    assert "devices" not in data.get("android_ecosystem", {}), (
-        "Snapshot android_ecosystem must not include 'devices' list"
-    )
+    assert "devices" not in data.get(
+        "android_ecosystem", {}
+    ), "Snapshot android_ecosystem must not include 'devices' list"
 
 
 # ===========================================================================
@@ -305,9 +306,9 @@ def test_14_single_device_ecosystem_has_source_field(client):
     """GET /api/v1/operator/devices/ecosystem/{device_id} must include '_source' from store."""
     absorb_device_state_snapshot("coherence_dev", {"model_ready": True})
     data = client.get("/api/v1/operator/devices/ecosystem/coherence_dev").json()
-    assert "_source" in data, (
-        "Single-device ecosystem response must include '_source' provenance from DeviceStateSnapshot"
-    )
+    assert (
+        "_source" in data
+    ), "Single-device ecosystem response must include '_source' provenance from DeviceStateSnapshot"
     assert data["_source"] == "android_device_state_store"
 
 
@@ -319,9 +320,7 @@ def test_14_single_device_ecosystem_has_source_field(client):
 def test_15_snapshot_active_flow_count_is_int():
     """Snapshot active_flow_count must be an integer (not None or other type)."""
     snap = get_operator_surface().operator_snapshot()
-    assert isinstance(snap.active_flow_count, int), (
-        "OperatorSnapshot.active_flow_count must be an int"
-    )
+    assert isinstance(snap.active_flow_count, int), "OperatorSnapshot.active_flow_count must be an int"
     assert isinstance(snap.to_dict()["active_flow_count"], int)
 
 
@@ -337,9 +336,9 @@ def test_16_snapshot_active_flow_count_reflects_registered_flows():
     which is_active()), then asserts the snapshot count increases to 2.
     """
     from core.delegated_flow_entity import (
+        DelegatedFlowKind,
         create_delegated_flow_entity,
         record_delegated_flow,
-        DelegatedFlowKind,
     )
 
     before = get_operator_surface().operator_snapshot()
@@ -358,6 +357,6 @@ def test_16_snapshot_active_flow_count_reflects_registered_flows():
     record_delegated_flow(entity_b)
 
     after = get_operator_surface().operator_snapshot()
-    assert after.active_flow_count == 2, (
-        f"Expected active_flow_count=2 after registering 2 flows, got {after.active_flow_count}"
-    )
+    assert (
+        after.active_flow_count == 2
+    ), f"Expected active_flow_count=2 after registering 2 flows, got {after.active_flow_count}"

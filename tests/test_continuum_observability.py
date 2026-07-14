@@ -23,7 +23,7 @@ from unittest.mock import patch
 
 import pytest
 
-from core.continuum.config import ContinuumConfig, FeatureFlags, DEFAULT_CONTINUUM_CONFIG
+from core.continuum.config import DEFAULT_CONTINUUM_CONFIG, ContinuumConfig, FeatureFlags
 from core.continuum.metrics import ContinuumMetrics, get_continuum_metrics
 from core.continuum.orchestrator import ContinuumOrchestrator
 from core.continuum.types import (
@@ -33,10 +33,10 @@ from core.continuum.types import (
     DecisionState,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_cfg(**flag_kwargs) -> ContinuumConfig:
     return ContinuumConfig(flags=FeatureFlags(**flag_kwargs))

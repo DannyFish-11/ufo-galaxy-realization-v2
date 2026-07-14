@@ -59,7 +59,6 @@ from core.unified_execution_governance import (
     record_state_uplink,
 )
 
-
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------
@@ -103,13 +102,19 @@ class TestGroupA_WholeLoopStageProgression:
         did = "dev-a02"
         with _patch_mode_gate_pass():
             verdict = evaluate_execution_governance(
-                ExecutionType.goal_execution, did,
-                execution_id=eid, register_if_accepted=True,
+                ExecutionType.goal_execution,
+                did,
+                execution_id=eid,
+                register_if_accepted=True,
             )
         assert verdict.accepted is True
         view = query_closed_loop_governance_state(eid, did)
-        assert view.stage in (ClosedLoopStage.activation, ClosedLoopStage.execution,
-                               ClosedLoopStage.observation, ClosedLoopStage.reconciliation)
+        assert view.stage in (
+            ClosedLoopStage.activation,
+            ClosedLoopStage.execution,
+            ClosedLoopStage.observation,
+            ClosedLoopStage.reconciliation,
+        )
         assert view.lifecycle_event_count >= 1
 
     def test_A03_execution_stage_after_running_event(self):
@@ -123,18 +128,22 @@ class TestGroupA_WholeLoopStageProgression:
         did = "dev-a03"
         with _patch_mode_gate_pass():
             evaluate_execution_governance(
-                ExecutionType.goal_execution, did,
-                execution_id=eid, register_if_accepted=True,
+                ExecutionType.goal_execution,
+                did,
+                execution_id=eid,
+                register_if_accepted=True,
             )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.running,
             detail="now_running",
         )
         view = query_closed_loop_governance_state(eid, did)
         assert view.stage in (
-            ClosedLoopStage.execution, ClosedLoopStage.observation
+            ClosedLoopStage.execution,
+            ClosedLoopStage.observation,
         ), f"Expected execution or observation stage, got {view.stage.value!r}"
         assert view.lifecycle_phase == "running"
         assert view.is_terminal is False
@@ -147,18 +156,21 @@ class TestGroupA_WholeLoopStageProgression:
         # NOTE: We use raw lifecycle events (without evaluate_execution_governance)
         # to avoid counting the internal governance state_uplink in the uplink count.
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.admitted,
             enforce_transition=False,
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.running,
         )
         record_state_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             payload={"status": "running"},
         )
@@ -173,17 +185,21 @@ class TestGroupA_WholeLoopStageProgression:
         did = "dev-a05"
         with _patch_mode_gate_pass():
             evaluate_execution_governance(
-                ExecutionType.parallel_subtask, did,
-                execution_id=eid, register_if_accepted=True,
+                ExecutionType.parallel_subtask,
+                did,
+                execution_id=eid,
+                register_if_accepted=True,
             )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.parallel_subtask,
             phase=ExecutionLifecyclePhase.running,
         )
         # Terminal uplink arrives before lifecycle termination
         record_result_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.parallel_subtask,
             payload={"status": "success"},
         )
@@ -198,11 +214,15 @@ class TestGroupA_WholeLoopStageProgression:
         did = "dev-a06"
         with _patch_mode_gate_pass():
             evaluate_execution_governance(
-                ExecutionType.goal_execution, did,
-                execution_id=eid, register_if_accepted=True,
+                ExecutionType.goal_execution,
+                did,
+                execution_id=eid,
+                register_if_accepted=True,
             )
         removed = notify_execution_completed(
-            did, ExecutionType.goal_execution, eid,
+            did,
+            ExecutionType.goal_execution,
+            eid,
             completion_phase=ExecutionLifecyclePhase.succeeded,
         )
         assert removed is True
@@ -231,19 +251,24 @@ class TestGroupA_WholeLoopStageProgression:
         did = f"dev-a07-{exec_type.value}"
         with _patch_mode_gate_pass():
             evaluate_execution_governance(
-                exec_type, did, execution_id=eid, register_if_accepted=True,
+                exec_type,
+                did,
+                execution_id=eid,
+                register_if_accepted=True,
             )
         notify_execution_completed(
-            did, exec_type, eid, completion_phase=terminal_phase,
+            did,
+            exec_type,
+            eid,
+            completion_phase=terminal_phase,
         )
         view = query_closed_loop_governance_state(eid, did)
         assert view.stage == ClosedLoopStage.completion, (
-            f"Expected completion stage for {exec_type.value}/{terminal_phase.value}, "
-            f"got {view.stage.value}"
+            f"Expected completion stage for {exec_type.value}/{terminal_phase.value}, " f"got {view.stage.value}"
         )
-        assert view.canonical_terminal_outcome == expected_outcome, (
-            f"Expected outcome {expected_outcome!r}, got {view.canonical_terminal_outcome!r}"
-        )
+        assert (
+            view.canonical_terminal_outcome == expected_outcome
+        ), f"Expected outcome {expected_outcome!r}, got {view.canonical_terminal_outcome!r}"
         assert view.loop_is_coherent is True
 
     def test_A08_loop_stage_not_unknown_when_lifecycle_events_exist(self):
@@ -251,7 +276,8 @@ class TestGroupA_WholeLoopStageProgression:
         eid = "exec-a08-not-unknown"
         did = "dev-a08"
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.created,
             enforce_transition=False,
@@ -266,21 +292,27 @@ class TestGroupA_WholeLoopStageProgression:
         did = "dev-a09"
         with _patch_mode_gate_pass():
             evaluate_execution_governance(
-                ExecutionType.takeover_request, did,
-                execution_id=eid, register_if_accepted=True,
+                ExecutionType.takeover_request,
+                did,
+                execution_id=eid,
+                register_if_accepted=True,
             )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.takeover_request,
             phase=ExecutionLifecyclePhase.running,
         )
         record_state_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.takeover_request,
             payload={"status": "running", "device_controlled": True},
         )
         notify_execution_completed(
-            did, ExecutionType.takeover_request, eid,
+            did,
+            ExecutionType.takeover_request,
+            eid,
             completion_phase=ExecutionLifecyclePhase.succeeded,
         )
         view = query_closed_loop_governance_state(eid, did)
@@ -296,8 +328,10 @@ class TestGroupA_WholeLoopStageProgression:
         did = "dev-a10"
         with _patch_mode_gate_pass():
             evaluate_execution_governance(
-                ExecutionType.goal_execution, did,
-                execution_id=eid, register_if_accepted=True,
+                ExecutionType.goal_execution,
+                did,
+                execution_id=eid,
+                register_if_accepted=True,
             )
         view = query_closed_loop_governance_state(eid, did)
         d = view.to_dict()
@@ -320,27 +354,31 @@ class TestGroupB_CrossStageInvariantEnforcement:
         did = "dev-b01"
         with _patch_mode_gate_pass():
             evaluate_execution_governance(
-                ExecutionType.goal_execution, did,
-                execution_id=eid, register_if_accepted=True,
+                ExecutionType.goal_execution,
+                did,
+                execution_id=eid,
+                register_if_accepted=True,
             )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.running,
         )
         record_state_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             payload={"status": "running"},
         )
         notify_execution_completed(
-            did, ExecutionType.goal_execution, eid,
+            did,
+            ExecutionType.goal_execution,
+            eid,
             completion_phase=ExecutionLifecyclePhase.succeeded,
         )
         violations = assert_closed_loop_invariants(eid, did)
-        assert violations == [], (
-            f"Expected no violations for coherent loop, got: {[v.to_dict() for v in violations]}"
-        )
+        assert violations == [], f"Expected no violations for coherent loop, got: {[v.to_dict() for v in violations]}"
 
     def test_B02_I02_terminal_phase_without_outcome_is_detected(self):
         """B02: I-02 fires when is_terminal=True but canonical_terminal_outcome is None.
@@ -352,8 +390,10 @@ class TestGroupB_CrossStageInvariantEnforcement:
         did = "dev-b02"
         with _patch_mode_gate_pass():
             evaluate_execution_governance(
-                ExecutionType.goal_execution, did,
-                execution_id=eid, register_if_accepted=True,
+                ExecutionType.goal_execution,
+                did,
+                execution_id=eid,
+                register_if_accepted=True,
             )
         # Patch uplink truth to simulate inconsistent terminal state
         fake_truth = {
@@ -369,11 +409,10 @@ class TestGroupB_CrossStageInvariantEnforcement:
             "state_uplink_count": 1,
             "reconciliation_delayed_observation": False,
         }
-        with patch(
-            "core.closed_loop_governance_consolidation.query_closed_loop_governance_state"
-        ) as mock_query:
+        with patch("core.closed_loop_governance_consolidation.query_closed_loop_governance_state") as mock_query:
             # Instead of patching query, let's build the violation manually via _check_invariants
             from core.closed_loop_governance_consolidation import _check_invariants
+
             violations = _check_invariants(
                 execution_id=eid,
                 device_id=did,
@@ -390,13 +429,12 @@ class TestGroupB_CrossStageInvariantEnforcement:
                 uplink_truth=fake_truth,
             )
         i02_violations = [v for v in violations if v.invariant_id == "I-02"]
-        assert len(i02_violations) == 1, (
-            f"Expected I-02 violation, got: {[v.invariant_id for v in violations]}"
-        )
+        assert len(i02_violations) == 1, f"Expected I-02 violation, got: {[v.invariant_id for v in violations]}"
 
     def test_B03_I03_conflict_without_center_authority_is_detected(self):
         """B03: I-03 fires when reconciliation_conflict=True but center_lifecycle is not authoritative."""
         from core.closed_loop_governance_consolidation import _check_invariants
+
         eid = "exec-b03-i03"
         did = "dev-b03"
         violations = _check_invariants(
@@ -415,13 +453,12 @@ class TestGroupB_CrossStageInvariantEnforcement:
             uplink_truth={"reconciliation_delayed_observation": False},
         )
         i03_violations = [v for v in violations if v.invariant_id == "I-03"]
-        assert len(i03_violations) == 1, (
-            f"Expected I-03 violation, got: {[v.invariant_id for v in violations]}"
-        )
+        assert len(i03_violations) == 1, f"Expected I-03 violation, got: {[v.invariant_id for v in violations]}"
 
     def test_B04_I04_delayed_uplink_without_center_authority_is_detected(self):
         """B04: I-04 fires when delayed uplink is present but center_lifecycle is not authoritative."""
         from core.closed_loop_governance_consolidation import _check_invariants
+
         eid = "exec-b04-i04"
         did = "dev-b04"
         violations = _check_invariants(
@@ -440,13 +477,12 @@ class TestGroupB_CrossStageInvariantEnforcement:
             uplink_truth={"reconciliation_delayed_observation": True},
         )
         i04_violations = [v for v in violations if v.invariant_id == "I-04"]
-        assert len(i04_violations) == 1, (
-            f"Expected I-04 violation, got: {[v.invariant_id for v in violations]}"
-        )
+        assert len(i04_violations) == 1, f"Expected I-04 violation, got: {[v.invariant_id for v in violations]}"
 
     def test_B05_I07_completion_without_terminal_outcome_is_detected(self):
         """B05: I-07 fires when stage is 'completion' but canonical_terminal_outcome is None."""
         from core.closed_loop_governance_consolidation import _check_invariants
+
         eid = "exec-b05-i07"
         did = "dev-b05"
         violations = _check_invariants(
@@ -465,9 +501,7 @@ class TestGroupB_CrossStageInvariantEnforcement:
             uplink_truth={"reconciliation_delayed_observation": False},
         )
         i07_violations = [v for v in violations if v.invariant_id == "I-07"]
-        assert len(i07_violations) == 1, (
-            f"Expected I-07 violation, got: {[v.invariant_id for v in violations]}"
-        )
+        assert len(i07_violations) == 1, f"Expected I-07 violation, got: {[v.invariant_id for v in violations]}"
 
     def test_B06_coherent_interrupted_loop_has_no_violations(self):
         """B06: An interrupted execution that is properly recorded is coherent."""
@@ -475,22 +509,25 @@ class TestGroupB_CrossStageInvariantEnforcement:
         did = "dev-b06"
         with _patch_mode_gate_pass():
             evaluate_execution_governance(
-                ExecutionType.takeover_request, did,
-                execution_id=eid, register_if_accepted=True,
+                ExecutionType.takeover_request,
+                did,
+                execution_id=eid,
+                register_if_accepted=True,
             )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.takeover_request,
             phase=ExecutionLifecyclePhase.running,
         )
         notify_execution_completed(
-            did, ExecutionType.takeover_request, eid,
+            did,
+            ExecutionType.takeover_request,
+            eid,
             completion_phase=ExecutionLifecyclePhase.interrupted,
         )
         violations = assert_closed_loop_invariants(eid, did)
-        assert violations == [], (
-            f"Interrupted loop should be coherent, got: {[v.invariant_id for v in violations]}"
-        )
+        assert violations == [], f"Interrupted loop should be coherent, got: {[v.invariant_id for v in violations]}"
 
     def test_B07_coherent_failed_and_cancelled_loops(self):
         """B07: Failed and cancelled executions produce no invariant violations."""
@@ -500,11 +537,15 @@ class TestGroupB_CrossStageInvariantEnforcement:
             did = f"dev-b07-{terminal_phase.value}"
             with _patch_mode_gate_pass():
                 evaluate_execution_governance(
-                    ExecutionType.goal_execution, did,
-                    execution_id=eid, register_if_accepted=True,
+                    ExecutionType.goal_execution,
+                    did,
+                    execution_id=eid,
+                    register_if_accepted=True,
                 )
             notify_execution_completed(
-                did, ExecutionType.goal_execution, eid,
+                did,
+                ExecutionType.goal_execution,
+                eid,
                 completion_phase=terminal_phase,
             )
             violations = assert_closed_loop_invariants(eid, did)
@@ -516,6 +557,7 @@ class TestGroupB_CrossStageInvariantEnforcement:
     def test_B08_violation_to_dict_is_json_serialisable(self):
         """B08: ClosedLoopInvariantViolation.to_dict() is fully JSON-serialisable."""
         import json
+
         v = ClosedLoopInvariantViolation(
             invariant_id="I-99",
             description="Test violation",
@@ -544,25 +586,30 @@ class TestGroupC_AdverseConditions:
         did = "dev-c01"
         with _patch_mode_gate_pass():
             evaluate_execution_governance(
-                ExecutionType.goal_execution, did,
-                execution_id=eid, register_if_accepted=True,
+                ExecutionType.goal_execution,
+                did,
+                execution_id=eid,
+                register_if_accepted=True,
             )
         # Center declares success
         notify_execution_completed(
-            did, ExecutionType.goal_execution, eid,
+            did,
+            ExecutionType.goal_execution,
+            eid,
             completion_phase=ExecutionLifecyclePhase.succeeded,
         )
         # Late conflicting uplink arrives after terminal
         record_result_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             payload={"status": "failed"},
         )
         view = query_closed_loop_governance_state(eid, did)
         # Center terminal truth must be preserved
-        assert view.canonical_terminal_outcome == "success", (
-            f"Center truth must be retained, got: {view.canonical_terminal_outcome!r}"
-        )
+        assert (
+            view.canonical_terminal_outcome == "success"
+        ), f"Center truth must be retained, got: {view.canonical_terminal_outcome!r}"
         assert view.terminal_truth_authoritative_source == "center_lifecycle"
         assert view.stage == ClosedLoopStage.completion
         # No I-03 or I-04 violations because center_lifecycle IS the authoritative source
@@ -578,31 +625,39 @@ class TestGroupC_AdverseConditions:
         did = "dev-c02"
         with _patch_mode_gate_pass():
             evaluate_execution_governance(
-                ExecutionType.goal_execution, did,
-                execution_id=eid, register_if_accepted=True,
+                ExecutionType.goal_execution,
+                did,
+                execution_id=eid,
+                register_if_accepted=True,
             )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.running,
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.interrupted,
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.retrying,
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.running,
         )
         notify_execution_completed(
-            did, ExecutionType.goal_execution, eid,
+            did,
+            ExecutionType.goal_execution,
+            eid,
             completion_phase=ExecutionLifecyclePhase.succeeded,
         )
         view = query_closed_loop_governance_state(eid, did)
@@ -616,31 +671,39 @@ class TestGroupC_AdverseConditions:
         did = "dev-c03"
         with _patch_mode_gate_pass():
             evaluate_execution_governance(
-                ExecutionType.delegated_execution, did,
-                execution_id=eid, register_if_accepted=True,
+                ExecutionType.delegated_execution,
+                did,
+                execution_id=eid,
+                register_if_accepted=True,
             )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.delegated_execution,
             phase=ExecutionLifecyclePhase.running,
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.delegated_execution,
             phase=ExecutionLifecyclePhase.failed,
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.delegated_execution,
             phase=ExecutionLifecyclePhase.replayed,
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.delegated_execution,
             phase=ExecutionLifecyclePhase.running,
         )
         notify_execution_completed(
-            did, ExecutionType.delegated_execution, eid,
+            did,
+            ExecutionType.delegated_execution,
+            eid,
             completion_phase=ExecutionLifecyclePhase.succeeded,
         )
         view = query_closed_loop_governance_state(eid, did)
@@ -654,16 +717,20 @@ class TestGroupC_AdverseConditions:
         did = "dev-c04"
         with _patch_mode_gate_pass():
             evaluate_execution_governance(
-                ExecutionType.goal_execution, did,
-                execution_id=eid, register_if_accepted=True,
+                ExecutionType.goal_execution,
+                did,
+                execution_id=eid,
+                register_if_accepted=True,
             )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.running,
         )
         record_state_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             payload={"degraded": True, "reason": "partial_device_loss"},
         )
@@ -678,16 +745,21 @@ class TestGroupC_AdverseConditions:
         did = "dev-c05"
         with _patch_mode_gate_pass():
             evaluate_execution_governance(
-                ExecutionType.parallel_subtask, did,
-                execution_id=eid, register_if_accepted=True,
+                ExecutionType.parallel_subtask,
+                did,
+                execution_id=eid,
+                register_if_accepted=True,
             )
         record_result_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.parallel_subtask,
             payload={"status": "success"},
         )
         notify_execution_completed(
-            did, ExecutionType.parallel_subtask, eid,
+            did,
+            ExecutionType.parallel_subtask,
+            eid,
             completion_phase=ExecutionLifecyclePhase.succeeded,
         )
         view = query_closed_loop_governance_state(eid, did)
@@ -702,11 +774,15 @@ class TestGroupC_AdverseConditions:
         did = "dev-c06"
         with _patch_mode_gate_pass():
             evaluate_execution_governance(
-                ExecutionType.goal_execution, did,
-                execution_id=eid, register_if_accepted=True,
+                ExecutionType.goal_execution,
+                did,
+                execution_id=eid,
+                register_if_accepted=True,
             )
         notify_execution_completed(
-            did, ExecutionType.goal_execution, eid,
+            did,
+            ExecutionType.goal_execution,
+            eid,
             completion_phase=ExecutionLifecyclePhase.timed_out,
         )
         view = query_closed_loop_governance_state(eid, did)
@@ -720,22 +796,28 @@ class TestGroupC_AdverseConditions:
         did = "dev-c07"
         with _patch_mode_gate_pass():
             evaluate_execution_governance(
-                ExecutionType.goal_execution, did,
-                execution_id=eid, register_if_accepted=True,
+                ExecutionType.goal_execution,
+                did,
+                execution_id=eid,
+                register_if_accepted=True,
             )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.running,
         )
         for i in range(5):
             record_state_uplink(
-                execution_id=eid, device_id=did,
+                execution_id=eid,
+                device_id=did,
                 execution_type=ExecutionType.goal_execution,
                 payload={"progress": i * 20, "status": "running"},
             )
         notify_execution_completed(
-            did, ExecutionType.goal_execution, eid,
+            did,
+            ExecutionType.goal_execution,
+            eid,
             completion_phase=ExecutionLifecyclePhase.succeeded,
         )
         view = query_closed_loop_governance_state(eid, did)
@@ -749,21 +831,26 @@ class TestGroupC_AdverseConditions:
         did = "dev-c08"
         with _patch_mode_gate_pass():
             evaluate_execution_governance(
-                ExecutionType.parallel_subtask, did,
-                execution_id=eid, register_if_accepted=True,
+                ExecutionType.parallel_subtask,
+                did,
+                execution_id=eid,
+                register_if_accepted=True,
             )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.parallel_subtask,
             phase=ExecutionLifecyclePhase.running,
         )
         record_result_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.parallel_subtask,
             payload={"status": "success"},
         )
         record_state_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.parallel_subtask,
             payload={"status": "failed"},
         )
@@ -781,21 +868,27 @@ class TestGroupC_AdverseConditions:
         did = "dev-c09"
         with _patch_mode_gate_pass():
             evaluate_execution_governance(
-                ExecutionType.goal_execution, did,
-                execution_id=eid, register_if_accepted=True,
+                ExecutionType.goal_execution,
+                did,
+                execution_id=eid,
+                register_if_accepted=True,
             )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.running,
         )
         notify_execution_completed(
-            did, ExecutionType.goal_execution, eid,
+            did,
+            ExecutionType.goal_execution,
+            eid,
             completion_phase=ExecutionLifecyclePhase.interrupted,
         )
         # Recovery state uplink after terminal
         record_state_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             payload={"recovered": True, "reason": "device_reconnected"},
         )
@@ -816,15 +909,16 @@ class TestGroupC_AdverseConditions:
         did = "dev-c10"
         # No governance evaluation — only raw uplink
         record_result_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             payload={"status": "success"},
         )
         view = query_closed_loop_governance_state(eid, did)
         # Without lifecycle authority, the loop is not at completion stage
-        assert view.stage != ClosedLoopStage.completion, (
-            f"Uplink-only loop should NOT be at completion, got {view.stage.value!r}"
-        )
+        assert (
+            view.stage != ClosedLoopStage.completion
+        ), f"Uplink-only loop should NOT be at completion, got {view.stage.value!r}"
         # is_terminal is False because no center lifecycle phase was set
         assert view.is_terminal is False
         # terminal_truth_authoritative_source is 'reported_uplink' (not center_lifecycle)
@@ -847,15 +941,21 @@ class TestGroupD_CrossDeviceIsolation:
         did_b = "device-d01-B"
         with _patch_mode_gate_pass():
             evaluate_execution_governance(
-                ExecutionType.goal_execution, did_a,
-                execution_id=eid_a, register_if_accepted=True,
+                ExecutionType.goal_execution,
+                did_a,
+                execution_id=eid_a,
+                register_if_accepted=True,
             )
             evaluate_execution_governance(
-                ExecutionType.goal_execution, did_b,
-                execution_id=eid_b, register_if_accepted=True,
+                ExecutionType.goal_execution,
+                did_b,
+                execution_id=eid_b,
+                register_if_accepted=True,
             )
         notify_execution_completed(
-            did_a, ExecutionType.goal_execution, eid_a,
+            did_a,
+            ExecutionType.goal_execution,
+            eid_a,
             completion_phase=ExecutionLifecyclePhase.succeeded,
         )
         view_b = query_closed_loop_governance_state(eid_b, did_b)
@@ -871,12 +971,16 @@ class TestGroupD_CrossDeviceIsolation:
         did_b = "device-d02-B"
         with _patch_mode_gate_pass():
             evaluate_execution_governance(
-                ExecutionType.takeover_request, did_a,
-                execution_id=eid_a, register_if_accepted=True,
+                ExecutionType.takeover_request,
+                did_a,
+                execution_id=eid_a,
+                register_if_accepted=True,
             )
             evaluate_execution_governance(
-                ExecutionType.goal_execution, did_b,
-                execution_id=eid_b, register_if_accepted=True,
+                ExecutionType.goal_execution,
+                did_b,
+                execution_id=eid_b,
+                register_if_accepted=True,
             )
         view_b = query_closed_loop_governance_state(eid_b, did_b)
         # Device B's loop should have its own stage independent of device A
@@ -894,18 +998,23 @@ class TestGroupD_CrossDeviceIsolation:
         with _patch_mode_gate_pass():
             for eid, did, etype in devices:
                 evaluate_execution_governance(
-                    etype, did, execution_id=eid, register_if_accepted=True,
+                    etype,
+                    did,
+                    execution_id=eid,
+                    register_if_accepted=True,
                 )
         for eid, did, etype in devices:
             notify_execution_completed(
-                did, etype, eid,
+                did,
+                etype,
+                eid,
                 completion_phase=ExecutionLifecyclePhase.succeeded,
             )
         for eid, did, etype in devices:
             view = query_closed_loop_governance_state(eid, did)
-            assert view.stage == ClosedLoopStage.completion, (
-                f"Device {did} should be at completion, got {view.stage.value}"
-            )
+            assert (
+                view.stage == ClosedLoopStage.completion
+            ), f"Device {did} should be at completion, got {view.stage.value}"
             assert view.canonical_terminal_outcome == "success"
             assert view.loop_is_coherent is True
 
@@ -916,14 +1025,14 @@ class TestGroupD_CrossDeviceIsolation:
         with _patch_mode_gate_pass():
             for eid in eids:
                 evaluate_execution_governance(
-                    ExecutionType.goal_execution, did,
-                    execution_id=eid, register_if_accepted=True,
+                    ExecutionType.goal_execution,
+                    did,
+                    execution_id=eid,
+                    register_if_accepted=True,
                 )
         for eid in eids:
             view = query_closed_loop_governance_state(eid, did)
-            assert view.execution_id == eid, (
-                f"view.execution_id should be {eid!r}, got {view.execution_id!r}"
-            )
+            assert view.execution_id == eid, f"view.execution_id should be {eid!r}, got {view.execution_id!r}"
 
     def test_D05_completing_one_execution_does_not_terminal_another_same_device(self):
         """D05: Completing execution A on a device does not close execution B on the same device."""
@@ -932,11 +1041,15 @@ class TestGroupD_CrossDeviceIsolation:
         did = "device-d05"
         with _patch_mode_gate_pass():
             evaluate_execution_governance(
-                ExecutionType.goal_execution, did,
-                execution_id=eid_a, register_if_accepted=True,
+                ExecutionType.goal_execution,
+                did,
+                execution_id=eid_a,
+                register_if_accepted=True,
             )
         notify_execution_completed(
-            did, ExecutionType.goal_execution, eid_a,
+            did,
+            ExecutionType.goal_execution,
+            eid_a,
             completion_phase=ExecutionLifecyclePhase.succeeded,
         )
         # Execution B was never started — it should be at 'unknown' stage
@@ -959,8 +1072,10 @@ class TestGroupE_AuditAndSentinelCoverage:
         assert isinstance(CLOSED_LOOP_GOVERNANCE_CONSOLIDATION_SENTINEL, str)
         assert len(CLOSED_LOOP_GOVERNANCE_CONSOLIDATION_SENTINEL) > 50
         # Sentinel uses 'PR13_V2' format
-        assert "PR13_V2" in CLOSED_LOOP_GOVERNANCE_CONSOLIDATION_SENTINEL or \
-               "PR-13" in CLOSED_LOOP_GOVERNANCE_CONSOLIDATION_SENTINEL
+        assert (
+            "PR13_V2" in CLOSED_LOOP_GOVERNANCE_CONSOLIDATION_SENTINEL
+            or "PR-13" in CLOSED_LOOP_GOVERNANCE_CONSOLIDATION_SENTINEL
+        )
         assert "CLOSED_LOOP" in CLOSED_LOOP_GOVERNANCE_CONSOLIDATION_SENTINEL
 
     def test_E02_contract_version_is_correct(self):
@@ -983,11 +1098,15 @@ class TestGroupE_AuditAndSentinelCoverage:
         did = "dev-e04"
         with _patch_mode_gate_pass():
             evaluate_execution_governance(
-                ExecutionType.goal_execution, did,
-                execution_id=eid, register_if_accepted=True,
+                ExecutionType.goal_execution,
+                did,
+                execution_id=eid,
+                register_if_accepted=True,
             )
         notify_execution_completed(
-            did, ExecutionType.goal_execution, eid,
+            did,
+            ExecutionType.goal_execution,
+            eid,
             completion_phase=ExecutionLifecyclePhase.succeeded,
         )
         record = get_closed_loop_audit_record(eid, did)
@@ -1000,19 +1119,25 @@ class TestGroupE_AuditAndSentinelCoverage:
         did = "dev-e05"
         with _patch_mode_gate_pass():
             evaluate_execution_governance(
-                ExecutionType.goal_execution, did,
-                execution_id=eid, register_if_accepted=True,
+                ExecutionType.goal_execution,
+                did,
+                execution_id=eid,
+                register_if_accepted=True,
             )
         record = get_closed_loop_audit_record(eid, did)
         required_fields = {
-            "execution_id", "device_id", "closed_loop_view",
-            "lifecycle_history", "uplink_truth_snapshot", "uplink_records",
-            "audit_generated_at", "_sentinel", "_contract_version",
+            "execution_id",
+            "device_id",
+            "closed_loop_view",
+            "lifecycle_history",
+            "uplink_truth_snapshot",
+            "uplink_records",
+            "audit_generated_at",
+            "_sentinel",
+            "_contract_version",
         }
         for field_name in required_fields:
-            assert field_name in record, (
-                f"Audit record missing required field: {field_name!r}"
-            )
+            assert field_name in record, f"Audit record missing required field: {field_name!r}"
 
     def test_E06_audit_record_sentinel_matches_module_sentinel(self):
         """E06: Sentinel in audit record matches the module-level sentinel."""
@@ -1035,10 +1160,12 @@ class TestGroupE_AuditAndSentinelCoverage:
     def test_E08_closed_loop_stage_enum_has_all_required_values(self):
         """E08: ClosedLoopStage enum contains all required stage values."""
         required = {
-            "activation", "execution", "observation",
-            "reconciliation", "completion", "unknown",
+            "activation",
+            "execution",
+            "observation",
+            "reconciliation",
+            "completion",
+            "unknown",
         }
         actual = {s.value for s in ClosedLoopStage}
-        assert required <= actual, (
-            f"Missing ClosedLoopStage values: {required - actual}"
-        )
+        assert required <= actual, f"Missing ClosedLoopStage values: {required - actual}"

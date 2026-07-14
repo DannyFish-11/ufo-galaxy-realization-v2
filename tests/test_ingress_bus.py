@@ -1,4 +1,5 @@
 """Unit tests for the unified multimodal ingress bus and PerceptionFrame (PR-0C)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -7,16 +8,16 @@ from typing import List
 
 import pytest
 
+from core.multimodal.audio_features import AudioState
 from core.multimodal.ingress_bus import MultimodalIngressBus
 from core.multimodal.perception_frame import PerceptionFrame, SystemSignals
-from core.multimodal.audio_features import AudioState
+from core.multimodal.signal_quality import QualityFlag, SignalQuality
 from core.multimodal.video_features import VideoState
-from core.multimodal.signal_quality import SignalQuality, QualityFlag
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _audio_state() -> AudioState:
     return AudioState(
@@ -45,6 +46,7 @@ def _system_signals() -> SystemSignals:
 # ---------------------------------------------------------------------------
 # PerceptionFrame tests
 # ---------------------------------------------------------------------------
+
 
 class TestPerceptionFrame:
     def test_default_frame_all_missing(self):
@@ -177,6 +179,7 @@ class TestPerceptionFrame:
 # ---------------------------------------------------------------------------
 # MultimodalIngressBus tests
 # ---------------------------------------------------------------------------
+
 
 class TestMultimodalIngressBus:
     def test_instantiation(self):

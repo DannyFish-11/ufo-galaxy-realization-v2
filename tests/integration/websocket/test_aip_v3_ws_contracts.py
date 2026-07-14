@@ -47,6 +47,7 @@ import pytest
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _mk_v3(msg_type: str, device_id: str = "test-device-001", **extra) -> Dict[str, Any]:
     """Return a fully-compliant AIP v3.0 message dict."""
     return {
@@ -111,7 +112,7 @@ SNAPSHOT_TASK_END_ACK: Dict[str, Any] = {
     "message_id": _T_STR,
     "device_id": _T_STR,
     "timestamp": _T_INT,
-    "task_id": ...,         # present, any value (may be None)
+    "task_id": ...,  # present, any value (may be None)
     "status": "acknowledged",
 }
 
@@ -128,9 +129,7 @@ SNAPSHOT_DEVICE_STATUS_ACK: Dict[str, Any] = {
 def _check_snapshot(response: Dict[str, Any], snapshot: Dict[str, Any], *, label: str) -> None:
     """Assert that *response* matches all entries in *snapshot*."""
     for key, expected in snapshot.items():
-        assert key in response, (
-            f"[{label}] snapshot field '{key}' is missing from response {list(response.keys())}"
-        )
+        assert key in response, f"[{label}] snapshot field '{key}' is missing from response {list(response.keys())}"
         value = response[key]
         if expected is ...:
             pass  # any value is fine
@@ -140,14 +139,13 @@ def _check_snapshot(response: Dict[str, Any], snapshot: Dict[str, Any], *, label
                 f"got {type(value).__name__!r} = {value!r}"
             )
         else:
-            assert value == expected, (
-                f"[{label}] field '{key}': expected {expected!r}, got {value!r}"
-            )
+            assert value == expected, f"[{label}] field '{key}': expected {expected!r}, got {value!r}"
 
 
 # ===========================================================================
 # 1. Message-shape contracts (unit tests — no I/O)
 # ===========================================================================
+
 
 class TestAIPv3MessageShapeContract:
     """Verify that every constructed AIP v3 message carries the canonical fields."""
@@ -157,16 +155,18 @@ class TestAIPv3MessageShapeContract:
     def _assert_required(self, msg: Dict[str, Any], label: str) -> None:
         for field in self.REQUIRED_FIELDS:
             assert field in msg, (
-                f"[{label}] required AIP v3 field '{field}' is missing. "
-                f"Present keys: {list(msg.keys())}"
+                f"[{label}] required AIP v3 field '{field}' is missing. " f"Present keys: {list(msg.keys())}"
             )
 
     # --- AIPMessage Pydantic model ---
 
     def test_register_message_shape(self):
         from galaxy_gateway.protocol.aip_v3 import (
-            AIPMessage, AIPDeviceType, MessageType,
+            AIPDeviceType,
+            AIPMessage,
+            MessageType,
         )
+
         msg = AIPMessage(
             type=MessageType.DEVICE_REGISTER,
             device_id="shape-test-001",
@@ -179,6 +179,7 @@ class TestAIPv3MessageShapeContract:
 
     def test_heartbeat_message_shape(self):
         from galaxy_gateway.protocol.aip_v3 import AIPMessage, MessageType
+
         msg = AIPMessage(
             type=MessageType.DEVICE_HEARTBEAT,
             device_id="shape-test-hb",
@@ -189,6 +190,7 @@ class TestAIPv3MessageShapeContract:
 
     def test_task_submit_message_shape(self):
         from galaxy_gateway.protocol.aip_v3 import AIPMessage, MessageType
+
         msg = AIPMessage(
             type=MessageType.TASK_SUBMIT,
             device_id="shape-test-task",
@@ -200,6 +202,7 @@ class TestAIPv3MessageShapeContract:
 
     def test_error_message_shape(self):
         from galaxy_gateway.protocol.aip_v3 import AIPMessage, MessageType
+
         msg = AIPMessage(
             type=MessageType.ERROR,
             device_id="shape-test-err",
@@ -213,6 +216,7 @@ class TestAIPv3MessageShapeContract:
 
     def test_builder_register_ack_shape(self):
         from galaxy_gateway.android_bridge import MessageBuilder
+
         ack = MessageBuilder.device_register_ack("builder-001", success=True)
         self._assert_required(ack, "MessageBuilder.device_register_ack")
         assert ack["type"] == "device_register_ack"
@@ -220,12 +224,14 @@ class TestAIPv3MessageShapeContract:
 
     def test_builder_heartbeat_ack_shape(self):
         from galaxy_gateway.android_bridge import MessageBuilder
+
         ack = MessageBuilder.heartbeat_ack("builder-002")
         self._assert_required(ack, "MessageBuilder.heartbeat_ack")
         assert ack["type"] == "heartbeat_ack"
 
     def test_builder_task_assign_shape(self):
         from galaxy_gateway.android_bridge import MessageBuilder
+
         task_id = str(uuid.uuid4())
         msg = MessageBuilder.task_assign(
             device_id="builder-003",
@@ -239,6 +245,7 @@ class TestAIPv3MessageShapeContract:
 
     def test_builder_error_shape(self):
         from galaxy_gateway.android_bridge import MessageBuilder
+
         msg = MessageBuilder.error(
             device_id="builder-004",
             error_code="E001",
@@ -249,6 +256,7 @@ class TestAIPv3MessageShapeContract:
 
     def test_builder_capability_report_ack_shape(self):
         from galaxy_gateway.android_bridge import MessageBuilder
+
         ack = MessageBuilder.capability_report_ack("builder-005")
         self._assert_required(ack, "MessageBuilder.capability_report_ack")
         assert ack["type"] == "capability_report_ack"
@@ -258,10 +266,12 @@ class TestAIPv3MessageShapeContract:
 # 2. Flow snapshots — AndroidBridge handlers (unit tests)
 # ===========================================================================
 
+
 @pytest.fixture()
 def bridge():
     """Fresh AndroidBridge instance for each test."""
     from galaxy_gateway.android_bridge import AndroidBridge
+
     return AndroidBridge()
 
 
@@ -387,10 +397,7 @@ class TestFlowSnapshots:
         )
         response = await bridge.handle_message(ws, task_msg)
         # Bridge does not send a response for task_result — returns None.
-        assert response is None, (
-            "task_result should not generate an outbound response; "
-            f"got {response!r}"
-        )
+        assert response is None, "task_result should not generate an outbound response; " f"got {response!r}"
 
     # ------------------------------------------------------------------
     # error — no outbound response (logged only)
@@ -410,10 +417,7 @@ class TestFlowSnapshots:
             error_message="Action execution failed",
         )
         response = await bridge.handle_message(ws, err_msg)
-        assert response is None, (
-            "error messages should not generate an outbound response; "
-            f"got {response!r}"
-        )
+        assert response is None, "error messages should not generate an outbound response; " f"got {response!r}"
 
     # ------------------------------------------------------------------
     # task_end → task_end_ack
@@ -462,6 +466,7 @@ class TestFlowSnapshots:
 # 3. Protocol contracts — normalised message invariants
 # ===========================================================================
 
+
 class TestProtocolContracts:
     """
     Verify the compat layer always produces AIP v3 compliant dicts/objects.
@@ -472,53 +477,58 @@ class TestProtocolContracts:
 
     # --- parse_message_compat output contract ---
 
-    @pytest.mark.parametrize("raw", [
-        # AIP/1.0 aliases
-        {"type": "register",         "device_id": "c-01"},
-        {"type": "heartbeat",        "device_id": "c-02"},
-        {"type": "agent_register",   "device_id": "c-03"},
-        {"type": "registration",     "device_id": "c-04"},
-        {"type": "command_result",   "device_id": "c-05"},
-        {"type": "status_update",    "device_id": "c-06"},
-        {"type": "task_execute",     "device_id": "c-07"},
-        # AIP/2.0
-        {"version": "2.0", "type": "device_register",  "device_id": "c-08"},
-        {"version": "2.0", "type": "heartbeat",         "device_id": "c-09"},
-        # AIP/3.0 — pass-through
-        {"version": "3.0", "type": "heartbeat",         "device_id": "c-10"},
-        {"version": "3.0", "type": "device_register",   "device_id": "c-11"},
-        {"version": "3.0", "type": "task_submit",       "device_id": "c-12"},
-    ])
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            # AIP/1.0 aliases
+            {"type": "register", "device_id": "c-01"},
+            {"type": "heartbeat", "device_id": "c-02"},
+            {"type": "agent_register", "device_id": "c-03"},
+            {"type": "registration", "device_id": "c-04"},
+            {"type": "command_result", "device_id": "c-05"},
+            {"type": "status_update", "device_id": "c-06"},
+            {"type": "task_execute", "device_id": "c-07"},
+            # AIP/2.0
+            {"version": "2.0", "type": "device_register", "device_id": "c-08"},
+            {"version": "2.0", "type": "heartbeat", "device_id": "c-09"},
+            # AIP/3.0 — pass-through
+            {"version": "3.0", "type": "heartbeat", "device_id": "c-10"},
+            {"version": "3.0", "type": "device_register", "device_id": "c-11"},
+            {"version": "3.0", "type": "task_submit", "device_id": "c-12"},
+        ],
+    )
     def test_compat_output_always_v3(self, raw):
-        from galaxy_gateway.protocol.compat import parse_message_compat
         from galaxy_gateway.protocol.aip_v3 import AIPMessage
+        from galaxy_gateway.protocol.compat import parse_message_compat
+
         msg = parse_message_compat(dict(raw))
         assert isinstance(msg, AIPMessage), "parse_message_compat must return AIPMessage"
-        assert msg.version.startswith("3"), (
-            f"Expected version 3.x, got {msg.version!r}"
-        )
+        assert msg.version.startswith("3"), f"Expected version 3.x, got {msg.version!r}"
         assert msg.device_id, "device_id must be non-empty after compat normalisation"
 
     # --- normalise_to_v3_dict output contract ---
 
-    @pytest.mark.parametrize("raw", [
-        {"type": "register",         "device_id": "n-01", "extra_field": "preserved"},
-        {"version": "2.0", "type": "heartbeat", "device_id": "n-02", "platform": "android"},
-        {"version": "3.0", "type": "capability_report", "device_id": "n-03"},
-    ])
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            {"type": "register", "device_id": "n-01", "extra_field": "preserved"},
+            {"version": "2.0", "type": "heartbeat", "device_id": "n-02", "platform": "android"},
+            {"version": "3.0", "type": "capability_report", "device_id": "n-03"},
+        ],
+    )
     def test_normalise_to_v3_dict_contract(self, raw):
         from galaxy_gateway.protocol.compat import normalise_to_v3_dict
+
         out = normalise_to_v3_dict(dict(raw))
         assert isinstance(out, dict)
         assert out.get("version") == "3.0"
         for field in self.REQUIRED_V3_FIELDS:
-            assert field in out, (
-                f"Required field '{field}' missing from normalise_to_v3_dict output"
-            )
+            assert field in out, f"Required field '{field}' missing from normalise_to_v3_dict output"
 
     def test_normalise_preserves_extra_fields(self):
         """normalise_to_v3_dict must NOT drop application-level extra fields."""
         from galaxy_gateway.protocol.compat import normalise_to_v3_dict
+
         raw = {
             "type": "register",
             "device_id": "n-extra",
@@ -534,6 +544,7 @@ class TestProtocolContracts:
     def test_trace_id_injected_in_compat(self):
         """trace_id must always be injected by parse_message_compat."""
         from galaxy_gateway.protocol.compat import inject_trace_metadata
+
         out = inject_trace_metadata({"type": "heartbeat", "device_id": "n-trace"})
         assert "trace_id" in out, "trace_id must be injected"
         # Must be a valid UUID
@@ -543,6 +554,7 @@ class TestProtocolContracts:
     def test_route_mode_injected_in_compat(self):
         """route_mode must always be injected when absent."""
         from galaxy_gateway.protocol.compat import inject_trace_metadata
+
         out = inject_trace_metadata({"type": "heartbeat", "device_id": "n-rm"})
         assert "route_mode" in out, "route_mode must be injected"
         assert out["route_mode"] == "cross_device"
@@ -550,18 +562,22 @@ class TestProtocolContracts:
     def test_existing_trace_id_preserved(self):
         """A pre-existing trace_id must NOT be overwritten."""
         from galaxy_gateway.protocol.compat import inject_trace_metadata
+
         original_tid = str(uuid.uuid4())
-        out = inject_trace_metadata({
-            "type": "heartbeat",
-            "device_id": "n-notrace",
-            "trace_id": original_tid,
-        })
+        out = inject_trace_metadata(
+            {
+                "type": "heartbeat",
+                "device_id": "n-notrace",
+                "trace_id": original_tid,
+            }
+        )
         assert out["trace_id"] == original_tid
 
 
 # ===========================================================================
 # 4. Android WS endpoint contracts — gateway TestClient
 # ===========================================================================
+
 
 @pytest.fixture(scope="module")
 def gw_client():
@@ -577,6 +593,7 @@ def gw_client():
     """
     from fastapi import FastAPI, Query, WebSocket
     from fastapi.testclient import TestClient
+
     from galaxy_gateway.app import _handle_android_ws
 
     minimal_app = FastAPI()
@@ -586,11 +603,10 @@ def gw_client():
         await _handle_android_ws(websocket, device_id)
 
     @minimal_app.websocket("/ws/android")
-    async def ws_android_fallback(
-        websocket: WebSocket, device_id: str = Query(None)
-    ):
+    async def ws_android_fallback(websocket: WebSocket, device_id: str = Query(None)):
         if not device_id:
             import uuid as _uuid
+
             device_id = str(_uuid.uuid4())
         await _handle_android_ws(websocket, device_id)
 
@@ -613,8 +629,7 @@ def _ws_register_and_heartbeat(
     """
     with client.websocket_connect(path) as ws:
         # Step 1 – register
-        ws.send_text(json.dumps(_mk_v3("device_register", device_id=device_id,
-                                       platform="android", model="Test Phone")))
+        ws.send_text(json.dumps(_mk_v3("device_register", device_id=device_id, platform="android", model="Test Phone")))
         reg_ack = ws.receive_json()
 
         # Step 2 – heartbeat
@@ -642,26 +657,20 @@ class TestAndroidWSEndpointContracts:
 
     def test_ws_android_primary_register_ack(self, gw_client):
         device_id = f"ws-a-{uuid.uuid4().hex[:8]}"
-        reg_ack, _ = _ws_register_and_heartbeat(
-            gw_client, f"/ws/android/{device_id}", device_id
-        )
+        reg_ack, _ = _ws_register_and_heartbeat(gw_client, f"/ws/android/{device_id}", device_id)
         self._assert_register_ack_contract(reg_ack, "/ws/android/{device_id}")
         assert reg_ack["device_id"] == device_id
 
     def test_ws_android_primary_heartbeat_ack(self, gw_client):
         device_id = f"ws-ah-{uuid.uuid4().hex[:8]}"
-        _, hb_ack = _ws_register_and_heartbeat(
-            gw_client, f"/ws/android/{device_id}", device_id
-        )
+        _, hb_ack = _ws_register_and_heartbeat(gw_client, f"/ws/android/{device_id}", device_id)
         self._assert_heartbeat_ack_contract(hb_ack, "/ws/android/{device_id}")
         assert hb_ack["device_id"] == device_id
 
     def test_ws_android_primary_version_field(self, gw_client):
         """Responses on /ws/android/{device_id} must always carry version='3.0'."""
         device_id = f"ws-av-{uuid.uuid4().hex[:8]}"
-        reg_ack, hb_ack = _ws_register_and_heartbeat(
-            gw_client, f"/ws/android/{device_id}", device_id
-        )
+        reg_ack, hb_ack = _ws_register_and_heartbeat(gw_client, f"/ws/android/{device_id}", device_id)
         assert reg_ack.get("version") == "3.0"
         assert hb_ack.get("version") == "3.0"
 
@@ -671,9 +680,7 @@ class TestAndroidWSEndpointContracts:
 
     def test_ws_android_fallback_with_device_id(self, gw_client):
         device_id = f"ws-af-{uuid.uuid4().hex[:8]}"
-        reg_ack, hb_ack = _ws_register_and_heartbeat(
-            gw_client, f"/ws/android?device_id={device_id}", device_id
-        )
+        reg_ack, hb_ack = _ws_register_and_heartbeat(gw_client, f"/ws/android?device_id={device_id}", device_id)
         self._assert_register_ack_contract(reg_ack, "/ws/android?device_id=")
         self._assert_heartbeat_ack_contract(hb_ack, "/ws/android?device_id=")
 
@@ -692,25 +699,19 @@ class TestAndroidWSEndpointContracts:
 
     def test_ws_device_register_ack(self, gw_client):
         device_id = f"ws-d-{uuid.uuid4().hex[:8]}"
-        reg_ack, _ = _ws_register_and_heartbeat(
-            gw_client, f"/ws/device/{device_id}", device_id
-        )
+        reg_ack, _ = _ws_register_and_heartbeat(gw_client, f"/ws/device/{device_id}", device_id)
         self._assert_register_ack_contract(reg_ack, "/ws/device/{device_id}")
         assert reg_ack["device_id"] == device_id
 
     def test_ws_device_heartbeat_ack(self, gw_client):
         device_id = f"ws-dh-{uuid.uuid4().hex[:8]}"
-        _, hb_ack = _ws_register_and_heartbeat(
-            gw_client, f"/ws/device/{device_id}", device_id
-        )
+        _, hb_ack = _ws_register_and_heartbeat(gw_client, f"/ws/device/{device_id}", device_id)
         self._assert_heartbeat_ack_contract(hb_ack, "/ws/device/{device_id}")
 
     def test_ws_device_version_field(self, gw_client):
         """Responses on /ws/device/{device_id} must always carry version='3.0'."""
         device_id = f"ws-dv-{uuid.uuid4().hex[:8]}"
-        reg_ack, hb_ack = _ws_register_and_heartbeat(
-            gw_client, f"/ws/device/{device_id}", device_id
-        )
+        reg_ack, hb_ack = _ws_register_and_heartbeat(gw_client, f"/ws/device/{device_id}", device_id)
         assert reg_ack.get("version") == "3.0"
         assert hb_ack.get("version") == "3.0"
 
@@ -721,9 +722,7 @@ class TestAndroidWSEndpointContracts:
     def test_regression_register_ack_type_is_stable(self, gw_client):
         """Snapshot regression: device_register_ack type field must equal 'device_register_ack'."""
         device_id = f"ws-rg-{uuid.uuid4().hex[:8]}"
-        reg_ack, _ = _ws_register_and_heartbeat(
-            gw_client, f"/ws/android/{device_id}", device_id
-        )
+        reg_ack, _ = _ws_register_and_heartbeat(gw_client, f"/ws/android/{device_id}", device_id)
         assert reg_ack["type"] == "device_register_ack", (
             "REGRESSION: device_register response 'type' has changed from "
             f"'device_register_ack' to {reg_ack['type']!r}"
@@ -732,20 +731,15 @@ class TestAndroidWSEndpointContracts:
     def test_regression_heartbeat_ack_type_is_stable(self, gw_client):
         """Snapshot regression: heartbeat_ack type field must equal 'heartbeat_ack'."""
         device_id = f"ws-rhb-{uuid.uuid4().hex[:8]}"
-        _, hb_ack = _ws_register_and_heartbeat(
-            gw_client, f"/ws/android/{device_id}", device_id
-        )
+        _, hb_ack = _ws_register_and_heartbeat(gw_client, f"/ws/android/{device_id}", device_id)
         assert hb_ack["type"] == "heartbeat_ack", (
-            "REGRESSION: heartbeat response 'type' has changed from "
-            f"'heartbeat_ack' to {hb_ack['type']!r}"
+            "REGRESSION: heartbeat response 'type' has changed from " f"'heartbeat_ack' to {hb_ack['type']!r}"
         )
 
     def test_regression_message_id_unique_per_response(self, gw_client):
         """Each response must carry a distinct message_id (no static/re-used IDs)."""
         device_id = f"ws-uid-{uuid.uuid4().hex[:8]}"
-        reg_ack, hb_ack = _ws_register_and_heartbeat(
-            gw_client, f"/ws/android/{device_id}", device_id
-        )
+        reg_ack, hb_ack = _ws_register_and_heartbeat(gw_client, f"/ws/android/{device_id}", device_id)
         ids = {reg_ack.get("message_id"), hb_ack.get("message_id")}
         assert len(ids) == 2, (
             "REGRESSION: register_ack and heartbeat_ack share the same message_id. "
@@ -761,6 +755,7 @@ class TestAndroidWSEndpointContracts:
 # 5. AIP v3 MessageType completeness (contract guard)
 # ===========================================================================
 
+
 class TestMessageTypeContractCompleteness:
     """
     Contract: the set of MessageType values covers all message types that
@@ -774,14 +769,14 @@ class TestMessageTypeContractCompleteness:
         "capability_report",
         "diagnostics_payload",
         "task_result",
-        "task_end",         # bidirectional: client sends task_end, server also sends it
+        "task_end",  # bidirectional: client sends task_end, server also sends it
         "task_progress",
         "command_result",
-        "error",            # bidirectional: both sides may send error
+        "error",  # bidirectional: both sides may send error
         "agent_ping",
         "device_status",
         "gui_screen_content",
-        "vision_request",   # client initiates; server responds with vision_result
+        "vision_request",  # client initiates; server responds with vision_result
     ]
 
     # Server→Android outbound types (server sends these)
@@ -791,20 +786,21 @@ class TestMessageTypeContractCompleteness:
         "capability_report_ack",
         "diagnostics_payload_ack",
         "task_assign",
-        "task_end",         # bidirectional: server sends task_end to signal completion
+        "task_end",  # bidirectional: server sends task_end to signal completion
         "command",
         "gui_click",
         "gui_swipe",
         "gui_input",
         "gui_screenshot",
         "gui_element_query",
-        "error",            # bidirectional: server sends error on failure
-        "vision_result",    # server response to client's vision_request
+        "error",  # bidirectional: server sends error on failure
+        "vision_result",  # server response to client's vision_request
     ]
 
     @pytest.mark.parametrize("msg_type", ANDROID_INBOUND)
     def test_inbound_type_in_message_type_enum(self, msg_type):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         all_values = {t.value for t in MessageType}
         assert msg_type in all_values, (
             f"AIP v3 MessageType enum is missing inbound type '{msg_type}'. "
@@ -814,6 +810,7 @@ class TestMessageTypeContractCompleteness:
     @pytest.mark.parametrize("msg_type", ANDROID_OUTBOUND)
     def test_outbound_type_in_message_type_enum(self, msg_type):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         all_values = {t.value for t in MessageType}
         assert msg_type in all_values, (
             f"AIP v3 MessageType enum is missing outbound type '{msg_type}'. "

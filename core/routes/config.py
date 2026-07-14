@@ -7,6 +7,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Any, Dict
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -26,10 +27,20 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     "GOOGLE_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "Google API Key"},
     "GEMINI_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "Gemini API Key (alias)"},
     "XAI_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "xAI API Key"},
-    "META_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "Meta Model API Key (Muse Spark)"},
+    "META_API_KEY": {
+        "default": "",
+        "type": "string",
+        "category": "llm",
+        "description": "Meta Model API Key (Muse Spark)",
+    },
     "MISTRAL_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "Mistral API Key"},
     "QWEN_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "Qwen API Key"},
-    "DASHSCOPE_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "DashScope API Key (alias)"},
+    "DASHSCOPE_API_KEY": {
+        "default": "",
+        "type": "string",
+        "category": "llm",
+        "description": "DashScope API Key (alias)",
+    },
     "ZHIPU_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "Zhipu API Key"},
     "GROQ_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "Groq API Key"},
     "HF_API_TOKEN": {"default": "", "type": "string", "category": "llm", "description": "HuggingFace API Token"},
@@ -41,134 +52,538 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     "ONEAPI_URL": {"default": "", "type": "url", "category": "llm", "description": "OneAPI Base URL"},
     "ONEAPI_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "OneAPI Key"},
     "OPENROUTER_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "OpenRouter API Key"},
-    "DEEPSEEK_OCR2_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "DeepSeek OCR API Key"},
-    "OPENAI_API_BASE": {"default": "", "type": "url", "category": "llm", "description": "OpenAI-compatible Base URL (代理/中转)"},
-    "SONAR_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "Perplexity Sonar API Key (alias)"},
+    "DEEPSEEK_OCR2_API_KEY": {
+        "default": "",
+        "type": "string",
+        "category": "llm",
+        "description": "DeepSeek OCR API Key",
+    },
+    "OPENAI_API_BASE": {
+        "default": "",
+        "type": "url",
+        "category": "llm",
+        "description": "OpenAI-compatible Base URL (代理/中转)",
+    },
+    "SONAR_API_KEY": {
+        "default": "",
+        "type": "string",
+        "category": "llm",
+        "description": "Perplexity Sonar API Key (alias)",
+    },
     "VLLM_URL": {"default": "", "type": "url", "category": "llm", "description": "vLLM URL (alias)"},
     "LOCAL_VLLM_URL": {"default": "", "type": "url", "category": "llm", "description": "Local vLLM URL"},
     # options 不再硬编码——由 get_config 在响应时从 core.model_catalog 动态派生
     # （与 model_selection、面板 ModelsTab 同一真相源，杜绝三份清单漂移）。
-    "OLLAMA_MODEL": {"default": "", "type": "select", "category": "llm", "description": "本地主脑模型（原生多模态）", "options": []},
-
+    "OLLAMA_MODEL": {
+        "default": "",
+        "type": "select",
+        "category": "llm",
+        "description": "本地主脑模型（原生多模态）",
+        "options": [],
+    },
     # --- Service Ports & Nodes ---
     "GATEWAY_PORT": {"default": "9000", "type": "number", "category": "ports", "description": "Galaxy Gateway Port"},
     "UFO_NODE_HOST": {"default": "localhost", "type": "string", "category": "ports", "description": "Node Host"},
-    "NODE_92_URL": {"default": "http://localhost:8092", "type": "url", "category": "ports", "description": "Device Control Service"},
-    "NODE_45_URL": {"default": "http://localhost:8045", "type": "url", "category": "ports", "description": "Desktop Endpoint"},
-    "NODE_33_URL": {"default": "http://localhost:8033", "type": "url", "category": "ports", "description": "ADB Control"},
-    "NODE_71_URL": {"default": "http://localhost:8071", "type": "url", "category": "ports", "description": "Multi-Device Orchestration"},
+    "NODE_92_URL": {
+        "default": "http://localhost:8092",
+        "type": "url",
+        "category": "ports",
+        "description": "Device Control Service",
+    },
+    "NODE_45_URL": {
+        "default": "http://localhost:8045",
+        "type": "url",
+        "category": "ports",
+        "description": "Desktop Endpoint",
+    },
+    "NODE_33_URL": {
+        "default": "http://localhost:8033",
+        "type": "url",
+        "category": "ports",
+        "description": "ADB Control",
+    },
+    "NODE_71_URL": {
+        "default": "http://localhost:8071",
+        "type": "url",
+        "category": "ports",
+        "description": "Multi-Device Orchestration",
+    },
     "NODE_71_HOST": {"default": "localhost", "type": "string", "category": "ports", "description": "Node 71 Host"},
-    "NODE_95_URL": {"default": "http://localhost:8095", "type": "url", "category": "ports", "description": "Vision Sampler"},
-    "NODE_97_URL": {"default": "http://localhost:8097", "type": "url", "category": "ports", "description": "Academic Retrieval"},
+    "NODE_95_URL": {
+        "default": "http://localhost:8095",
+        "type": "url",
+        "category": "ports",
+        "description": "Vision Sampler",
+    },
+    "NODE_97_URL": {
+        "default": "http://localhost:8097",
+        "type": "url",
+        "category": "ports",
+        "description": "Academic Retrieval",
+    },
     "NODE09_SANDBOX_URL": {"default": "", "type": "url", "category": "ports", "description": "Code Sandbox"},
     "OLLAMA_URL": {"default": "", "type": "url", "category": "ports", "description": "Ollama URL"},
     "QDRANT_URL": {"default": "", "type": "url", "category": "ports", "description": "Qdrant Vector DB"},
     "REDIS_URL": {"default": "", "type": "url", "category": "ports", "description": "Redis URL"},
     "SECRETVAULT_URL": {"default": "", "type": "url", "category": "ports", "description": "Secret Vault"},
-    "MAIN_REPO_URL": {"default": "http://localhost:8080", "type": "url", "category": "ports", "description": "Main Repo URL"},
+    "MAIN_REPO_URL": {
+        "default": "http://localhost:8080",
+        "type": "url",
+        "category": "ports",
+        "description": "Main Repo URL",
+    },
     "MQTT_PORT": {"default": "", "type": "number", "category": "ports", "description": "MQTT Broker Port"},
-
     # --- Authentication & Security ---
-    "GALAXY_AUTH_ENABLED": {"default": "false", "type": "boolean", "category": "auth", "description": "Enable Authentication"},
+    "GALAXY_AUTH_ENABLED": {
+        "default": "false",
+        "type": "boolean",
+        "category": "auth",
+        "description": "Enable Authentication",
+    },
     "GALAXY_API_TOKEN": {"default": "", "type": "string", "category": "auth", "description": "API Token (single)"},
-    "GALAXY_API_TOKENS": {"default": "", "type": "string", "category": "auth", "description": "API Tokens (comma-separated)"},
+    "GALAXY_API_TOKENS": {
+        "default": "",
+        "type": "string",
+        "category": "auth",
+        "description": "API Tokens (comma-separated)",
+    },
     "GALAXY_API_TOKEN_EXPIRY": {"default": "", "type": "string", "category": "auth", "description": "Token Expiry"},
     "GALAXY_REVOKED_TOKENS": {"default": "", "type": "string", "category": "auth", "description": "Revoked Tokens"},
-    "GALAXY_REQUIRE_API_TOKEN": {"default": "false", "type": "boolean", "category": "auth", "description": "Require API Token"},
-    "GALAXY_STRICT_AUTHORITY_CHECK": {"default": "false", "type": "boolean", "category": "auth", "description": "Strict Authority Check"},
-    "GALAXY_SECRET_BACKEND": {"default": "env", "type": "select", "category": "auth", "description": "Secret Backend", "options": ["env", "vault", "kms"]},
+    "GALAXY_REQUIRE_API_TOKEN": {
+        "default": "false",
+        "type": "boolean",
+        "category": "auth",
+        "description": "Require API Token",
+    },
+    "GALAXY_STRICT_AUTHORITY_CHECK": {
+        "default": "false",
+        "type": "boolean",
+        "category": "auth",
+        "description": "Strict Authority Check",
+    },
+    "GALAXY_SECRET_BACKEND": {
+        "default": "env",
+        "type": "select",
+        "category": "auth",
+        "description": "Secret Backend",
+        "options": ["env", "vault", "kms"],
+    },
     "GALAXY_TLS_CERT": {"default": "", "type": "string", "category": "auth", "description": "TLS Certificate Path"},
     "GITHUB_TOKEN": {"default": "", "type": "string", "category": "auth", "description": "GitHub Token"},
     # 融合(域6):删掉两个幽灵开关 GALAXY_AUDIT_KEY / GALAXY_MESSAGE_SIGNING_KEY——
     # 全仓无任何代码读它们(面板上摆着没实现的安全功能,误导操作者)。消息签名
     # 【真实已实现】,但键名是 GALAXY_MESH_SECRET(capability_token HMAC 签名/校验,
     # 缺省自动生成 .galaxy_mesh_key),把真的这只上面板。
-    "GALAXY_MESH_SECRET": {"default": "", "type": "string", "category": "auth", "description": "Mesh 签名密钥(能力令牌 HMAC;留空自动生成)"},
-
+    "GALAXY_MESH_SECRET": {
+        "default": "",
+        "type": "string",
+        "category": "auth",
+        "description": "Mesh 签名密钥(能力令牌 HMAC;留空自动生成)",
+    },
     # --- Mesh & NATS ---
-    "GALAXY_MDNS": {"default": "true", "type": "boolean", "category": "mesh", "description": "局域网零配置发现(mDNS · 手机/手表免输 IP 自动发现网关)"},
+    "GALAXY_MDNS": {
+        "default": "true",
+        "type": "boolean",
+        "category": "mesh",
+        "description": "局域网零配置发现(mDNS · 手机/手表免输 IP 自动发现网关)",
+    },
     "GALAXY_NATS_ENABLED": {"default": "true", "type": "boolean", "category": "mesh", "description": "Enable NATS"},
-    "GALAXY_NATS_URL": {"default": "nats://localhost:4222", "type": "url", "category": "mesh", "description": "NATS URL"},
-    "GALAXY_NATS_EXECUTOR_TIMEOUT": {"default": "30", "type": "number", "category": "mesh", "description": "NATS Executor Timeout (s)"},
-    "GALAXY_NATS_EXECUTOR_FALLBACK": {"default": "sync", "type": "select", "category": "mesh", "description": "Executor Fallback Mode", "options": ["sync", "async", "reject"]},
-    "GALAXY_CROSS_DEVICE_ENABLED": {"default": "true", "type": "boolean", "category": "mesh", "description": "Cross-Device Orchestration"},
-    "GALAXY_MASTER_BRAIN_ENABLED": {"default": "false", "type": "boolean", "category": "mesh", "description": "启用主脑编排 + worker/NATS 分布式(多设备总开关 · 默认关=单机)"},
-    "GALAXY_FABRIC_STRICT": {"default": "false", "type": "boolean", "category": "mesh", "description": "严格织网:NATS 不可达即视为致命(默认关=优雅降级单机)"},
-    "GALAXY_HEARTBEAT_INTERVAL": {"default": "5", "type": "number", "category": "mesh", "description": "Heartbeat Interval (s)"},
-    "FEDERATION_ENABLED": {"default": "false", "type": "boolean", "category": "mesh", "description": "Enable Federation"},
-    "FEDERATION_LOCAL_HOST": {"default": "", "type": "string", "category": "mesh", "description": "Federation Local Host"},
-    "FEDERATION_PEERS": {"default": "", "type": "string", "category": "mesh", "description": "Federation Peers (comma-separated)"},
-    "FEDERATION_HEARTBEAT_INTERVAL": {"default": "10", "type": "number", "category": "mesh", "description": "Federation Heartbeat (s)"},
-    "GALAXY_CANONICAL_DISPATCH_AUTHORITY_MODE": {"default": "strict", "type": "select", "category": "mesh", "description": "Dispatch Authority Mode", "options": ["strict", "advisory", "disabled"]},
-
+    "GALAXY_NATS_URL": {
+        "default": "nats://localhost:4222",
+        "type": "url",
+        "category": "mesh",
+        "description": "NATS URL",
+    },
+    "GALAXY_NATS_EXECUTOR_TIMEOUT": {
+        "default": "30",
+        "type": "number",
+        "category": "mesh",
+        "description": "NATS Executor Timeout (s)",
+    },
+    "GALAXY_NATS_EXECUTOR_FALLBACK": {
+        "default": "sync",
+        "type": "select",
+        "category": "mesh",
+        "description": "Executor Fallback Mode",
+        "options": ["sync", "async", "reject"],
+    },
+    "GALAXY_CROSS_DEVICE_ENABLED": {
+        "default": "true",
+        "type": "boolean",
+        "category": "mesh",
+        "description": "Cross-Device Orchestration",
+    },
+    "GALAXY_MASTER_BRAIN_ENABLED": {
+        "default": "false",
+        "type": "boolean",
+        "category": "mesh",
+        "description": "启用主脑编排 + worker/NATS 分布式(多设备总开关 · 默认关=单机)",
+    },
+    "GALAXY_FABRIC_STRICT": {
+        "default": "false",
+        "type": "boolean",
+        "category": "mesh",
+        "description": "严格织网:NATS 不可达即视为致命(默认关=优雅降级单机)",
+    },
+    "GALAXY_HEARTBEAT_INTERVAL": {
+        "default": "5",
+        "type": "number",
+        "category": "mesh",
+        "description": "Heartbeat Interval (s)",
+    },
+    "FEDERATION_ENABLED": {
+        "default": "false",
+        "type": "boolean",
+        "category": "mesh",
+        "description": "Enable Federation",
+    },
+    "FEDERATION_LOCAL_HOST": {
+        "default": "",
+        "type": "string",
+        "category": "mesh",
+        "description": "Federation Local Host",
+    },
+    "FEDERATION_PEERS": {
+        "default": "",
+        "type": "string",
+        "category": "mesh",
+        "description": "Federation Peers (comma-separated)",
+    },
+    "FEDERATION_HEARTBEAT_INTERVAL": {
+        "default": "10",
+        "type": "number",
+        "category": "mesh",
+        "description": "Federation Heartbeat (s)",
+    },
+    "GALAXY_CANONICAL_DISPATCH_AUTHORITY_MODE": {
+        "default": "strict",
+        "type": "select",
+        "category": "mesh",
+        "description": "Dispatch Authority Mode",
+        "options": ["strict", "advisory", "disabled"],
+    },
     # --- Circuit Breaker & Adaptive ---
-    "GALAXY_ROUTER_ADAPTIVE_CONCURRENCY": {"default": "true", "type": "boolean", "category": "circuit", "description": "Adaptive Concurrency"},
-    "GALAXY_ROUTER_CB_ENABLED": {"default": "true", "type": "boolean", "category": "circuit", "description": "Circuit Breaker"},
-    "GALAXY_ROUTER_MAX_QUEUE_DEPTH": {"default": "1000", "type": "number", "category": "circuit", "description": "Max Queue Depth"},
-    "GALAXY_CB_FAILURE_THRESHOLD": {"default": "5", "type": "number", "category": "circuit", "description": "CB Failure Threshold"},
-    "GALAXY_CB_RECOVERY_TIMEOUT_S": {"default": "30", "type": "number", "category": "circuit", "description": "CB Recovery Timeout (s)"},
-    "GALAXY_CB_HALF_OPEN_PROBES": {"default": "3", "type": "number", "category": "circuit", "description": "CB Half-Open Probes"},
-    "GALAXY_CB_WINDOW_SIZE": {"default": "60", "type": "number", "category": "circuit", "description": "CB Window Size (s)"},
-    "GALAXY_AS_TARGET_LATENCY_MS": {"default": "2000", "type": "number", "category": "circuit", "description": "Adaptive Target Latency (ms)"},
-    "GALAXY_AS_ERROR_THRESHOLD": {"default": "0.1", "type": "number", "category": "circuit", "description": "Adaptive Error Threshold"},
-    "GALAXY_AS_INIT_LIMIT": {"default": "10", "type": "number", "category": "circuit", "description": "Adaptive Init Limit"},
-    "GALAXY_AS_MAX_LIMIT": {"default": "200", "type": "number", "category": "circuit", "description": "Adaptive Max Limit"},
-    "GALAXY_AS_MIN_LIMIT": {"default": "1", "type": "number", "category": "circuit", "description": "Adaptive Min Limit"},
-    "GALAXY_AS_SAMPLE_WINDOW": {"default": "60", "type": "number", "category": "circuit", "description": "Adaptive Sample Window (s)"},
-    "GALAXY_AS_PROBE_INTERVAL_S": {"default": "5", "type": "number", "category": "circuit", "description": "Adaptive Probe Interval (s)"},
-
+    "GALAXY_ROUTER_ADAPTIVE_CONCURRENCY": {
+        "default": "true",
+        "type": "boolean",
+        "category": "circuit",
+        "description": "Adaptive Concurrency",
+    },
+    "GALAXY_ROUTER_CB_ENABLED": {
+        "default": "true",
+        "type": "boolean",
+        "category": "circuit",
+        "description": "Circuit Breaker",
+    },
+    "GALAXY_ROUTER_MAX_QUEUE_DEPTH": {
+        "default": "1000",
+        "type": "number",
+        "category": "circuit",
+        "description": "Max Queue Depth",
+    },
+    "GALAXY_CB_FAILURE_THRESHOLD": {
+        "default": "5",
+        "type": "number",
+        "category": "circuit",
+        "description": "CB Failure Threshold",
+    },
+    "GALAXY_CB_RECOVERY_TIMEOUT_S": {
+        "default": "30",
+        "type": "number",
+        "category": "circuit",
+        "description": "CB Recovery Timeout (s)",
+    },
+    "GALAXY_CB_HALF_OPEN_PROBES": {
+        "default": "3",
+        "type": "number",
+        "category": "circuit",
+        "description": "CB Half-Open Probes",
+    },
+    "GALAXY_CB_WINDOW_SIZE": {
+        "default": "60",
+        "type": "number",
+        "category": "circuit",
+        "description": "CB Window Size (s)",
+    },
+    "GALAXY_AS_TARGET_LATENCY_MS": {
+        "default": "2000",
+        "type": "number",
+        "category": "circuit",
+        "description": "Adaptive Target Latency (ms)",
+    },
+    "GALAXY_AS_ERROR_THRESHOLD": {
+        "default": "0.1",
+        "type": "number",
+        "category": "circuit",
+        "description": "Adaptive Error Threshold",
+    },
+    "GALAXY_AS_INIT_LIMIT": {
+        "default": "10",
+        "type": "number",
+        "category": "circuit",
+        "description": "Adaptive Init Limit",
+    },
+    "GALAXY_AS_MAX_LIMIT": {
+        "default": "200",
+        "type": "number",
+        "category": "circuit",
+        "description": "Adaptive Max Limit",
+    },
+    "GALAXY_AS_MIN_LIMIT": {
+        "default": "1",
+        "type": "number",
+        "category": "circuit",
+        "description": "Adaptive Min Limit",
+    },
+    "GALAXY_AS_SAMPLE_WINDOW": {
+        "default": "60",
+        "type": "number",
+        "category": "circuit",
+        "description": "Adaptive Sample Window (s)",
+    },
+    "GALAXY_AS_PROBE_INTERVAL_S": {
+        "default": "5",
+        "type": "number",
+        "category": "circuit",
+        "description": "Adaptive Probe Interval (s)",
+    },
     # --- Storage ---
     "GALAXY_DATA_DIR": {"default": "./data", "type": "string", "category": "storage", "description": "Data Directory"},
-    "GALAXY_MARKET_STORE_DIR": {"default": "./market", "type": "string", "category": "storage", "description": "Market Store Dir"},
-    "GALAXY_FEATURE_FLAGS_PATH": {"default": "", "type": "string", "category": "storage", "description": "Feature Flags Path"},
-    "GALAXY_MASTER_BRAIN_STATE_PATH": {"default": "", "type": "string", "category": "storage", "description": "Master Brain State Path"},
-    "CHROMA_PERSIST_DIR": {"default": "./chroma", "type": "string", "category": "storage", "description": "Chroma Persist Dir"},
-    "ANDROID_DEVICE_STATE_STORE_PATH": {"default": "", "type": "string", "category": "storage", "description": "Android State Store"},
-    "ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS": {"default": "300", "type": "number", "category": "storage", "description": "Android Snapshot TTL (s)"},
-
+    "GALAXY_MARKET_STORE_DIR": {
+        "default": "./market",
+        "type": "string",
+        "category": "storage",
+        "description": "Market Store Dir",
+    },
+    "GALAXY_FEATURE_FLAGS_PATH": {
+        "default": "",
+        "type": "string",
+        "category": "storage",
+        "description": "Feature Flags Path",
+    },
+    "GALAXY_MASTER_BRAIN_STATE_PATH": {
+        "default": "",
+        "type": "string",
+        "category": "storage",
+        "description": "Master Brain State Path",
+    },
+    "CHROMA_PERSIST_DIR": {
+        "default": "./chroma",
+        "type": "string",
+        "category": "storage",
+        "description": "Chroma Persist Dir",
+    },
+    "ANDROID_DEVICE_STATE_STORE_PATH": {
+        "default": "",
+        "type": "string",
+        "category": "storage",
+        "description": "Android State Store",
+    },
+    "ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS": {
+        "default": "300",
+        "type": "number",
+        "category": "storage",
+        "description": "Android Snapshot TTL (s)",
+    },
     # --- Development ---
     "GALAXY_DEV_MODE": {"default": "false", "type": "boolean", "category": "dev", "description": "Developer Mode"},
-    "GALAXY_MODE": {"default": "standard", "type": "select", "category": "dev", "description": "Run Mode", "options": ["standard", "distributed", "federated", "standalone"]},
-    "GALAXY_SYSTEM_MODE": {"default": "desktop-local", "type": "select", "category": "mesh", "description": "运行模式（desktop-local=单机 · desktop-cross-device=跨设备织网）", "options": ["desktop-local", "desktop-cross-device"]},
-    "GALAXY_PREFLIGHT_MODE": {"default": "normal", "type": "select", "category": "dev", "description": "Preflight Mode", "options": ["normal", "strict", "skip"]},
-    "GALAXY_PREFLIGHT_FAIL_FAST": {"default": "false", "type": "boolean", "category": "dev", "description": "Preflight Fail-Fast"},
-    "GALAXY_ALLOW_LEGACY_SCHEDULER_FALLBACK": {"default": "false", "type": "boolean", "category": "dev", "description": "Legacy Scheduler Fallback"},
-    "GALAXY_ENTRYMODE_USE_READINESS": {"default": "true", "type": "boolean", "category": "dev", "description": "Use Readiness Check"},
-    "CMD_MAX_CONCURRENT": {"default": "50", "type": "number", "category": "dev", "description": "Max Concurrent Commands"},
-    "CONCURRENCY_GLOBAL_MAX": {"default": "100", "type": "number", "category": "dev", "description": "Global Concurrency Max"},
-    "GALAXY_MAX_CONTEXT_TOKENS": {"default": "100000", "type": "number", "category": "dev", "description": "Max Context Tokens"},
-    "GALAXY_MAX_MESSAGE_SIZE": {"default": "10485760", "type": "number", "category": "dev", "description": "Max Message Size (bytes)"},
-
+    "GALAXY_MODE": {
+        "default": "standard",
+        "type": "select",
+        "category": "dev",
+        "description": "Run Mode",
+        "options": ["standard", "distributed", "federated", "standalone"],
+    },
+    "GALAXY_SYSTEM_MODE": {
+        "default": "desktop-local",
+        "type": "select",
+        "category": "mesh",
+        "description": "运行模式（desktop-local=单机 · desktop-cross-device=跨设备织网）",
+        "options": ["desktop-local", "desktop-cross-device"],
+    },
+    "GALAXY_PREFLIGHT_MODE": {
+        "default": "normal",
+        "type": "select",
+        "category": "dev",
+        "description": "Preflight Mode",
+        "options": ["normal", "strict", "skip"],
+    },
+    "GALAXY_PREFLIGHT_FAIL_FAST": {
+        "default": "false",
+        "type": "boolean",
+        "category": "dev",
+        "description": "Preflight Fail-Fast",
+    },
+    "GALAXY_ALLOW_LEGACY_SCHEDULER_FALLBACK": {
+        "default": "false",
+        "type": "boolean",
+        "category": "dev",
+        "description": "Legacy Scheduler Fallback",
+    },
+    "GALAXY_ENTRYMODE_USE_READINESS": {
+        "default": "true",
+        "type": "boolean",
+        "category": "dev",
+        "description": "Use Readiness Check",
+    },
+    "CMD_MAX_CONCURRENT": {
+        "default": "50",
+        "type": "number",
+        "category": "dev",
+        "description": "Max Concurrent Commands",
+    },
+    "CONCURRENCY_GLOBAL_MAX": {
+        "default": "100",
+        "type": "number",
+        "category": "dev",
+        "description": "Global Concurrency Max",
+    },
+    "GALAXY_MAX_CONTEXT_TOKENS": {
+        "default": "100000",
+        "type": "number",
+        "category": "dev",
+        "description": "Max Context Tokens",
+    },
+    "GALAXY_MAX_MESSAGE_SIZE": {
+        "default": "10485760",
+        "type": "number",
+        "category": "dev",
+        "description": "Max Message Size (bytes)",
+    },
     # --- 行为 / 在场 (面板"行为"区直接开关，无需改环境变量) ---
     # 这些是面向用户的行为开关，面板上以明确的开关呈现:说/流式/自发在场/原生音频。
-    "GALAXY_AUTONOMY": {"default": "guided", "type": "select", "category": "behavior", "description": "自治档位（safe=敏感操作全问 · guided=读放行写审批 · autonomous=不逐步问人）", "options": ["safe", "guided", "autonomous"]},
-    "GALAXY_SPEAK": {"default": "true", "type": "boolean", "category": "behavior", "description": "朗读回复（说 · 默认开）"},
-    "GALAXY_TTS_ENGINE": {"default": "edge", "type": "select", "category": "behavior", "description": "说·语音引擎（edge=联网音质好 · melo=离线中英混读自然 · piper=离线最轻 · auto=优先edge退melo退piper）", "options": ["edge", "melo", "piper", "auto"]},
-    "GALAXY_ASR_ENGINE": {"default": "auto", "type": "select", "category": "behavior", "description": "听·识别引擎（auto=中文CPU首选SenseVoice退Whisper · sensevoice=离线中文快而准 · whisper=兜底）", "options": ["auto", "sensevoice", "whisper"]},
-    "GALAXY_VOICE_EAGERNESS": {"default": "auto", "type": "select", "category": "behavior", "description": "接话急切度（low=耐心等你想 · auto · high=抢答）——按说话内容判断回合是否结束", "options": ["low", "auto", "high"]},
-    "GALAXY_VOICE_DELEGATE": {"default": "true", "type": "boolean", "category": "behavior", "description": "语音委托模式（重活先口头致谢、后台跑,对话不被堵死 · 默认开）"},
-    "GALAXY_VOICE_BACKCHANNEL": {"default": "true", "type": "boolean", "category": "behavior", "description": "后台干活时的短应答（嗯,还在处理 · 默认开）"},
-    "GALAXY_TTS_STREAMING": {"default": "true", "type": "boolean", "category": "behavior", "description": "分句流式朗读（边生成边说 · 默认开）"},
-    "GALAXY_AMBIENT_LOOP": {"default": "false", "type": "boolean", "category": "behavior", "description": "自发在场（持续看/听、自己判断何时开口 · 需桌面感知）"},
-    "GALAXY_NATIVE_AUDIO": {"default": "false", "type": "boolean", "category": "behavior", "description": "原生音频输入（模型直接听音频，需全模态服务；关则走 ASR 转文字）"},
-    "GALAXY_AMBIENT_INTERVAL_S": {"default": "2.0", "type": "number", "category": "behavior", "description": "自发在场节拍(秒)"},
-    "GALAXY_AMBIENT_COOLDOWN_S": {"default": "20.0", "type": "number", "category": "behavior", "description": "开口/委托后冷却(秒,防话痨)"},
-
+    "GALAXY_AUTONOMY": {
+        "default": "guided",
+        "type": "select",
+        "category": "behavior",
+        "description": "自治档位（safe=敏感操作全问 · guided=读放行写审批 · autonomous=不逐步问人）",
+        "options": ["safe", "guided", "autonomous"],
+    },
+    "GALAXY_SPEAK": {
+        "default": "true",
+        "type": "boolean",
+        "category": "behavior",
+        "description": "朗读回复（说 · 默认开）",
+    },
+    "GALAXY_TTS_ENGINE": {
+        "default": "edge",
+        "type": "select",
+        "category": "behavior",
+        "description": "说·语音引擎（edge=联网音质好 · melo=离线中英混读自然 · piper=离线最轻 · auto=优先edge退melo退piper）",
+        "options": ["edge", "melo", "piper", "auto"],
+    },
+    "GALAXY_ASR_ENGINE": {
+        "default": "auto",
+        "type": "select",
+        "category": "behavior",
+        "description": "听·识别引擎（auto=中文CPU首选SenseVoice退Whisper · sensevoice=离线中文快而准 · whisper=兜底）",
+        "options": ["auto", "sensevoice", "whisper"],
+    },
+    "GALAXY_VOICE_EAGERNESS": {
+        "default": "auto",
+        "type": "select",
+        "category": "behavior",
+        "description": "接话急切度（low=耐心等你想 · auto · high=抢答）——按说话内容判断回合是否结束",
+        "options": ["low", "auto", "high"],
+    },
+    "GALAXY_VOICE_DELEGATE": {
+        "default": "true",
+        "type": "boolean",
+        "category": "behavior",
+        "description": "语音委托模式（重活先口头致谢、后台跑,对话不被堵死 · 默认开）",
+    },
+    "GALAXY_VOICE_BACKCHANNEL": {
+        "default": "true",
+        "type": "boolean",
+        "category": "behavior",
+        "description": "后台干活时的短应答（嗯,还在处理 · 默认开）",
+    },
+    "GALAXY_TTS_STREAMING": {
+        "default": "true",
+        "type": "boolean",
+        "category": "behavior",
+        "description": "分句流式朗读（边生成边说 · 默认开）",
+    },
+    "GALAXY_AMBIENT_LOOP": {
+        "default": "false",
+        "type": "boolean",
+        "category": "behavior",
+        "description": "自发在场（持续看/听、自己判断何时开口 · 需桌面感知）",
+    },
+    "GALAXY_NATIVE_AUDIO": {
+        "default": "false",
+        "type": "boolean",
+        "category": "behavior",
+        "description": "原生音频输入（模型直接听音频，需全模态服务；关则走 ASR 转文字）",
+    },
+    "GALAXY_AMBIENT_INTERVAL_S": {
+        "default": "2.0",
+        "type": "number",
+        "category": "behavior",
+        "description": "自发在场节拍(秒)",
+    },
+    "GALAXY_AMBIENT_COOLDOWN_S": {
+        "default": "20.0",
+        "type": "number",
+        "category": "behavior",
+        "description": "开口/委托后冷却(秒,防话痨)",
+    },
     # --- WebRTC & Network ---
-    "GALAXY_ENABLE_WEBRTC_DATA_CHANNEL": {"default": "false", "type": "boolean", "category": "network", "description": "WebRTC Data Channel"},
+    "GALAXY_ENABLE_WEBRTC_DATA_CHANNEL": {
+        "default": "false",
+        "type": "boolean",
+        "category": "network",
+        "description": "WebRTC Data Channel",
+    },
     "GALAXY_TURN_URLS": {"default": "", "type": "string", "category": "network", "description": "TURN Server URLs"},
     "GALAXY_HEADSCALE_URL": {"default": "", "type": "url", "category": "network", "description": "Headscale URL"},
-    "GALAXY_TAILSCALE_CHECK_INTERVAL": {"default": "60", "type": "number", "category": "network", "description": "Tailscale Check Interval (s)"},
+    "GALAXY_TAILSCALE_CHECK_INTERVAL": {
+        "default": "60",
+        "type": "number",
+        "category": "network",
+        "description": "Tailscale Check Interval (s)",
+    },
     "CORS_ALLOWED_ORIGINS": {"default": "*", "type": "string", "category": "network", "description": "CORS Origins"},
-    "CORS_ALLOWED_METHODS": {"default": "GET,POST,PUT,DELETE", "type": "string", "category": "network", "description": "CORS Methods"},
+    "CORS_ALLOWED_METHODS": {
+        "default": "GET,POST,PUT,DELETE",
+        "type": "string",
+        "category": "network",
+        "description": "CORS Methods",
+    },
     "CORS_ALLOWED_HEADERS": {"default": "*", "type": "string", "category": "network", "description": "CORS Headers"},
-
     # --- SLO & Continuity ---
-    "GALAXY_SLO_LATENCY_WINDOW": {"default": "300", "type": "number", "category": "slo", "description": "SLO Latency Window (s)"},
-    "GALAXY_SLO_HEARTBEAT_WINDOW": {"default": "60", "type": "number", "category": "slo", "description": "SLO Heartbeat Window (s)"},
-    "GALAXY_RESULT_INGRESS_CONTINUITY_MODE": {"default": "strict", "type": "select", "category": "slo", "description": "Result Continuity Mode", "options": ["strict", "best-effort", "disabled"]},
-    "GALAXY_RUNTIME_TRUTH_CONTINUITY_MODE": {"default": "strict", "type": "select", "category": "slo", "description": "Truth Continuity Mode", "options": ["strict", "best-effort", "disabled"]},
-    "GALAXY_MASTER_BRAIN_SCALING_REEVAL_INTERVAL_S": {"default": "300", "type": "number", "category": "slo", "description": "Scaling Re-eval Interval (s)"},
+    "GALAXY_SLO_LATENCY_WINDOW": {
+        "default": "300",
+        "type": "number",
+        "category": "slo",
+        "description": "SLO Latency Window (s)",
+    },
+    "GALAXY_SLO_HEARTBEAT_WINDOW": {
+        "default": "60",
+        "type": "number",
+        "category": "slo",
+        "description": "SLO Heartbeat Window (s)",
+    },
+    "GALAXY_RESULT_INGRESS_CONTINUITY_MODE": {
+        "default": "strict",
+        "type": "select",
+        "category": "slo",
+        "description": "Result Continuity Mode",
+        "options": ["strict", "best-effort", "disabled"],
+    },
+    "GALAXY_RUNTIME_TRUTH_CONTINUITY_MODE": {
+        "default": "strict",
+        "type": "select",
+        "category": "slo",
+        "description": "Truth Continuity Mode",
+        "options": ["strict", "best-effort", "disabled"],
+    },
+    "GALAXY_MASTER_BRAIN_SCALING_REEVAL_INTERVAL_S": {
+        "default": "300",
+        "type": "number",
+        "category": "slo",
+        "description": "Scaling Re-eval Interval (s)",
+    },
     "GALAXY_TEMPORAL_URL": {"default": "", "type": "url", "category": "slo", "description": "Temporal URL"},
     "GALAXY_GW_ADAPTER_DLQ_SUBJECT": {"default": "", "type": "string", "category": "slo", "description": "DLQ Subject"},
 }
@@ -191,6 +606,7 @@ async def get_config():
     dynamic_options: Dict[str, list] = {}
     try:
         from core.model_catalog import local_choice_options
+
         dynamic_options["OLLAMA_MODEL"] = local_choice_options()
     except Exception:  # noqa: BLE001
         pass
@@ -250,6 +666,7 @@ async def update_config(req: ConfigUpdateRequest):
     try:
         from core.config_schema import classify_key as _classify
         from core.config_service import ConfigService as _CS
+
         _cs = None
         for _k, _v in req.config.items():
             if _classify(_k) == "secret" and str(_v).strip():
@@ -271,6 +688,7 @@ async def update_config(req: ConfigUpdateRequest):
     if "OLLAMA_MODEL" in req.config:
         try:
             from core import model_catalog as _mc
+
             _tag = req.config["OLLAMA_MODEL"]
             _mc.save_tier(_mc.infer_tier_from_model(_tag), main_brain=_tag)
         except Exception as exc:  # noqa: BLE001
@@ -281,7 +699,8 @@ async def update_config(req: ConfigUpdateRequest):
     # 唯独 ambient 循环是常驻后台任务,需在这里显式拉起/收起。
     if "GALAXY_AMBIENT_LOOP" in req.config:
         try:
-            from core.ambient_attention_loop import get_ambient_loop, ambient_loop_enabled
+            from core.ambient_attention_loop import ambient_loop_enabled, get_ambient_loop
+
             _loop = get_ambient_loop()
             if ambient_loop_enabled() and not _loop.running:
                 await _loop.start()
@@ -310,6 +729,7 @@ async def update_config(req: ConfigUpdateRequest):
     # 一个"名义最高优先级、实际全程失效"的摆设。
     try:
         from core.unified_config import config as _unified_cfg
+
         _unified_cfg.reload()
     except Exception:
         pass
@@ -319,6 +739,7 @@ async def update_config(req: ConfigUpdateRequest):
     if any(CONFIG_SCHEMA.get(k, {}).get("category") == "llm" for k in req.config):
         try:
             from core.multi_llm_router import refresh_llm_router
+
             refreshed = await refresh_llm_router()
         except Exception:
             refreshed = None
@@ -390,9 +811,7 @@ async def probe_config_urls(req: ProbeRequest):
         to_probe[key] = os.environ.get(key, meta["default"])
 
     if to_probe:
-        probed = await _asyncio.gather(
-            *(_asyncio.to_thread(_probe_one, raw) for raw in to_probe.values())
-        )
+        probed = await _asyncio.gather(*(_asyncio.to_thread(_probe_one, raw) for raw in to_probe.values()))
         results.update(zip(to_probe.keys(), probed))
 
     return {"results": results}

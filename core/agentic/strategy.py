@@ -50,27 +50,31 @@ def _agent_factory(llm_router: Any, factory: Any) -> Any:
     if factory is not None:
         return factory
     from core.agent_factory import get_agent_factory
+
     return get_agent_factory(llm_router)
 
 
 def _build_fractal(llm_router: Any, factory: Any) -> wf.Workflow:
     from core.fractal_agent import FractalExecutor
-    executor = FractalExecutor(
-        llm_router=llm_router, agent_factory=_agent_factory(llm_router, factory))
+
+    executor = FractalExecutor(llm_router=llm_router, agent_factory=_agent_factory(llm_router, factory))
     return wf.from_fractal_executor(executor, name="fractal")
 
 
 def _build_team(strategy: str) -> StrategyBuilder:
     def _builder(llm_router: Any, factory: Any) -> wf.Workflow:
         from core.agent_team import TeamManager
+
         manager = TeamManager(agent_factory=_agent_factory(llm_router, factory))
         return wf.from_team_manager(manager, strategy, name=f"team:{strategy}")
+
     return _builder
 
 
 def _build_single(llm_router: Any, factory: Any) -> wf.Workflow:
     # single：用单成员团队作最接近单 agent 的一站式入口。
     from core.agent_team import TeamManager
+
     manager = TeamManager(agent_factory=_agent_factory(llm_router, factory))
     return wf.from_team_manager(manager, "specialized", member_count=1, name="single")
 

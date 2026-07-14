@@ -117,6 +117,7 @@ EXECUTION_SPINE_INGRESS_POLICY: str = (
 # Ingress source classification
 # ---------------------------------------------------------------------------
 
+
 class ExecutionIngressSource(str, Enum):
     """Classifies the origin of an execution ingress frame."""
 
@@ -145,6 +146,7 @@ class ExecutionIngressSource(str, Enum):
 # ---------------------------------------------------------------------------
 # Ingress record (observability ring-buffer entry)
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class IngressRecord:
@@ -203,6 +205,7 @@ def _append_ingress_record(record: IngressRecord) -> None:
 # ---------------------------------------------------------------------------
 # Normalization helpers
 # ---------------------------------------------------------------------------
+
 
 def _new_task_id() -> str:
     return f"task_{uuid.uuid4().hex[:16]}"
@@ -276,6 +279,7 @@ def normalize_ingress_to_envelope(
     # ── Fast path: already a TaskEnvelope ──────────────────────────────────
     try:
         from core.schemas.task_envelope import TaskEnvelope as _TE
+
         if isinstance(payload, _TE):
             return payload
     except Exception as exc:
@@ -284,6 +288,7 @@ def normalize_ingress_to_envelope(
     # ── Delegate to PR-2 message interop layer ─────────────────────────────
     try:
         from core.message_interop import normalize_to_task_envelope as _norm
+
         envelope = _norm(payload, source=source.value if isinstance(source, ExecutionIngressSource) else str(source))
         return envelope
     except Exception as exc:
@@ -302,11 +307,7 @@ def normalize_ingress_to_envelope(
     task_id = str(raw.get("task_id") or _new_task_id())
     trace_id = str(raw.get("trace_id") or _new_trace_id())
     tool_name = str(
-        raw.get("tool_name")
-        or raw.get("task_type")
-        or raw.get("action")
-        or raw.get("command")
-        or "unknown"
+        raw.get("tool_name") or raw.get("task_type") or raw.get("action") or raw.get("command") or "unknown"
     )
     targets_raw = list(raw.get("targets") or [])
     if not targets_raw:
@@ -317,6 +318,7 @@ def normalize_ingress_to_envelope(
 
     try:
         from core.schemas.task_envelope import TaskEnvelope as _TE
+
         return _TE(
             task_id=task_id,
             trace_id=trace_id,
@@ -326,7 +328,7 @@ def normalize_ingress_to_envelope(
             args=raw.get("args") or raw.get("payload") or raw.get("params") or {},
             metadata={"ingress_source": src_val},
         )
-    except Exception as exc:
+    except Exception:
         # pydantic / TaskEnvelope unavailable — return lightweight fallback
         return _FallbackEnvelope(
             task_id=task_id,
@@ -342,6 +344,7 @@ def normalize_ingress_to_envelope(
 # ---------------------------------------------------------------------------
 # Main spine entry — normalize + route
 # ---------------------------------------------------------------------------
+
 
 async def route_via_spine(
     payload: Any,
@@ -389,6 +392,7 @@ async def route_via_spine(
     # 2. Record ingress for observability
     try:
         from core.schemas.task_envelope import TaskEnvelope as _TE
+
         is_canonical = isinstance(payload, _TE)
     except Exception as exc:
         logger.debug("Fallback triggered: %s", exc)
@@ -401,7 +405,11 @@ async def route_via_spine(
         tool_name=getattr(envelope, "tool_name", ""),
         targets=list(getattr(envelope, "targets", []) or []),
         was_normalized=not is_canonical,
-        legacy_reason="" if is_canonical else f"ingress from {source.value if isinstance(source, ExecutionIngressSource) else source}",
+        legacy_reason=(
+            ""
+            if is_canonical
+            else f"ingress from {source.value if isinstance(source, ExecutionIngressSource) else source}"
+        ),
     )
     _append_ingress_record(rec)
 
@@ -409,6 +417,7 @@ async def route_via_spine(
     if router is None:
         try:
             from core.command_router import get_command_router
+
             router = get_command_router()
         except Exception as exc:
             return {
@@ -435,6 +444,7 @@ async def route_via_spine(
 # ---------------------------------------------------------------------------
 # Legacy ingress recorder (for non-spine paths that can't yet be migrated)
 # ---------------------------------------------------------------------------
+
 
 def record_legacy_ingress(
     source: ExecutionIngressSource,
@@ -475,16 +485,11 @@ def record_legacy_ingress(
         source=source,
         task_id=raw.get("task_id", ""),
         trace_id=raw.get("trace_id", ""),
-        tool_name=(
-            raw.get("tool_name")
-            or raw.get("task_type")
-            or raw.get("action")
-            or raw.get("command")
-            or ""
-        ),
+        tool_name=(raw.get("tool_name") or raw.get("task_type") or raw.get("action") or raw.get("command") or ""),
         targets=list(raw.get("targets") or []),
         was_normalized=True,
-        legacy_reason=reason or f"legacy ingress from {source.value if isinstance(source, ExecutionIngressSource) else source}",
+        legacy_reason=reason
+        or f"legacy ingress from {source.value if isinstance(source, ExecutionIngressSource) else source}",
     )
     _append_ingress_record(rec)
     return rec

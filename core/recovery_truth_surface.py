@@ -658,59 +658,67 @@ class RecoveryTruthReport:
 # Internal probe helpers
 # ---------------------------------------------------------------------------
 
+
 def _probe_continuity_available() -> bool:
     try:
         import core.flow_continuity_coordinator  # noqa: F401
+
         return True
-    except Exception as exc:
+    except Exception:
         return False
 
 
 def _probe_recovery_available() -> bool:
     try:
         import core.delegated_flow_recovery_coordinator  # noqa: F401
+
         return True
-    except Exception as exc:
+    except Exception:
         return False
 
 
 def _probe_closure_available() -> bool:
     try:
         import core.recovery_durability_closure_validator  # noqa: F401
+
         return True
-    except Exception as exc:
+    except Exception:
         return False
 
 
 def _probe_signal_guard_available() -> bool:
     try:
         import core.attached_runtime_recovery_readiness  # noqa: F401
+
         return True
-    except Exception as exc:
+    except Exception:
         return False
 
 
 def _probe_restart_recovery_available() -> bool:
     try:
         import core.runtime_restart_recovery  # noqa: F401
+
         return True
-    except Exception as exc:
+    except Exception:
         return False
 
 
 def _probe_offline_replay_contract_available() -> bool:
     try:
         import core.offline_replay_ordering_contract  # noqa: F401
+
         return True
-    except Exception as exc:
+    except Exception:
         return False
 
 
 def _probe_continuity_contract_available() -> bool:
     try:
         import core.inflight_task_continuity_contract  # noqa: F401
+
         return True
-    except Exception as exc:
+    except Exception:
         return False
 
 
@@ -779,9 +787,9 @@ def _build_reconnect_entry(available_modules: List[str]) -> RecoveryTruthEntry:
                 FlowContinuityCoordinator,
                 coordinate_reconnect,
             )
-            reconnect_decision_callable = (
-                callable(coordinate_reconnect)
-                and hasattr(FlowContinuityCoordinator, "decide_reconnect")
+
+            reconnect_decision_callable = callable(coordinate_reconnect) and hasattr(
+                FlowContinuityCoordinator, "decide_reconnect"
             )
         except Exception as exc:
             logger.debug("Fallback triggered: %s", exc)
@@ -812,8 +820,7 @@ def _build_reconnect_entry(available_modules: List[str]) -> RecoveryTruthEntry:
             status=RecoveryTruthStatus.partial,
             recovery_level=RecoveryLevel.participant_reconnect,
             evidence_summary=(
-                "core.flow_continuity_coordinator importable but "
-                "coordinate_reconnect callable check failed."
+                "core.flow_continuity_coordinator importable but " "coordinate_reconnect callable check failed."
             ),
             policy_reference=policy,
             supporting_modules=supporting,
@@ -822,10 +829,7 @@ def _build_reconnect_entry(available_modules: List[str]) -> RecoveryTruthEntry:
         dimension=dimension,
         status=RecoveryTruthStatus.unknown,
         recovery_level=RecoveryLevel.participant_reconnect,
-        evidence_summary=(
-            "FlowContinuityCoordinator unavailable; "
-            "cannot assess reconnect observation capability."
-        ),
+        evidence_summary=("FlowContinuityCoordinator unavailable; " "cannot assess reconnect observation capability."),
         policy_reference=policy,
         supporting_modules=[],
     )
@@ -844,6 +848,7 @@ def _build_redispatch_entry(available_modules: List[str]) -> RecoveryTruthEntry:
     if "core.delegated_flow_recovery_coordinator" in available_modules:
         try:
             from core.delegated_flow_recovery_coordinator import RecoveryAction
+
             redispatch_action_present = hasattr(RecoveryAction, "redispatch_runtime")
         except Exception as exc:
             logger.debug("Fallback triggered: %s", exc)
@@ -886,10 +891,7 @@ def _build_redispatch_entry(available_modules: List[str]) -> RecoveryTruthEntry:
         dimension=dimension,
         status=RecoveryTruthStatus.unknown,
         recovery_level=RecoveryLevel.v2_internal,
-        evidence_summary=(
-            "DelegatedFlowRecoveryCoordinator unavailable; "
-            "cannot assess redispatch capability."
-        ),
+        evidence_summary=("DelegatedFlowRecoveryCoordinator unavailable; " "cannot assess redispatch capability."),
         policy_reference=policy,
         supporting_modules=[],
     )
@@ -916,21 +918,24 @@ def _build_in_flight_continuity_entry(available_modules: List[str]) -> RecoveryT
         try:
             from core.inflight_task_continuity_contract import (
                 InFlightTaskContinuityContract,
-                TaskContinuityStatus,
                 TaskContinuityReport,
+                TaskContinuityStatus,
             )
-            continuity_contract_present = all([
-                callable(InFlightTaskContinuityContract),
-                hasattr(TaskContinuityStatus, "resumed"),
-                hasattr(TaskContinuityStatus, "recoverable"),
-                hasattr(TaskContinuityStatus, "interrupted"),
-                hasattr(TaskContinuityStatus, "abandoned"),
-                hasattr(TaskContinuityStatus, "needs_reconcile"),
-                hasattr(TaskContinuityStatus, "ambiguous"),
-                hasattr(TaskContinuityReport, "continuity_gap_count"),
-                hasattr(TaskContinuityReport, "has_unrecovered_tasks"),
-                hasattr(TaskContinuityReport, "has_ambiguous_tasks"),
-            ])
+
+            continuity_contract_present = all(
+                [
+                    callable(InFlightTaskContinuityContract),
+                    hasattr(TaskContinuityStatus, "resumed"),
+                    hasattr(TaskContinuityStatus, "recoverable"),
+                    hasattr(TaskContinuityStatus, "interrupted"),
+                    hasattr(TaskContinuityStatus, "abandoned"),
+                    hasattr(TaskContinuityStatus, "needs_reconcile"),
+                    hasattr(TaskContinuityStatus, "ambiguous"),
+                    hasattr(TaskContinuityReport, "continuity_gap_count"),
+                    hasattr(TaskContinuityReport, "has_unrecovered_tasks"),
+                    hasattr(TaskContinuityReport, "has_ambiguous_tasks"),
+                ]
+            )
         except Exception as exc:
             logger.debug("Fallback triggered: %s", exc)
             continuity_contract_present = None
@@ -939,6 +944,7 @@ def _build_in_flight_continuity_entry(available_modules: List[str]) -> RecoveryT
     if "core.delegated_flow_recovery_coordinator" in available_modules:
         try:
             from core.delegated_flow_recovery_coordinator import RecoveryAction
+
             continuity_actions_present = all(
                 hasattr(RecoveryAction, a)
                 for a in ("resume_in_place", "replay_from_checkpoint", "preserve_partial_then_resume")
@@ -1009,8 +1015,7 @@ def _build_in_flight_continuity_entry(available_modules: List[str]) -> RecoveryT
             status=RecoveryTruthStatus.partial,
             recovery_level=RecoveryLevel.task_continuity,
             evidence_summary=(
-                "core.delegated_flow_recovery_coordinator importable but "
-                "continuity action check failed."
+                "core.delegated_flow_recovery_coordinator importable but " "continuity action check failed."
             ),
             policy_reference=policy,
             supporting_modules=supporting,
@@ -1020,8 +1025,7 @@ def _build_in_flight_continuity_entry(available_modules: List[str]) -> RecoveryT
         status=RecoveryTruthStatus.unknown,
         recovery_level=RecoveryLevel.task_continuity,
         evidence_summary=(
-            "DelegatedFlowRecoveryCoordinator unavailable; "
-            "cannot assess in-flight continuity capability."
+            "DelegatedFlowRecoveryCoordinator unavailable; " "cannot assess in-flight continuity capability."
         ),
         policy_reference=policy,
         supporting_modules=[],
@@ -1047,6 +1051,7 @@ def _build_duplicate_dispatch_entry(available_modules: List[str]) -> RecoveryTru
             from core.delegated_flow_recovery_coordinator import (
                 RecoveryAction,
             )
+
             idempotency_present = hasattr(RecoveryAction, "suppress_duplicate_recovery")
         except Exception as exc:
             logger.debug("Fallback triggered: %s", exc)
@@ -1057,6 +1062,7 @@ def _build_duplicate_dispatch_entry(available_modules: List[str]) -> RecoveryTru
             from core.attached_runtime_recovery_readiness import (
                 check_signal_guard,
             )
+
             signal_guard_present = callable(check_signal_guard)
         except Exception as exc:
             logger.debug("Fallback triggered: %s", exc)
@@ -1095,9 +1101,7 @@ def _build_duplicate_dispatch_entry(available_modules: List[str]) -> RecoveryTru
             dimension=dimension,
             status=RecoveryTruthStatus.partial,
             recovery_level=RecoveryLevel.v2_internal,
-            evidence_summary=(
-                f"Partial duplicate-avoidance coverage: {mechanisms!r} present."
-            ),
+            evidence_summary=(f"Partial duplicate-avoidance coverage: {mechanisms!r} present."),
             policy_reference=policy,
             supporting_modules=supporting,
         )
@@ -1134,6 +1138,7 @@ def _build_state_aligned_entry(available_modules: List[str]) -> RecoveryTruthEnt
             from core.recovery_durability_closure_validator import (
                 build_recovery_closure_report,
             )
+
             r = build_recovery_closure_report()
             closure_all_closed = getattr(r, "all_closed", None)
         except Exception as exc:
@@ -1157,9 +1162,7 @@ def _build_state_aligned_entry(available_modules: List[str]) -> RecoveryTruthEnt
             ),
             policy_reference=policy,
             supporting_modules=supporting,
-            deferred_note=(
-                EPHEMERAL_TRANSPORT_BINDING_IS_DEFERRED_TRUTH_POLICY
-            ),
+            deferred_note=(EPHEMERAL_TRANSPORT_BINDING_IS_DEFERRED_TRUTH_POLICY),
         )
     if supporting:
         return RecoveryTruthEntry(
@@ -1180,10 +1183,7 @@ def _build_state_aligned_entry(available_modules: List[str]) -> RecoveryTruthEnt
         dimension=dimension,
         status=RecoveryTruthStatus.unknown,
         recovery_level=RecoveryLevel.authority_state_alignment,
-        evidence_summary=(
-            "Recovery modules unavailable; "
-            "cannot assess recovered state alignment."
-        ),
+        evidence_summary=("Recovery modules unavailable; " "cannot assess recovered state alignment."),
         policy_reference=policy,
         supporting_modules=[],
         deferred_note=EPHEMERAL_TRANSPORT_BINDING_IS_DEFERRED_TRUTH_POLICY,
@@ -1238,15 +1238,9 @@ def build_recovery_truth_report() -> RecoveryTruthReport:
         _build_state_aligned_entry(available_modules),
     ]
 
-    deferred_dims: List[str] = [
-        e.dimension.value for e in entries if e.status == RecoveryTruthStatus.deferred
-    ]
-    open_dims: List[str] = [
-        e.dimension.value for e in entries if e.status.is_open
-    ]
-    closed_dims: List[str] = [
-        e.dimension.value for e in entries if e.status.is_closed
-    ]
+    deferred_dims: List[str] = [e.dimension.value for e in entries if e.status == RecoveryTruthStatus.deferred]
+    open_dims: List[str] = [e.dimension.value for e in entries if e.status.is_open]
+    closed_dims: List[str] = [e.dimension.value for e in entries if e.status.is_closed]
 
     # Four-level success flags: closed or partial is treated as success
     # for the structural-wiring level; deferred/unknown is a gap.
@@ -1255,7 +1249,8 @@ def build_recovery_truth_report() -> RecoveryTruthReport:
         if not level_entries:
             return False
         return all(
-            e.status in (
+            e.status
+            in (
                 RecoveryTruthStatus.observed,
                 RecoveryTruthStatus.not_applicable,
                 RecoveryTruthStatus.partial,
@@ -1274,9 +1269,7 @@ def build_recovery_truth_report() -> RecoveryTruthReport:
         "GALAXY V2 — RECOVERY TRUTH SURFACE",
         "=" * 68,
         f"Modules available: {len(available_modules)}/6",
-        f"Dimensions closed: {len(closed_dims)}/6  "
-        f"open: {len(open_dims)}/6  "
-        f"deferred: {len(deferred_dims)}/6",
+        f"Dimensions closed: {len(closed_dims)}/6  " f"open: {len(open_dims)}/6  " f"deferred: {len(deferred_dims)}/6",
         "",
         "RECOVERY LAYER SUMMARY",
         "-" * 40,
@@ -1289,44 +1282,26 @@ def build_recovery_truth_report() -> RecoveryTruthReport:
         "-" * 40,
     ]
     for e in entries:
-        lines.append(
-            f"  [{e.status.value:>15s}] {e.dimension.value}"
-        )
+        lines.append(f"  [{e.status.value:>15s}] {e.dimension.value}")
     lines.append("")
     if deferred_dims:
         lines.append("DEFERRED BOUNDARIES (explicitly and honestly reported)")
         lines.append("-" * 40)
-        lines.append(
-            "  • Ephemeral transport binding identity proof: deferred"
-        )
-        lines.append(
-            "  • Multi-device simultaneous reconnect ordering: deferred"
-        )
+        lines.append("  • Ephemeral transport binding identity proof: deferred")
+        lines.append("  • Multi-device simultaneous reconnect ordering: deferred")
         lines.append("")
-    offline_contract_present = (
-        "core.offline_replay_ordering_contract" in available_modules
-    )
+    offline_contract_present = "core.offline_replay_ordering_contract" in available_modules
     if offline_contract_present:
         lines.append("OFFLINE REPLAY ORDERING CONTRACT (PR-P0-3)")
         lines.append("-" * 40)
-        lines.append(
-            "  • Android offline queue replay ordering: V2 authoritative"
-            " contract defined"
-        )
-        lines.append(
-            "  • V2 is declared replay ordering authority; signal guard"
-            " enforces semantics"
-        )
-        lines.append(
-            "  • Live drain evidence: pending (contract_not_yet_evidenced)"
-        )
+        lines.append("  • Android offline queue replay ordering: V2 authoritative" " contract defined")
+        lines.append("  • V2 is declared replay ordering authority; signal guard" " enforces semantics")
+        lines.append("  • Live drain evidence: pending (contract_not_yet_evidenced)")
         lines.append("")
     else:
         lines.append("DEFERRED BOUNDARY (offline replay contract not loaded)")
         lines.append("-" * 40)
-        lines.append(
-            "  • Android offline queue replay ordering (RS-16): deferred"
-        )
+        lines.append("  • Android offline queue replay ordering (RS-16): deferred")
         lines.append("")
     lines.append(
         "NOTE: 'partial' status = structural wiring verified, no live event "

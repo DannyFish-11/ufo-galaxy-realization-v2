@@ -52,8 +52,8 @@ import pytest
 
 try:
     from core.runtime.source_dispatch_orchestrator import (
-        INTEGRATED_REGRESSION_CLOSURE_RELEASE_READINESS_PR28_SENTINEL,
         END_TO_END_DISPATCH_EXECUTION_RESULT_COHERENCE_PR28_POLICY,
+        INTEGRATED_REGRESSION_CLOSURE_RELEASE_READINESS_PR28_SENTINEL,
         INTEGRATED_SELECTION_REGISTRY_REUSE_FALLBACK_BEHAVIOR_PR28_POLICY,
         REGISTRATION_CAPABILITY_READINESS_UNDER_INTEGRATED_SCENARIOS_PR28_POLICY,
         REGRESSION_STABILIZATION_RELEASE_READINESS_TIGHTENING_PR28_POLICY,
@@ -73,13 +73,13 @@ except ImportError:
     _PROJECTION_AVAILABLE = False
 
 try:
+    from core.runtime import END_TO_END_DISPATCH_EXECUTION_RESULT_COHERENCE_PR28_POLICY as _rt_e2e
+    from core.runtime import INTEGRATED_REGRESSION_CLOSURE_RELEASE_READINESS_PR28_SENTINEL as _rt_sentinel
+    from core.runtime import INTEGRATED_SELECTION_REGISTRY_REUSE_FALLBACK_BEHAVIOR_PR28_POLICY as _rt_selection
     from core.runtime import (
-        INTEGRATED_REGRESSION_CLOSURE_RELEASE_READINESS_PR28_SENTINEL as _rt_sentinel,
-        END_TO_END_DISPATCH_EXECUTION_RESULT_COHERENCE_PR28_POLICY as _rt_e2e,
-        INTEGRATED_SELECTION_REGISTRY_REUSE_FALLBACK_BEHAVIOR_PR28_POLICY as _rt_selection,
         REGISTRATION_CAPABILITY_READINESS_UNDER_INTEGRATED_SCENARIOS_PR28_POLICY as _rt_registration,
-        REGRESSION_STABILIZATION_RELEASE_READINESS_TIGHTENING_PR28_POLICY as _rt_regression,
     )
+    from core.runtime import REGRESSION_STABILIZATION_RELEASE_READINESS_TIGHTENING_PR28_POLICY as _rt_regression
 
     _RUNTIME_EXPORTS_AVAILABLE = True
 except ImportError:
@@ -89,6 +89,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Shared helpers for building dispatch/result payloads used in tests
 # ---------------------------------------------------------------------------
+
 
 def _make_dispatch_request(
     trace_id: str = "trace-001",
@@ -157,18 +158,12 @@ _IDENTITY_FIELDS = ("trace_id", "task_id", "session_id")
 
 _RESULT_BASE_FIELDS = ("trace_id", "task_id", "session_id", "device_id", "path", "status")
 
-_KNOWN_FAILURE_KINDS = frozenset(
-    {"registration_failure", "capability_failure", "readiness_failure", "config_error"}
-)
+_KNOWN_FAILURE_KINDS = frozenset({"registration_failure", "capability_failure", "readiness_failure", "config_error"})
 
-_KNOWN_TERMINAL_SIGNAL_KINDS = frozenset(
-    {"final_result", "error", "timeout", "cancelled"}
-)
+_KNOWN_TERMINAL_SIGNAL_KINDS = frozenset({"final_result", "error", "timeout", "cancelled"})
 
 
-def _result_identity_matches_request(
-    request: Dict[str, Any], result: Dict[str, Any]
-) -> bool:
+def _result_identity_matches_request(request: Dict[str, Any], result: Dict[str, Any]) -> bool:
     """Return True if identity fields are identical between request and result."""
     return all(request.get(f) == result.get(f) for f in _IDENTITY_FIELDS)
 
@@ -181,6 +176,7 @@ def _result_has_base_fields(result: Dict[str, Any]) -> bool:
 # ---------------------------------------------------------------------------
 # Group A — Orchestrator sentinels
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(
     not _ORCHESTRATOR_AVAILABLE,
@@ -234,6 +230,7 @@ class TestOrchestratorPR28Sentinels:
 # Group B — Projection sentinel
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(
     not _PROJECTION_AVAILABLE,
     reason="projection module unavailable",
@@ -247,9 +244,11 @@ class TestProjectionPR28Sentinel:
         assert "UNAVAILABLE" not in INTEGRATED_REGRESSION_CLOSURE_RELEASE_READINESS_ALIGNED_PR28
 
     def test_projection_sentinel_mentions_pr28(self) -> None:
-        assert "PR28" in INTEGRATED_REGRESSION_CLOSURE_RELEASE_READINESS_ALIGNED_PR28 or \
-               "PR-28" in INTEGRATED_REGRESSION_CLOSURE_RELEASE_READINESS_ALIGNED_PR28 or \
-               "28" in INTEGRATED_REGRESSION_CLOSURE_RELEASE_READINESS_ALIGNED_PR28
+        assert (
+            "PR28" in INTEGRATED_REGRESSION_CLOSURE_RELEASE_READINESS_ALIGNED_PR28
+            or "PR-28" in INTEGRATED_REGRESSION_CLOSURE_RELEASE_READINESS_ALIGNED_PR28
+            or "28" in INTEGRATED_REGRESSION_CLOSURE_RELEASE_READINESS_ALIGNED_PR28
+        )
 
     def test_projection_sentinel_mentions_regression(self) -> None:
         lower = INTEGRATED_REGRESSION_CLOSURE_RELEASE_READINESS_ALIGNED_PR28.lower()
@@ -263,6 +262,7 @@ class TestProjectionPR28Sentinel:
 # ---------------------------------------------------------------------------
 # Group C — core.runtime re-exports
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(
     not _RUNTIME_EXPORTS_AVAILABLE,
@@ -297,6 +297,7 @@ class TestCoreRuntimePR28Exports:
 # ---------------------------------------------------------------------------
 # Group D — End-to-end identity coherence
 # ---------------------------------------------------------------------------
+
 
 class TestEndToEndIdentityCoherence:
     def test_local_path_identity_preserved(self) -> None:
@@ -349,6 +350,7 @@ class TestEndToEndIdentityCoherence:
 # Group E — Fallback result identity
 # ---------------------------------------------------------------------------
 
+
 class TestFallbackResultIdentity:
     def test_fallback_result_carries_same_trace_id(self) -> None:
         req = _make_dispatch_request(trace_id="tr-fb-1")
@@ -394,6 +396,7 @@ class TestFallbackResultIdentity:
 # Group F — Integrated selection / registry / reuse / fallback chain
 # ---------------------------------------------------------------------------
 
+
 class TestIntegratedSelectionRegistryReuseFallbackChain:
     def test_primary_path_result_identity_stable(self) -> None:
         req = _make_dispatch_request(trace_id="tr-ch-1", path="reuse")
@@ -417,9 +420,7 @@ class TestIntegratedSelectionRegistryReuseFallbackChain:
                     trace_id=trace_id, task_id=task_id, session_id=session_id
                 )
             else:
-                result = _make_dispatch_result(
-                    trace_id=trace_id, task_id=task_id, session_id=session_id, path=path
-                )
+                result = _make_dispatch_result(trace_id=trace_id, task_id=task_id, session_id=session_id, path=path)
             assert result["trace_id"] == req["trace_id"]
             assert result["task_id"] == req["task_id"]
             assert result["session_id"] == req["session_id"]
@@ -449,6 +450,7 @@ class TestIntegratedSelectionRegistryReuseFallbackChain:
 # ---------------------------------------------------------------------------
 # Group G — Fallback path preserves reuse-binding coherence
 # ---------------------------------------------------------------------------
+
 
 class TestFallbackPreservesReuseBindingCoherence:
     def test_fallback_does_not_mutate_binding_id(self) -> None:
@@ -481,6 +483,7 @@ class TestFallbackPreservesReuseBindingCoherence:
 # Group H — Registration / capability / readiness coherence under integrated
 # ---------------------------------------------------------------------------
 
+
 class TestRegistrationCapabilityReadinessIntegrated:
     def test_readiness_failure_produces_known_failure_kind(self) -> None:
         result = _make_dispatch_result(status="failure", failure_kind="readiness_failure")
@@ -503,21 +506,13 @@ class TestRegistrationCapabilityReadinessIntegrated:
         assert len(fks) == len(set(fks))
 
     def test_readiness_failure_during_selection_matches_readiness_failure_in_ack(self) -> None:
-        selection_result = _make_dispatch_result(
-            status="failure", failure_kind="readiness_failure"
-        )
-        ack_result = _make_dispatch_result(
-            status="failure", failure_kind="readiness_failure"
-        )
+        selection_result = _make_dispatch_result(status="failure", failure_kind="readiness_failure")
+        ack_result = _make_dispatch_result(status="failure", failure_kind="readiness_failure")
         assert selection_result["failure_kind"] == ack_result["failure_kind"]
 
     def test_capability_failure_during_dispatch_matches_pre_dispatch_check(self) -> None:
-        dispatch_result = _make_dispatch_result(
-            status="failure", failure_kind="capability_failure"
-        )
-        pre_check_result = _make_dispatch_result(
-            status="failure", failure_kind="capability_failure"
-        )
+        dispatch_result = _make_dispatch_result(status="failure", failure_kind="capability_failure")
+        pre_check_result = _make_dispatch_result(status="failure", failure_kind="capability_failure")
         assert dispatch_result["failure_kind"] == pre_check_result["failure_kind"]
 
     def test_registration_failure_carries_structured_info(self) -> None:
@@ -542,6 +537,7 @@ class TestRegistrationCapabilityReadinessIntegrated:
 # ---------------------------------------------------------------------------
 # Group I — Cross-feature regression: result surfacing + selection fallback
 # ---------------------------------------------------------------------------
+
 
 class TestResultSurfacingWithSelectionFallback:
     def test_result_surface_fields_stable_under_local_path(self) -> None:
@@ -580,6 +576,7 @@ class TestResultSurfacingWithSelectionFallback:
 # ---------------------------------------------------------------------------
 # Group J — Cross-feature regression: gateway error semantics + readiness degradation
 # ---------------------------------------------------------------------------
+
 
 class TestGatewayErrorSemanticsWithReadinessDegradation:
     def test_readiness_degraded_produces_readiness_failure_kind(self) -> None:
@@ -621,6 +618,7 @@ class TestGatewayErrorSemanticsWithReadinessDegradation:
 # ---------------------------------------------------------------------------
 # Group K — Cross-feature regression: session registry and reuse-binding consistency
 # ---------------------------------------------------------------------------
+
 
 class TestSessionRegistryReuseBindingConsistency:
     def test_active_session_is_consistent_with_eligible_binding(self) -> None:
@@ -667,6 +665,7 @@ class TestSessionRegistryReuseBindingConsistency:
 # Group L — Sentinel keyword checks
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(
     not _ORCHESTRATOR_AVAILABLE,
     reason="source_dispatch_orchestrator unavailable",
@@ -708,6 +707,7 @@ class TestSentinelKeywords:
 # Group M — Delegated execution terminal signals consistent with reconciliation
 # ---------------------------------------------------------------------------
 
+
 class TestDelegatedExecutionTerminalSignalConsistency:
     def test_all_terminal_signal_kinds_are_known(self) -> None:
         for kind in _KNOWN_TERMINAL_SIGNAL_KINDS:
@@ -733,7 +733,9 @@ class TestDelegatedExecutionTerminalSignalConsistency:
         for kind in _KNOWN_TERMINAL_SIGNAL_KINDS:
             status = "success" if kind == "final_result" else "failure"
             result = _make_dispatch_result(
-                trace_id="tr-term", task_id="ta-term", session_id="se-term",
+                trace_id="tr-term",
+                task_id="ta-term",
+                session_id="se-term",
                 status=status,
                 payload={"signal_kind": kind},
             )
@@ -746,6 +748,7 @@ class TestDelegatedExecutionTerminalSignalConsistency:
 # ---------------------------------------------------------------------------
 # Group N — No parallel authority or duplicate end-to-end control path
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(
     not _ORCHESTRATOR_AVAILABLE,
@@ -779,6 +782,7 @@ class TestNoParallelAuthority:
 # Group O — Idempotency of select → reuse-check → fallback route
 # ---------------------------------------------------------------------------
 
+
 class TestSelectionChainIdempotency:
     def _simulate_selection_chain(
         self,
@@ -791,17 +795,25 @@ class TestSelectionChainIdempotency:
         """Simulate the select → reuse-check → fallback outcome."""
         if has_active_candidate and reuse_eligible:
             return _make_dispatch_result(
-                trace_id=trace_id, task_id=task_id, session_id=session_id,
-                path="reuse", status="success",
+                trace_id=trace_id,
+                task_id=task_id,
+                session_id=session_id,
+                path="reuse",
+                status="success",
             )
         elif has_active_candidate:
             return _make_dispatch_result(
-                trace_id=trace_id, task_id=task_id, session_id=session_id,
-                path="delegated", status="success",
+                trace_id=trace_id,
+                task_id=task_id,
+                session_id=session_id,
+                path="delegated",
+                status="success",
             )
         else:
             return _make_fallback_result(
-                trace_id=trace_id, task_id=task_id, session_id=session_id,
+                trace_id=trace_id,
+                task_id=task_id,
+                session_id=session_id,
                 failure_kind="readiness_failure",
                 fallback_reason="no_active_candidates",
             )

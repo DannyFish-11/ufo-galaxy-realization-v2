@@ -33,6 +33,7 @@ _CHOICE_FILE = PROJECT_ROOT / ".galaxy_model"
 def _choice_order() -> List[str]:
     try:
         from core.model_catalog import choice_order
+
         return choice_order()
     except Exception:  # noqa: BLE001 — catalog 不可用时的保守兜底
         return ["gemma4:e2b", "gemma4:e4b", "gemma4:12b", "openbmb/minicpm-o4.5"]
@@ -41,6 +42,7 @@ def _choice_order() -> List[str]:
 def _labels() -> Dict[str, Tuple[str, str]]:
     try:
         from core.model_catalog import get_model
+
         out: Dict[str, Tuple[str, str]] = {}
         for tag in _choice_order():
             spec = get_model(tag)
@@ -65,6 +67,7 @@ def parse_ollama_version(version_output: str) -> Optional[Tuple[int, int, int]]:
     """从 `ollama --version` 输出(如 "ollama version is 0.14.1")解析出
     (major, minor, patch)；解析不出返回 None。"""
     import re
+
     m = re.search(r"(\d+)\.(\d+)\.(\d+)", version_output or "")
     if not m:
         return None
@@ -86,6 +89,7 @@ def _brain_sizes() -> Dict[str, int]:
     """模型尺寸(MB)派生自 core.model_catalog（唯一真相源），失败时空表。"""
     try:
         from core.model_catalog import all_models
+
         return {s.tag: s.size_mb() for s in all_models()}
     except Exception:  # noqa: BLE001
         return {}
@@ -95,6 +99,7 @@ def _default_tag() -> str:
     """默认主脑派生自 core.model_catalog.default_model()（唯一真相源）。"""
     try:
         from core.model_catalog import default_model
+
         return default_model()
     except Exception:  # noqa: BLE001
         return "gemma4:12b"
@@ -121,14 +126,16 @@ def get_compute_summary() -> Tuple[int, bool, str]:
     """返回 (max_model_size_mb, has_gpu, 硬件摘要)。复用 core.hardware_compute_profiler。"""
     try:
         from core.hardware_compute_profiler import get_compute_profile_sync
+
         p = get_compute_profile_sync()
         max_mb = int(getattr(p, "max_model_size_mb", 0) or 0)
         gpus = getattr(p, "gpus", []) or []
         has_gpu = bool(gpus)
         if has_gpu:
             g = gpus[0]
-            summary = (f"GPU {getattr(g, 'name', '?')} "
-                       f"(显存 {getattr(g, 'total_vram_mb', 0)} MB) | 可加载 ≤ {max_mb} MB")
+            summary = (
+                f"GPU {getattr(g, 'name', '?')} " f"(显存 {getattr(g, 'total_vram_mb', 0)} MB) | 可加载 ≤ {max_mb} MB"
+            )
         else:
             summary = f"未检测到独立 GPU（CPU 模式）| 可加载 ≤ {max_mb} MB"
         return max_mb, has_gpu, summary
@@ -165,6 +172,7 @@ def load_choice() -> str:
     """当前主脑 tag —— 收敛到 model_catalog 的统一记录(不再独立读 .galaxy_model)。"""
     try:
         from core.model_catalog import main_brain
+
         return main_brain()
     except Exception:  # noqa: BLE001 — catalog 不可用时兜底读旧文件(迁移期)
         try:
@@ -184,6 +192,7 @@ def save_choice(tag: str) -> None:
         return
     try:
         from core.model_catalog import save_main_brain
+
         save_main_brain(tag)
     except Exception:  # noqa: BLE001 — catalog 不可用时至少把运行时 env 设上
         os.environ["OLLAMA_MODEL"] = tag
@@ -211,8 +220,8 @@ def interactive_select() -> str:
     非交互终端返回推荐档位的主脑，不阻塞。
     """
     from core import cli_render as r
-    from core.ascii_art import Colors
     from core import model_catalog as mc
+    from core.ascii_art import Colors
 
     max_mb, has_gpu, hw = get_compute_summary()
     rec_tier = recommend_tier(has_gpu, max_mb)
@@ -244,15 +253,14 @@ def interactive_select() -> str:
         return f"{color}{t}{Colors.ENDC}" if r._use_color() else t
 
     print()
-    print("  " + _c("选择 AI 主脑档位", Colors.BOLD + Colors.CYAN)
-          + _c("  (AB 两档 · 本地原生多模态)", Colors.DIM))
+    print("  " + _c("选择 AI 主脑档位", Colors.BOLD + Colors.CYAN) + _c("  (AB 两档 · 本地原生多模态)", Colors.DIM))
     r.rule()
     r.phase("硬件", hw, "info")
     r.phase("推荐", f"{rec_tier} 档  ←（按你的实际硬件）", "ok")
     print()
     keys = [t.key for t in tiers]
     for i, t in enumerate(tiers, 1):
-        is_rec = (t.key == rec_tier)
+        is_rec = t.key == rec_tier
         marker = _c("▸", Colors.GREEN) if is_rec else " "
         num = _c(f"[{i}]", Colors.BOLD if is_rec else Colors.DIM)
         io = mc.tier_effective_io(t.key)
@@ -260,8 +268,10 @@ def interactive_select() -> str:
         tail = _c("  ← 推荐", Colors.GREEN) if is_rec else ""
         print(f"  {marker} {num} {_c(t.label, Colors.BOLD if is_rec else Colors.ENDC)}{tail}")
         print(f"         {_c(t.desc, Colors.DIM)}")
-        print(f"         {_c(io_txt, Colors.DIM)} · 模型: "
-              + _c(", ".join(m.name for m in mc.tier_models(t.key)), Colors.DIM))
+        print(
+            f"         {_c(io_txt, Colors.DIM)} · 模型: "
+            + _c(", ".join(m.name for m in mc.tier_models(t.key)), Colors.DIM)
+        )
     r.rule()
     print("  " + _c("回车=用推荐档 · 数字=选档 · s=跳过下载", Colors.DIM))
     while True:
@@ -292,6 +302,7 @@ def background_pull(tag: str) -> None:
     import shutil
     import subprocess
     import threading
+
     if not tag:
         return
     if not shutil.which("ollama"):
@@ -302,17 +313,21 @@ def background_pull(tag: str) -> None:
         # `ollama create` 才能把下载的 GGUF 导入成本地模型,同样依赖这个命令)
         # 也一起被跳过,但控制台【什么提示都没有】,用户只会觉得"什么都没发生"。
         # 这里改成至少打印一句清楚的原因,不再彻底沉默。
-        print("     未检测到 ollama 命令,跳过本地主脑模型拉取与 HuggingFace 回退"
-              "(两者都需要 ollama 命令来导入/运行模型)。"
-              "可先在「模型」tab 填一个云端 API Key 作为主力兜底，"
-              "或安装 Ollama: https://ollama.com/download")
+        print(
+            "     未检测到 ollama 命令,跳过本地主脑模型拉取与 HuggingFace 回退"
+            "(两者都需要 ollama 命令来导入/运行模型)。"
+            "可先在「模型」tab 填一个云端 API Key 作为主力兜底，"
+            "或安装 Ollama: https://ollama.com/download"
+        )
         return
 
     def _pull() -> None:
         try:
             import httpx
+
             # ollama 地址解析收口到 core.ollama_endpoint 唯一属主(空值/缺协议头都兜底)。
             from core.ollama_endpoint import resolve_ollama_base_url
+
             base = resolve_ollama_base_url()
             have: List[str] = []
             try:
@@ -337,13 +352,21 @@ def background_pull(tag: str) -> None:
                     show_r = httpx.post(f"{base}/api/show", json={"name": matched}, timeout=5.0)
                     if show_r.status_code == 200:
                         return  # 确实已装好且可用
-                    print(f"  ⚠ Ollama 列表里有 {matched}，但 /api/show 核实不可用"
-                          f"(status={show_r.status_code})——当作未安装，重新拉取。")
+                    print(
+                        f"  ⚠ Ollama 列表里有 {matched}，但 /api/show 核实不可用"
+                        f"(status={show_r.status_code})——当作未安装，重新拉取。"
+                    )
                 except Exception as exc:
                     print(f"  ⚠ Ollama 列表里有 {matched}，但核实可用性失败({exc})——当作未安装，重新拉取。")
             print(f"  ▶ 正在后台拉取本地主脑模型 ollama pull {tag} …(不阻塞启动)")
-            proc = subprocess.run(["ollama", "pull", tag], capture_output=True, text=True,
-                                  encoding="utf-8", errors="replace", timeout=3600)
+            proc = subprocess.run(
+                ["ollama", "pull", tag],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=3600,
+            )
             if proc.returncode == 0:
                 print(f"  ✓ 本地主脑模型已就绪:{tag}")
                 return
@@ -353,20 +376,32 @@ def background_pull(tag: str) -> None:
             _err = (proc.stderr or proc.stdout or "").strip()[:300]
             print(f"  ⚠ 拉取 {tag} 失败 — {_err}")
             try:
-                _ver = subprocess.run(["ollama", "--version"], capture_output=True, text=True,
-                                      encoding="utf-8", errors="replace", timeout=5).stdout.strip()
+                _ver = subprocess.run(
+                    ["ollama", "--version"],
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=5,
+                ).stdout.strip()
                 print(f"     当前 Ollama 版本:{_ver or '(未知)'}")
                 _too_old = is_ollama_version_too_old(_ver)
                 if _too_old is True:
-                    print(f"     ⚠ 你的 Ollama 版本明显低于 {root} 系列所需的最低版本"
-                          f"(经核实需 ≥ {'.'.join(map(str, MIN_OLLAMA_VERSION_FOR_GEMMA4))}，"
-                          f"建议直接升到最新版)。这几乎可以肯定就是拉取失败的原因。")
-                    print(f"     Windows 升级:winget upgrade Ollama.Ollama ,"
-                          f"或从 https://ollama.com/download/windows 下载最新安装包直接覆盖安装"
-                          f"(会保留已下载的模型)。升级后重跑 `ollama pull {tag}` 应该就能成功。")
+                    print(
+                        f"     ⚠ 你的 Ollama 版本明显低于 {root} 系列所需的最低版本"
+                        f"(经核实需 ≥ {'.'.join(map(str, MIN_OLLAMA_VERSION_FOR_GEMMA4))}，"
+                        f"建议直接升到最新版)。这几乎可以肯定就是拉取失败的原因。"
+                    )
+                    print(
+                        f"     Windows 升级:winget upgrade Ollama.Ollama ,"
+                        f"或从 https://ollama.com/download/windows 下载最新安装包直接覆盖安装"
+                        f"(会保留已下载的模型)。升级后重跑 `ollama pull {tag}` 应该就能成功。"
+                    )
                 elif _too_old is False:
-                    print("     Ollama 版本本身不算旧，拉取失败更可能是网络/registry 问题，"
-                          "或该 tag 确实不在库里——继续尝试 HuggingFace 回退。")
+                    print(
+                        "     Ollama 版本本身不算旧，拉取失败更可能是网络/registry 问题，"
+                        "或该 tag 确实不在库里——继续尝试 HuggingFace 回退。"
+                    )
             except Exception:
                 pass
 
@@ -376,6 +411,7 @@ def background_pull(tag: str) -> None:
             if os.environ.get("GALAXY_HF_OLLAMA_FALLBACK", "1").strip().lower() not in ("0", "false", "no", "off"):
                 try:
                     from core.hf_ollama_import_fallback import download_and_import_to_ollama
+
                     local_tag = download_and_import_to_ollama(tag)
                 except Exception as exc:  # noqa: BLE001
                     local_tag = None
@@ -412,8 +448,5 @@ def resolve_main_brain(interactive: bool = True) -> str:
 
 # ── 向后兼容：main.py / launch_desktop 仍以 MODELS[tag]["name"] 取展示名 ──
 # 同样派生自 catalog（模块导入期求值一次；catalog 是静态定义，够用）。
-MODELS: Dict[str, Dict] = {
-    tag: {"name": lbl[0], "modalities": lbl[1]}
-    for tag, lbl in _labels().items()
-}
+MODELS: Dict[str, Dict] = {tag: {"name": lbl[0], "modalities": lbl[1]} for tag, lbl in _labels().items()}
 DEFAULT_MODEL = _default_tag()

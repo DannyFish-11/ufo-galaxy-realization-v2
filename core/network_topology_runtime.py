@@ -94,8 +94,7 @@ __all__ = [
 
 #: Module authority marker.
 NETWORK_TOPOLOGY_RUNTIME_AUTHORITY: str = (
-    "core.network_topology_runtime"
-    " — canonical device/gateway/fabric topology runtime (PR-8)"
+    "core.network_topology_runtime" " — canonical device/gateway/fabric topology runtime (PR-8)"
 )
 
 #: Layer position within the canonical control-plane stack.
@@ -355,6 +354,7 @@ class GroundedRuntimeTopology:
 @dataclass
 class NetworkPosition:
     """Network position of a single device (legacy PR-28 surface)."""
+
     device_id: str = ""
     lan_subnet: str = ""
     lan_ip: str = ""
@@ -384,6 +384,7 @@ class NetworkPosition:
 @dataclass
 class PathAssessment:
     """Best path assessment between two devices (legacy PR-28 surface)."""
+
     source: str = ""
     target: str = ""
     best_path: str = "unknown"
@@ -501,9 +502,7 @@ class NetworkTopologyRuntime:
                 TRUTH_GRADE_PROJECTION,
                 source="core.network_topology_runtime.NetworkTopologyRuntime",
                 recovery_status=(
-                    RECOVERY_STATUS_REVALIDATED
-                    if node.node_id in self._recovered_node_ids
-                    else RECOVERY_STATUS_LIVE
+                    RECOVERY_STATUS_REVALIDATED if node.node_id in self._recovered_node_ids else RECOVERY_STATUS_LIVE
                 ),
                 field_truth_grades={"topology_view": TRUTH_GRADE_PROJECTION},
                 notes=[
@@ -523,9 +522,7 @@ class NetworkTopologyRuntime:
         self.persist_durable_state()
         return node
 
-    def update_node_state(
-        self, node_id: str, state: TopologyConnectionState
-    ) -> Optional[TopologyNode]:
+    def update_node_state(self, node_id: str, state: TopologyConnectionState) -> Optional[TopologyNode]:
         """Update a node's connection state; ``None`` for unknown nodes."""
         with self._rw_lock:
             node = self._nodes.get(node_id)
@@ -549,9 +546,7 @@ class NetworkTopologyRuntime:
             if node is None:
                 return False
             removed_edges = [
-                eid
-                for eid, e in self._edges.items()
-                if e.source_node_id == node_id or e.target_node_id == node_id
+                eid for eid, e in self._edges.items() if e.source_node_id == node_id or e.target_node_id == node_id
             ]
             for eid in removed_edges:
                 del self._edges[eid]
@@ -605,9 +600,7 @@ class NetworkTopologyRuntime:
                 TRUTH_GRADE_PROJECTION,
                 source="core.network_topology_runtime.NetworkTopologyRuntime",
                 recovery_status=(
-                    RECOVERY_STATUS_REVALIDATED
-                    if edge.edge_id in self._recovered_edge_ids
-                    else RECOVERY_STATUS_LIVE
+                    RECOVERY_STATUS_REVALIDATED if edge.edge_id in self._recovered_edge_ids else RECOVERY_STATUS_LIVE
                 ),
                 field_truth_grades={"topology_view": TRUTH_GRADE_PROJECTION},
             )
@@ -692,20 +685,14 @@ class NetworkTopologyRuntime:
 
     # ── Transport hierarchy absorption ────────────────────────────────────
 
-    def absorb_nats_state(
-        self, is_connected: bool, host: str = "", port: int = 0
-    ) -> TopologyNode:
+    def absorb_nats_state(self, is_connected: bool, host: str = "", port: int = 0) -> TopologyNode:
         """Absorb NATS fabric state into the canonical NATS endpoint node."""
         with self._rw_lock:
             existing = self._nodes.get(NATS_FABRIC_NODE_ID)
             node = TopologyNode(
                 node_id=NATS_FABRIC_NODE_ID,
                 kind=TopologyNodeKind.NATS_FABRIC_ENDPOINT,
-                state=(
-                    TopologyConnectionState.CONNECTED
-                    if is_connected
-                    else TopologyConnectionState.UNAVAILABLE
-                ),
+                state=(TopologyConnectionState.CONNECTED if is_connected else TopologyConnectionState.UNAVAILABLE),
                 host=host or (existing.host if existing else ""),
                 port=port or (existing.port if existing else 0),
                 tags=["nats", "fabric"],
@@ -734,11 +721,7 @@ class NetworkTopologyRuntime:
             node = TopologyNode(
                 node_id=gateway_id,
                 kind=TopologyNodeKind.GATEWAY,
-                state=(
-                    TopologyConnectionState.CONNECTED
-                    if is_connected
-                    else TopologyConnectionState.UNAVAILABLE
-                ),
+                state=(TopologyConnectionState.CONNECTED if is_connected else TopologyConnectionState.UNAVAILABLE),
                 host=host or (existing.host if existing else ""),
                 port=port or (existing.port if existing else 0),
                 tags=["gateway", "substrate"],
@@ -779,11 +762,7 @@ class NetworkTopologyRuntime:
           state.
         """
         if effective_routable:
-            state = (
-                TopologyConnectionState.CONNECTED
-                if preferred_path
-                else TopologyConnectionState.REACHABLE
-            )
+            state = TopologyConnectionState.CONNECTED if preferred_path else TopologyConnectionState.REACHABLE
         elif fallback_available:
             state = TopologyConnectionState.FALLBACK
         elif mesh_overlay_available:
@@ -887,11 +866,7 @@ class NetworkTopologyRuntime:
         *transport_strategy* hint becomes the effective path.
         """
         with self._rw_lock:
-            edges = [
-                e
-                for e in self._edges.values()
-                if e.source_node_id == source_id and e.target_node_id == target_id
-            ]
+            edges = [e for e in self._edges.values() if e.source_node_id == source_id and e.target_node_id == target_id]
 
         active_states = {
             TopologyConnectionState.PREFERRED,
@@ -906,15 +881,11 @@ class NetworkTopologyRuntime:
                 available_paths.append(kind_val)
 
         preferred_edge = next((e for e in edges if e.preferred), None)
-        fallback_edge = next(
-            (e for e in edges if e.state == TopologyConnectionState.FALLBACK), None
-        )
+        fallback_edge = next((e for e in edges if e.state == TopologyConnectionState.FALLBACK), None)
         return TransportPathInfo(
             source_id=source_id,
             target_id=target_id,
-            effective_path=(
-                _kind_value(preferred_edge.kind) if preferred_edge else transport_strategy
-            ),
+            effective_path=(_kind_value(preferred_edge.kind) if preferred_edge else transport_strategy),
             fallback_path=_kind_value(fallback_edge.kind) if fallback_edge else "",
             available_paths=available_paths,
             transport_strategy=transport_strategy,
@@ -943,11 +914,7 @@ class NetworkTopologyRuntime:
                 source_node_id=source_id,
                 target_node_id=target_id,
                 kind=_PATH_TO_EDGE_KIND.get(strategy.lower(), TopologyEdgeKind.DIRECT),
-                state=(
-                    TopologyConnectionState.FALLBACK
-                    if fallback_used
-                    else TopologyConnectionState.PREFERRED
-                ),
+                state=(TopologyConnectionState.FALLBACK if fallback_used else TopologyConnectionState.PREFERRED),
                 preferred=not fallback_used,
                 metadata={"transport_strategy": strategy, "fallback_used": fallback_used},
             )
@@ -993,9 +960,7 @@ class NetworkTopologyRuntime:
             truth_governance=build_truth_governance(
                 TRUTH_GRADE_PROJECTION,
                 source="core.network_topology_runtime.NetworkTopologyRuntime",
-                recovery_status=(
-                    RECOVERY_STATUS_DEGRADED if recovered_at else RECOVERY_STATUS_LIVE
-                ),
+                recovery_status=(RECOVERY_STATUS_DEGRADED if recovered_at else RECOVERY_STATUS_LIVE),
                 revalidation_required=degraded,
                 degraded=degraded,
                 field_truth_grades={
@@ -1003,7 +968,8 @@ class NetworkTopologyRuntime:
                     "restored_view": TRUTH_GRADE_RECOVERABLE,
                 },
                 notes=[
-                    "Recovered topology entries remain degraded/recoverable view truth until live updates replace them.",
+                    "Recovered topology entries remain degraded/recoverable view truth "
+                    "until live updates replace them.",
                 ],
                 extra={
                     "durable_state_path": self._state_path,
@@ -1027,9 +993,7 @@ class NetworkTopologyRuntime:
         try:
             write_json_atomically(self._state_path, payload)
         except OSError:
-            logger.warning(
-                "network_topology_runtime durable persist failed: %s", self._state_path
-            )
+            logger.warning("network_topology_runtime durable persist failed: %s", self._state_path)
 
     def restore_durable_state(self, state: Optional[dict] = None) -> Dict[str, int]:
         """Restore the persisted topology as degraded recoverable truth.
@@ -1124,9 +1088,7 @@ class NetworkTopologyRuntime:
             if os.path.exists(self._state_path):
                 os.remove(self._state_path)
         except OSError:
-            logger.warning(
-                "network_topology_runtime durable clear failed: %s", self._state_path
-            )
+            logger.warning("network_topology_runtime durable clear failed: %s", self._state_path)
 
     # ── Internal ──────────────────────────────────────────────────────────
 
@@ -1163,11 +1125,13 @@ class NetworkTopologyRuntime:
         with self._rw_lock:
             self._positions[self._my_device_id] = self._my_position
         self._probe_task = asyncio.create_task(
-            self._refresh_loop(), name="network_topology_refresh",
+            self._refresh_loop(),
+            name="network_topology_refresh",
         )
         logger.info(
             "NetworkTopologyRuntime started | device=%s lan=%s ts=%s",
-            self._my_device_id, self._my_position.lan_subnet,
+            self._my_device_id,
+            self._my_position.lan_subnet,
             self._my_position.tailscale_ip or "none",
         )
 
@@ -1214,7 +1178,8 @@ class NetworkTopologyRuntime:
 
         if not src_pos or not tgt_pos:
             return PathAssessment(
-                source=source, target=target,
+                source=source,
+                target=target,
                 best_path="unknown",
                 recommended_transport="websocket",
                 estimated_rtt_ms=999.0,
@@ -1225,7 +1190,8 @@ class NetworkTopologyRuntime:
         if src_pos.lan_subnet and tgt_pos.lan_subnet:
             if src_pos.lan_subnet == tgt_pos.lan_subnet:
                 return PathAssessment(
-                    source=source, target=target,
+                    source=source,
+                    target=target,
                     best_path="same_subnet",
                     recommended_transport="tcp",
                     estimated_rtt_ms=1.0,
@@ -1235,7 +1201,8 @@ class NetworkTopologyRuntime:
         # Path 2: Same Tailscale tailnet → P2P via WireGuard
         if src_pos.tailscale_ip and tgt_pos.tailscale_ip:
             return PathAssessment(
-                source=source, target=target,
+                source=source,
+                target=target,
                 best_path="same_tailnet",
                 recommended_transport="tailscale_p2p",
                 estimated_rtt_ms=max(5.0, min(src_pos.rtt_ms, tgt_pos.rtt_ms, 50.0)),
@@ -1246,7 +1213,8 @@ class NetworkTopologyRuntime:
         if tgt_pos.public_ip and tgt_pos.nat_type in ("full_cone", "restricted", "none"):
             if "quic" in tgt_pos.capabilities:
                 return PathAssessment(
-                    source=source, target=target,
+                    source=source,
+                    target=target,
                     best_path="p2p_quic",
                     recommended_transport="quic",
                     estimated_rtt_ms=50.0,
@@ -1256,7 +1224,8 @@ class NetworkTopologyRuntime:
         # Path 4: DERP relay
         if src_pos.tailscale_ip and not tgt_pos.tailscale_ip:
             return PathAssessment(
-                source=source, target=target,
+                source=source,
+                target=target,
                 best_path="derp_relay",
                 recommended_transport="tailscale_p2p",
                 estimated_rtt_ms=150.0,
@@ -1265,7 +1234,8 @@ class NetworkTopologyRuntime:
 
         # Path 5: WebSocket gateway (ultimate fallback)
         return PathAssessment(
-            source=source, target=target,
+            source=source,
+            target=target,
             best_path="gateway_ws",
             recommended_transport="websocket",
             estimated_rtt_ms=100.0,
@@ -1321,12 +1291,17 @@ class NetworkTopologyRuntime:
 
     async def _get_tailscale_info(self) -> Tuple[str, str]:
         import shutil
+
         if not shutil.which("tailscale"):
             return "", ""
         try:
             result = subprocess.run(
                 ["tailscale", "status", "--json"],
-                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=10,
             )
             if result.returncode == 0:
                 status = json.loads(result.stdout)
@@ -1341,10 +1316,12 @@ class NetworkTopologyRuntime:
     def _detect_capabilities() -> List[str]:
         caps = ["websocket", "tcp", "udp"]
         import shutil
+
         if shutil.which("tailscale"):
             caps.append("tailscale_p2p")
         try:
             import aioquic  # noqa: F401
+
             caps.append("quic")
         except ImportError:
             pass
@@ -1373,9 +1350,7 @@ class NetworkTopologyRuntime:
 # ---------------------------------------------------------------------------
 
 
-def assimilate_nats_state(
-    is_connected: bool, host: str = "", port: int = 0
-) -> TopologyNode:
+def assimilate_nats_state(is_connected: bool, host: str = "", port: int = 0) -> TopologyNode:
     """Absorb NATS fabric state into the singleton runtime."""
     return get_network_topology_runtime().absorb_nats_state(is_connected, host, port)
 
@@ -1384,9 +1359,7 @@ def assimilate_gateway_state(
     gateway_id: str, host: str = "", port: int = 0, is_connected: bool = False
 ) -> TopologyNode:
     """Absorb gateway substrate state into the singleton runtime."""
-    return get_network_topology_runtime().absorb_gateway_state(
-        gateway_id, host, port, is_connected
-    )
+    return get_network_topology_runtime().absorb_gateway_state(gateway_id, host, port, is_connected)
 
 
 def assimilate_device_connectivity(
@@ -1439,9 +1412,7 @@ def assimilate_transport_hierarchy_record(
     )
 
 
-def build_grounded_runtime_topology(
-    *, max_allocation_records: int = 64
-) -> GroundedRuntimeTopology:
+def build_grounded_runtime_topology(*, max_allocation_records: int = 64) -> GroundedRuntimeTopology:
     """Build the operator-facing grounded topology rooted at the V2 host.
 
     Combines the canonical topology view with task-allocation relations from
@@ -1482,9 +1453,7 @@ def build_grounded_runtime_topology(
     try:
         from core.canonical_task import get_canonical_task_runtime
 
-        allocation_records = get_canonical_task_runtime().list_allocation_records(
-            limit=max_allocation_records
-        )
+        allocation_records = get_canonical_task_runtime().list_allocation_records(limit=max_allocation_records)
         for record in allocation_records:
             executor = str(record.selected_executor or "")
             if not executor or executor == "unknown":

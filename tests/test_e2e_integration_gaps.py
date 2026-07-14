@@ -21,6 +21,7 @@ import pytest
 
 def _make_capability_item(name: str, source: str = "mcp", source_id: str = "test"):
     from core.agent.capability_registry import CapabilityItem
+
     return CapabilityItem(
         name=name,
         description=f"测试工具: {name}",
@@ -61,7 +62,7 @@ class TestMCPSkillToLLMTools:
     async def test_execution_planner_sets_tool_schemas_on_plan(self):
         """ExecutionPlanner.execute() 必须将 to_tool_schemas() 结果写入 plan.tool_schemas。"""
         from core.agent.capability_registry import CapabilityRegistry
-        from core.agent.execution_planner import ExecutionPlanner, ExecutionPlan
+        from core.agent.execution_planner import ExecutionPlan, ExecutionPlanner
         from core.agent.intent_router import IntentResult
 
         reg = CapabilityRegistry.get_instance()
@@ -78,6 +79,7 @@ class TestMCPSkillToLLMTools:
         async def _mock_dispatch(p, strategy, steps, tc):
             captured_plan["tool_schemas"] = list(p.tool_schemas)
             from core.agent.execution_planner import ExecutionResult
+
             return ExecutionResult(success=True, reply="ok", mode=strategy)
 
         # mock refresh 为空操作，避免替换手动注册的 item
@@ -100,7 +102,7 @@ class TestMCPSkillToLLMTools:
     async def test_execution_planner_task_dict_contains_tools(self):
         """_run_single_agent 调用 execute_agent_task 时 task_dict 必须含 tools 列表。"""
         from core.agent.capability_registry import CapabilityRegistry
-        from core.agent.execution_planner import ExecutionPlanner, ExecutionPlan
+        from core.agent.execution_planner import ExecutionPlan, ExecutionPlanner
         from core.agent.intent_router import IntentResult
 
         reg = CapabilityRegistry.get_instance()
@@ -164,8 +166,8 @@ class TestDeviceRegistrationAllPaths:
 
     def test_v1_register_syncs_capability_registry(self):
         """/api/v1/devices/register 注册后能力必须出现在 CapabilityRegistry。"""
-        from core.routes.devices import _sync_device_to_capability_registry
         from core.agent.capability_registry import get_capability_registry
+        from core.routes.devices import _sync_device_to_capability_registry
 
         suffix = uuid.uuid4().hex[:8]
         info = self._device_info(suffix)
@@ -195,6 +197,7 @@ class TestDeviceRegistrationAllPaths:
 
         # 直接调用 compat.py 中的同步逻辑（通过 _sync_device_to_capability_registry）
         from core.routes.devices import _sync_device_to_capability_registry
+
         device_info = {
             "device_id": device_id,
             "device_type": "android",
@@ -213,8 +216,8 @@ class TestDeviceRegistrationAllPaths:
 
     def test_gateway_device_router_register_syncs_capability_registry(self):
         """gateway DeviceRouter.register_device() 注册后能力必须同步到 CapabilityRegistry。"""
-        from galaxy_gateway.device_router import DeviceRouter
         from core.agent.capability_registry import get_capability_registry
+        from galaxy_gateway.device_router import DeviceRouter
 
         suffix = uuid.uuid4().hex[:8]
         device_id = f"e2e_gw_{suffix}"
@@ -262,9 +265,8 @@ class TestDeviceRegistrationAllPaths:
         mock_ws.send_json = AsyncMock()
 
         from galaxy_gateway import websocket_handler
-        with patch.object(
-            websocket_handler.device_router, "register_device", return_value=True
-        ):
+
+        with patch.object(websocket_handler.device_router, "register_device", return_value=True):
             await websocket_handler.handle_register("conn_id", aip_msg, mock_ws)
 
         key = f"gateway__{device_id}__microphone"
@@ -303,9 +305,9 @@ class TestDeviceCommandViaCommandRouter:
 
         mock_sgc.assert_called_once()
         call_kwargs = mock_sgc.call_args
-        assert call_kwargs.kwargs.get("device_id") == "test_device_01" or \
-               (call_kwargs.args and call_kwargs.args[0] == "test_device_01"), \
-               "send_gateway_command 必须以 device_id=test_device_01 调用"
+        assert call_kwargs.kwargs.get("device_id") == "test_device_01" or (
+            call_kwargs.args and call_kwargs.args[0] == "test_device_01"
+        ), "send_gateway_command 必须以 device_id=test_device_01 调用"
         assert result["success"] is True
 
     @pytest.mark.asyncio
@@ -354,6 +356,7 @@ class TestChatRouteOpenClawdOnly:
     def _make_test_client(self):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
         from core.api_routes import create_api_routes
 
         app = FastAPI()
@@ -381,8 +384,11 @@ class TestChatRouteOpenClawdOnly:
         assert resp.status_code == 200
         body = resp.json()
         # 必须是 OpenClawd 处理的响应
-        assert body.get("response") == "OpenClawd 回复" or body.get("reply") == "OpenClawd 回复" or \
-               body.get("success") is True
+        assert (
+            body.get("response") == "OpenClawd 回复"
+            or body.get("reply") == "OpenClawd 回复"
+            or body.get("success") is True
+        )
 
     def test_no_duplicate_chat_route_registration(self):
         """create_api_routes() 生成的 router 中 POST /api/v1/chat 只应有一条路由记录。"""
@@ -391,14 +397,16 @@ class TestChatRouteOpenClawdOnly:
         router = create_api_routes()
 
         chat_routes = [
-            r for r in router.routes
-            if hasattr(r, "path") and r.path == "/api/v1/chat"
-            and "POST" in getattr(r, "methods", set())
+            r
+            for r in router.routes
+            if hasattr(r, "path") and r.path == "/api/v1/chat" and "POST" in getattr(r, "methods", set())
         ]
         # 通过 include_router 加入的子路由不出现在顶层 routes，验证没有重复的内联注册
         inline_chat_routes = [
-            r for r in router.routes
-            if hasattr(r, "path") and r.path == "/api/v1/chat"
+            r
+            for r in router.routes
+            if hasattr(r, "path")
+            and r.path == "/api/v1/chat"
             and "POST" in getattr(r, "methods", set())
             and not hasattr(r, "app")  # 排除挂载的子应用
         ]
@@ -410,12 +418,14 @@ class TestChatRouteOpenClawdOnly:
     def test_core_routes_chat_uses_openclawd_process(self):
         """core/routes/chat.py 的 chat 端点必须调用 OpenClawd.process() 而非旧分流逻辑。"""
         import inspect
+
         from core.routes import chat as chat_module
 
         source = inspect.getsource(chat_module)
         # 确认调用了 OpenClawd.process
-        assert "clawd.process(" in source or "openclawd.process(" in source or \
-               "OpenClawd" in source, "chat.py 应使用 OpenClawd.process()"
+        assert (
+            "clawd.process(" in source or "openclawd.process(" in source or "OpenClawd" in source
+        ), "chat.py 应使用 OpenClawd.process()"
         # 旧分流逻辑不应存在于 chat 路由处理函数内（外部辅助函数可以保留）
         # 检查 create_router() 内部没有 if _is_action_intent 分流
         router_source_start = source.find("def create_router(")
@@ -430,5 +440,4 @@ class TestChatRouteOpenClawdOnly:
             if next_def < 0:
                 next_def = handler_snippet.find("\n    def ", 1)
             chat_handler_src = handler_snippet[:next_def] if next_def > 0 else handler_snippet
-            assert "_is_action_intent" not in chat_handler_src, \
-                "chat handler 内不应再有 _is_action_intent 分流逻辑"
+            assert "_is_action_intent" not in chat_handler_src, "chat handler 内不应再有 _is_action_intent 分流逻辑"

@@ -29,6 +29,7 @@ import pytest
 
 def _reset_registry() -> None:
     from core.contract_map import reset_contract_registry
+
     reset_contract_registry()
 
 
@@ -114,9 +115,7 @@ class TestMessageKind:
         from core.contract_map import MessageKind
 
         actual = {mk.value for mk in MessageKind}
-        assert EXPECTED_CONTRACTS.issubset(actual), (
-            f"Missing message kinds: {EXPECTED_CONTRACTS - actual}"
-        )
+        assert EXPECTED_CONTRACTS.issubset(actual), f"Missing message kinds: {EXPECTED_CONTRACTS - actual}"
 
     def test_message_kind_is_str_enum(self) -> None:
         from core.contract_map import MessageKind
@@ -143,7 +142,7 @@ class TestMessageKind:
 
 class TestContractDescriptor:
     def test_minimal_construction(self) -> None:
-        from core.contract_map import ContractDescriptor, PlaneKind, MessageKind
+        from core.contract_map import ContractDescriptor, MessageKind, PlaneKind
 
         d = ContractDescriptor(
             plane=PlaneKind.orchestration_plane,
@@ -159,7 +158,7 @@ class TestContractDescriptor:
         assert d.notes is None
 
     def test_full_construction(self) -> None:
-        from core.contract_map import ContractDescriptor, PlaneKind, MessageKind
+        from core.contract_map import ContractDescriptor, MessageKind, PlaneKind
 
         d = ContractDescriptor(
             plane=PlaneKind.orchestration_plane,
@@ -176,7 +175,7 @@ class TestContractDescriptor:
         assert "trace_id" in d.identity_fields
 
     def test_to_dict_shape(self) -> None:
-        from core.contract_map import ContractDescriptor, PlaneKind, MessageKind
+        from core.contract_map import ContractDescriptor, MessageKind, PlaneKind
 
         d = ContractDescriptor(
             plane=PlaneKind.control_plane,
@@ -192,7 +191,7 @@ class TestContractDescriptor:
         json.dumps(result)
 
     def test_required_fields_summary(self) -> None:
-        from core.contract_map import ContractDescriptor, PlaneKind, MessageKind
+        from core.contract_map import ContractDescriptor, MessageKind, PlaneKind
 
         d = ContractDescriptor(
             plane=PlaneKind.runtime_handoff_plane,
@@ -206,7 +205,7 @@ class TestContractDescriptor:
         assert "task_id" in summary["identity_fields"]
 
     def test_descriptor_is_frozen(self) -> None:
-        from core.contract_map import ContractDescriptor, PlaneKind, MessageKind
+        from core.contract_map import ContractDescriptor, MessageKind, PlaneKind
 
         d = ContractDescriptor(
             plane=PlaneKind.device_plane,
@@ -216,7 +215,7 @@ class TestContractDescriptor:
             d.notes = "mutate attempt"  # type: ignore[misc]
 
     def test_to_dict_all_fields_serialisable(self) -> None:
-        from core.contract_map import ContractDescriptor, PlaneKind, MessageKind
+        from core.contract_map import ContractDescriptor, MessageKind, PlaneKind
 
         d = ContractDescriptor(
             plane=PlaneKind.observability_plane,
@@ -252,22 +251,20 @@ class TestContractRegistry:
         assert r1 is r2
 
     def test_registry_seeded_with_expected_contracts(self) -> None:
-        from core.contract_map import get_contract_registry, MessageKind
+        from core.contract_map import MessageKind, get_contract_registry
 
         reg = get_contract_registry()
         for kind_value in EXPECTED_CONTRACTS:
             kind = MessageKind(kind_value)
             descriptor = reg.get(kind)
-            assert descriptor is not None, (
-                f"Expected contract '{kind_value}' not found in registry"
-            )
+            assert descriptor is not None, f"Expected contract '{kind_value}' not found in registry"
 
     def test_register_and_get(self) -> None:
         from core.contract_map import (
-            get_contract_registry,
             ContractDescriptor,
-            PlaneKind,
             MessageKind,
+            PlaneKind,
+            get_contract_registry,
         )
 
         reg = get_contract_registry()
@@ -290,7 +287,7 @@ class TestContractRegistry:
         assert len(descriptors) >= len(EXPECTED_CONTRACTS)
 
     def test_descriptors_for_plane(self) -> None:
-        from core.contract_map import get_contract_registry, PlaneKind
+        from core.contract_map import PlaneKind, get_contract_registry
 
         reg = get_contract_registry()
         device_descriptors = reg.descriptors_for_plane(PlaneKind.device_plane)
@@ -318,7 +315,7 @@ class TestContractRegistry:
         json.dumps(snapshot)  # must not raise
 
     def test_planes_summary_covers_all_planes(self) -> None:
-        from core.contract_map import get_contract_registry, PlaneKind
+        from core.contract_map import PlaneKind, get_contract_registry
 
         reg = get_contract_registry()
         summary = reg.planes_summary()
@@ -334,7 +331,7 @@ class TestContractRegistry:
         assert len(reg) >= len(EXPECTED_CONTRACTS)
 
     def test_get_unknown_kind_returns_none(self) -> None:
-        from core.contract_map import get_contract_registry, MessageKind
+        from core.contract_map import MessageKind, get_contract_registry
 
         reg = get_contract_registry()
         # Use any real kind to confirm None is not returned for real ones
@@ -373,7 +370,7 @@ class TestSeedData:
 
     def test_canonical_contracts_have_identity_fields(self) -> None:
         """Key contracts must have at least one identity field."""
-        from core.contract_map import get_contract_registry, MessageKind
+        from core.contract_map import MessageKind, get_contract_registry
 
         reg = get_contract_registry()
         key_kinds = [
@@ -387,12 +384,10 @@ class TestSeedData:
         for kind in key_kinds:
             d = reg.get(kind)
             assert d is not None, f"Missing descriptor for {kind.value}"
-            assert len(d.identity_fields) >= 1, (
-                f"No identity fields for {kind.value}"
-            )
+            assert len(d.identity_fields) >= 1, f"No identity fields for {kind.value}"
 
     def test_handoff_contract_descriptor(self) -> None:
-        from core.contract_map import get_contract_registry, MessageKind, PlaneKind
+        from core.contract_map import MessageKind, PlaneKind, get_contract_registry
 
         reg = get_contract_registry()
         d = reg.get(MessageKind.handoff_contract)
@@ -402,7 +397,7 @@ class TestSeedData:
         assert d.canonical_type == "galaxy_gateway.agent_bridge.HandoffContract"
 
     def test_task_envelope_descriptor(self) -> None:
-        from core.contract_map import get_contract_registry, MessageKind, PlaneKind
+        from core.contract_map import MessageKind, PlaneKind, get_contract_registry
 
         reg = get_contract_registry()
         d = reg.get(MessageKind.task_envelope)
@@ -413,7 +408,7 @@ class TestSeedData:
         assert d.canonical_type == "core.schemas.task_envelope.TaskEnvelope"
 
     def test_swarm_manifest_descriptor(self) -> None:
-        from core.contract_map import get_contract_registry, MessageKind, PlaneKind
+        from core.contract_map import MessageKind, PlaneKind, get_contract_registry
 
         reg = get_contract_registry()
         d = reg.get(MessageKind.swarm_agent_manifest)
@@ -424,7 +419,7 @@ class TestSeedData:
         assert d.canonical_type == "core.control_plane.swarm_manifest.SwarmAgentManifest"
 
     def test_runtime_projection_descriptor(self) -> None:
-        from core.contract_map import get_contract_registry, MessageKind, PlaneKind
+        from core.contract_map import MessageKind, PlaneKind, get_contract_registry
 
         reg = get_contract_registry()
         d = reg.get(MessageKind.runtime_projection)
@@ -433,7 +428,7 @@ class TestSeedData:
         assert d.canonical_type == "core.projection.runtime_projection.RuntimeProjection"
 
     def test_nats_task_dispatch_descriptor(self) -> None:
-        from core.contract_map import get_contract_registry, MessageKind, PlaneKind
+        from core.contract_map import MessageKind, PlaneKind, get_contract_registry
 
         reg = get_contract_registry()
         d = reg.get(MessageKind.nats_task_dispatch)
@@ -444,7 +439,7 @@ class TestSeedData:
         assert "trace_id" in d.identity_fields
 
     def test_error_payload_descriptor(self) -> None:
-        from core.contract_map import get_contract_registry, MessageKind, PlaneKind
+        from core.contract_map import MessageKind, PlaneKind, get_contract_registry
 
         reg = get_contract_registry()
         d = reg.get(MessageKind.error_payload)
@@ -473,7 +468,7 @@ class TestContractIntrospection:
         _reset_registry()
 
     def test_get_planes_snapshot_shape(self) -> None:
-        from core.contract_map import get_planes_snapshot, PlaneKind
+        from core.contract_map import PlaneKind, get_planes_snapshot
 
         snapshot = get_planes_snapshot()
         assert "planes" in snapshot
@@ -487,13 +482,11 @@ class TestContractIntrospection:
             assert isinstance(detail["message_kinds"], list)
 
     def test_get_planes_snapshot_all_planes_present(self) -> None:
-        from core.contract_map import get_planes_snapshot, PlaneKind
+        from core.contract_map import PlaneKind, get_planes_snapshot
 
         snapshot = get_planes_snapshot()
         for pk in PlaneKind:
-            assert pk.value in snapshot["planes"], (
-                f"Plane '{pk.value}' missing from planes snapshot"
-            )
+            assert pk.value in snapshot["planes"], f"Plane '{pk.value}' missing from planes snapshot"
 
     def test_get_planes_snapshot_is_json_serialisable(self) -> None:
         from core.contract_map import get_planes_snapshot
@@ -517,7 +510,7 @@ class TestContractIntrospection:
         json.dumps(get_messages_snapshot())
 
     def test_get_descriptor_for_kind_returns_dict(self) -> None:
-        from core.contract_map import get_descriptor_for_kind, MessageKind
+        from core.contract_map import MessageKind, get_descriptor_for_kind
 
         result = get_descriptor_for_kind(MessageKind.task_envelope)
         assert result is not None
@@ -526,12 +519,13 @@ class TestContractIntrospection:
 
     def test_get_descriptor_for_kind_returns_none_gracefully(self) -> None:
         from core.contract_map import (
+            ContractDescriptor,
+            MessageKind,
+            PlaneKind,
             get_contract_registry,
             get_descriptor_for_kind,
-            MessageKind,
-            ContractDescriptor,
-            PlaneKind,
         )
+
         # All seeded kinds should return non-None; we just verify one real kind
         assert get_descriptor_for_kind(MessageKind.audit_trace) is not None
 
@@ -547,7 +541,7 @@ class TestContractIntrospection:
             assert "identity_fields" in s
 
     def test_get_contracts_for_plane(self) -> None:
-        from core.contract_map import get_contracts_for_plane, PlaneKind
+        from core.contract_map import PlaneKind, get_contracts_for_plane
 
         descriptors = get_contracts_for_plane(PlaneKind.orchestration_plane)
         assert len(descriptors) >= 1
@@ -555,7 +549,7 @@ class TestContractIntrospection:
             assert d["plane"] == "orchestration_plane"
 
     def test_get_contracts_for_plane_empty_plane(self) -> None:
-        from core.contract_map import get_contracts_for_plane, PlaneKind
+        from core.contract_map import PlaneKind, get_contracts_for_plane
 
         # All planes should have at least one descriptor in the seed
         for pk in PlaneKind:
@@ -574,10 +568,12 @@ class TestContractsRoutes:
     @pytest.fixture
     def router(self):
         from core.routes.contracts import create_router
+
         return create_router()
 
     def test_create_router_returns_apirouter(self, router) -> None:
         from fastapi import APIRouter
+
         assert isinstance(router, APIRouter)
 
     def test_router_has_planes_route(self, router) -> None:
@@ -592,8 +588,9 @@ class TestContractsRoutes:
     async def test_get_contract_planes_response(self) -> None:
         _reset_registry()
         try:
-            from fastapi.testclient import TestClient
             from fastapi import FastAPI
+            from fastapi.testclient import TestClient
+
             from core.routes.contracts import create_router
 
             app = FastAPI()
@@ -613,8 +610,9 @@ class TestContractsRoutes:
     async def test_get_contract_messages_response(self) -> None:
         _reset_registry()
         try:
-            from fastapi.testclient import TestClient
             from fastapi import FastAPI
+            from fastapi.testclient import TestClient
+
             from core.routes.contracts import create_router
 
             app = FastAPI()
@@ -633,10 +631,11 @@ class TestContractsRoutes:
     async def test_planes_endpoint_all_planes_in_response(self) -> None:
         _reset_registry()
         try:
-            from fastapi.testclient import TestClient
             from fastapi import FastAPI
-            from core.routes.contracts import create_router
+            from fastapi.testclient import TestClient
+
             from core.contract_map import PlaneKind
+            from core.routes.contracts import create_router
 
             app = FastAPI()
             app.include_router(create_router())
@@ -654,8 +653,9 @@ class TestContractsRoutes:
     async def test_messages_endpoint_contains_task_envelope(self) -> None:
         _reset_registry()
         try:
-            from fastapi.testclient import TestClient
             from fastapi import FastAPI
+            from fastapi.testclient import TestClient
+
             from core.routes.contracts import create_router
 
             app = FastAPI()
@@ -685,7 +685,7 @@ class TestGracefulDegradation:
 
     def test_descriptor_with_only_required_fields(self) -> None:
         """A descriptor with only plane+kind must be valid and serialisable."""
-        from core.contract_map import ContractDescriptor, PlaneKind, MessageKind
+        from core.contract_map import ContractDescriptor, MessageKind, PlaneKind
 
         d = ContractDescriptor(
             plane=PlaneKind.device_plane,
@@ -726,11 +726,11 @@ class TestGracefulDegradation:
 
     def test_required_fields_summary_on_empty_registry(self) -> None:
         """get_required_fields_summary on an empty registry returns empty list."""
+        # Monkey-patch for this one test only
+        import core.contract_map.contract_registry as _mod
         from core.contract_map import ContractRegistry
         from core.contract_map.contract_introspection import get_required_fields_summary
 
-        # Monkey-patch for this one test only
-        import core.contract_map.contract_registry as _mod
         original = _mod.get_contract_registry
 
         try:
@@ -745,10 +745,10 @@ class TestGracefulDegradation:
 
     def test_get_contracts_for_plane_unknown_plane_returns_empty(self) -> None:
         """A fresh empty registry returns [] for any plane."""
+        import core.contract_map.contract_registry as _mod
         from core.contract_map import ContractRegistry, PlaneKind
         from core.contract_map.contract_introspection import get_contracts_for_plane
 
-        import core.contract_map.contract_registry as _mod
         reg = ContractRegistry()
 
         try:

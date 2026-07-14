@@ -81,34 +81,39 @@ M) PR-D new provider kinds integration
 from __future__ import annotations
 
 import json
-import pytest
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def _reset():
     """Reset singletons before each test."""
     try:
         from core.capability_assimilation import reset_capability_assimilation_layer
+
         reset_capability_assimilation_layer()
     except Exception:
         pass
     try:
         from core.capability_graph_selection import reset_selection_log
+
         reset_selection_log()
     except Exception:
         pass
     yield
     try:
         from core.capability_assimilation import reset_capability_assimilation_layer
+
         reset_capability_assimilation_layer()
     except Exception:
         pass
     try:
         from core.capability_graph_selection import reset_selection_log
+
         reset_selection_log()
     except Exception:
         pass
@@ -117,10 +122,11 @@ def _reset():
 def _register(node_id, caps=None, kind="capability_provider", online=True):
     """Helper: register a provider in the assimilation layer."""
     from core.capability_assimilation import (
-        get_capability_assimilation_layer,
-        NodeParticipantKind,
         AssimilationPresenceState,
+        NodeParticipantKind,
+        get_capability_assimilation_layer,
     )
+
     layer = get_capability_assimilation_layer()
     rec = layer.assimilate(
         node_id,
@@ -136,22 +142,27 @@ def _register(node_id, caps=None, kind="capability_provider", online=True):
 # A) Module structure
 # ---------------------------------------------------------------------------
 
+
 class TestModuleStructure:
     def test_authority_sentinel_importable(self):
         from core.capability_graph_selection import CAPABILITY_GRAPH_SELECTION_AUTHORITY
+
         assert isinstance(CAPABILITY_GRAPH_SELECTION_AUTHORITY, str)
         assert "PR-D" in CAPABILITY_GRAPH_SELECTION_AUTHORITY
 
     def test_layer_position_is_10(self):
         from core.capability_graph_selection import CAPABILITY_SELECTION_PLANE_LAYER_POSITION
+
         assert CAPABILITY_SELECTION_PLANE_LAYER_POSITION == 10
 
     def test_selection_policy_importable(self):
         from core.capability_graph_selection import CAPABILITY_SELECTION_POLICY
+
         assert isinstance(CAPABILITY_SELECTION_POLICY, str)
 
     def test_all_public_names_importable(self):
         import core.capability_graph_selection as m
+
         for name in m.__all__:
             assert hasattr(m, name), f"Missing: {name}"
 
@@ -160,9 +171,11 @@ class TestModuleStructure:
 # B) CapabilityFitScore dataclass
 # ---------------------------------------------------------------------------
 
+
 class TestCapabilityFitScore:
     def test_construction(self):
         from core.capability_graph_selection import CapabilityFitScore
+
         score = CapabilityFitScore(
             node_id="n1",
             required_matched=2,
@@ -176,6 +189,7 @@ class TestCapabilityFitScore:
 
     def test_to_dict_contains_keys(self):
         from core.capability_graph_selection import CapabilityFitScore
+
         score = CapabilityFitScore(
             node_id="n1",
             required_matched=1,
@@ -186,12 +200,12 @@ class TestCapabilityFitScore:
             total_score=10.0,
         )
         d = score.to_dict()
-        for key in ("node_id", "coverage_ratio", "total_score", "is_online",
-                    "matched_caps", "missing_caps"):
+        for key in ("node_id", "coverage_ratio", "total_score", "is_online", "matched_caps", "missing_caps"):
             assert key in d
 
     def test_to_dict_json_serialisable(self):
         from core.capability_graph_selection import CapabilityFitScore
+
         score = CapabilityFitScore(
             node_id="n1",
             required_matched=1,
@@ -210,9 +224,11 @@ class TestCapabilityFitScore:
 # C) SelectionExplanation dataclass
 # ---------------------------------------------------------------------------
 
+
 class TestSelectionExplanation:
     def test_construction(self):
-        from core.capability_graph_selection import SelectionExplanation, CapabilityFitScore
+        from core.capability_graph_selection import CapabilityFitScore, SelectionExplanation
+
         fit = CapabilityFitScore("n1", 1, 1, 1.0, 10, True, 10.0)
         expl = SelectionExplanation(
             node_id="n1",
@@ -223,7 +239,8 @@ class TestSelectionExplanation:
         assert expl.node_id == "n1"
 
     def test_to_dict_contains_keys(self):
-        from core.capability_graph_selection import SelectionExplanation, CapabilityFitScore
+        from core.capability_graph_selection import CapabilityFitScore, SelectionExplanation
+
         fit = CapabilityFitScore("n1", 1, 1, 1.0, 10, True, 10.0)
         expl = SelectionExplanation(
             node_id="n1",
@@ -241,9 +258,11 @@ class TestSelectionExplanation:
 # D) SelectionRecord dataclass
 # ---------------------------------------------------------------------------
 
+
 class TestSelectionRecord:
     def test_construction(self):
         from core.capability_graph_selection import SelectionRecord
+
         rec = SelectionRecord(
             record_id=1,
             operation="discover",
@@ -255,6 +274,7 @@ class TestSelectionRecord:
 
     def test_to_dict_contains_keys(self):
         from core.capability_graph_selection import SelectionRecord
+
         rec = SelectionRecord(
             record_id=1,
             operation="select_best",
@@ -272,15 +292,18 @@ class TestSelectionRecord:
 # E) discover_providers — empty assimilation layer
 # ---------------------------------------------------------------------------
 
+
 class TestDiscoverEmpty:
     def test_returns_empty_when_no_providers(self):
         from core.capability_graph_selection import discover_providers
+
         results = discover_providers(["cap_x"])
         assert results == []
 
     def test_returns_empty_when_no_online_match(self):
         _register("offline-node", caps=["cap_x"], online=False)
         from core.capability_graph_selection import discover_providers
+
         results = discover_providers(["cap_x"], require_online=True)
         assert results == []
 
@@ -289,10 +312,12 @@ class TestDiscoverEmpty:
 # F) discover_providers — basic capability matching
 # ---------------------------------------------------------------------------
 
+
 class TestDiscoverBasic:
     def test_returns_matching_providers(self):
         _register("node-a", caps=["cap_search", "cap_fetch"])
         from core.capability_graph_selection import discover_providers
+
         results = discover_providers(["cap_search"])
         ids = [r.node_id for r in results]
         assert "node-a" in ids
@@ -300,6 +325,7 @@ class TestDiscoverBasic:
     def test_does_not_return_non_matching_providers(self):
         _register("node-b", caps=["cap_audio"])
         from core.capability_graph_selection import discover_providers
+
         results = discover_providers(["cap_search"])
         # node-b has no cap_search but might be returned if no caps required; with caps filter it should score 0
         # With required caps, node-b gets coverage_ratio=0 — it may still be returned but with score 0
@@ -313,6 +339,7 @@ class TestDiscoverBasic:
         _register("worker-x", caps=["cap_a"], kind="worker")
         _register("mcp-x", caps=["cap_a"], kind="mcp_provider")
         from core.capability_graph_selection import discover_providers
+
         results = discover_providers(["cap_a"], kind_filter=["worker"])
         ids = [r.node_id for r in results]
         assert "worker-x" in ids
@@ -321,6 +348,7 @@ class TestDiscoverBasic:
     def test_require_online_false_returns_offline(self):
         _register("offline-x", caps=["cap_b"], online=False)
         from core.capability_graph_selection import discover_providers
+
         results = discover_providers(["cap_b"], require_online=False)
         ids = [r.node_id for r in results]
         assert "offline-x" in ids
@@ -330,34 +358,40 @@ class TestDiscoverBasic:
 # G) score_provider
 # ---------------------------------------------------------------------------
 
+
 class TestScoreProvider:
     def test_full_match_coverage_ratio_one(self):
         rec = _register("sp-full", caps=["cap_a", "cap_b"])
         from core.capability_graph_selection import score_provider
+
         fit = score_provider(rec, ["cap_a", "cap_b"])
         assert fit.coverage_ratio == 1.0
 
     def test_partial_match_coverage_between_zero_and_one(self):
         rec = _register("sp-partial", caps=["cap_a"])
         from core.capability_graph_selection import score_provider
+
         fit = score_provider(rec, ["cap_a", "cap_b"])
         assert 0.0 < fit.coverage_ratio < 1.0
 
     def test_no_match_coverage_zero(self):
         rec = _register("sp-none", caps=["cap_x"])
         from core.capability_graph_selection import score_provider
+
         fit = score_provider(rec, ["cap_a", "cap_b"])
         assert fit.coverage_ratio == 0.0
 
     def test_missing_caps_lists_unmatched(self):
         rec = _register("sp-miss", caps=["cap_a"])
         from core.capability_graph_selection import score_provider
+
         fit = score_provider(rec, ["cap_a", "cap_z"])
         assert "cap_z" in fit.missing_caps
 
     def test_matched_caps_lists_matched(self):
         rec = _register("sp-match", caps=["cap_a", "cap_b"])
         from core.capability_graph_selection import score_provider
+
         fit = score_provider(rec, ["cap_a", "cap_b"])
         assert "cap_a" in fit.matched_caps
         assert "cap_b" in fit.matched_caps
@@ -366,6 +400,7 @@ class TestScoreProvider:
         rec_worker = _register("sp-w", caps=["cap_a"], kind="worker")
         rec_unknown = _register("sp-u", caps=["cap_a"], kind="unknown")
         from core.capability_graph_selection import score_provider
+
         score_w = score_provider(rec_worker, ["cap_a"])
         score_u = score_provider(rec_unknown, ["cap_a"])
         assert score_w.total_score > score_u.total_score
@@ -375,9 +410,11 @@ class TestScoreProvider:
 # H) select_best_provider
 # ---------------------------------------------------------------------------
 
+
 class TestSelectBestProvider:
     def test_returns_none_when_empty(self):
         from core.capability_graph_selection import select_best_provider
+
         result = select_best_provider(["cap_x"])
         assert result is None
 
@@ -385,6 +422,7 @@ class TestSelectBestProvider:
         _register("best-a", caps=["cap_a", "cap_b"])
         _register("worse-b", caps=["cap_a"])
         from core.capability_graph_selection import select_best_provider
+
         result = select_best_provider(["cap_a", "cap_b"])
         assert result is not None
         assert result.node_id == "best-a"
@@ -392,6 +430,7 @@ class TestSelectBestProvider:
     def test_returns_none_for_excluded_kind(self):
         _register("device-1", caps=["cap_a"], kind="device")
         from core.capability_graph_selection import select_best_provider
+
         result = select_best_provider(["cap_a"], kind_filter=["worker"])
         assert result is None
 
@@ -400,9 +439,11 @@ class TestSelectBestProvider:
 # I) select_fallback_providers
 # ---------------------------------------------------------------------------
 
+
 class TestSelectFallbackProviders:
     def test_returns_empty_when_no_providers(self):
         from core.capability_graph_selection import select_fallback_providers
+
         results = select_fallback_providers(["cap_x"])
         assert results == []
 
@@ -410,6 +451,7 @@ class TestSelectFallbackProviders:
         _register("fb-main", caps=["cap_a"])
         _register("fb-fall", caps=["cap_a"])
         from core.capability_graph_selection import select_fallback_providers
+
         results = select_fallback_providers(["cap_a"], exclude_ids=["fb-main"])
         ids = [r.node_id for r in results]
         assert "fb-main" not in ids
@@ -419,6 +461,7 @@ class TestSelectFallbackProviders:
         for i in range(5):
             _register(f"fb-n{i}", caps=["cap_a"])
         from core.capability_graph_selection import select_fallback_providers
+
         results = select_fallback_providers(["cap_a"], max_results=2)
         assert len(results) <= 2
 
@@ -427,28 +470,33 @@ class TestSelectFallbackProviders:
 # J) explain_selection
 # ---------------------------------------------------------------------------
 
+
 class TestExplainSelection:
     def test_returns_selection_explanation(self):
         rec = _register("explain-1", caps=["cap_a"])
         from core.capability_graph_selection import explain_selection
+
         expl = explain_selection(rec, ["cap_a"])
         assert expl is not None
 
     def test_reason_mentions_node_id(self):
         rec = _register("explain-2", caps=["cap_a"])
         from core.capability_graph_selection import explain_selection
+
         expl = explain_selection(rec, ["cap_a"])
         assert "explain-2" in expl.reason
 
     def test_reason_reflects_full_match(self):
         rec = _register("explain-3", caps=["cap_a", "cap_b"])
         from core.capability_graph_selection import explain_selection
+
         expl = explain_selection(rec, ["cap_a", "cap_b"])
         assert "full" in expl.reason.lower() or "match" in expl.reason.lower()
 
     def test_reason_reflects_partial_match(self):
         rec = _register("explain-4", caps=["cap_a"])
         from core.capability_graph_selection import explain_selection
+
         expl = explain_selection(rec, ["cap_a", "cap_b"])
         assert "partial" in expl.reason.lower()
 
@@ -457,6 +505,7 @@ class TestExplainSelection:
         alt1 = _register("alt-1", caps=["cap_a"])
         alt2 = _register("alt-2", caps=["cap_a"])
         from core.capability_graph_selection import explain_selection
+
         expl = explain_selection(rec, ["cap_a"], alternatives=[alt1, alt2])
         assert expl.alternatives_count == 2
 
@@ -465,21 +514,25 @@ class TestExplainSelection:
 # K) Ring buffer / observability
 # ---------------------------------------------------------------------------
 
+
 class TestRingBuffer:
     def test_get_selection_log_returns_deque(self):
         from core.capability_graph_selection import get_selection_log
+
         log = get_selection_log()
         assert hasattr(log, "__iter__")
 
     def test_discover_emits_record(self):
         from core.capability_graph_selection import discover_providers, get_selection_log
+
         _register("log-1", caps=["cap_a"])
         initial = len(get_selection_log())
         discover_providers(["cap_a"])
         assert len(get_selection_log()) > initial
 
     def test_select_best_emits_record(self):
-        from core.capability_graph_selection import select_best_provider, get_selection_log
+        from core.capability_graph_selection import get_selection_log, select_best_provider
+
         _register("log-2", caps=["cap_a"])
         initial = len(get_selection_log())
         select_best_provider(["cap_a"])
@@ -487,6 +540,7 @@ class TestRingBuffer:
 
     def test_ring_buffer_bounded_256(self):
         from core.capability_graph_selection import get_selection_log
+
         log = get_selection_log()
         assert log.maxlen == 256
 
@@ -495,12 +549,16 @@ class TestRingBuffer:
 # L) reset_selection_log
 # ---------------------------------------------------------------------------
 
+
 class TestResetSelectionLog:
     def test_clears_the_log(self):
         _register("reset-1", caps=["cap_a"])
         from core.capability_graph_selection import (
-            discover_providers, get_selection_log, reset_selection_log,
+            discover_providers,
+            get_selection_log,
+            reset_selection_log,
         )
+
         discover_providers(["cap_a"])
         assert len(get_selection_log()) > 0
         reset_selection_log()
@@ -511,36 +569,45 @@ class TestResetSelectionLog:
 # M) PR-D new provider kinds integration
 # ---------------------------------------------------------------------------
 
+
 class TestNewProviderKinds:
     def test_device_kind_discoverable(self):
         from core.capability_assimilation import assimilate_device
+
         assimilate_device("android-01", capabilities=["screen", "touch"])
         from core.capability_graph_selection import discover_providers
+
         results = discover_providers(["screen"], kind_filter=["device"])
         ids = [r.node_id for r in results]
         assert "android-01" in ids
 
     def test_mcp_provider_discoverable(self):
         from core.capability_assimilation import assimilate_mcp_provider
+
         assimilate_mcp_provider("mcp-fs-01", tools=["read_file", "write_file"])
         from core.capability_graph_selection import discover_providers
+
         results = discover_providers(["read_file"], kind_filter=["mcp_provider"])
         ids = [r.node_id for r in results]
         assert "mcp-fs-01" in ids
 
     def test_skill_kind_discoverable(self):
         from core.capability_assimilation import assimilate_skill
+
         assimilate_skill("skill-search-01", capabilities=["web_search"])
         from core.capability_graph_selection import discover_providers
+
         results = discover_providers(["web_search"], kind_filter=["skill"])
         ids = [r.node_id for r in results]
         assert "skill-search-01" in ids
 
     def test_kind_filter_device_only(self):
         from core.capability_assimilation import assimilate_device, assimilate_mcp_provider
+
         assimilate_device("dev-filter", capabilities=["screen"])
         assimilate_mcp_provider("mcp-filter", tools=["screen"])  # same cap
         from core.capability_graph_selection import discover_providers
+
         results = discover_providers(["screen"], kind_filter=["device"])
         ids = [r.node_id for r in results]
         assert "dev-filter" in ids

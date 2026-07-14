@@ -636,7 +636,7 @@ class FullSystemBaselineV3Evaluator:
         for attr in attrs:
             try:
                 cur = getattr(cur, attr)
-            except Exception as exc:
+            except Exception:
                 return None
         return cur
 
@@ -1124,9 +1124,7 @@ class FullSystemBaselineV3Evaluator:
         # - pipeline_verdict == "complete": canonical verdict classification
         # - closure_grade: strict android evidence closure criteria
         is_closure_grade_complete = (
-            grounding["is_complete"]
-            and pipeline_verdict_str == "complete"
-            and grounding["closure_grade"]
+            grounding["is_complete"] and pipeline_verdict_str == "complete" and grounding["closure_grade"]
         )
         if is_closure_grade_complete:
             state = SubsystemState.implemented_and_evidenced
@@ -1269,9 +1267,7 @@ class FullSystemBaselineV3Evaluator:
         )
         runtime_verified = dimension_counts.get("automated_verified", 0) > 0
         audit_report_closure_grade = (
-            system_verdict == "platform_baseline_established"
-            and no_structural_gaps
-            and runtime_verified
+            system_verdict == "platform_baseline_established" and no_structural_gaps and runtime_verified
         )
         state = (
             SubsystemState.implemented_and_evidenced
@@ -1332,8 +1328,7 @@ class FullSystemBaselineV3Evaluator:
                     ),
                 }
                 all_dimensions_resolved = (
-                    status_counts.get("pending", 0) == 0
-                    and status_counts.get("unresolved", 0) == 0
+                    status_counts.get("pending", 0) == 0 and status_counts.get("unresolved", 0) == 0
                 )
                 if (
                     grounding["is_fully_operational"]
@@ -1800,7 +1795,8 @@ class FullSystemBaselineV3Evaluator:
                 ),
                 signal_source="core.canonical_cross_repo_evidence_pipeline (pipeline_verdict)",
                 currently_answerable=android_detected,
-                next_action_hint="Run Android protected CI and verify canonical evidence artifact delivery into V2 ingress.",
+                next_action_hint="Run Android protected CI and verify canonical evidence "
+                "artifact delivery into V2 ingress.",
             ),
             OpenQuestion(
                 question_id="release_gate_truly_blocking",
@@ -1812,7 +1808,8 @@ class FullSystemBaselineV3Evaluator:
                     "core.distributed_release_gate_skeleton " "(GATE_IS_NOW_CI_ENFORCING_AUTHORITY + CI workflow logs)"
                 ),
                 currently_answerable=self._try_import("core.distributed_release_gate_skeleton") is not None,
-                next_action_hint="Verify release_blocking_gate workflow blocks merges when critical gate dimensions fail.",
+                next_action_hint="Verify release_blocking_gate workflow blocks merges when "
+                "critical gate dimensions fail.",
             ),
             OpenQuestion(
                 question_id="recovery_reconnect_e2e_proven",
@@ -1822,7 +1819,8 @@ class FullSystemBaselineV3Evaluator:
                 ),
                 signal_source=("tests/integration/test_dual_runtime_cross_repo_harness_reporting.py"),
                 currently_answerable=False,
-                next_action_hint="Run dual-runtime cross-repo harness against induced reconnect/replay failure scenarios.",
+                next_action_hint="Run dual-runtime cross-repo harness against induced "
+                "reconnect/replay failure scenarios.",
             ),
             OpenQuestion(
                 question_id="nats_distributed_runtime_real",
@@ -1832,7 +1830,8 @@ class FullSystemBaselineV3Evaluator:
                 ),
                 signal_source="core.agent_bus_fabric or NATS runtime logs",
                 currently_answerable=False,
-                next_action_hint="Produce runtime proof artifact from real NATS/fabric execution path before claiming closure.",
+                next_action_hint="Produce runtime proof artifact from real NATS/fabric "
+                "execution path before claiming closure.",
             ),
             OpenQuestion(
                 question_id="dual_repo_ci_gate_enforced",

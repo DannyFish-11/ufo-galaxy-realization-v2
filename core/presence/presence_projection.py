@@ -58,16 +58,16 @@ logger = logging.getLogger("Galaxy.Presence.Projection")
 class ProjectionIntensity(float, Enum):
     """Normalised projection intensity by device role."""
 
-    FULL = 1.0   # PRESENCE role devices
-    MEDIUM = 0.6   # ACTION role devices
-    LOW = 0.3   # PERCEPTION role devices
-    MINIMAL = 0.1   # No-role / unknown devices
+    FULL = 1.0  # PRESENCE role devices
+    MEDIUM = 0.6  # ACTION role devices
+    LOW = 0.3  # PERCEPTION role devices
+    MINIMAL = 0.1  # No-role / unknown devices
 
 
 # Role → intensity mapping
 _ROLE_INTENSITY: Dict[str, ProjectionIntensity] = {
-    "presence":   ProjectionIntensity.FULL,
-    "action":     ProjectionIntensity.MEDIUM,
+    "presence": ProjectionIntensity.FULL,
+    "action": ProjectionIntensity.MEDIUM,
     "perception": ProjectionIntensity.LOW,
 }
 
@@ -187,7 +187,8 @@ class PresenceProjection:
                               in this session are targeted.
             trace_id:         Optional trace identifier.
             android_presence_participation:
-                              Optional :class:`~core.presence.android_presence_participation.AndroidPresenceParticipationSummary`
+                              Optional
+                              :class:`~core.presence.android_presence_participation.AndroidPresenceParticipationSummary`
                               (or any object with a ``records`` iterable of
                               :class:`~core.presence.android_presence_participation.AndroidPresenceParticipationRecord`).
                               When provided, Android devices that are presence
@@ -212,6 +213,7 @@ class PresenceProjection:
 
         try:
             from core.mesh.body_mesh_registry import get_body_mesh_registry
+
             registry = get_body_mesh_registry()
             if session_id:
                 entries = registry.get_by_session(session_id)
@@ -234,6 +236,7 @@ class PresenceProjection:
                 from core.presence.android_presence_participation import (
                     AndroidPresenceParticipationMode,
                 )
+
                 if android_participation_mode == AndroidPresenceParticipationMode.FOREGROUND_PRESENCE.value:
                     intensity = max(intensity, float(ProjectionIntensity.FULL))
                 else:
@@ -329,7 +332,8 @@ class PresenceProjection:
     def _emit_event(evt: ProjectionEvent) -> None:
         """Best-effort emission on the StateEventBus."""
         try:
-            from core.state_event_bus import get_state_event_bus, StateEventType
+            from core.state_event_bus import StateEventType, get_state_event_bus
+
             bus = get_state_event_bus()
             event_type = StateEventType.PRESENCE_PROJECTED
             bus.publish(

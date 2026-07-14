@@ -40,7 +40,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List
 
-
 # ---------------------------------------------------------------------------
 # CapabilityAvailability
 # ---------------------------------------------------------------------------
@@ -68,18 +67,14 @@ class CapabilityAvailability(str, Enum):
 
 
 AVAILABILITY_DESCRIPTIONS: Dict[str, str] = {
-    CapabilityAvailability.AVAILABLE.value: (
-        "Capability is fully operational and may be dispatched."
-    ),
+    CapabilityAvailability.AVAILABLE.value: ("Capability is fully operational and may be dispatched."),
     CapabilityAvailability.DEGRADED.value: (
         "Capability is partially operational; routing should prefer healthy alternatives."
     ),
     CapabilityAvailability.UNAVAILABLE.value: (
         "Capability is explicitly offline or blocked; dispatch should be skipped."
     ),
-    CapabilityAvailability.UNKNOWN.value: (
-        "Availability has not yet been reported; treat as degraded for safety."
-    ),
+    CapabilityAvailability.UNKNOWN.value: ("Availability has not yet been reported; treat as degraded for safety."),
 }
 
 
@@ -142,9 +137,7 @@ class CapabilityRuntimeState:
             "state_id": self.state_id,
             "name": self.name,
             "availability": (
-                self.availability.value
-                if isinstance(self.availability, CapabilityAvailability)
-                else self.availability
+                self.availability.value if isinstance(self.availability, CapabilityAvailability) else self.availability
             ),
             "device_bindings": list(self.device_bindings),
             "preferred_device_ids": list(self.preferred_device_ids),

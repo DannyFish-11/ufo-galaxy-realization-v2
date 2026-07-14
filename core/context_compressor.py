@@ -53,9 +53,10 @@ CHARS_PER_TOKEN_EST = 2.0
 @dataclass
 class ConversationSummary:
     """对话摘要条目"""
+
     session_id: str
-    summary_text: str           # 压缩后的摘要
-    covered_turns: int          # 覆盖了多少轮对话
+    summary_text: str  # 压缩后的摘要
+    covered_turns: int  # 覆盖了多少轮对话
     start_timestamp: float
     end_timestamp: float
     key_topics: List[str] = field(default_factory=list)
@@ -106,7 +107,7 @@ class ContextCompressor:
         if not text:
             return 0
         # 混合文本：中文字符占多权重，英文占少
-        cn_chars = sum(1 for c in text if '\u4e00' <= c <= '\u9fff')
+        cn_chars = sum(1 for c in text if "\u4e00" <= c <= "\u9fff")
         other_chars = len(text) - cn_chars
         # 中文 ≈ 1 token/字，英文 ≈ 0.3 token/字
         return int(cn_chars * 1.0 + other_chars * 0.3)
@@ -133,7 +134,6 @@ class ContextCompressor:
         # 提取关键信息
         topics = set()
         actions = []
-        facts = []
 
         for msg in messages:
             content = msg.get("content", "")
@@ -179,21 +179,21 @@ class ContextCompressor:
             conditions = " OR ".join(["content LIKE ?"] * len(keywords))
             params = [f"%{k}%" for k in keywords]
 
-            cursor.execute(f"""
+            cursor.execute(
+                f"""
                 SELECT id, content, timestamp, context
                 FROM experiences
                 WHERE {conditions}
                 ORDER BY timestamp DESC
                 LIMIT ?
-            """, params + [limit])
+            """,
+                params + [limit],
+            )
 
             rows = cursor.fetchall()
             conn.close()
 
-            return [
-                {"id": r[0], "content": r[1], "timestamp": r[2], "context": r[3]}
-                for r in rows
-            ]
+            return [{"id": r[0], "content": r[1], "timestamp": r[2], "context": r[3]} for r in rows]
         except Exception as e:
             logger.debug("记忆召回失败（非致命）: %s", e)
             return []
@@ -258,13 +258,14 @@ class ContextCompressor:
 
         if system_content_parts:
             system_content_parts.append(
-                "以上是你与用户的过往对话摘要和相关记忆。"
-                "请基于这些信息理解上下文，但优先响应当前查询。"
+                "以上是你与用户的过往对话摘要和相关记忆。" "请基于这些信息理解上下文，但优先响应当前查询。"
             )
-            result.append({
-                "role": "system",
-                "content": "\n\n".join(system_content_parts),
-            })
+            result.append(
+                {
+                    "role": "system",
+                    "content": "\n\n".join(system_content_parts),
+                }
+            )
 
         # 5. 添加保留的近期对话
         result.extend(recent_messages)
@@ -278,7 +279,9 @@ class ContextCompressor:
         if final_tokens > self.max_context_tokens:
             logger.warning(
                 "[%s] 仍超限制 (%d > %d)，截断早期消息",
-                session_id, final_tokens, self.max_context_tokens,
+                session_id,
+                final_tokens,
+                self.max_context_tokens,
             )
             # 逐步移除非系统消息的早期条目
             while self._estimate_messages_tokens(result) > self.max_context_tokens and len(result) > 3:

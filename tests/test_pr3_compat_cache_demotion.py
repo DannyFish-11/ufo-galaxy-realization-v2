@@ -65,8 +65,8 @@ Test index
 from __future__ import annotations
 
 import inspect
-import sys
 import os
+import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -76,6 +76,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_udm_device(device_id: str, status: str = "online", capabilities=None):
     dev = MagicMock()
@@ -115,23 +116,27 @@ def _make_udm(devices: dict):
 # 1. DEVICE_READINESS_AUTHORITY importable
 # ---------------------------------------------------------------------------
 
+
 class TestReadinessAuthoritySentinel(unittest.TestCase):
     def test_01_authority_importable(self):
         from core.device_readiness import DEVICE_READINESS_AUTHORITY
+
         self.assertIsInstance(DEVICE_READINESS_AUTHORITY, str)
         self.assertTrue(len(DEVICE_READINESS_AUTHORITY) > 0)
 
     def test_02_authority_is_v2(self):
         from core.device_readiness import DEVICE_READINESS_AUTHORITY
-        self.assertIn("V2", DEVICE_READINESS_AUTHORITY,
-                      "PR-3 should upgrade sentinel to V2")
+
+        self.assertIn("V2", DEVICE_READINESS_AUTHORITY, "PR-3 should upgrade sentinel to V2")
 
     def test_03_compat_excluded_importable_and_true(self):
         from core.device_readiness import DEVICE_READINESS_COMPAT_EXCLUDED
+
         self.assertIs(DEVICE_READINESS_COMPAT_EXCLUDED, True)
 
     def test_04_compat_excluded_in_all(self):
         import core.device_readiness as dr
+
         self.assertIn("DEVICE_READINESS_COMPAT_EXCLUDED", dr.__all__)
 
 
@@ -139,19 +144,23 @@ class TestReadinessAuthoritySentinel(unittest.TestCase):
 # 5-6. REGISTERED_DEVICES_COMPAT_CACHE_AUTHORITY
 # ---------------------------------------------------------------------------
 
+
 class TestCompatCacheAuthoritySentinel(unittest.TestCase):
     def test_05_sentinel_importable(self):
         from core.routes._shared import REGISTERED_DEVICES_COMPAT_CACHE_AUTHORITY
+
         self.assertIsInstance(REGISTERED_DEVICES_COMPAT_CACHE_AUTHORITY, str)
 
     def test_06_sentinel_non_empty(self):
         from core.routes._shared import REGISTERED_DEVICES_COMPAT_CACHE_AUTHORITY
+
         self.assertTrue(len(REGISTERED_DEVICES_COMPAT_CACHE_AUTHORITY) > 0)
 
 
 # ---------------------------------------------------------------------------
 # 7-10. get_device_readiness canonical authority
 # ---------------------------------------------------------------------------
+
 
 class TestGetDeviceReadinessCanonical(unittest.TestCase):
     def _patch_udm(self, devices: dict):
@@ -160,40 +169,45 @@ class TestGetDeviceReadinessCanonical(unittest.TestCase):
 
     def _patch_ucm(self, connections: dict):
         mock_ucm = MagicMock()
-        mock_ucm.get_connection = MagicMock(
-            side_effect=lambda did: connections.get(did)
-        )
-        mock_ucm.is_device_connected = MagicMock(
-            side_effect=lambda did: did in connections
-        )
+        mock_ucm.get_connection = MagicMock(side_effect=lambda did: connections.get(did))
+        mock_ucm.is_device_connected = MagicMock(side_effect=lambda did: did in connections)
         return patch("core.device_readiness._get_ucm", return_value=mock_ucm)
 
     def test_07_registered_true_when_udm_has_device(self):
         from core.device_readiness import get_device_readiness
+
         dev = _make_udm_device("dev-001")
-        with self._patch_udm({"dev-001": dev}), \
-             self._patch_ucm({}), \
-             patch("core.device_readiness._get_gateway_ws_manager", return_value=None), \
-             patch("core.device_readiness._get_device_router", return_value=None):
+        with (
+            self._patch_udm({"dev-001": dev}),
+            self._patch_ucm({}),
+            patch("core.device_readiness._get_gateway_ws_manager", return_value=None),
+            patch("core.device_readiness._get_device_router", return_value=None),
+        ):
             rs = get_device_readiness("dev-001")
         self.assertTrue(rs.registered)
 
     def test_08_online_true_when_udm_status_online(self):
         from core.device_readiness import get_device_readiness
+
         dev = _make_udm_device("dev-001", status="online")
-        with self._patch_udm({"dev-001": dev}), \
-             self._patch_ucm({}), \
-             patch("core.device_readiness._get_gateway_ws_manager", return_value=None), \
-             patch("core.device_readiness._get_device_router", return_value=None):
+        with (
+            self._patch_udm({"dev-001": dev}),
+            self._patch_ucm({}),
+            patch("core.device_readiness._get_gateway_ws_manager", return_value=None),
+            patch("core.device_readiness._get_device_router", return_value=None),
+        ):
             rs = get_device_readiness("dev-001")
         self.assertTrue(rs.online)
 
     def test_09_registered_false_when_udm_has_no_device(self):
         from core.device_readiness import get_device_readiness
-        with self._patch_udm({}), \
-             self._patch_ucm({}), \
-             patch("core.device_readiness._get_gateway_ws_manager", return_value=None), \
-             patch("core.device_readiness._get_device_router", return_value=None):
+
+        with (
+            self._patch_udm({}),
+            self._patch_ucm({}),
+            patch("core.device_readiness._get_gateway_ws_manager", return_value=None),
+            patch("core.device_readiness._get_device_router", return_value=None),
+        ):
             rs = get_device_readiness("ghost-device")
         self.assertFalse(rs.registered)
 
@@ -204,15 +218,17 @@ class TestGetDeviceReadinessCanonical(unittest.TestCase):
         dev = _make_udm_device("dev-002", status="offline")
         # Even if registered_devices has the device as "online", readiness should
         # reflect UDM truth (offline).
-        with self._patch_udm({"dev-002": dev}), \
-             self._patch_ucm({}), \
-             patch("core.device_readiness._get_gateway_ws_manager", return_value=None), \
-             patch("core.device_readiness._get_device_router", return_value=None), \
-             patch.dict(
-                 "core.routes._shared.registered_devices",
-                 {"dev-002": {"status": "online", "online": True}},
-                 clear=False,
-             ):
+        with (
+            self._patch_udm({"dev-002": dev}),
+            self._patch_ucm({}),
+            patch("core.device_readiness._get_gateway_ws_manager", return_value=None),
+            patch("core.device_readiness._get_device_router", return_value=None),
+            patch.dict(
+                "core.routes._shared.registered_devices",
+                {"dev-002": {"status": "online", "online": True}},
+                clear=False,
+            ),
+        ):
             rs = get_device_readiness("dev-002")
         # Readiness should use UDM status (offline), not compat cache
         self.assertFalse(rs.online)
@@ -222,33 +238,43 @@ class TestGetDeviceReadinessCanonical(unittest.TestCase):
 # 11-13. _is_device_registered_canonical helper
 # ---------------------------------------------------------------------------
 
+
 class TestIsDeviceRegisteredCanonical(unittest.TestCase):
     def test_11_true_for_udm_device(self):
         from core.routes.devices import _is_device_registered_canonical
+
         dev = _make_udm_device("dev-a")
         mock_udm = _make_udm({"dev-a": dev})
-        with patch("core.routes.devices.get_unified_device_manager", return_value=mock_udm), \
-             patch.dict("core.routes._shared.registered_devices", {}, clear=True):
+        with (
+            patch("core.routes.devices.get_unified_device_manager", return_value=mock_udm),
+            patch.dict("core.routes._shared.registered_devices", {}, clear=True),
+        ):
             result = _is_device_registered_canonical("dev-a")
         self.assertTrue(result)
 
     def test_12_true_for_compat_only_device(self):
         from core.routes.devices import _is_device_registered_canonical
+
         mock_udm = _make_udm({})
-        with patch("core.routes.devices.get_unified_device_manager", return_value=mock_udm), \
-             patch.dict(
-                 "core.routes._shared.registered_devices",
-                 {"dev-b": {"device_id": "dev-b"}},
-                 clear=True,
-             ):
+        with (
+            patch("core.routes.devices.get_unified_device_manager", return_value=mock_udm),
+            patch.dict(
+                "core.routes._shared.registered_devices",
+                {"dev-b": {"device_id": "dev-b"}},
+                clear=True,
+            ),
+        ):
             result = _is_device_registered_canonical("dev-b")
         self.assertTrue(result)
 
     def test_13_false_for_absent_device(self):
         from core.routes.devices import _is_device_registered_canonical
+
         mock_udm = _make_udm({})
-        with patch("core.routes.devices.get_unified_device_manager", return_value=mock_udm), \
-             patch.dict("core.routes._shared.registered_devices", {}, clear=True):
+        with (
+            patch("core.routes.devices.get_unified_device_manager", return_value=mock_udm),
+            patch.dict("core.routes._shared.registered_devices", {}, clear=True),
+        ):
             result = _is_device_registered_canonical("ghost")
         self.assertFalse(result)
 
@@ -257,21 +283,26 @@ class TestIsDeviceRegisteredCanonical(unittest.TestCase):
 # 14-15. update_device_status canonical check
 # ---------------------------------------------------------------------------
 
+
 class TestUpdateDeviceStatusCanonical(unittest.TestCase):
     """update_device_status must use UDM for existence check, not compat cache."""
 
     def _build_router(self):
         from core.routes.devices import create_router
+
         return create_router()
 
     def test_14_404_when_neither_udm_nor_compat_has_device(self):
         from fastapi import HTTPException
+
         from core.routes.devices import create_router
 
         # Simulate route logic directly
         mock_udm = _make_udm({})
-        with patch("core.routes.devices.get_unified_device_manager", return_value=mock_udm), \
-             patch.dict("core.routes._shared.registered_devices", {}, clear=True):
+        with (
+            patch("core.routes.devices.get_unified_device_manager", return_value=mock_udm),
+            patch.dict("core.routes._shared.registered_devices", {}, clear=True),
+        ):
             from core.routes._shared import registered_devices
 
             # Reproduce existence check
@@ -282,31 +313,39 @@ class TestUpdateDeviceStatusCanonical(unittest.TestCase):
     def test_15_canonical_check_passes_for_udm_only_device(self):
         dev = _make_udm_device("dev-x")
         mock_udm = _make_udm({"dev-x": dev})
-        with patch("core.routes.devices.get_unified_device_manager", return_value=mock_udm), \
-             patch.dict("core.routes._shared.registered_devices", {}, clear=True):
+        with (
+            patch("core.routes.devices.get_unified_device_manager", return_value=mock_udm),
+            patch.dict("core.routes._shared.registered_devices", {}, clear=True),
+        ):
             udm_dev = mock_udm.get_device("dev-x")
-            self.assertIsNotNone(udm_dev,
-                                 "UDM should provide the device for canonical check")
+            self.assertIsNotNone(udm_dev, "UDM should provide the device for canonical check")
 
 
 # ---------------------------------------------------------------------------
 # 16-17. send_device_command canonical check
 # ---------------------------------------------------------------------------
 
+
 class TestSendDeviceCommandCanonical(unittest.TestCase):
     def test_16_canonical_check_true_for_udm_device(self):
         from core.routes.devices import _is_device_registered_canonical
+
         dev = _make_udm_device("dev-cmd")
         mock_udm = _make_udm({"dev-cmd": dev})
-        with patch("core.routes.devices.get_unified_device_manager", return_value=mock_udm), \
-             patch.dict("core.routes._shared.registered_devices", {}, clear=True):
+        with (
+            patch("core.routes.devices.get_unified_device_manager", return_value=mock_udm),
+            patch.dict("core.routes._shared.registered_devices", {}, clear=True),
+        ):
             self.assertTrue(_is_device_registered_canonical("dev-cmd"))
 
     def test_17_canonical_check_false_for_unregistered(self):
         from core.routes.devices import _is_device_registered_canonical
+
         mock_udm = _make_udm({})
-        with patch("core.routes.devices.get_unified_device_manager", return_value=mock_udm), \
-             patch.dict("core.routes._shared.registered_devices", {}, clear=True):
+        with (
+            patch("core.routes.devices.get_unified_device_manager", return_value=mock_udm),
+            patch.dict("core.routes._shared.registered_devices", {}, clear=True),
+        ):
             self.assertFalse(_is_device_registered_canonical("totally-unknown"))
 
 
@@ -314,21 +353,27 @@ class TestSendDeviceCommandCanonical(unittest.TestCase):
 # 18-20. get_device_telemetry canonical check
 # ---------------------------------------------------------------------------
 
+
 class TestGetDeviceTelemetryCanonical(unittest.TestCase):
     def test_18_uses_udm_data_when_available(self):
         """Telemetry should reflect UDM data when the device is in UDM."""
         import asyncio
+
         from core.routes.devices import create_router
 
         dev = _make_udm_device("dev-tel", status="online")
         dev.last_heartbeat = None
         mock_udm = _make_udm({"dev-tel": dev})
 
-        with patch("core.routes.devices.get_unified_device_manager", return_value=mock_udm), \
-             patch.dict("core.routes._shared.registered_devices",
-                        {"dev-tel": {"status": "stale", "capabilities": ["OLD"]}},
-                        clear=True), \
-             patch("core.routes._shared.connection_manager") as mock_cm:
+        with (
+            patch("core.routes.devices.get_unified_device_manager", return_value=mock_udm),
+            patch.dict(
+                "core.routes._shared.registered_devices",
+                {"dev-tel": {"status": "stale", "capabilities": ["OLD"]}},
+                clear=True,
+            ),
+            patch("core.routes._shared.connection_manager") as mock_cm,
+        ):
             mock_cm.active_devices = {}
 
             # Directly invoke the existence check to verify UDM path
@@ -340,20 +385,28 @@ class TestGetDeviceTelemetryCanonical(unittest.TestCase):
     def test_19_fallback_to_compat_cache_on_udm_miss(self):
         """When UDM has no device, compat cache should be consulted."""
         mock_udm = _make_udm({})
-        with patch("core.routes.devices.get_unified_device_manager", return_value=mock_udm), \
-             patch.dict("core.routes._shared.registered_devices",
-                        {"dev-legacy": {"status": "offline", "capabilities": ["screen"]}},
-                        clear=True):
+        with (
+            patch("core.routes.devices.get_unified_device_manager", return_value=mock_udm),
+            patch.dict(
+                "core.routes._shared.registered_devices",
+                {"dev-legacy": {"status": "offline", "capabilities": ["screen"]}},
+                clear=True,
+            ),
+        ):
             # Device exists only in compat cache
             from core.routes.devices import _is_device_registered_canonical
+
             result = _is_device_registered_canonical("dev-legacy")
             self.assertTrue(result, "Should find device via compat fallback")
 
     def test_20_returns_404_when_neither_source_has_device(self):
         mock_udm = _make_udm({})
-        with patch("core.routes.devices.get_unified_device_manager", return_value=mock_udm), \
-             patch.dict("core.routes._shared.registered_devices", {}, clear=True):
+        with (
+            patch("core.routes.devices.get_unified_device_manager", return_value=mock_udm),
+            patch.dict("core.routes._shared.registered_devices", {}, clear=True),
+        ):
             from core.routes.devices import _is_device_registered_canonical
+
             result = _is_device_registered_canonical("nobody")
             self.assertFalse(result)
 
@@ -362,13 +415,17 @@ class TestGetDeviceTelemetryCanonical(unittest.TestCase):
 # 21. transfer_file canonical check
 # ---------------------------------------------------------------------------
 
+
 class TestTransferFileCanonical(unittest.TestCase):
     def test_21_canonical_check_for_both_devices(self):
         from core.routes.devices import _is_device_registered_canonical
+
         src = _make_udm_device("src-dev")
         mock_udm = _make_udm({"src-dev": src})
-        with patch("core.routes.devices.get_unified_device_manager", return_value=mock_udm), \
-             patch.dict("core.routes._shared.registered_devices", {}, clear=True):
+        with (
+            patch("core.routes.devices.get_unified_device_manager", return_value=mock_udm),
+            patch.dict("core.routes._shared.registered_devices", {}, clear=True),
+        ):
             self.assertTrue(_is_device_registered_canonical("src-dev"))
             self.assertFalse(_is_device_registered_canonical("tgt-dev"))
 
@@ -377,15 +434,18 @@ class TestTransferFileCanonical(unittest.TestCase):
 # 22-23. discover_devices canonical source
 # ---------------------------------------------------------------------------
 
+
 class TestDiscoverDevicesCanonical(unittest.TestCase):
     def test_22_udm_only_device_visible(self):
         """A device only in UDM should appear in discover_devices output."""
         dev = _make_udm_device("udm-only", status="online")
         mock_udm = _make_udm({"udm-only": dev})
 
-        with patch("core.routes.devices.get_unified_device_manager", return_value=mock_udm), \
-             patch.dict("core.routes._shared.registered_devices", {}, clear=True), \
-             patch("core.routes._shared.connection_manager") as mock_cm:
+        with (
+            patch("core.routes.devices.get_unified_device_manager", return_value=mock_udm),
+            patch.dict("core.routes._shared.registered_devices", {}, clear=True),
+            patch("core.routes._shared.connection_manager") as mock_cm,
+        ):
             mock_cm.active_devices = {}
 
             # Simulate discover_devices UDM scan
@@ -397,17 +457,26 @@ class TestDiscoverDevicesCanonical(unittest.TestCase):
         """Devices in compat cache but not in UDM should appear in discover output."""
         mock_udm = _make_udm({})
 
-        with patch("core.routes.devices.get_unified_device_manager", return_value=mock_udm), \
-             patch.dict(
-                 "core.routes._shared.registered_devices",
-                 {"compat-only": {"device_id": "compat-only", "device_type": "android",
-                                  "capabilities": [], "status": "registered"}},
-                 clear=True,
-             ), \
-             patch("core.routes._shared.connection_manager") as mock_cm:
+        with (
+            patch("core.routes.devices.get_unified_device_manager", return_value=mock_udm),
+            patch.dict(
+                "core.routes._shared.registered_devices",
+                {
+                    "compat-only": {
+                        "device_id": "compat-only",
+                        "device_type": "android",
+                        "capabilities": [],
+                        "status": "registered",
+                    }
+                },
+                clear=True,
+            ),
+            patch("core.routes._shared.connection_manager") as mock_cm,
+        ):
             mock_cm.active_devices = {}
 
             from core.routes._shared import registered_devices
+
             udm_all = mock_udm.list_devices()
             seen = {d.device_id for d in udm_all}
             supplement_ids = [did for did in registered_devices if did not in seen]
@@ -417,6 +486,7 @@ class TestDiscoverDevicesCanonical(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 24. device_readiness module does not reference registered_devices
 # ---------------------------------------------------------------------------
+
 
 class TestReadinessModuleNoDependencyOnCompatCache(unittest.TestCase):
     def test_24_module_source_does_not_import_registered_devices(self):
@@ -428,7 +498,9 @@ class TestReadinessModuleNoDependencyOnCompatCache(unittest.TestCase):
         Name('registered_devices') nodes outside of string literals.
         """
         import ast
+
         import core.device_readiness as dr
+
         src = inspect.getsource(dr)
         try:
             tree = ast.parse(src)
@@ -454,15 +526,24 @@ class TestReadinessModuleNoDependencyOnCompatCache(unittest.TestCase):
 # 25. DeviceReadinessSummary.to_dict() fields
 # ---------------------------------------------------------------------------
 
+
 class TestDeviceReadinessSummaryToDict(unittest.TestCase):
     def test_25_to_dict_contains_expected_fields(self):
         from core.device_readiness import DeviceReadinessSummary
+
         rs = DeviceReadinessSummary(device_id="test-dev")
         d = rs.to_dict()
         expected_keys = {
-            "device_id", "registered", "online", "connected",
-            "routable", "capability_ready", "connection", "routability",
-            "reasons", "sources",
+            "device_id",
+            "registered",
+            "online",
+            "connected",
+            "routable",
+            "capability_ready",
+            "connection",
+            "routability",
+            "reasons",
+            "sources",
         }
         self.assertTrue(expected_keys.issubset(set(d.keys())))
 

@@ -40,13 +40,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 _ROOT = pathlib.Path(__file__).parent.parent
 
+
 def _read(rel: str) -> str:
     return (_ROOT / rel).read_text(encoding="utf-8")
 
+
 _UNIFIED_ROUTER_SRC = _read("core/unified/llm_router.py")
-_MULTI_ROUTER_SRC   = _read("core/multi_llm_router.py")
-_OPENCLAWD_SRC      = _read("core/openclawd.py")
-_AGENT_FACTORY_SRC  = _read("core/agent_factory.py")
+_MULTI_ROUTER_SRC = _read("core/multi_llm_router.py")
+_OPENCLAWD_SRC = _read("core/openclawd.py")
+_AGENT_FACTORY_SRC = _read("core/agent_factory.py")
 
 
 def _method_src(file_src: str, name: str) -> str:
@@ -75,7 +77,7 @@ class TestPR3ProviderRoutingClosure(unittest.TestCase):
 
     def test_02_unified_llm_router_authority_references_pr3(self):
         idx = _UNIFIED_ROUTER_SRC.find("UNIFIED_LLM_ROUTER_AUTHORITY")
-        snippet = _UNIFIED_ROUTER_SRC[idx:idx+800]
+        snippet = _UNIFIED_ROUTER_SRC[idx : idx + 800]
         self.assertIn("PR3", snippet)
         self.assertIn("UnifiedLLMRouter", snippet)
 
@@ -85,7 +87,7 @@ class TestPR3ProviderRoutingClosure(unittest.TestCase):
 
     def test_04_local_llm_provider_role_documents_ollama_and_pr3(self):
         idx = _MULTI_ROUTER_SRC.find("LOCAL_LLM_PROVIDER_ROLE")
-        snippet = _MULTI_ROUTER_SRC[idx:idx+600]
+        snippet = _MULTI_ROUTER_SRC[idx : idx + 600]
         self.assertIn("ollama", snippet.lower())
         self.assertIn("PR3", snippet)
 
@@ -110,8 +112,9 @@ class TestPR3ProviderRoutingClosure(unittest.TestCase):
             clawd = mod.get_openclawd()
             router = clawd._get_router()
             if router is not None:
-                self.assertTrue(hasattr(router, "chat_with_tools"),
-                    f"{type(router).__name__} must have chat_with_tools()")
+                self.assertTrue(
+                    hasattr(router, "chat_with_tools"), f"{type(router).__name__} must have chat_with_tools()"
+                )
         except Exception:
             self.skipTest("OpenClawd not importable in this test environment")
 
@@ -132,7 +135,7 @@ class TestPR3ProviderRoutingClosure(unittest.TestCase):
         loop = asyncio.new_event_loop()
         try:
             result = loop.run_until_complete(
-                router.chat_with_tools(messages=[{"role":"user","content":"hi"}], task_type="general")
+                router.chat_with_tools(messages=[{"role": "user", "content": "hi"}], task_type="general")
             )
         finally:
             loop.close()
@@ -148,15 +151,17 @@ class TestPR3ProviderRoutingClosure(unittest.TestCase):
             return
         router = m.get_llm_router()
         calls = []
+
         async def _fake(**kw):
             calls.append(kw)
-            return m.LLMResponse(content="ok", provider="p", model="m",
-                                 input_tokens=0, output_tokens=0)
+            return m.LLMResponse(content="ok", provider="p", model="m", input_tokens=0, output_tokens=0)
+
         with patch.object(router, "chat", side_effect=_fake):
             loop = asyncio.new_event_loop()
             try:
-                loop.run_until_complete(router.chat_with_tools(
-                    messages=[{"role":"user","content":"x"}], task_type="general"))
+                loop.run_until_complete(
+                    router.chat_with_tools(messages=[{"role": "user", "content": "x"}], task_type="general")
+                )
             finally:
                 loop.close()
         self.assertEqual(len(calls), 1)
@@ -176,7 +181,7 @@ class TestPR3ProviderRoutingClosure(unittest.TestCase):
         idx = _MULTI_ROUTER_SRC.find("TASK_ROUTING_PREFERENCES")
         g_idx = _MULTI_ROUTER_SRC.find("TaskType.GENERAL", idx)
         self.assertGreater(g_idx, idx)
-        snippet = _MULTI_ROUTER_SRC[g_idx: _MULTI_ROUTER_SRC.find("]", g_idx) + 1]
+        snippet = _MULTI_ROUTER_SRC[g_idx : _MULTI_ROUTER_SRC.find("]", g_idx) + 1]
         self.assertIn('"ollama"', snippet)
 
     def test_14_ollama_is_first_in_general_preferences_source(self):
@@ -186,11 +191,10 @@ class TestPR3ProviderRoutingClosure(unittest.TestCase):
         g_idx = _MULTI_ROUTER_SRC.find("TaskType.GENERAL", idx)
         bracket_start = _MULTI_ROUTER_SRC.find("[", g_idx)
         bracket_end = _MULTI_ROUTER_SRC.find("]", g_idx)
-        snippet = _MULTI_ROUTER_SRC[bracket_start: bracket_end + 1]
+        snippet = _MULTI_ROUTER_SRC[bracket_start : bracket_end + 1]
         providers = re.findall(r'"[a-zA-Z0-9_-]+"', snippet)
         self.assertTrue(providers, "GENERAL preferences list is empty")
-        self.assertEqual(providers[0], '"ollama"',
-                         f"local-brain-first: ollama must be first, got {providers[:3]}")
+        self.assertEqual(providers[0], '"ollama"', f"local-brain-first: ollama must be first, got {providers[:3]}")
 
     # 15-18 ─ Routing closure: no direct get_llm_router() bypasses
     def test_15_handle_chat_no_direct_bypass(self):
@@ -210,7 +214,7 @@ class TestPR3ProviderRoutingClosure(unittest.TestCase):
         if idx == -1:
             idx = _OPENCLAWD_SRC.find("def get_status(")
         self.assertGreater(idx, 0)
-        snippet = _OPENCLAWD_SRC[idx: idx + 1200]
+        snippet = _OPENCLAWD_SRC[idx : idx + 1200]
         self.assertNotIn("from core.multi_llm_router import get_llm_router", snippet)
 
     # 19 ─ compute_complexity_vector delegates to _backend (mock)
@@ -221,11 +225,12 @@ class TestPR3ProviderRoutingClosure(unittest.TestCase):
             self.skipTest("core.unified.llm_router requires pydantic")
             return
         router = m.get_unified_llm_router()
-        mock_cv = MagicMock(); mock_cv.weighted_score = 0.6
+        mock_cv = MagicMock()
+        mock_cv.weighted_score = 0.6
         mock_be = MagicMock()
         mock_be._compute_complexity_vector = MagicMock(return_value=mock_cv)
         router._backend = mock_be
-        result = router.compute_complexity_vector([{"role":"user","content":"x"}])
+        result = router.compute_complexity_vector([{"role": "user", "content": "x"}])
         mock_be._compute_complexity_vector.assert_called_once()
         self.assertEqual(result, mock_cv)
 

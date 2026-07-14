@@ -6,6 +6,7 @@
   - 未声明节点:legacy 放行;GALAXY_PERM_STRICT=1 收紧为拒绝。
   - 统一执行器集成:越权动作在加载节点前就被拦下,返回结构化 permission_denial。
 """
+
 from __future__ import annotations
 
 import asyncio

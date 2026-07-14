@@ -84,10 +84,7 @@ PARTICIPATION_BUILDS_ON_READINESS: bool = True
 # TIL-aligned — its sources are exclusively UCM and UDM, the same primary
 # authorities as core.truth_integration_layer.  By extension, participation
 # never reads the compat cache.
-PARTICIPATION_TRUTH_SOURCE: str = (
-    "DEVICE_READINESS_LAYER(UCM+UDM) "
-    "via TRUTH_INTEGRATION_LAYER_BACKED=True"
-)
+PARTICIPATION_TRUTH_SOURCE: str = "DEVICE_READINESS_LAYER(UCM+UDM) " "via TRUTH_INTEGRATION_LAYER_BACKED=True"
 
 # PR-5: Affirms that participation is strictly an enrichment layer.
 # session/formation/context data can only add role/session/mesh enrichment;
@@ -178,6 +175,7 @@ def _get_canonical_readiness(device_id: str) -> Any:
     """
     try:
         from core.device_readiness import get_device_readiness  # type: ignore
+
         return get_device_readiness(device_id)
     except ImportError:
         logger.debug("_get_canonical_readiness: device_readiness module unavailable")
@@ -195,11 +193,13 @@ def _get_udm() -> Any:
     """Return the UnifiedDeviceManager singleton, or None on failure."""
     try:
         from core.unified_device_manager import UnifiedDeviceManager
+
         return UnifiedDeviceManager.get_instance()
     except Exception as exc:
         logger.debug("_get_udm: UnifiedDeviceManager unavailable: %s", exc)
     try:
         from core.device_registry import get_device_registry
+
         return get_device_registry()
     except Exception as exc:
         logger.debug("_get_udm: device_registry unavailable: %s", exc)
@@ -253,19 +253,22 @@ def _get_mesh_membership(device_id: str) -> Optional[Any]:
         # Try body mesh registry first
         try:
             from core.mesh.body_mesh_registry import BodyMeshRegistry
+
             registry = BodyMeshRegistry.get_instance()
             if registry is not None:
                 entry = registry.get(device_id)
                 if entry is not None:
                     from contracts.mesh_membership import from_body_mesh_entry
+
                     return from_body_mesh_entry(entry)
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
 
         # Try device formation summary
         try:
-            from core.device_formation import resolve_formation_summary
             from contracts.mesh_membership import from_device_formation_summary
+            from core.device_formation import resolve_formation_summary
+
             summary = resolve_formation_summary()
             memberships = from_device_formation_summary(summary)
             for m in memberships or []:
@@ -286,6 +289,7 @@ def _get_mesh_session(device_id: str) -> Optional[Any]:
         # Try mesh session coordinator
         try:
             from contracts.mesh_session_coordinator import get_active_session_for_device
+
             return get_active_session_for_device(device_id)
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
@@ -294,6 +298,7 @@ def _get_mesh_session(device_id: str) -> Optional[Any]:
             from core.runtime.source_dispatch_orchestrator import (
                 get_active_mesh_session,
             )
+
             session = get_active_mesh_session()
             if session is not None:
                 participants = getattr(session, "participants", []) or []
@@ -409,11 +414,15 @@ def get_device_participation(device_id: str) -> ParticipationSummary:
             # runtime_present maps to Layer-1 "online" (transport-level presence)
             summary.runtime_present = bool(getattr(rs, "online", False))
             summary.routable = bool(getattr(rs, "routable", False))
-            sources["readiness"] = rs.to_dict() if hasattr(rs, "to_dict") else {
-                "registered": summary.registered,
-                "runtime_present": summary.runtime_present,
-                "routable": summary.routable,
-            }
+            sources["readiness"] = (
+                rs.to_dict()
+                if hasattr(rs, "to_dict")
+                else {
+                    "registered": summary.registered,
+                    "runtime_present": summary.runtime_present,
+                    "routable": summary.routable,
+                }
+            )
             if not summary.registered:
                 reasons.append("not-registered")
             elif not summary.routable:
@@ -441,15 +450,9 @@ def get_device_participation(device_id: str) -> ParticipationSummary:
             # Gate eligibility on Layer-1 readiness being valid.
             # A device that the selector marks eligible but is not registered
             # or not routable at the transport layer must not be eligible.
-            summary.orchestration_eligible = (
-                raw_eligible
-                and summary.registered
-                and summary.routable
-            )
+            summary.orchestration_eligible = raw_eligible and summary.registered and summary.routable
             sources["selector"] = (
-                sel_status.to_dict()
-                if hasattr(sel_status, "to_dict")
-                else {"status": str(sel_status)}
+                sel_status.to_dict() if hasattr(sel_status, "to_dict") else {"status": str(sel_status)}
             )
             if raw_eligible and not summary.orchestration_eligible:
                 reasons.append("not-eligible:readiness-gate-failed")
@@ -475,16 +478,12 @@ def get_device_participation(device_id: str) -> ParticipationSummary:
             if summary.authority_scope is None:
                 scope_raw = getattr(membership, "authority_scope", None)
                 if scope_raw is not None:
-                    summary.authority_scope = (
-                        scope_raw.value if hasattr(scope_raw, "value") else str(scope_raw)
-                    )
+                    summary.authority_scope = scope_raw.value if hasattr(scope_raw, "value") else str(scope_raw)
 
             if summary.routing_intent is None:
                 intent_raw = getattr(membership, "routing_intent", None)
                 if intent_raw is not None:
-                    summary.routing_intent = (
-                        intent_raw.value if hasattr(intent_raw, "value") else str(intent_raw)
-                    )
+                    summary.routing_intent = intent_raw.value if hasattr(intent_raw, "value") else str(intent_raw)
 
             # Derive boolean flags from role strings
             role_set = {r.lower() for r in summary.roles}
@@ -494,9 +493,7 @@ def get_device_participation(device_id: str) -> ParticipationSummary:
             summary.is_relay = summary.is_relay or "relay" in role_set
 
             sources["mesh_membership"] = (
-                membership.to_dict()
-                if hasattr(membership, "to_dict")
-                else {"member_device_id": device_id}
+                membership.to_dict() if hasattr(membership, "to_dict") else {"member_device_id": device_id}
             )
         else:
             reasons.append("mesh-membership-unavailable")
@@ -585,9 +582,7 @@ def get_orchestration_ready_devices() -> List[ParticipationSummary]:
                 if ps.orchestration_eligible:
                     ready.append(ps)
             except Exception as exc:
-                logger.warning(
-                    "get_orchestration_ready_devices: error for %s: %s", device_id, exc
-                )
+                logger.warning("get_orchestration_ready_devices: error for %s: %s", device_id, exc)
         return ready
 
     except Exception as exc:

@@ -24,10 +24,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_real_handoff_contract(**kwargs) -> Any:
     """Return a real HandoffContract dataclass instance."""
@@ -360,8 +360,8 @@ class TestDeviceRouterHandoffContractCarriesPosture:
         This test mirrors the construction logic in DeviceRouter.route_task() Round-5
         to assert that source_runtime_posture is included in the contract and its to_dict().
         """
-        from galaxy_gateway.agent_bridge import HandoffContract
         from core.source_runtime_posture import resolve_source_runtime_posture
+        from galaxy_gateway.agent_bridge import HandoffContract
 
         ctx = {"source_runtime_posture": "join_runtime"}
         source_runtime_posture = resolve_source_runtime_posture(ctx.get("source_runtime_posture"))
@@ -531,16 +531,16 @@ class TestNoPostureSilentDropPolicyEndToEnd:
 
         # Path A: from_legacy_handoff_contract adapter
         env_a = from_legacy_handoff_contract(contract)
-        assert env_a.source_runtime_posture == "join_runtime", (
-            "from_legacy_handoff_contract silently reset join_runtime to control_only"
-        )
+        assert (
+            env_a.source_runtime_posture == "join_runtime"
+        ), "from_legacy_handoff_contract silently reset join_runtime to control_only"
 
         # Path B: AgentBridge.build_envelope_v2
         env_b = bridge.build_envelope_v2(contract)
         assert env_b is not None
-        assert env_b.source_runtime_posture == "join_runtime", (
-            "AgentBridge.build_envelope_v2 silently reset join_runtime to control_only"
-        )
+        assert (
+            env_b.source_runtime_posture == "join_runtime"
+        ), "AgentBridge.build_envelope_v2 silently reset join_runtime to control_only"
 
     def test_contract_to_dict_posture_matches_original(self):
         """to_dict() must never modify or drop the posture."""
@@ -589,42 +589,32 @@ class TestHandoffContractAuthorityRoleField:
     def test_handoff_contract_accepts_source_controller_role(self):
         from galaxy_gateway.agent_bridge import HandoffContract
 
-        c = HandoffContract(
-            trace_id="t", task={}, coordination_role="source_controller"
-        )
+        c = HandoffContract(trace_id="t", task={}, coordination_role="source_controller")
         assert c.coordination_role == "source_controller"
 
     def test_handoff_contract_accepts_joined_runtime_participant_role(self):
         from galaxy_gateway.agent_bridge import HandoffContract
 
-        c = HandoffContract(
-            trace_id="t", task={}, coordination_role="joined_runtime_participant"
-        )
+        c = HandoffContract(trace_id="t", task={}, coordination_role="joined_runtime_participant")
         assert c.coordination_role == "joined_runtime_participant"
 
     def test_handoff_contract_accepts_target_only_executor_role(self):
         from galaxy_gateway.agent_bridge import HandoffContract
 
-        c = HandoffContract(
-            trace_id="t", task={}, coordination_role="target_only_executor"
-        )
+        c = HandoffContract(trace_id="t", task={}, coordination_role="target_only_executor")
         assert c.coordination_role == "target_only_executor"
 
     def test_handoff_contract_accepts_observer_only_role(self):
         from galaxy_gateway.agent_bridge import HandoffContract
 
-        c = HandoffContract(
-            trace_id="t", task={}, coordination_role="observer_only"
-        )
+        c = HandoffContract(trace_id="t", task={}, coordination_role="observer_only")
         assert c.coordination_role == "observer_only"
 
     def test_to_dict_includes_coordination_role_when_non_empty(self):
         """to_dict() must include coordination_role when it is non-empty."""
         from galaxy_gateway.agent_bridge import HandoffContract
 
-        c = HandoffContract(
-            trace_id="t", task={}, coordination_role="source_controller"
-        )
+        c = HandoffContract(trace_id="t", task={}, coordination_role="source_controller")
         d = c.to_dict()
         assert "coordination_role" in d
         assert d["coordination_role"] == "source_controller"
@@ -710,9 +700,7 @@ class TestFromLegacyHandoffContractAuthorityPropagation:
     def test_propagates_joined_runtime_participant_role(self):
         from contracts.handoff_envelope_v2 import from_legacy_handoff_contract
 
-        contract = _make_real_handoff_contract(
-            coordination_role="joined_runtime_participant"
-        )
+        contract = _make_real_handoff_contract(coordination_role="joined_runtime_participant")
         env = from_legacy_handoff_contract(contract)
         assert env.coordination_role == "joined_runtime_participant"
         assert env.source.coordination_role == "joined_runtime_participant"
@@ -736,11 +724,19 @@ class TestFromLegacyHandoffContractAuthorityPropagation:
 
         from contracts.handoff_envelope_v2 import from_legacy_handoff_contract
 
-        m = MagicMock(spec=[
-            "trace_id", "task", "capability", "exec_mode", "route_mode",
-            "session", "callback_channel", "source_runtime_posture",
-            # coordination_role intentionally absent — simulates pre-PR-3 contract
-        ])
+        m = MagicMock(
+            spec=[
+                "trace_id",
+                "task",
+                "capability",
+                "exec_mode",
+                "route_mode",
+                "session",
+                "callback_channel",
+                "source_runtime_posture",
+                # coordination_role intentionally absent — simulates pre-PR-3 contract
+            ]
+        )
         m.trace_id = "t"
         m.task = {}
         m.capability = ""
@@ -788,9 +784,7 @@ class TestAgentBridgeBuildEnvelopeV2AuthorityPropagation:
         from galaxy_gateway.agent_bridge import AgentBridge, AgentBridgeConfig
 
         bridge = AgentBridge(config=AgentBridgeConfig(enabled=True))
-        contract = _make_real_handoff_contract(
-            coordination_role="joined_runtime_participant"
-        )
+        contract = _make_real_handoff_contract(coordination_role="joined_runtime_participant")
         env = bridge.build_envelope_v2(contract)
         assert env is not None
         assert env.metadata.get("coordination_role") == "joined_runtime_participant"
@@ -905,17 +899,13 @@ class TestHandoffEnvelopeV2AuthorityField:
     def test_handoff_envelope_v2_accepts_coordination_role(self):
         from contracts.handoff_envelope_v2 import HandoffEnvelopeV2
 
-        env = HandoffEnvelopeV2(
-            trace_id="t", coordination_role="joined_runtime_participant"
-        )
+        env = HandoffEnvelopeV2(trace_id="t", coordination_role="joined_runtime_participant")
         assert env.coordination_role == "joined_runtime_participant"
 
     def test_to_compact_summary_includes_coordination_role(self):
         from contracts.handoff_envelope_v2 import HandoffEnvelopeV2
 
-        env = HandoffEnvelopeV2(
-            trace_id="t", coordination_role="source_controller"
-        )
+        env = HandoffEnvelopeV2(trace_id="t", coordination_role="source_controller")
         summary = env.to_compact_summary()
         assert "coordination_role" in summary
         assert summary["coordination_role"] == "source_controller"
@@ -1116,17 +1106,13 @@ class TestNoAuthoritySilentDropPolicyEndToEnd:
         ):
             c = HandoffContract(trace_id="t", task={}, coordination_role=role)
             d = c.to_dict()
-            assert d.get("coordination_role") == role, (
-                f"to_dict() dropped coordination_role={role}"
-            )
+            assert d.get("coordination_role") == role, f"to_dict() dropped coordination_role={role}"
 
     def test_round_trip_contract_to_envelope_to_dict(self):
         """HandoffContract → HandoffEnvelopeV2 → to_dict preserves role."""
         from contracts.handoff_envelope_v2 import from_legacy_handoff_contract
 
-        contract = _make_real_handoff_contract(
-            coordination_role="target_only_executor"
-        )
+        contract = _make_real_handoff_contract(coordination_role="target_only_executor")
         env = from_legacy_handoff_contract(contract)
         d = env.to_dict()
         assert d.get("coordination_role") == "target_only_executor"

@@ -10,22 +10,20 @@ gaps across node/runtime/panel/model/device surfaces.
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
+
 logger = logging.getLogger(__name__)
 
 
 import time
 from typing import Any, Dict
 
-
-SYSTEM_REALITY_CHECKPOINT_AUTHORITY: str = (
-    "SYSTEM_REALITY_CHECKPOINT_V1::core.system_reality_checkpoint"
-)
+SYSTEM_REALITY_CHECKPOINT_AUTHORITY: str = "SYSTEM_REALITY_CHECKPOINT_V1::core.system_reality_checkpoint"
 
 
 def _safe_call(fn, default):
     try:
         return fn()
-    except Exception as exc:
+    except Exception:
         return default
 
 
@@ -67,8 +65,7 @@ def _build_mcp_skill_checkpoint() -> Dict[str, Any]:
     skills = skill_loader.list_skills()
     shell_skills = skill_md_loader.list_skills()
     mcp_tool_count = sum(
-        len(getattr(server, "tools", []) or [])
-        for server in getattr(mcp_loader, "servers", {}).values()
+        len(getattr(server, "tools", []) or []) for server in getattr(mcp_loader, "servers", {}).values()
     )
     skill_wrappers = len(skill_loader.list_as_mcp_tools())
     return {
@@ -97,9 +94,7 @@ def _build_runtime_credibility_checkpoint(panel_generated_at: float) -> Dict[str
     alloc_records = runtime.list_allocation_records(limit=1)
     tracker_snapshot = build_execution_tracking_snapshot()
     allocation_state_path = getattr(runtime, "_allocation_state_path", None)
-    latest_absorbed = max(
-        [float(getattr(s, "absorbed_at", 0.0) or 0.0) for s in snaps] or [0.0]
-    )
+    latest_absorbed = max([float(getattr(s, "absorbed_at", 0.0) or 0.0) for s in snaps] or [0.0])
     now = time.time()
     android_age = max(0.0, now - latest_absorbed) if latest_absorbed else None
     return {
@@ -118,9 +113,7 @@ def _build_runtime_credibility_checkpoint(panel_generated_at: float) -> Dict[str
             "delegated_execution_tracking_recovered_unrevalidated_count": (
                 tracker_snapshot.recovered_unrevalidated_count
             ),
-            "delegated_execution_tracking_recovered_stale_count": (
-                tracker_snapshot.recovered_stale_count
-            ),
+            "delegated_execution_tracking_recovered_stale_count": (tracker_snapshot.recovered_stale_count),
         },
     }
 
@@ -193,10 +186,7 @@ def _build_device_support_checkpoint() -> Dict[str, Any]:
 
     snapshots = list_device_state_snapshots()
     observed_types = sorted(
-        {
-            str(getattr(snapshot, "device_type", "android") or "android").lower()
-            for snapshot in snapshots
-        }
+        {str(getattr(snapshot, "device_type", "android") or "android").lower() for snapshot in snapshots}
     )
     return build_device_support_matrix(observed_types=observed_types)
 

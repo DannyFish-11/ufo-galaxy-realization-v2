@@ -47,10 +47,10 @@ GALAXY_SECRET_BACKEND      "env" (default) | "vault" | "kms" — selects the
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import textwrap
-import logging
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
@@ -62,6 +62,7 @@ logger = logging.getLogger("Galaxy.ConfigPreflight")
 # ---------------------------------------------------------------------------
 # Local configuration authority loader  (PR-3)
 # ---------------------------------------------------------------------------
+
 
 def _load_runtime_secrets_into_env() -> List[str]:
     """
@@ -103,24 +104,27 @@ def _load_runtime_secrets_into_env() -> List[str]:
 # Severity levels
 # ---------------------------------------------------------------------------
 
+
 class Severity(str, Enum):
-    CRITICAL = "CRITICAL"   # Must be set; startup should be blocked
-    WARNING = "WARNING"    # Strongly recommended; feature will be degraded
-    INFO = "INFO"       # Informational; defaults exist
+    CRITICAL = "CRITICAL"  # Must be set; startup should be blocked
+    WARNING = "WARNING"  # Strongly recommended; feature will be degraded
+    INFO = "INFO"  # Informational; defaults exist
 
 
 # ---------------------------------------------------------------------------
 # Check descriptor
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class EnvCheck:
     """Describes a single environment-variable requirement."""
+
     var: str
     severity: Severity
     description: str
     hint: str
-    groups: List[str]             # which preflight groups this belongs to
+    groups: List[str]  # which preflight groups this belongs to
     allow_placeholder: bool = True  # treat "your_*_here" as missing
 
 
@@ -165,7 +169,7 @@ _CHECKS: List[EnvCheck] = [
         description="Bearer token used to authenticate REST + WebSocket endpoints.",
         hint=(
             "Generate a random token and set it in .env:\n"
-            "  GALAXY_API_TOKEN=$(python3 -c \"import secrets; print(secrets.token_urlsafe(32))\")\n"
+            '  GALAXY_API_TOKEN=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")\n'
             "  Also set GALAXY_AUTH_ENABLED=true to enforce it.\n"
             "  Or set GALAXY_REQUIRE_API_TOKEN=true to treat a missing token as CRITICAL "
             "even when Bearer auth is disabled (staging hardening).\n"
@@ -180,7 +184,8 @@ _CHECKS: List[EnvCheck] = [
         description="Master encryption key for Node_03 SecretVault.",
         hint=(
             "Generate and set SECRETVAULT_MASTER_KEY in .env:\n"
-            "  SECRETVAULT_MASTER_KEY=$(python3 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')\n"
+            "  SECRETVAULT_MASTER_KEY=$(python3 -c 'from cryptography.fernet import Fernet;"
+            " print(Fernet.generate_key().decode())')\n"
             "  Required when GALAXY_SECRET_BACKEND=vault."
         ),
         groups=["vault", "all"],
@@ -304,11 +309,12 @@ _CHECKS: List[EnvCheck] = [
 # Result types
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class Finding:
     check: EnvCheck
     present: bool
-    value_hint: str = ""   # safe summary of the value (never the actual secret)
+    value_hint: str = ""  # safe summary of the value (never the actual secret)
 
 
 @dataclass
@@ -320,13 +326,11 @@ class PreflightReport:
 
     @property
     def criticals(self) -> List[Finding]:
-        return [f for f in self.findings
-                if not f.present and f.check.severity == Severity.CRITICAL]
+        return [f for f in self.findings if not f.present and f.check.severity == Severity.CRITICAL]
 
     @property
     def warnings(self) -> List[Finding]:
-        return [f for f in self.findings
-                if not f.present and f.check.severity == Severity.WARNING]
+        return [f for f in self.findings if not f.present and f.check.severity == Severity.WARNING]
 
     @property
     def passed(self) -> List[Finding]:
@@ -394,6 +398,7 @@ class PreflightReport:
 # ---------------------------------------------------------------------------
 # Error
 # ---------------------------------------------------------------------------
+
 
 class ConfigPreflightError(RuntimeError):
     """Raised when CRITICAL env vars are missing and fail_fast=True."""
@@ -596,6 +601,7 @@ def run_preflight(
 # Convenience: check a single variable
 # ---------------------------------------------------------------------------
 
+
 def require_env(var: str, hint: str = "") -> str:
     """
     Return the value of *var* or raise a descriptive RuntimeError.
@@ -603,8 +609,11 @@ def require_env(var: str, hint: str = "") -> str:
     Intended for inline use inside module-level code that needs a specific
     env var and wants a clear error message:
 
-        secret = require_env("SECRETVAULT_MASTER_KEY",
-                             "Generate with: python3 -c \\"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\\"")
+        secret = require_env(
+            "SECRETVAULT_MASTER_KEY",
+            "Generate with: python3 -c \\"from cryptography.fernet import Fernet; "
+            "print(Fernet.generate_key().decode())\\"",
+        )
     """
     value = os.environ.get(var, "")
     if not value or value.lower().startswith(_PLACEHOLDER_PREFIXES):
@@ -618,6 +627,7 @@ def require_env(var: str, hint: str = "") -> str:
 # ---------------------------------------------------------------------------
 # CLI entry-point
 # ---------------------------------------------------------------------------
+
 
 def _main() -> None:
     import argparse
@@ -662,7 +672,7 @@ def _main() -> None:
     try:
         report = run_preflight(
             dry_run=args.dry_run,
-            fail_fast=False,   # we handle exit ourselves below
+            fail_fast=False,  # we handle exit ourselves below
             mode=args.mode,
             verbose=not args.quiet,
         )

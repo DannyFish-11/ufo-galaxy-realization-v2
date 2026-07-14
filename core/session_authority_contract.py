@@ -111,8 +111,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 SESSION_AUTHORITY_CONTRACT_AUTHORITY: str = (
-    "SESSION_AUTHORITY_CONTRACT::"
-    "UNIFIED_IDENTITY_AND_CONTINUITY_BINDING_FOR_RECONNECT_MIGRATION_HANDOFF_V1"
+    "SESSION_AUTHORITY_CONTRACT::" "UNIFIED_IDENTITY_AND_CONTINUITY_BINDING_FOR_RECONNECT_MIGRATION_HANDOFF_V1"
 )
 
 SESSION_AUTHORITY_CONTRACT_PR2_SENTINEL: str = (
@@ -268,6 +267,7 @@ def get_session_authority_registry():
     """
     try:
         from core.attached_runtime_session_registry import get_session_registry
+
         return get_session_registry()
     except Exception as exc:
         logger.warning(
@@ -285,6 +285,7 @@ def get_continuity_coordinator():
     """
     try:
         from core.flow_continuity_coordinator import get_flow_continuity_coordinator
+
         return get_flow_continuity_coordinator()
     except Exception as exc:
         logger.warning(

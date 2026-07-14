@@ -146,7 +146,6 @@ from core.capability_assimilation import (
     reset_capability_assimilation_layer,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -277,8 +276,7 @@ def test_d01_execution_profile_minimal_construction():
 def test_d02_execution_profile_to_dict_keys():
     ep = ExecutionProfile(node_id="n1")
     d = ep.to_dict()
-    for key in ("node_id", "participant_kind", "max_concurrent_tasks", "priority",
-                "supported_task_types", "metadata"):
+    for key in ("node_id", "participant_kind", "max_concurrent_tasks", "priority", "supported_task_types", "metadata"):
         assert key in d, f"Missing key: {key}"
 
 
@@ -306,8 +304,17 @@ def test_e01_fabric_presence_minimal_construction():
 def test_e02_fabric_presence_to_dict_keys():
     fp = FabricPresence(node_id="n1")
     d = fp.to_dict()
-    for key in ("node_id", "presence_state", "host", "port", "transport_hints",
-                "last_heartbeat_at", "heartbeat_age_secs", "heartbeat_count", "registered_at"):
+    for key in (
+        "node_id",
+        "presence_state",
+        "host",
+        "port",
+        "transport_hints",
+        "last_heartbeat_at",
+        "heartbeat_age_secs",
+        "heartbeat_count",
+        "registered_at",
+    ):
         assert key in d, f"Missing key: {key}"
 
 
@@ -334,9 +341,16 @@ def test_f01_assimilation_record_minimal_construction():
 def test_f02_assimilation_record_to_dict_keys():
     rec = AssimilationRecord(node_id="n1")
     d = rec.to_dict()
-    for key in ("node_id", "capability_descriptor", "execution_profile",
-                "fabric_presence", "projected_to_task_graph",
-                "projected_to_network_graph", "assimilation_notes", "contract_version"):
+    for key in (
+        "node_id",
+        "capability_descriptor",
+        "execution_profile",
+        "fabric_presence",
+        "projected_to_task_graph",
+        "projected_to_network_graph",
+        "assimilation_notes",
+        "contract_version",
+    ):
         assert key in d, f"Missing key: {key}"
 
 

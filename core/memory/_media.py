@@ -16,11 +16,20 @@ from typing import Optional
 logger = logging.getLogger("Galaxy.Memory.Media")
 
 _EXT_BY_MIME = {
-    "image/jpeg": ".jpg", "image/jpg": ".jpg", "image/png": ".png",
-    "image/webp": ".webp", "image/gif": ".gif",
-    "audio/webm": ".webm", "audio/wav": ".wav", "audio/x-wav": ".wav",
-    "audio/mpeg": ".mp3", "audio/mp3": ".mp3", "audio/ogg": ".ogg", "audio/m4a": ".m4a",
-    "video/mp4": ".mp4", "video/webm": ".webm",
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+    "audio/webm": ".webm",
+    "audio/wav": ".wav",
+    "audio/x-wav": ".wav",
+    "audio/mpeg": ".mp3",
+    "audio/mp3": ".mp3",
+    "audio/ogg": ".ogg",
+    "audio/m4a": ".m4a",
+    "video/mp4": ".mp4",
+    "video/webm": ".webm",
 }
 _EXT_BY_MODALITY = {"image": ".jpg", "audio": ".webm", "video": ".mp4"}
 

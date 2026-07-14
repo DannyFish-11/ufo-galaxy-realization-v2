@@ -74,18 +74,18 @@ from core.android_delegated_signal_ingress import (
     ANDROID_DELEGATED_SIGNAL_INGRESS_AUTHORITY,
     ANDROID_DELEGATED_SIGNAL_INGRESS_PR16_SENTINEL,
     INGRESS_DELEGATED_SIGNAL_TYPE_IS_CANONICAL_POLICY,
-    INGRESS_SIGNAL_KIND_IS_EXPLICIT_FIELD_POLICY,
-    INGRESS_RESULT_KIND_DISAMBIGUATES_RESULT_SIGNALS_POLICY,
-    INGRESS_SIGNAL_ID_IS_PRESERVED_POLICY,
+    INGRESS_DELEGATES_TO_RECONCILER_POLICY,
     INGRESS_EMISSION_SEQ_IS_PRESERVED_POLICY,
     INGRESS_IDENTITY_FIELDS_ARE_VERBATIM_POLICY,
-    INGRESS_REQUIRES_LOOKUP_KEY_POLICY,
-    INGRESS_DELEGATES_TO_RECONCILER_POLICY,
-    INGRESS_TRACKER_PHASE_CONSISTENT_WITH_SIGNAL_KIND_POLICY,
     INGRESS_NON_DESTRUCTIVE_ON_MISS_POLICY,
+    INGRESS_REQUIRES_LOOKUP_KEY_POLICY,
+    INGRESS_RESULT_KIND_DISAMBIGUATES_RESULT_SIGNALS_POLICY,
+    INGRESS_SIGNAL_ID_IS_PRESERVED_POLICY,
+    INGRESS_SIGNAL_KIND_IS_EXPLICIT_FIELD_POLICY,
+    INGRESS_TRACKER_PHASE_CONSISTENT_WITH_SIGNAL_KIND_POLICY,
+    DelegatedExecutionSignalEnvelope,
     DelegatedSignalKind,
     ResultKind,
-    DelegatedExecutionSignalEnvelope,
     extract_delegated_signal_envelope,
     ingest_delegated_execution_signal,
 )
@@ -129,14 +129,17 @@ def _make_tracking_record(
     runtime: Optional[DelegatedExecutionTrackingRuntime] = None,
 ):
     rt = runtime or _fresh_runtime()
-    return create_execution_tracking_record(
-        session_id=session_id,
-        contract_id=contract_id,
-        device_id=device_id,
-        trace_id=trace_id,
-        source_runtime_posture="join_runtime",
-        runtime=rt,
-    ), rt
+    return (
+        create_execution_tracking_record(
+            session_id=session_id,
+            contract_id=contract_id,
+            device_id=device_id,
+            trace_id=trace_id,
+            source_runtime_posture="join_runtime",
+            runtime=rt,
+        ),
+        rt,
+    )
 
 
 def _make_delegated_signal_message(
@@ -895,9 +898,7 @@ def test_Z01_full_lifecycle_ack_progress_result_success():
     assert outcome_prog.record.phase == DelegatedExecutionPhase.in_progress
 
     outcome_result = ingest_delegated_execution_signal(
-        _make_delegated_signal_message(
-            signal_kind="result", result_kind="success", emission_seq=3
-        ),
+        _make_delegated_signal_message(signal_kind="result", result_kind="success", emission_seq=3),
         runtime=rt,
     )
     assert outcome_result.record is not None
@@ -909,15 +910,15 @@ def test_Z01_full_lifecycle_ack_progress_result_success():
 def test_AA01_ack_progress_result_failure():
     record, rt = _make_tracking_record()
 
-    ingest_delegated_execution_signal(
-        _make_delegated_signal_message(signal_kind="ack", emission_seq=1), runtime=rt
-    )
+    ingest_delegated_execution_signal(_make_delegated_signal_message(signal_kind="ack", emission_seq=1), runtime=rt)
     ingest_delegated_execution_signal(
         _make_delegated_signal_message(signal_kind="progress", emission_seq=2), runtime=rt
     )
     outcome = ingest_delegated_execution_signal(
         _make_delegated_signal_message(
-            signal_kind="result", result_kind="failure", emission_seq=3,
+            signal_kind="result",
+            result_kind="failure",
+            emission_seq=3,
             extra_payload={"error_message": "delegated execution failed"},
         ),
         runtime=rt,
@@ -931,9 +932,7 @@ def test_AA01_ack_progress_result_failure():
 def test_AB01_ack_timeout_timed_out():
     record, rt = _make_tracking_record()
 
-    ingest_delegated_execution_signal(
-        _make_delegated_signal_message(signal_kind="ack", emission_seq=1), runtime=rt
-    )
+    ingest_delegated_execution_signal(_make_delegated_signal_message(signal_kind="ack", emission_seq=1), runtime=rt)
     outcome = ingest_delegated_execution_signal(
         _make_delegated_signal_message(signal_kind="timeout", emission_seq=2), runtime=rt
     )
@@ -944,9 +943,7 @@ def test_AB01_ack_timeout_timed_out():
 def test_AC01_ack_cancelled_cancelled():
     record, rt = _make_tracking_record()
 
-    ingest_delegated_execution_signal(
-        _make_delegated_signal_message(signal_kind="ack", emission_seq=1), runtime=rt
-    )
+    ingest_delegated_execution_signal(_make_delegated_signal_message(signal_kind="ack", emission_seq=1), runtime=rt)
     outcome = ingest_delegated_execution_signal(
         _make_delegated_signal_message(signal_kind="cancelled", emission_seq=2), runtime=rt
     )
@@ -961,21 +958,15 @@ def test_AD01_signal_after_terminal_not_updated():
         _make_delegated_signal_message(signal_kind="result", result_kind="success"),
         runtime=rt,
     )
-    outcome = ingest_delegated_execution_signal(
-        _make_delegated_signal_message(signal_kind="progress"), runtime=rt
-    )
+    outcome = ingest_delegated_execution_signal(_make_delegated_signal_message(signal_kind="progress"), runtime=rt)
     assert outcome.was_updated is False
 
 
 def test_AE01_contract_id_lookup_takes_precedence():
     rt = _fresh_runtime()
     # Create two records with different contract_ids
-    record1, _ = _make_tracking_record(
-        contract_id="ctr-A", session_id="ses-A", runtime=rt
-    )
-    record2, _ = _make_tracking_record(
-        contract_id="ctr-B", session_id="ses-B", runtime=rt
-    )
+    record1, _ = _make_tracking_record(contract_id="ctr-A", session_id="ses-A", runtime=rt)
+    record2, _ = _make_tracking_record(contract_id="ctr-B", session_id="ses-B", runtime=rt)
     # Send ack targeting ctr-A
     msg = _make_delegated_signal_message(
         contract_id="ctr-A",
@@ -990,9 +981,7 @@ def test_AE01_contract_id_lookup_takes_precedence():
 
 def test_AF01_session_id_fallback_when_no_contract_id():
     rt = _fresh_runtime()
-    record, _ = _make_tracking_record(
-        contract_id="ctr-af-001", session_id="ses-af-001", runtime=rt
-    )
+    record, _ = _make_tracking_record(contract_id="ctr-af-001", session_id="ses-af-001", runtime=rt)
     msg = {
         "type": "delegated_execution_signal",
         "device_id": "dev-af-001",
@@ -1014,6 +1003,7 @@ def test_AF01_session_id_fallback_when_no_contract_id():
 
 def test_AG01_core_runtime_exports_all_pr16_symbols():
     from core import runtime as rt_module
+
     assert hasattr(rt_module, "ANDROID_DELEGATED_SIGNAL_INGRESS_AUTHORITY")
     assert hasattr(rt_module, "ANDROID_DELEGATED_SIGNAL_INGRESS_PR16_SENTINEL")
     assert hasattr(rt_module, "DelegatedSignalKind")
@@ -1025,6 +1015,7 @@ def test_AG01_core_runtime_exports_all_pr16_symbols():
 
 def test_AG02_core_runtime_exports_all_policy_sentinels():
     from core import runtime as rt_module
+
     assert hasattr(rt_module, "INGRESS_DELEGATED_SIGNAL_TYPE_IS_CANONICAL_POLICY")
     assert hasattr(rt_module, "INGRESS_SIGNAL_KIND_IS_EXPLICIT_FIELD_POLICY")
     assert hasattr(rt_module, "INGRESS_RESULT_KIND_DISAMBIGUATES_RESULT_SIGNALS_POLICY")
@@ -1048,6 +1039,7 @@ def test_AG02_core_runtime_exports_all_policy_sentinels():
 )
 def test_AH01_projection_sentinel_present():
     from core.routes.projection import ANDROID_DELEGATED_SIGNAL_INGRESS_ALIGNED_PR16
+
     assert ANDROID_DELEGATED_SIGNAL_INGRESS_ALIGNED_PR16
     assert "UNAVAILABLE" not in ANDROID_DELEGATED_SIGNAL_INGRESS_ALIGNED_PR16
 
@@ -1096,6 +1088,7 @@ def test_AK01_envelope_id_is_uuid():
 
 def test_AL01_received_at_is_float():
     import time
+
     before = time.time()
     env = DelegatedExecutionSignalEnvelope()
     after = time.time()
@@ -1124,7 +1117,8 @@ def test_AM01_was_updated_true_on_success():
 def test_AN01_result_set_for_result_success():
     record, rt = _make_tracking_record()
     msg = _make_delegated_signal_message(
-        signal_kind="result", result_kind="success",
+        signal_kind="result",
+        result_kind="success",
         extra_payload={"result": "ok output"},
     )
     outcome = ingest_delegated_execution_signal(msg, runtime=rt)
@@ -1136,7 +1130,8 @@ def test_AN01_result_set_for_result_success():
 def test_AO01_result_set_for_result_failure():
     record, rt = _make_tracking_record()
     msg = _make_delegated_signal_message(
-        signal_kind="result", result_kind="failure",
+        signal_kind="result",
+        result_kind="failure",
         extra_payload={"error_message": "oops"},
     )
     outcome = ingest_delegated_execution_signal(msg, runtime=rt)
@@ -1183,6 +1178,7 @@ def test_AS01_result_kind_defaults_to_unknown():
 
 def test_AT01_message_type_delegated_execution_signal_exists():
     from galaxy_gateway.protocol.aip_v3 import MessageType
+
     assert MessageType.DELEGATED_EXECUTION_SIGNAL.value == "delegated_execution_signal"
 
 
@@ -1256,12 +1252,8 @@ def test_AY01_result_unknown_maps_to_completed():
 
 def test_AZ01_two_sessions_independent():
     rt = _fresh_runtime()
-    record_a, _ = _make_tracking_record(
-        session_id="ses-az-A", contract_id="ctr-az-A", runtime=rt
-    )
-    record_b, _ = _make_tracking_record(
-        session_id="ses-az-B", contract_id="ctr-az-B", runtime=rt
-    )
+    record_a, _ = _make_tracking_record(session_id="ses-az-A", contract_id="ctr-az-A", runtime=rt)
+    record_b, _ = _make_tracking_record(session_id="ses-az-B", contract_id="ctr-az-B", runtime=rt)
 
     # Advance A to completed
     msg_a = _make_delegated_signal_message(

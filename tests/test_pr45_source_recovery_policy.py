@@ -157,6 +157,7 @@ Coverage
     - HEALTHY source remains HEALTHY (no-op)
     - unknown source_id is safe (no-op)
 """
+
 from __future__ import annotations
 
 import json
@@ -165,7 +166,6 @@ from typing import Any, Dict
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -173,6 +173,7 @@ import pytest
 
 def _make_registry():
     from core.multimodal.perception_source_registry import PerceptionSourceRegistry
+
     return PerceptionSourceRegistry()
 
 
@@ -181,6 +182,7 @@ def _mic_kwargs(**overrides) -> dict:
         PerceptionSourceType,
         SourceModality,
     )
+
     base = dict(
         source_type=PerceptionSourceType.MICROPHONE,
         modality=SourceModality.AUDIO,
@@ -198,6 +200,7 @@ def _webcam_kwargs(**overrides) -> dict:
         PerceptionSourceType,
         SourceModality,
     )
+
     base = dict(
         source_type=PerceptionSourceType.WEBCAM,
         modality=SourceModality.VIDEO,
@@ -215,6 +218,7 @@ def _webrtc_kwargs(**overrides) -> dict:
         PerceptionSourceType,
         SourceModality,
     )
+
     base = dict(
         source_type=PerceptionSourceType.WEBRTC,
         modality=SourceModality.VIDEO,
@@ -228,6 +232,7 @@ def _webrtc_kwargs(**overrides) -> dict:
 
 def _make_policy(**kwargs):
     from core.multimodal.source_recovery_policy import SourceRecoveryPolicy
+
     return SourceRecoveryPolicy(**kwargs)
 
 
@@ -239,17 +244,20 @@ def _make_policy(**kwargs):
 class TestSourceRecoverability:
     def test_expected_values_present(self):
         from core.multimodal.source_recovery_policy import SourceRecoverability
+
         assert SourceRecoverability.RECOVERABLE.value == "recoverable"
         assert SourceRecoverability.UNRECOVERABLE.value == "unrecoverable"
         assert SourceRecoverability.UNKNOWN.value == "unknown"
 
     def test_from_string_round_trips(self):
         from core.multimodal.source_recovery_policy import SourceRecoverability
+
         for member in SourceRecoverability:
             assert SourceRecoverability.from_string(member.value) == member
 
     def test_from_string_unknown_input(self):
         from core.multimodal.source_recovery_policy import SourceRecoverability
+
         assert SourceRecoverability.from_string("garbage") == SourceRecoverability.UNKNOWN
         assert SourceRecoverability.from_string("") == SourceRecoverability.UNKNOWN
 
@@ -262,17 +270,20 @@ class TestSourceRecoverability:
 class TestSourceFreshness:
     def test_expected_values_present(self):
         from core.multimodal.source_recovery_policy import SourceFreshness
+
         assert SourceFreshness.FRESH.value == "fresh"
         assert SourceFreshness.STALE.value == "stale"
         assert SourceFreshness.UNKNOWN.value == "unknown"
 
     def test_from_string_round_trips(self):
         from core.multimodal.source_recovery_policy import SourceFreshness
+
         for member in SourceFreshness:
             assert SourceFreshness.from_string(member.value) == member
 
     def test_from_string_unknown_input(self):
         from core.multimodal.source_recovery_policy import SourceFreshness
+
         assert SourceFreshness.from_string("garbage") == SourceFreshness.UNKNOWN
 
 
@@ -284,6 +295,7 @@ class TestSourceFreshness:
 class TestPrimarySourceSwitchReason:
     def test_expected_values_present(self):
         from core.multimodal.source_recovery_policy import PrimarySourceSwitchReason
+
         expected = {
             "PRIMARY_FAILED",
             "PRIMARY_DEGRADED",
@@ -298,11 +310,13 @@ class TestPrimarySourceSwitchReason:
 
     def test_from_string_round_trips(self):
         from core.multimodal.source_recovery_policy import PrimarySourceSwitchReason
+
         for member in PrimarySourceSwitchReason:
             assert PrimarySourceSwitchReason.from_string(member.value) == member
 
     def test_from_string_unrecognised_returns_none(self):
         from core.multimodal.source_recovery_policy import PrimarySourceSwitchReason
+
         assert PrimarySourceSwitchReason.from_string("garbage") == PrimarySourceSwitchReason.NONE
 
 
@@ -314,17 +328,20 @@ class TestPrimarySourceSwitchReason:
 class TestRecoveryEventKind:
     def test_expected_values_present(self):
         from core.multimodal.source_recovery_policy import RecoveryEventKind
+
         expected = {"RECOVERED", "EVICTED", "PRIMARY_REELECTED", "FLAP_SMOOTHED"}
         actual = {m.name for m in RecoveryEventKind}
         assert expected.issubset(actual)
 
     def test_from_string_round_trips(self):
         from core.multimodal.source_recovery_policy import RecoveryEventKind
+
         for member in RecoveryEventKind:
             assert RecoveryEventKind.from_string(member.value) == member
 
     def test_from_string_unrecognised_returns_recovered(self):
         from core.multimodal.source_recovery_policy import RecoveryEventKind
+
         assert RecoveryEventKind.from_string("garbage") == RecoveryEventKind.RECOVERED
 
 
@@ -335,7 +352,8 @@ class TestRecoveryEventKind:
 
 class TestSourceRecoveryEvent:
     def test_defaults(self):
-        from core.multimodal.source_recovery_policy import SourceRecoveryEvent, RecoveryEventKind
+        from core.multimodal.source_recovery_policy import RecoveryEventKind, SourceRecoveryEvent
+
         evt = SourceRecoveryEvent()
         assert isinstance(evt.event_id, str) and len(evt.event_id) > 0
         assert evt.event_kind == RecoveryEventKind.RECOVERED
@@ -343,15 +361,17 @@ class TestSourceRecoveryEvent:
 
     def test_to_dict_is_json_serialisable(self):
         from core.multimodal.source_recovery_policy import SourceRecoveryEvent
+
         evt = SourceRecoveryEvent(source_id="s1", modality="audio")
         d = evt.to_dict()
         json.dumps(d)  # must not raise
 
     def test_to_dict_from_dict_round_trip(self):
         from core.multimodal.source_recovery_policy import (
-            SourceRecoveryEvent,
             RecoveryEventKind,
+            SourceRecoveryEvent,
         )
+
         evt = SourceRecoveryEvent(
             event_kind=RecoveryEventKind.EVICTED,
             source_id="src-abc",
@@ -372,6 +392,7 @@ class TestSourceRecoveryEvent:
 
     def test_event_id_is_unique_per_instance(self):
         from core.multimodal.source_recovery_policy import SourceRecoveryEvent
+
         e1 = SourceRecoveryEvent()
         e2 = SourceRecoveryEvent()
         assert e1.event_id != e2.event_id
@@ -388,6 +409,7 @@ class TestPrimarySourceSwitchEvent:
             PrimarySourceSwitchEvent,
             PrimarySourceSwitchReason,
         )
+
         evt = PrimarySourceSwitchEvent()
         assert isinstance(evt.event_id, str)
         assert evt.reason == PrimarySourceSwitchReason.NONE
@@ -395,6 +417,7 @@ class TestPrimarySourceSwitchEvent:
 
     def test_to_dict_is_json_serialisable(self):
         from core.multimodal.source_recovery_policy import PrimarySourceSwitchEvent
+
         evt = PrimarySourceSwitchEvent(modality="audio", new_source_id="s1")
         json.dumps(evt.to_dict())
 
@@ -403,6 +426,7 @@ class TestPrimarySourceSwitchEvent:
             PrimarySourceSwitchEvent,
             PrimarySourceSwitchReason,
         )
+
         evt = PrimarySourceSwitchEvent(
             modality="video",
             previous_source_id="old",
@@ -425,6 +449,7 @@ class TestPrimarySourceSwitchEvent:
 class TestSourceRecoverySnapshot:
     def test_defaults(self):
         from core.multimodal.source_recovery_policy import SourceRecoverySnapshot
+
         snap = SourceRecoverySnapshot()
         assert isinstance(snap.snapshot_id, str)
         assert snap.snapshot_at > 0
@@ -433,10 +458,11 @@ class TestSourceRecoverySnapshot:
 
     def test_to_dict_is_json_serialisable(self):
         from core.multimodal.source_recovery_policy import (
-            SourceRecoverySnapshot,
-            SourceRecoveryEvent,
             PrimarySourceSwitchEvent,
+            SourceRecoveryEvent,
+            SourceRecoverySnapshot,
         )
+
         snap = SourceRecoverySnapshot(
             recent_recovery_events=[SourceRecoveryEvent()],
             recent_switch_events=[PrimarySourceSwitchEvent()],
@@ -445,10 +471,11 @@ class TestSourceRecoverySnapshot:
 
     def test_to_dict_from_dict_round_trip(self):
         from core.multimodal.source_recovery_policy import (
-            SourceRecoverySnapshot,
-            SourceRecoveryEvent,
             PrimarySourceSwitchEvent,
+            SourceRecoveryEvent,
+            SourceRecoverySnapshot,
         )
+
         snap = SourceRecoverySnapshot(
             current_primary_audio_id="mic-1",
             current_primary_video_id="cam-1",
@@ -478,8 +505,8 @@ class TestSourceRecoverySnapshot:
 
 class TestAssessRecoverability:
     def test_healthy_source_returns_unknown(self):
-        from core.multimodal.source_recovery_policy import SourceRecoverability
         from core.multimodal.perception_source_registry import SourceHealthStatus
+        from core.multimodal.source_recovery_policy import SourceRecoverability
 
         registry = _make_registry()
         sid = registry.register(**_mic_kwargs())
@@ -678,6 +705,7 @@ class TestEvictStaleSources:
         record.last_seen_at = time.time() - 60.0
         # force health to HEALTHY while inactive to test the guard
         from core.multimodal.perception_source_registry import SourceHealthStatus
+
         record.health = SourceHealthStatus.HEALTHY
         policy = _make_policy(stale_threshold_s=30.0)
         evicted = policy.evict_stale_sources(registry)
@@ -760,6 +788,7 @@ class TestReelelectPrimaryAudio:
         registry.mark_unavailable(sid1)
         policy = _make_policy()
         from core.multimodal.source_recovery_policy import PrimarySourceSwitchReason
+
         new_id = policy.reelect_primary_audio(registry, PrimarySourceSwitchReason.PRIMARY_FAILED)
         assert new_id == sid2
         assert registry.primary_audio_id == sid2
@@ -772,6 +801,7 @@ class TestReelelectPrimaryAudio:
         registry.mark_active(sid_high)
         policy = _make_policy()
         from core.multimodal.source_recovery_policy import PrimarySourceSwitchReason
+
         new_id = policy.reelect_primary_audio(registry, PrimarySourceSwitchReason.NO_PRIMARY)
         assert new_id == sid_low
 
@@ -786,6 +816,7 @@ class TestReelelectPrimaryAudio:
         registry.mark_degraded(sid_deg, "test")
         policy = _make_policy()
         from core.multimodal.source_recovery_policy import PrimarySourceSwitchReason
+
         new_id = policy.reelect_primary_audio(registry, PrimarySourceSwitchReason.PRIMARY_DEGRADED)
         assert new_id == sid_hlth
 
@@ -797,6 +828,7 @@ class TestReelelectPrimaryAudio:
         registry.mark_unavailable(sid)
         policy = _make_policy()
         from core.multimodal.source_recovery_policy import PrimarySourceSwitchReason
+
         new_id = policy.reelect_primary_audio(registry, PrimarySourceSwitchReason.PRIMARY_FAILED)
         assert new_id is None
         assert registry.primary_audio_id is None
@@ -811,6 +843,7 @@ class TestReelelectPrimaryAudio:
         registry.mark_unavailable(sid1)
         policy = _make_policy()
         from core.multimodal.source_recovery_policy import PrimarySourceSwitchReason
+
         policy.reelect_primary_audio(registry, PrimarySourceSwitchReason.PRIMARY_FAILED)
         snap = policy.snapshot(registry)
         assert len(snap.recent_switch_events) >= 1
@@ -823,6 +856,7 @@ class TestReelelectPrimaryAudio:
         registry.set_primary_audio(sid)
         policy = _make_policy()
         from core.multimodal.source_recovery_policy import PrimarySourceSwitchReason
+
         policy.reelect_primary_audio(registry, PrimarySourceSwitchReason.PRIMARY_FAILED)
         snap = policy.snapshot(registry)
         # No switch because the same source is still best
@@ -845,6 +879,7 @@ class TestReelectPrimaryVideo:
         registry.mark_unavailable(sid1)
         policy = _make_policy()
         from core.multimodal.source_recovery_policy import PrimarySourceSwitchReason
+
         new_id = policy.reelect_primary_video(registry, PrimarySourceSwitchReason.PRIMARY_FAILED)
         assert new_id == sid2
         assert registry.primary_video_id == sid2
@@ -858,6 +893,7 @@ class TestReelectPrimaryVideo:
         registry.mark_degraded(sid1)
         policy = _make_policy()
         from core.multimodal.source_recovery_policy import PrimarySourceSwitchReason
+
         new_id = policy.reelect_primary_video(registry, PrimarySourceSwitchReason.PRIMARY_DEGRADED)
         assert new_id == sid2
 
@@ -869,6 +905,7 @@ class TestReelectPrimaryVideo:
         registry.mark_unavailable(sid)
         policy = _make_policy()
         from core.multimodal.source_recovery_policy import PrimarySourceSwitchReason
+
         new_id = policy.reelect_primary_video(registry, PrimarySourceSwitchReason.PRIMARY_FAILED)
         assert new_id is None
         assert registry.primary_video_id is None
@@ -883,6 +920,7 @@ class TestReelectPrimaryVideo:
         registry.mark_unavailable(sid1)
         policy = _make_policy()
         from core.multimodal.source_recovery_policy import PrimarySourceSwitchReason
+
         policy.reelect_primary_video(registry, PrimarySourceSwitchReason.PRIMARY_FAILED)
         snap = policy.snapshot(registry)
         assert len(snap.recent_switch_events) >= 1
@@ -1189,6 +1227,7 @@ class TestDisconnectedSourceReintegration:
         policy.attempt_recovery(registry, sid1)
         # After recovery sid1 has priority 10 (better than sid2 at 20)
         from core.multimodal.source_recovery_policy import PrimarySourceSwitchReason
+
         new_id = policy.reelect_primary_audio(registry, PrimarySourceSwitchReason.PRIMARY_DEGRADED)
         assert new_id == sid1
 
@@ -1201,29 +1240,31 @@ class TestDisconnectedSourceReintegration:
 class TestDesktopPresenceRuntimeIntegration:
     def test_run_source_recovery_cycle_returns_dict(self):
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         runtime = DesktopPresenceRuntime()
         result = runtime.run_source_recovery_cycle()
         assert isinstance(result, dict)
 
     def test_source_recovery_snapshot_returns_dict(self):
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         runtime = DesktopPresenceRuntime()
         snap = runtime.source_recovery_snapshot()
         assert isinstance(snap, dict)
 
     def test_source_recovery_snapshot_is_json_serialisable(self):
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         runtime = DesktopPresenceRuntime()
         snap = runtime.source_recovery_snapshot()
         json.dumps(snap)  # must not raise
 
     def test_run_source_recovery_cycle_never_raises(self):
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         runtime = DesktopPresenceRuntime()
         # Register a mic and set it as primary, then degrade it
-        sid = runtime._source_registry.register(
-            **_mic_kwargs(source_id="test-mic")
-        )
+        sid = runtime._source_registry.register(**_mic_kwargs(source_id="test-mic"))
         runtime._source_registry.mark_active(sid)
         runtime._source_registry.set_primary_audio(sid)
         runtime._source_registry.mark_degraded(sid, "test")
@@ -1286,6 +1327,7 @@ class TestSingleton:
             get_source_recovery_policy,
             reset_source_recovery_policy,
         )
+
         reset_source_recovery_policy()
         p1 = get_source_recovery_policy()
         p2 = get_source_recovery_policy()
@@ -1296,6 +1338,7 @@ class TestSingleton:
             get_source_recovery_policy,
             reset_source_recovery_policy,
         )
+
         reset_source_recovery_policy()
         p1 = get_source_recovery_policy()
         reset_source_recovery_policy()
@@ -1311,18 +1354,19 @@ class TestSingleton:
 class TestModuleImports:
     def test_all_public_symbols_importable(self):
         from core.multimodal.source_recovery_policy import (
-            SourceRecoverability,
-            SourceFreshness,
+            PrimarySourceSwitchEvent,
             PrimarySourceSwitchReason,
             RecoveryEventKind,
+            SourceFreshness,
+            SourceRecoverability,
             SourceRecoveryEvent,
-            PrimarySourceSwitchEvent,
-            SourceRecoverySnapshot,
             SourceRecoveryPolicy,
+            SourceRecoverySnapshot,
             build_source_recovery_snapshot,
             get_source_recovery_policy,
             reset_source_recovery_policy,
         )
+
         assert SourceRecoveryPolicy is not None
 
 

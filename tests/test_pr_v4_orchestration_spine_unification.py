@@ -92,21 +92,22 @@ try:
     from core.unified_orchestration_spine import (
         ALL_EXECUTION_MODES_MUST_USE_SPINE_POLICY,
         CANONICAL_DISPATCH_SLOT_AUTHORITY_IS_SPINE_CONSUMER_POLICY,
-        CompletionContract,
-        DeviceOrchestrationSlot,
-        ExecutionMode,
         ORCHESTRATION_SPINE_AUDIT_RECORD_IS_CANONICAL_POLICY,
         ORCHESTRATION_SPINE_LIFECYCLE_STAGE_IS_UNIFIED_POLICY,
         ORCHESTRATION_SPINE_V4_CONSUMES_CANONICAL_SLOT_POLICY,
-        OrchestrationDecision,
-        OrchestrationLifecycleStage,
-        OrchestrationRequest,
         PARALLEL_FANOUT_MUST_USE_SPINE_POLICY,
         SPINE_COMPLETION_CONTRACT_IS_UNIFIED_POLICY,
         UNIFIED_ORCHESTRATION_SPINE_AUTHORITY,
         WAKE_HANDOFF_DELEGATED_MUST_USE_SPINE_POLICY,
+        CompletionContract,
+        DeviceOrchestrationSlot,
+        ExecutionMode,
+        OrchestrationDecision,
+        OrchestrationLifecycleStage,
+        OrchestrationRequest,
         evaluate_orchestration_request,
     )
+
     _SPINE_AVAILABLE = True
 except ImportError:
     _SPINE_AVAILABLE = False
@@ -114,10 +115,11 @@ except ImportError:
 try:
     from core.canonical_dispatch_slot_authority import (
         CanonicalDispatchSlot,
-        CanonicalDispatchSlotStatus,
         CanonicalDispatchSlotsResult,
+        CanonicalDispatchSlotStatus,
         get_canonical_dispatch_slots,
     )
+
     _AUTHORITY_AVAILABLE = True
 except ImportError:
     _AUTHORITY_AVAILABLE = False
@@ -127,11 +129,14 @@ except ImportError:
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _device_id() -> str:
     return f"dev_{uuid.uuid4().hex[:8]}"
 
 
-def _make_approved_canonical_slot(device_id: str, execution_mode: str = "single_device_remote") -> "CanonicalDispatchSlot":
+def _make_approved_canonical_slot(
+    device_id: str, execution_mode: str = "single_device_remote"
+) -> "CanonicalDispatchSlot":
     """Build a fully approved CanonicalDispatchSlot for patching."""
     return CanonicalDispatchSlot(
         device_id=device_id,
@@ -571,9 +576,7 @@ class TestReadinessStatusBackwardCompatMapping:
         assert slot.readiness_status == "blocked_registration_gap"
 
     def test_slot_blocked_transport_maps_to_blocked_transport(self) -> None:
-        slot = self._run_with_blocked_status(
-            "slot_blocked_transport", "transport_readiness"
-        )
+        slot = self._run_with_blocked_status("slot_blocked_transport", "transport_readiness")
         assert slot.readiness_status == "blocked_transport"
 
     def test_slot_not_registered_maps_to_not_registered(self) -> None:
@@ -581,9 +584,7 @@ class TestReadinessStatusBackwardCompatMapping:
         assert slot.readiness_status == "not_registered"
 
     def test_slot_blocked_attachment_maps_to_blocked_stale_attachment(self) -> None:
-        slot = self._run_with_blocked_status(
-            "slot_blocked_attachment", "attachment_validity"
-        )
+        slot = self._run_with_blocked_status("slot_blocked_attachment", "attachment_validity")
         assert slot.readiness_status == "blocked_stale_attachment"
 
     def _run_with_approved_status(self) -> "DeviceOrchestrationSlot":
@@ -666,9 +667,7 @@ class TestSerialisation:
     """OrchestrationDecision and DeviceOrchestrationSlot serialise correctly."""
 
     def test_decision_to_dict_includes_lifecycle_stage(self) -> None:
-        dec = OrchestrationDecision(
-            lifecycle_stage=OrchestrationLifecycleStage.AWAITING_RESULT.value
-        )
+        dec = OrchestrationDecision(lifecycle_stage=OrchestrationLifecycleStage.AWAITING_RESULT.value)
         d = dec.to_dict()
         assert "lifecycle_stage" in d
         assert d["lifecycle_stage"] == "awaiting_result"

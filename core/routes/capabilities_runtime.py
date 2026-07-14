@@ -82,6 +82,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.capability_runtime import get_capability_runtime_snapshot
+
             payload = get_capability_runtime_snapshot()
             return JSONResponse(content=payload, status_code=200)
         except Exception as exc:  # pragma: no cover
@@ -125,6 +126,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             from core.capability_runtime import (
                 CapabilityRuntimeRegistry,
             )
+
             registry = CapabilityRuntimeRegistry.get_instance()
             summary = registry.get_summary(capability_name)
 
@@ -141,7 +143,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         except Exception as exc:  # pragma: no cover
             logger.error(
                 "capability_runtime single endpoint error for '%s': %s",
-                capability_name, exc,
+                capability_name,
+                exc,
             )
             return JSONResponse(
                 content={

@@ -95,6 +95,7 @@ if _REPO_ROOT not in sys.path:
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_stub_router():
     """Return a minimal stub object that mimics the MultiLLMRouter interface."""
     from dataclasses import dataclass, field
@@ -525,11 +526,7 @@ def test_49_all_pr_l1_entries_have_guardrail_tag():
 def test_50_legacy_registry_has_at_least_twelve_pr_l1_entries():
     from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
 
-    count = sum(
-        1
-        for e in LEGACY_PATH_REGISTRY.values()
-        if e.pr_guardrail_added == "PR-L1"
-    )
+    count = sum(1 for e in LEGACY_PATH_REGISTRY.values() if e.pr_guardrail_added == "PR-L1")
     assert count >= 12, f"Expected ≥12 PR-L1 entries, got {count}"
 
 
@@ -540,8 +537,7 @@ def test_51_all_pr_l1_entries_are_legacy_compatibility():
     assert len(l1_entries) > 0
     for entry in l1_entries:
         assert entry.status == LegacyPathStatus.LEGACY_COMPATIBILITY, (
-            f"PR-L1 entry {entry.module_path!r} should be LEGACY_COMPATIBILITY, "
-            f"got {entry.status!r}"
+            f"PR-L1 entry {entry.module_path!r} should be LEGACY_COMPATIBILITY, " f"got {entry.status!r}"
         )
 
 

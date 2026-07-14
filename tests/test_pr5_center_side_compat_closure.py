@@ -134,9 +134,7 @@ def test_cross_repo_readiness_policy_keyword() -> None:
 
 
 def test_canonical_preference_policy_keyword() -> None:
-    assert (
-        "CANONICAL_PATH_PREFERENCE" in CANONICAL_PATH_PREFERENCE_MUST_BE_ENFORCED_POLICY
-    )
+    assert "CANONICAL_PATH_PREFERENCE" in CANONICAL_PATH_PREFERENCE_MUST_BE_ENFORCED_POLICY
 
 
 # ---------------------------------------------------------------------------
@@ -240,9 +238,7 @@ def test_every_record_has_required_fields() -> None:
 def test_fenced_gaps_have_non_none_fence_kind() -> None:
     for rec in get_compat_gap_catalog():
         if rec.status == CompatClosureStatus.FENCED:
-            assert rec.fence_kind != CompatFenceKind.none, (
-                f"{rec.gap_id}: FENCED status requires a non-none fence_kind"
-            )
+            assert rec.fence_kind != CompatFenceKind.none, f"{rec.gap_id}: FENCED status requires a non-none fence_kind"
 
 
 # ---------------------------------------------------------------------------
@@ -252,9 +248,9 @@ def test_fenced_gaps_have_non_none_fence_kind() -> None:
 
 def test_open_gaps_have_none_fence_kind() -> None:
     for rec in get_open_gaps():
-        assert rec.fence_kind == CompatFenceKind.none, (
-            f"{rec.gap_id}: OPEN gap must have fence_kind=none (no fence in place)"
-        )
+        assert (
+            rec.fence_kind == CompatFenceKind.none
+        ), f"{rec.gap_id}: OPEN gap must have fence_kind=none (no fence in place)"
 
 
 # ---------------------------------------------------------------------------
@@ -391,9 +387,7 @@ def test_assert_canonical_preferred_when_canonical_active() -> None:
 
 
 def test_assert_canonical_preferred_when_compat_invoked() -> None:
-    result = assert_canonical_path_preferred(
-        "PROTO-007", canonical_active=False, context="test_context"
-    )
+    result = assert_canonical_path_preferred("PROTO-007", canonical_active=False, context="test_context")
     assert result.verdict == FenceVerdict.COMPAT_ALLOWED_FENCED
 
 
@@ -416,14 +410,10 @@ def test_build_snapshot_returns_correct_type() -> None:
 def test_snapshot_counts_consistent() -> None:
     snapshot = build_compat_closure_snapshot()
     total_from_statuses = (
-        snapshot.open_count
-        + snapshot.fenced_count
-        + snapshot.retired_count
-        + snapshot.tombstoned_count
+        snapshot.open_count + snapshot.fenced_count + snapshot.retired_count + snapshot.tombstoned_count
     )
     assert snapshot.total_gaps == total_from_statuses, (
-        f"Snapshot total_gaps={snapshot.total_gaps} != "
-        f"sum of status counts={total_from_statuses}"
+        f"Snapshot total_gaps={snapshot.total_gaps} != " f"sum of status counts={total_from_statuses}"
     )
 
 
@@ -457,9 +447,7 @@ def test_snapshot_to_dict_keys() -> None:
         "policy_sentinels",
         "gap_summaries",
     }
-    assert expected_keys.issubset(d.keys()), (
-        f"Missing keys: {expected_keys - d.keys()}"
-    )
+    assert expected_keys.issubset(d.keys()), f"Missing keys: {expected_keys - d.keys()}"
     assert isinstance(d["by_status"], dict)
     assert "open" in d["by_status"]
     assert "fenced" in d["by_status"]
@@ -487,9 +475,7 @@ def test_gap_record_to_dict_keys() -> None:
     }
     for rec in get_compat_gap_catalog():
         d = rec.to_dict()
-        assert required_keys.issubset(d.keys()), (
-            f"{rec.gap_id} to_dict() missing keys: {required_keys - d.keys()}"
-        )
+        assert required_keys.issubset(d.keys()), f"{rec.gap_id} to_dict() missing keys: {required_keys - d.keys()}"
 
 
 # ---------------------------------------------------------------------------
@@ -503,10 +489,7 @@ def test_cross_repo_convergence_ready_when_no_open_gaps(
     import core.center_side_compat_closure as _mod
 
     # All records fenced — should be ready
-    fenced_only = [
-        r for r in _mod._COMPAT_GAP_CATALOG
-        if r.status == CompatClosureStatus.FENCED
-    ]
+    fenced_only = [r for r in _mod._COMPAT_GAP_CATALOG if r.status == CompatClosureStatus.FENCED]
     monkeypatch.setattr(_mod, "_COMPAT_GAP_CATALOG", fenced_only)
     assert is_cross_repo_convergence_ready() is True
 
@@ -527,9 +510,7 @@ def test_cross_repo_convergence_not_ready_when_open_gap(
         canonical_replacement="core.routes.canonical",
         retirement_condition="Test only.",
     )
-    monkeypatch.setattr(
-        _mod, "_COMPAT_GAP_CATALOG", list(_mod._COMPAT_GAP_CATALOG) + [synthetic_open]
-    )
+    monkeypatch.setattr(_mod, "_COMPAT_GAP_CATALOG", list(_mod._COMPAT_GAP_CATALOG) + [synthetic_open])
     assert is_cross_repo_convergence_ready() is False
 
 

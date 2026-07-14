@@ -54,11 +54,11 @@ import pytest
 
 try:
     from core.runtime.source_dispatch_orchestrator import (
+        STAGED_MESH_GRACEFUL_DEGRADATION_FALLBACK_PR32_POLICY,
         STAGED_MESH_MINIMAL_EXECUTABLE_CLOSURE_PR32_SENTINEL,
         STAGED_MESH_PLAN_TO_EXECUTION_TRANSITION_PR32_POLICY,
-        STAGED_MESH_SESSION_COORDINATOR_INTEGRATION_PR32_POLICY,
         STAGED_MESH_RESULT_INTEGRATION_CONTRACT_PR32_POLICY,
-        STAGED_MESH_GRACEFUL_DEGRADATION_FALLBACK_PR32_POLICY,
+        STAGED_MESH_SESSION_COORDINATOR_INTEGRATION_PR32_POLICY,
     )
 
     _ORCHESTRATOR_AVAILABLE = True
@@ -75,13 +75,11 @@ except ImportError:
     _PROJECTION_AVAILABLE = False
 
 try:
-    from core.runtime import (
-        STAGED_MESH_MINIMAL_EXECUTABLE_CLOSURE_PR32_SENTINEL as _rt_sentinel,
-        STAGED_MESH_PLAN_TO_EXECUTION_TRANSITION_PR32_POLICY as _rt_plan_exec,
-        STAGED_MESH_SESSION_COORDINATOR_INTEGRATION_PR32_POLICY as _rt_coord,
-        STAGED_MESH_RESULT_INTEGRATION_CONTRACT_PR32_POLICY as _rt_result,
-        STAGED_MESH_GRACEFUL_DEGRADATION_FALLBACK_PR32_POLICY as _rt_degrade,
-    )
+    from core.runtime import STAGED_MESH_GRACEFUL_DEGRADATION_FALLBACK_PR32_POLICY as _rt_degrade
+    from core.runtime import STAGED_MESH_MINIMAL_EXECUTABLE_CLOSURE_PR32_SENTINEL as _rt_sentinel
+    from core.runtime import STAGED_MESH_PLAN_TO_EXECUTION_TRANSITION_PR32_POLICY as _rt_plan_exec
+    from core.runtime import STAGED_MESH_RESULT_INTEGRATION_CONTRACT_PR32_POLICY as _rt_result
+    from core.runtime import STAGED_MESH_SESSION_COORDINATOR_INTEGRATION_PR32_POLICY as _rt_coord
 
     _RUNTIME_EXPORTS_AVAILABLE = True
 except ImportError:
@@ -89,8 +87,8 @@ except ImportError:
 
 try:
     from core.runtime.source_dispatch_orchestrator import (
-        orchestrate_source_runtime_dispatch,
         build_source_dispatch_plan,
+        orchestrate_source_runtime_dispatch,
     )
 
     _DISPATCH_AVAILABLE = True
@@ -125,6 +123,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_mesh_session_dict(
     session_id: str = "msess_pr32_001",
@@ -196,6 +195,7 @@ def _run_staged_mesh_dispatch(
 # Group A: Orchestrator sentinels
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(not _ORCHESTRATOR_AVAILABLE, reason="orchestrator not available")
 class TestGroupA_OrchestratorSentinels:
     def test_a1_main_sentinel_present(self) -> None:
@@ -223,6 +223,7 @@ class TestGroupA_OrchestratorSentinels:
 # Group B: Projection sentinel
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(not _PROJECTION_AVAILABLE, reason="projection not available")
 class TestGroupB_ProjectionSentinel:
     def test_b1_projection_sentinel_importable(self) -> None:
@@ -238,6 +239,7 @@ class TestGroupB_ProjectionSentinel:
 # ---------------------------------------------------------------------------
 # Group C: core.runtime re-exports
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(not _RUNTIME_EXPORTS_AVAILABLE, reason="core.runtime not available")
 class TestGroupC_RuntimeExports:
@@ -266,6 +268,7 @@ class TestGroupC_RuntimeExports:
 # Group D-I: staged_mesh result shape (with mock coordinator)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(
     not _DISPATCH_AVAILABLE or not _CONTRACTS_AVAILABLE,
     reason="dispatch or contracts not available",
@@ -273,9 +276,7 @@ class TestGroupC_RuntimeExports:
 class TestGroupD_StagedMeshResultShape:
     """Test the shape of the SourceDispatchResult when mode=staged_mesh."""
 
-    def _mock_coordinator_state(
-        self, status: str = "active"
-    ) -> MagicMock:
+    def _mock_coordinator_state(self, status: str = "active") -> MagicMock:
         state = MagicMock()
         state_status = MagicMock()
         state_status.value = status
@@ -293,9 +294,7 @@ class TestGroupD_StagedMeshResultShape:
         }
         return summary
 
-    def _run_with_mocked_coordinator(
-        self, coordinator_state: Any = None, coordinator_raises: bool = False
-    ) -> Any:
+    def _run_with_mocked_coordinator(self, coordinator_state: Any = None, coordinator_raises: bool = False) -> Any:
         """Run staged_mesh dispatch with the coordinator mocked."""
         mesh_session = _make_mesh_session_dict()
 
@@ -309,9 +308,7 @@ class TestGroupD_StagedMeshResultShape:
         mock_summary = self._mock_coordinator_summary()
         mock_get_summary = MagicMock(return_value=mock_summary)
 
-        with patch(
-            "core.runtime.source_dispatch_orchestrator.orchestrate_source_runtime_dispatch"
-        ):
+        with patch("core.runtime.source_dispatch_orchestrator.orchestrate_source_runtime_dispatch"):
             pass  # just testing import availability
 
         # Run directly: no target_device_id so mode=staged_mesh is selected
@@ -335,9 +332,7 @@ class TestGroupD_StagedMeshResultShape:
             pytest.skip("result.result is not a dict")
         # The result should be 'staged_mesh_coordinated', not 'staged_mesh_plan_prepared'
         action = inner.get("action_taken", "")
-        assert action == "staged_mesh_coordinated", (
-            f"Expected action_taken='staged_mesh_coordinated', got '{action}'"
-        )
+        assert action == "staged_mesh_coordinated", f"Expected action_taken='staged_mesh_coordinated', got '{action}'"
 
     def test_d2_action_taken_not_plan_prepared(self) -> None:
         """staged_mesh must NOT return the old 'staged_mesh_plan_prepared' action."""
@@ -368,9 +363,9 @@ class TestGroupD_StagedMeshResultShape:
             pytest.skip("dispatch returned None")
         result_dict = result.to_dict() if hasattr(result, "to_dict") else dict(result)
         if result_dict.get("success"):
-            assert result_dict.get("decision_reason") == "staged_mesh:coordinated", (
-                f"Expected 'staged_mesh:coordinated', got '{result_dict.get('decision_reason')}'"
-            )
+            assert (
+                result_dict.get("decision_reason") == "staged_mesh:coordinated"
+            ), f"Expected 'staged_mesh:coordinated', got '{result_dict.get('decision_reason')}'"
 
     def test_h1_coordinator_summary_key_present(self) -> None:
         """result.result must contain 'coordinator_summary' key."""
@@ -399,6 +394,7 @@ class TestGroupD_StagedMeshResultShape:
 # ---------------------------------------------------------------------------
 # Group J: End-to-end minimal path with real coordinator
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(
     not _DISPATCH_AVAILABLE or not _COORDINATOR_AVAILABLE or not _MESH_SESSION_AVAILABLE,
@@ -486,6 +482,7 @@ class TestGroupJ_EndToEndMinimalPath:
 # Group K-L: Graceful degradation
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(
     not _DISPATCH_AVAILABLE,
     reason="dispatch not available",
@@ -543,6 +540,7 @@ class TestGroupKL_GracefulDegradation:
 # Group M: Coordinator status transition
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(
     not _COORDINATOR_AVAILABLE or not _MESH_SESSION_AVAILABLE,
     reason="coordinator or mesh_session contracts not available",
@@ -595,6 +593,7 @@ class TestGroupM_CoordinatorStatusTransition:
 # Group N: Sentinel string content
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(not _ORCHESTRATOR_AVAILABLE, reason="orchestrator not available")
 class TestGroupN_SentinelContent:
     def test_n1_main_sentinel_contains_staged_mesh(self) -> None:
@@ -620,6 +619,7 @@ class TestGroupN_SentinelContent:
 # ---------------------------------------------------------------------------
 # Group O: No parallel result authority
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(
     not _DISPATCH_AVAILABLE or not _CONTRACTS_AVAILABLE,
@@ -663,6 +663,7 @@ class TestGroupO_NoParallelAuthority:
 # Group P: Regression — non-staged-mesh modes unaffected
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(
     not _DISPATCH_AVAILABLE or not _CONTRACTS_AVAILABLE,
     reason="dispatch or contracts not available",
@@ -703,6 +704,7 @@ class TestGroupP_RegressionNonStagedMesh:
 # ---------------------------------------------------------------------------
 # Group S: mesh_session_id propagation
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(
     not _DISPATCH_AVAILABLE or not _MESH_SESSION_AVAILABLE,

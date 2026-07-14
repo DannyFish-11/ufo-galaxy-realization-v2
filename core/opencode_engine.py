@@ -73,7 +73,6 @@ def _extract_code(raw: str, language: Optional[str]) -> str:
     lines = raw.strip().splitlines()
     inside = False
     collected: List[str] = []
-    lang = (language or "").lower()
     for line in lines:
         stripped = line.strip()
         if not inside:
@@ -125,7 +124,7 @@ class OpenCodeEngine:
 
         若未配置任何 LLM 提供商，返回带明确错误信息的失败结果，不抛出异常。
         """
-        from core.multi_llm_router import get_llm_router, ProviderStatus
+        from core.multi_llm_router import ProviderStatus, get_llm_router
 
         gen_id = f"codegen_{uuid.uuid4().hex[:12]}"
         lang = language or "python"
@@ -135,10 +134,7 @@ class OpenCodeEngine:
 
         # ── 检查路由器是否有可用提供商 ────────────────────────────────────
         router = get_llm_router()
-        available = [
-            name for name, cfg in router.providers.items()
-            if cfg.status != ProviderStatus.DOWN
-        ]
+        available = [name for name, cfg in router.providers.items() if cfg.status != ProviderStatus.DOWN]
         if not available:
             err = (
                 "OpenCodeEngine: 没有可用的 LLM 提供商。"
@@ -318,13 +314,10 @@ class OpenCodeEngine:
 
     def get_status(self) -> dict:
         """返回引擎状态，包含配置的提供商、模型及可用性信息。"""
-        from core.multi_llm_router import get_llm_router, ProviderStatus
+        from core.multi_llm_router import ProviderStatus, get_llm_router
 
         router = get_llm_router()
-        available_providers = [
-            name for name, cfg in router.providers.items()
-            if cfg.status != ProviderStatus.DOWN
-        ]
+        available_providers = [name for name, cfg in router.providers.items() if cfg.status != ProviderStatus.DOWN]
         router_status = router.get_status()
 
         effective_provider = self._configured_provider or (available_providers[0] if available_providers else None)

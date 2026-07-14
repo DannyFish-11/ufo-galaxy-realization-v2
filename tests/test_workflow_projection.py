@@ -60,7 +60,6 @@ from core.task_graph_runtime import (
     result_envelope_to_node_update,
 )
 
-
 # ===========================================================================
 # Helpers
 # ===========================================================================
@@ -180,18 +179,14 @@ def test_C07_completed_maps_to_completed() -> None:
 
 def test_D01_trace_id_propagated_to_nodes() -> None:
     rt = _fresh()
-    project_workflow_to_graph(
-        _workflow_record(trace_id="trace_abc", node_statuses={"tnode": "done"}), rt
-    )
+    project_workflow_to_graph(_workflow_record(trace_id="trace_abc", node_statuses={"tnode": "done"}), rt)
     node = rt.get_node_by_task_id("tnode")
     assert node.trace_id == "trace_abc"
 
 
 def test_D02_session_id_propagated_to_nodes() -> None:
     rt = _fresh()
-    project_workflow_to_graph(
-        _workflow_record(session_id="sess_99", node_statuses={"snode": "done"}), rt
-    )
+    project_workflow_to_graph(_workflow_record(session_id="sess_99", node_statuses={"snode": "done"}), rt)
     node = rt.get_node_by_task_id("snode")
     assert node.session_id == "sess_99"
 
@@ -203,18 +198,14 @@ def test_D02_session_id_propagated_to_nodes() -> None:
 
 def test_E01_contributor_task_graph_engine() -> None:
     rt = _fresh()
-    project_workflow_to_graph(
-        _workflow_record(contributor="task_graph_engine", node_statuses={"cn1": "done"}), rt
-    )
+    project_workflow_to_graph(_workflow_record(contributor="task_graph_engine", node_statuses={"cn1": "done"}), rt)
     node = rt.get_node_by_task_id("cn1")
     assert node.contributor == WorkflowContributorKind.TASK_GRAPH_ENGINE
 
 
 def test_E02_contributor_galaxy_orchestrator() -> None:
     rt = _fresh()
-    project_workflow_to_graph(
-        _workflow_record(contributor="galaxy_orchestrator", node_statuses={"cn2": "done"}), rt
-    )
+    project_workflow_to_graph(_workflow_record(contributor="galaxy_orchestrator", node_statuses={"cn2": "done"}), rt)
     node = rt.get_node_by_task_id("cn2")
     assert node.contributor == WorkflowContributorKind.GALAXY_ORCHESTRATOR
 
@@ -226,9 +217,7 @@ def test_E02_contributor_galaxy_orchestrator() -> None:
 
 def test_F01_unknown_contributor_defaults() -> None:
     rt = _fresh()
-    project_workflow_to_graph(
-        _workflow_record(contributor="some_future_engine", node_statuses={"un1": "done"}), rt
-    )
+    project_workflow_to_graph(_workflow_record(contributor="some_future_engine", node_statuses={"un1": "done"}), rt)
     node = rt.get_node_by_task_id("un1")
     assert node.contributor == WorkflowContributorKind.UNKNOWN
 
@@ -251,9 +240,7 @@ def test_G01_returns_projection_record_type() -> None:
 
 def test_H01_node_ids_in_projection() -> None:
     rt = _fresh()
-    proj = project_workflow_to_graph(
-        _workflow_record(node_statuses={"h1": "done", "h2": "running"}), rt
-    )
+    proj = project_workflow_to_graph(_workflow_record(node_statuses={"h1": "done", "h2": "running"}), rt)
     assert len(proj.node_ids_registered) == 2
 
 
@@ -364,9 +351,13 @@ def test_N01_multiple_contributors() -> None:
 def test_O01_galaxy_orchestrator_graph_contributor_importable() -> None:
     """Verify the sentinel is present in the galaxy_orchestrator source file."""
     import os
+
     path = os.path.join(
-        os.path.dirname(__file__), "..",
-        "galaxy_gateway", "orchestrator", "galaxy_orchestrator.py",
+        os.path.dirname(__file__),
+        "..",
+        "galaxy_gateway",
+        "orchestrator",
+        "galaxy_orchestrator.py",
     )
     with open(path) as f:
         source = f.read()
@@ -376,9 +367,13 @@ def test_O01_galaxy_orchestrator_graph_contributor_importable() -> None:
 def test_O02_galaxy_orchestrator_graph_contributor_value() -> None:
     """Verify the sentinel value contains the expected substring."""
     import os
+
     path = os.path.join(
-        os.path.dirname(__file__), "..",
-        "galaxy_gateway", "orchestrator", "galaxy_orchestrator.py",
+        os.path.dirname(__file__),
+        "..",
+        "galaxy_gateway",
+        "orchestrator",
+        "galaxy_orchestrator.py",
     )
     with open(path) as f:
         source = f.read()
@@ -393,9 +388,12 @@ def test_O02_galaxy_orchestrator_graph_contributor_value() -> None:
 def test_P01_unified_orchestrator_graph_contributor_importable() -> None:
     """Verify the sentinel is present in the unified_orchestrator source file."""
     import os
+
     path = os.path.join(
-        os.path.dirname(__file__), "..",
-        "fusion", "unified_orchestrator.py",
+        os.path.dirname(__file__),
+        "..",
+        "fusion",
+        "unified_orchestrator.py",
     )
     with open(path) as f:
         source = f.read()
@@ -405,9 +403,12 @@ def test_P01_unified_orchestrator_graph_contributor_importable() -> None:
 def test_P02_unified_orchestrator_graph_contributor_value() -> None:
     """Verify the sentinel value contains the expected substring."""
     import os
+
     path = os.path.join(
-        os.path.dirname(__file__), "..",
-        "fusion", "unified_orchestrator.py",
+        os.path.dirname(__file__),
+        "..",
+        "fusion",
+        "unified_orchestrator.py",
     )
     with open(path) as f:
         source = f.read()
@@ -421,9 +422,7 @@ def test_P02_unified_orchestrator_graph_contributor_value() -> None:
 
 def test_Q01_terminal_nodes_in_snapshot() -> None:
     rt = _fresh()
-    project_workflow_to_graph(
-        _workflow_record(node_statuses={"q1": "done", "q2": "failed", "q3": "running"}), rt
-    )
+    project_workflow_to_graph(_workflow_record(node_statuses={"q1": "done", "q2": "failed", "q3": "running"}), rt)
     snap = rt.snapshot()
     assert snap.nodes_by_state.get("completed", 0) >= 1
     assert snap.nodes_by_state.get("failed", 0) >= 1
@@ -437,9 +436,7 @@ def test_Q01_terminal_nodes_in_snapshot() -> None:
 
 def test_R01_multiple_nodes_total() -> None:
     rt = _fresh()
-    project_workflow_to_graph(
-        _workflow_record(node_statuses={f"n{i}": "done" for i in range(5)}), rt
-    )
+    project_workflow_to_graph(_workflow_record(node_statuses={f"n{i}": "done" for i in range(5)}), rt)
     snap = rt.snapshot()
     assert snap.total_nodes == 5
 
@@ -451,8 +448,14 @@ def test_R01_multiple_nodes_total() -> None:
 
 def test_S01_contributor_kinds_include_expected() -> None:
     expected = {
-        "galaxy_orchestrator", "unified_orchestrator", "e2e_orchestrator",
-        "task_graph_engine", "openclawd", "scheduler", "command_router", "unknown",
+        "galaxy_orchestrator",
+        "unified_orchestrator",
+        "e2e_orchestrator",
+        "task_graph_engine",
+        "openclawd",
+        "scheduler",
+        "command_router",
+        "unknown",
     }
     actual = {c.value for c in WorkflowContributorKind}
     assert expected.issubset(actual)
@@ -465,7 +468,10 @@ def test_S01_contributor_kinds_include_expected() -> None:
 
 def test_T01_targets_mapped_to_device_id() -> None:
     env = SimpleNamespace(
-        task_id="tg1", trace_id="tr", session_id="s", tool_name="t",
+        task_id="tg1",
+        trace_id="tr",
+        session_id="s",
+        tool_name="t",
         targets=["device_phone"],
     )
     node = envelope_to_graph_node(env)
@@ -474,7 +480,10 @@ def test_T01_targets_mapped_to_device_id() -> None:
 
 def test_T02_empty_targets_gives_empty_device_id() -> None:
     env = SimpleNamespace(
-        task_id="tg2", trace_id="tr", session_id="s", tool_name="t",
+        task_id="tg2",
+        trace_id="tr",
+        session_id="s",
+        tool_name="t",
         targets=[],
     )
     node = envelope_to_graph_node(env)
@@ -488,7 +497,10 @@ def test_T02_empty_targets_gives_empty_device_id() -> None:
 
 def test_U01_device_id_override_wins() -> None:
     env = SimpleNamespace(
-        task_id="ov1", trace_id="tr", session_id="s", tool_name="t",
+        task_id="ov1",
+        trace_id="tr",
+        session_id="s",
+        tool_name="t",
         targets=["device_phone"],
     )
     node = envelope_to_graph_node(env, device_id="override_device")
@@ -553,9 +565,7 @@ def test_X01_missing_node_statuses_handled() -> None:
 
 def test_Y01_unknown_status_defaults_to_queued() -> None:
     rt = _fresh()
-    project_workflow_to_graph(
-        _workflow_record(node_statuses={"unknown_node": "zap_mode"}), rt
-    )
+    project_workflow_to_graph(_workflow_record(node_statuses={"unknown_node": "zap_mode"}), rt)
     node = rt.get_node_by_task_id("unknown_node")
     assert node is not None
     assert node.state == GraphNodeState.QUEUED  # default fallback

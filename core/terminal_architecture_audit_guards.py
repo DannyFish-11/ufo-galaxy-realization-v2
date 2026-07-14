@@ -363,6 +363,7 @@ def _has_attr(mod: Any, name: str) -> bool:
 def _read_source(rel_path: str) -> Optional[str]:
     """Read source of a project-relative file, return None on error."""
     import os
+
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     full_path = os.path.join(project_root, rel_path)
     try:
@@ -411,44 +412,52 @@ def check_v4_scope_regression(
     # (a) Module importable and sentinels present.
     importable, mod, err = _try_import("core.unified_orchestration_spine")
     if not importable:
-        findings.append(_error(
-            _GUARD_V4,
-            "core.unified_orchestration_spine is not importable; "
-            "V4 scope cannot be validated.",
-            {"error": err},
-        ))
+        findings.append(
+            _error(
+                _GUARD_V4,
+                "core.unified_orchestration_spine is not importable; " "V4 scope cannot be validated.",
+                {"error": err},
+            )
+        )
         return findings
 
     if not _has_attr(mod, "UNIFIED_ORCHESTRATION_SPINE_AUTHORITY"):
-        findings.append(_error(
-            _GUARD_V4,
-            "UNIFIED_ORCHESTRATION_SPINE_AUTHORITY sentinel is absent from "
-            "core.unified_orchestration_spine — V4 authority anchor removed.",
-        ))
+        findings.append(
+            _error(
+                _GUARD_V4,
+                "UNIFIED_ORCHESTRATION_SPINE_AUTHORITY sentinel is absent from "
+                "core.unified_orchestration_spine — V4 authority anchor removed.",
+            )
+        )
 
     if not _has_attr(mod, _V4_SENTINEL_NAME):
-        findings.append(_error(
-            _GUARD_V4,
-            f"{_V4_SENTINEL_NAME} sentinel is absent from "
-            "core.unified_orchestration_spine — V4 scope guard removed.",
-        ))
+        findings.append(
+            _error(
+                _GUARD_V4,
+                f"{_V4_SENTINEL_NAME} sentinel is absent from "
+                "core.unified_orchestration_spine — V4 scope guard removed.",
+            )
+        )
     else:
         # (b) Sentinel content must not be diluted.
         val: str = getattr(mod, _V4_SENTINEL_NAME, "")
         if "NOT" not in val:
-            findings.append(_error(
-                _GUARD_V4,
-                f"{_V4_SENTINEL_NAME} no longer contains 'NOT' — "
-                "the scope restriction may have been removed.",
-                {"sentinel_snippet": val[:120]},
-            ))
+            findings.append(
+                _error(
+                    _GUARD_V4,
+                    f"{_V4_SENTINEL_NAME} no longer contains 'NOT' — " "the scope restriction may have been removed.",
+                    {"sentinel_snippet": val[:120]},
+                )
+            )
         if "per-request" not in val.lower() and "per_request" not in val.lower():
-            findings.append(_error(
-                _GUARD_V4,
-                f"{_V4_SENTINEL_NAME} no longer mentions 'per-request' — "
-                "the scope restriction may have been diluted.",
-                {"sentinel_snippet": val[:120]},
-            ))
+            findings.append(
+                _error(
+                    _GUARD_V4,
+                    f"{_V4_SENTINEL_NAME} no longer mentions 'per-request' — "
+                    "the scope restriction may have been diluted.",
+                    {"sentinel_snippet": val[:120]},
+                )
+            )
 
     # (c) Hot-path sources must not import V4.
     for rel_path in _HOT_PATH_MODULES:
@@ -456,13 +465,15 @@ def check_v4_scope_regression(
         if source is None:
             continue
         if "unified_orchestration_spine" in source:
-            findings.append(_error(
-                _GUARD_V4,
-                f"Per-request hot-path module '{rel_path}' imports "
-                "unified_orchestration_spine — V4 has been re-inserted "
-                "into the per-request hot path (regression).",
-                {"file": rel_path},
-            ))
+            findings.append(
+                _error(
+                    _GUARD_V4,
+                    f"Per-request hot-path module '{rel_path}' imports "
+                    "unified_orchestration_spine — V4 has been re-inserted "
+                    "into the per-request hot path (regression).",
+                    {"file": rel_path},
+                )
+            )
 
     # (d) Snapshot-level check.
     if snapshot and isinstance(snapshot, dict):
@@ -470,19 +481,23 @@ def check_v4_scope_regression(
             snapshot.get("layer_key") == "multi_step_orchestration_spine"
             and snapshot.get("is_per_request_gate") is True
         ):
-            findings.append(_error(
-                _GUARD_V4,
-                "Architecture snapshot declares V4 as is_per_request_gate=True — "
-                "V4_IS_NOT_PER_REQUEST_GATE boundary invariant violated.",
-                {"snapshot": snapshot},
-            ))
+            findings.append(
+                _error(
+                    _GUARD_V4,
+                    "Architecture snapshot declares V4 as is_per_request_gate=True — "
+                    "V4_IS_NOT_PER_REQUEST_GATE boundary invariant violated.",
+                    {"snapshot": snapshot},
+                )
+            )
 
     if not findings:
-        findings.append(_info(
-            _GUARD_V4,
-            "V4 scope guard passed: unified_orchestration_spine remains "
-            "scoped to multi-step orchestration sessions; not on per-request hot path.",
-        ))
+        findings.append(
+            _info(
+                _GUARD_V4,
+                "V4 scope guard passed: unified_orchestration_spine remains "
+                "scoped to multi-step orchestration sessions; not on per-request hot path.",
+            )
+        )
 
     return findings
 
@@ -494,8 +509,12 @@ def check_v4_scope_regression(
 _GUARD_V6 = "V6_HOT_PATH_REGRESSION"
 
 _V6_MODULES = ["core.release_blocking_gate", "core.center_authority_boundary"]
-_V6_IMPORT_NAMES = ["release_blocking_gate", "center_authority_boundary",
-                    "assert_center_authority_intact", "evaluate_center_authority_boundary"]
+_V6_IMPORT_NAMES = [
+    "release_blocking_gate",
+    "center_authority_boundary",
+    "assert_center_authority_intact",
+    "evaluate_center_authority_boundary",
+]
 
 
 def check_v6_hot_path_regression(
@@ -527,28 +546,33 @@ def check_v6_hot_path_regression(
     # (a) V6 NOT-policy sentinel importable.
     importable, mod, err = _try_import("core.canonical_layer_model")
     if not importable:
-        findings.append(_error(
-            _GUARD_V6,
-            "core.canonical_layer_model is not importable; "
-            "V6 hot-path guard cannot be fully validated.",
-            {"error": err},
-        ))
+        findings.append(
+            _error(
+                _GUARD_V6,
+                "core.canonical_layer_model is not importable; " "V6 hot-path guard cannot be fully validated.",
+                {"error": err},
+            )
+        )
     else:
         if not _has_attr(mod, _V6_SENTINEL_NAME):
-            findings.append(_error(
-                _GUARD_V6,
-                f"{_V6_SENTINEL_NAME} sentinel is absent from "
-                "core.canonical_layer_model — V6 boundary invariant removed.",
-            ))
+            findings.append(
+                _error(
+                    _GUARD_V6,
+                    f"{_V6_SENTINEL_NAME} sentinel is absent from "
+                    "core.canonical_layer_model — V6 boundary invariant removed.",
+                )
+            )
         else:
             val: str = getattr(mod, _V6_SENTINEL_NAME, "")
             if "NOT" not in val:
-                findings.append(_error(
-                    _GUARD_V6,
-                    f"{_V6_SENTINEL_NAME} no longer contains 'NOT' — "
-                    "V6 hot-path restriction may have been removed.",
-                    {"sentinel_snippet": val[:120]},
-                ))
+                findings.append(
+                    _error(
+                        _GUARD_V6,
+                        f"{_V6_SENTINEL_NAME} no longer contains 'NOT' — "
+                        "V6 hot-path restriction may have been removed.",
+                        {"sentinel_snippet": val[:120]},
+                    )
+                )
 
     # (b) Hot-path sources must not import V6 boundary symbols.
     for rel_path in _HOT_PATH_MODULES:
@@ -557,33 +581,36 @@ def check_v6_hot_path_regression(
             continue
         for name in _V6_IMPORT_NAMES:
             if name in source:
-                findings.append(_error(
-                    _GUARD_V6,
-                    f"Per-request hot-path module '{rel_path}' references "
-                    f"'{name}' — V6 boundary has been inserted into the "
-                    "per-request hot path (regression).",
-                    {"file": rel_path, "symbol": name},
-                ))
+                findings.append(
+                    _error(
+                        _GUARD_V6,
+                        f"Per-request hot-path module '{rel_path}' references "
+                        f"'{name}' — V6 boundary has been inserted into the "
+                        "per-request hot path (regression).",
+                        {"file": rel_path, "symbol": name},
+                    )
+                )
 
     # (c) Snapshot-level check.
     if snapshot and isinstance(snapshot, dict):
-        if (
-            snapshot.get("layer_key") == "startup_release_integrity"
-            and snapshot.get("is_per_request_gate") is True
-        ):
-            findings.append(_error(
-                _GUARD_V6,
-                "Architecture snapshot declares V6 as is_per_request_gate=True — "
-                "V6_IS_NOT_PER_REQUEST_GATE boundary invariant violated.",
-                {"snapshot": snapshot},
-            ))
+        if snapshot.get("layer_key") == "startup_release_integrity" and snapshot.get("is_per_request_gate") is True:
+            findings.append(
+                _error(
+                    _GUARD_V6,
+                    "Architecture snapshot declares V6 as is_per_request_gate=True — "
+                    "V6_IS_NOT_PER_REQUEST_GATE boundary invariant violated.",
+                    {"snapshot": snapshot},
+                )
+            )
 
     if not findings:
-        findings.append(_info(
-            _GUARD_V6,
-            "V6 hot-path guard passed: release_blocking_gate / "
-            "center_authority_boundary remains outside per-request hot paths.",
-        ))
+        findings.append(
+            _info(
+                _GUARD_V6,
+                "V6 hot-path guard passed: release_blocking_gate / "
+                "center_authority_boundary remains outside per-request hot paths.",
+            )
+        )
 
     return findings
 
@@ -642,85 +669,97 @@ def check_l1_l2_l3_router_detachment(
     router_source = _read_source(_router_source_path)
     if router_source is None:
         # Source file absent — the module was removed (structural regression).
-        findings.append(_error(
-            _GUARD_L123,
-            f"{_router_source_path} does not exist — "
-            "core.unified.llm_router (UnifiedLLMRouter) has been removed; "
-            "L1/L2/L3 router fusion anchor is gone.",
-        ))
+        findings.append(
+            _error(
+                _GUARD_L123,
+                f"{_router_source_path} does not exist — "
+                "core.unified.llm_router (UnifiedLLMRouter) has been removed; "
+                "L1/L2/L3 router fusion anchor is gone.",
+            )
+        )
     else:
         # (b) Attribute presence via source inspection.
         for attr in _L123_AUTHORITY_ATTRS:
             if attr not in router_source:
-                findings.append(_error(
-                    _GUARD_L123,
-                    f"UnifiedLLMRouter source does not reference '{attr}' — "
-                    "L1/L2/L3 cognitive authority attribute may have been removed.",
-                    {"missing_attr": attr, "source_file": _router_source_path},
-                ))
+                findings.append(
+                    _error(
+                        _GUARD_L123,
+                        f"UnifiedLLMRouter source does not reference '{attr}' — "
+                        "L1/L2/L3 cognitive authority attribute may have been removed.",
+                        {"missing_attr": attr, "source_file": _router_source_path},
+                    )
+                )
 
         # (c) Helper method presence via source inspection.
         for method in _L123_HELPER_METHODS:
             if method not in router_source:
-                findings.append(_error(
-                    _GUARD_L123,
-                    f"UnifiedLLMRouter source does not define method '{method}' — "
-                    "L1/L2/L3 authority integration helper may have been removed.",
-                    {"missing_method": method, "source_file": _router_source_path},
-                ))
+                findings.append(
+                    _error(
+                        _GUARD_L123,
+                        f"UnifiedLLMRouter source does not define method '{method}' — "
+                        "L1/L2/L3 authority integration helper may have been removed.",
+                        {"missing_method": method, "source_file": _router_source_path},
+                    )
+                )
 
         # Also try live import for environments where dependencies are available;
         # import failure due to missing deps is a warning, not an error (since
         # the source-level checks above already verified structural presence).
         importable, mod, err = _try_import("core.unified.llm_router")
         if not importable:
-            findings.append(_warn(
-                _GUARD_L123,
-                "core.unified.llm_router is not importable at runtime "
-                "(likely missing optional dependency); "
-                "live class validation skipped — source-level checks passed.",
-                {"error": err},
-            ))
+            findings.append(
+                _warn(
+                    _GUARD_L123,
+                    "core.unified.llm_router is not importable at runtime "
+                    "(likely missing optional dependency); "
+                    "live class validation skipped — source-level checks passed.",
+                    {"error": err},
+                )
+            )
         elif mod is not None:
             router_cls = getattr(mod, "UnifiedLLMRouter", None)
             if router_cls is None:
-                findings.append(_error(
-                    _GUARD_L123,
-                    "UnifiedLLMRouter class is absent from core.unified.llm_router "
-                    "(module imports but class is missing) — "
-                    "L1/L2/L3 router fusion anchor removed.",
-                ))
+                findings.append(
+                    _error(
+                        _GUARD_L123,
+                        "UnifiedLLMRouter class is absent from core.unified.llm_router "
+                        "(module imports but class is missing) — "
+                        "L1/L2/L3 router fusion anchor removed.",
+                    )
+                )
 
     # (d) NOT-policy sentinel.
     importable_clm, clm_mod, clm_err = _try_import("core.canonical_layer_model")
     if importable_clm and clm_mod:
         if not _has_attr(clm_mod, _L1_L2_L3_SENTINEL_NAME):
-            findings.append(_error(
-                _GUARD_L123,
-                f"{_L1_L2_L3_SENTINEL_NAME} sentinel is absent from "
-                "core.canonical_layer_model — L1/L2/L3 layer invariant removed.",
-            ))
+            findings.append(
+                _error(
+                    _GUARD_L123,
+                    f"{_L1_L2_L3_SENTINEL_NAME} sentinel is absent from "
+                    "core.canonical_layer_model — L1/L2/L3 layer invariant removed.",
+                )
+            )
 
     # (e) Snapshot-level check.
     if snapshot and isinstance(snapshot, dict):
-        if (
-            snapshot.get("layer_key") == "router_cognitive_authority"
-            and snapshot.get("is_shadow_stack") is True
-        ):
-            findings.append(_error(
-                _GUARD_L123,
-                "Architecture snapshot declares L1/L2/L3 as is_shadow_stack=True — "
-                "L1_L2_L3_BELONGS_TO_ROUTER_LAYER_NOT_SHADOW_STACK boundary "
-                "invariant violated.",
-                {"snapshot": snapshot},
-            ))
+        if snapshot.get("layer_key") == "router_cognitive_authority" and snapshot.get("is_shadow_stack") is True:
+            findings.append(
+                _error(
+                    _GUARD_L123,
+                    "Architecture snapshot declares L1/L2/L3 as is_shadow_stack=True — "
+                    "L1_L2_L3_BELONGS_TO_ROUTER_LAYER_NOT_SHADOW_STACK boundary "
+                    "invariant violated.",
+                    {"snapshot": snapshot},
+                )
+            )
 
     if not findings:
-        findings.append(_info(
-            _GUARD_L123,
-            "L1/L2/L3 router detachment guard passed: cognitive authority "
-            "remains fused into UnifiedLLMRouter.",
-        ))
+        findings.append(
+            _info(
+                _GUARD_L123,
+                "L1/L2/L3 router detachment guard passed: cognitive authority " "remains fused into UnifiedLLMRouter.",
+            )
+        )
 
     return findings
 
@@ -765,89 +804,103 @@ def check_completion_truth_bypass(
     # (a) Truth chain module importable.
     importable, mod, err = _try_import("core.task_result_canonical_truth_chain")
     if not importable:
-        findings.append(_error(
-            _GUARD_COMPLETION,
-            "core.task_result_canonical_truth_chain is not importable; "
-            "completion truth backbone cannot be validated.",
-            {"error": err},
-        ))
+        findings.append(
+            _error(
+                _GUARD_COMPLETION,
+                "core.task_result_canonical_truth_chain is not importable; "
+                "completion truth backbone cannot be validated.",
+                {"error": err},
+            )
+        )
     else:
         # (b) Policy sentinel present.
         if not _has_attr(mod, _COMPLETION_TRUTH_POLICY_NAME):
-            findings.append(_error(
-                _GUARD_COMPLETION,
-                f"{_COMPLETION_TRUTH_POLICY_NAME} is absent from "
-                "core.task_result_canonical_truth_chain — "
-                "completion truth mandate removed.",
-            ))
+            findings.append(
+                _error(
+                    _GUARD_COMPLETION,
+                    f"{_COMPLETION_TRUTH_POLICY_NAME} is absent from "
+                    "core.task_result_canonical_truth_chain — "
+                    "completion truth mandate removed.",
+                )
+            )
         else:
             # (c) Content not diluted.
             val: str = getattr(mod, _COMPLETION_TRUTH_POLICY_NAME, "")
             if "MUST" not in val:
-                findings.append(_error(
-                    _GUARD_COMPLETION,
-                    f"{_COMPLETION_TRUTH_POLICY_NAME} no longer contains 'MUST' — "
-                    "the mandatory enforcement may have been weakened.",
-                    {"sentinel_snippet": val[:120]},
-                ))
+                findings.append(
+                    _error(
+                        _GUARD_COMPLETION,
+                        f"{_COMPLETION_TRUTH_POLICY_NAME} no longer contains 'MUST' — "
+                        "the mandatory enforcement may have been weakened.",
+                        {"sentinel_snippet": val[:120]},
+                    )
+                )
             if "truth" not in val.lower():
-                findings.append(_error(
-                    _GUARD_COMPLETION,
-                    f"{_COMPLETION_TRUTH_POLICY_NAME} no longer mentions 'truth' — "
-                    "the policy semantics may have been changed.",
-                    {"sentinel_snippet": val[:120]},
-                ))
+                findings.append(
+                    _error(
+                        _GUARD_COMPLETION,
+                        f"{_COMPLETION_TRUTH_POLICY_NAME} no longer mentions 'truth' — "
+                        "the policy semantics may have been changed.",
+                        {"sentinel_snippet": val[:120]},
+                    )
+                )
 
         # (d) Entry-point callable present.
         fn = getattr(mod, "run_task_result_truth_chain", None)
         if not callable(fn):
-            findings.append(_error(
-                _GUARD_COMPLETION,
-                "run_task_result_truth_chain callable is absent from "
-                "core.task_result_canonical_truth_chain — "
-                "completion truth entry point removed.",
-            ))
+            findings.append(
+                _error(
+                    _GUARD_COMPLETION,
+                    "run_task_result_truth_chain callable is absent from "
+                    "core.task_result_canonical_truth_chain — "
+                    "completion truth entry point removed.",
+                )
+            )
 
     # (e) CanonicalCompletionIngress importable.
     cci_importable, _, cci_err = _try_import("core.canonical_completion_ingress")
     if not cci_importable:
-        findings.append(_error(
-            _GUARD_COMPLETION,
-            "core.canonical_completion_ingress is not importable; "
-            "canonical completion ingress backbone unavailable.",
-            {"error": cci_err},
-        ))
+        findings.append(
+            _error(
+                _GUARD_COMPLETION,
+                "core.canonical_completion_ingress is not importable; "
+                "canonical completion ingress backbone unavailable.",
+                {"error": cci_err},
+            )
+        )
 
     # (f) Layer model sentinel present.
     importable_clm, clm_mod, _ = _try_import("core.canonical_layer_model")
     if importable_clm and clm_mod:
         if not _has_attr(clm_mod, "COMPLETION_TRUTH_IS_ENFORCED_NOT_OPTIONAL"):
-            findings.append(_error(
-                _GUARD_COMPLETION,
-                "COMPLETION_TRUTH_IS_ENFORCED_NOT_OPTIONAL sentinel is absent "
-                "from core.canonical_layer_model — layer invariant removed.",
-            ))
+            findings.append(
+                _error(
+                    _GUARD_COMPLETION,
+                    "COMPLETION_TRUTH_IS_ENFORCED_NOT_OPTIONAL sentinel is absent "
+                    "from core.canonical_layer_model — layer invariant removed.",
+                )
+            )
 
     # (g) Snapshot-level check.
     if snapshot and isinstance(snapshot, dict):
-        if (
-            snapshot.get("layer_key") == "completion_truth_backbone"
-            and snapshot.get("is_optional_signaling") is True
-        ):
-            findings.append(_error(
-                _GUARD_COMPLETION,
-                "Architecture snapshot declares completion truth backbone as "
-                "is_optional_signaling=True — "
-                "COMPLETION_TRUTH_IS_ENFORCED_NOT_OPTIONAL boundary invariant violated.",
-                {"snapshot": snapshot},
-            ))
+        if snapshot.get("layer_key") == "completion_truth_backbone" and snapshot.get("is_optional_signaling") is True:
+            findings.append(
+                _error(
+                    _GUARD_COMPLETION,
+                    "Architecture snapshot declares completion truth backbone as "
+                    "is_optional_signaling=True — "
+                    "COMPLETION_TRUTH_IS_ENFORCED_NOT_OPTIONAL boundary invariant violated.",
+                    {"snapshot": snapshot},
+                )
+            )
 
     if not findings:
-        findings.append(_info(
-            _GUARD_COMPLETION,
-            "Completion truth backbone guard passed: canonical truth chain "
-            "remains enforced and not optional.",
-        ))
+        findings.append(
+            _info(
+                _GUARD_COMPLETION,
+                "Completion truth backbone guard passed: canonical truth chain " "remains enforced and not optional.",
+            )
+        )
 
     return findings
 
@@ -858,13 +911,15 @@ def check_completion_truth_bypass(
 
 _GUARD_COHERENCE = "ARCHITECTURE_DECLARATION_COHERENCE"
 
-_EXPECTED_LAYER_KEYS = frozenset({
-    "completion_truth_backbone",
-    "router_cognitive_authority",
-    "per_request_hot_path",
-    "multi_step_orchestration_spine",
-    "startup_release_integrity",
-})
+_EXPECTED_LAYER_KEYS = frozenset(
+    {
+        "completion_truth_backbone",
+        "router_cognitive_authority",
+        "per_request_hot_path",
+        "multi_step_orchestration_spine",
+        "startup_release_integrity",
+    }
+)
 
 _EXPECTED_NOT_POLICY_SENTINELS = [
     "V4_IS_NOT_PER_REQUEST_GATE",
@@ -904,68 +959,82 @@ def check_architecture_declaration_coherence(
     # (a) Module importable.
     importable, mod, err = _try_import("core.canonical_layer_model")
     if not importable:
-        findings.append(_error(
-            _GUARD_COHERENCE,
-            "core.canonical_layer_model is not importable — "
-            "the canonical five-layer architecture declaration has been removed.",
-            {"error": err},
-        ))
+        findings.append(
+            _error(
+                _GUARD_COHERENCE,
+                "core.canonical_layer_model is not importable — "
+                "the canonical five-layer architecture declaration has been removed.",
+                {"error": err},
+            )
+        )
         return findings
 
     # (b) All five layer keys present.
     layer_keys = getattr(mod, "CANONICAL_LAYER_KEYS", None)
     if layer_keys is None:
-        findings.append(_error(
-            _GUARD_COHERENCE,
-            "CANONICAL_LAYER_KEYS is absent from core.canonical_layer_model.",
-        ))
+        findings.append(
+            _error(
+                _GUARD_COHERENCE,
+                "CANONICAL_LAYER_KEYS is absent from core.canonical_layer_model.",
+            )
+        )
     else:
         missing = _EXPECTED_LAYER_KEYS - frozenset(layer_keys)
         if missing:
-            findings.append(_error(
-                _GUARD_COHERENCE,
-                f"canonical layer keys missing from CANONICAL_LAYER_KEYS: {sorted(missing)}. "
-                "The five-layer architecture declaration is incomplete.",
-                {"missing_keys": sorted(missing)},
-            ))
+            findings.append(
+                _error(
+                    _GUARD_COHERENCE,
+                    f"canonical layer keys missing from CANONICAL_LAYER_KEYS: {sorted(missing)}. "
+                    "The five-layer architecture declaration is incomplete.",
+                    {"missing_keys": sorted(missing)},
+                )
+            )
 
     # (c) NOT-policy sentinels present and non-empty.
     for sentinel_name in _EXPECTED_NOT_POLICY_SENTINELS:
         if not _has_attr(mod, sentinel_name):
-            findings.append(_error(
-                _GUARD_COHERENCE,
-                f"NOT-policy sentinel '{sentinel_name}' is absent from "
-                "core.canonical_layer_model — layer boundary invariant removed.",
-                {"missing_sentinel": sentinel_name},
-            ))
+            findings.append(
+                _error(
+                    _GUARD_COHERENCE,
+                    f"NOT-policy sentinel '{sentinel_name}' is absent from "
+                    "core.canonical_layer_model — layer boundary invariant removed.",
+                    {"missing_sentinel": sentinel_name},
+                )
+            )
 
     # (d) Internal registry self-consistency.
     run_fn = getattr(mod, "run_layer_model_invariants", None)
     if not callable(run_fn):
-        findings.append(_error(
-            _GUARD_COHERENCE,
-            "run_layer_model_invariants is absent from core.canonical_layer_model — "
-            "layer model self-check entry point removed.",
-        ))
+        findings.append(
+            _error(
+                _GUARD_COHERENCE,
+                "run_layer_model_invariants is absent from core.canonical_layer_model — "
+                "layer model self-check entry point removed.",
+            )
+        )
     else:
         try:
             report = run_fn()  # no snapshots → validates registry only
             if not getattr(report, "overall_consistent", True):
                 error_count = getattr(report, "error_count", "?")
-                findings.append(_error(
-                    _GUARD_COHERENCE,
-                    f"run_layer_model_invariants() returned overall_consistent=False "
-                    f"({error_count} error(s)) — canonical layer registry is internally "
-                    "inconsistent.",
-                    {"error_count": error_count},
-                ))
+                findings.append(
+                    _error(
+                        _GUARD_COHERENCE,
+                        f"run_layer_model_invariants() returned overall_consistent=False "
+                        f"({error_count} error(s)) — canonical layer registry is internally "
+                        "inconsistent.",
+                        {"error_count": error_count},
+                    )
+                )
         except Exception as exc:
-            findings.append(_warn(
-                _GUARD_COHERENCE,
-                f"run_layer_model_invariants() raised an exception: {exc}. "
-                "Registry self-consistency could not be verified.",
-                {"exception": str(exc)},
-            ))
+            findings.append(
+                _warn(
+                    _GUARD_COHERENCE,
+                    f"run_layer_model_invariants() raised an exception: {exc}. "
+                    "Registry self-consistency could not be verified.",
+                    {"exception": str(exc)},
+                )
+            )
 
     # (e) Validate external snapshot if provided.
     if snapshot and isinstance(snapshot, dict):
@@ -975,26 +1044,32 @@ def check_architecture_declaration_coherence(
                 layer_findings = check_fn(snapshot)
                 errors = [f for f in layer_findings if getattr(f, "severity", "") == "error"]
                 for lf in errors:
-                    findings.append(_error(
-                        _GUARD_COHERENCE,
-                        f"Architecture snapshot is inconsistent with canonical layer model: "
-                        f"{getattr(lf, 'message', str(lf))}",
-                        {"layer_finding": lf.to_dict() if hasattr(lf, "to_dict") else {}},
-                    ))
+                    findings.append(
+                        _error(
+                            _GUARD_COHERENCE,
+                            f"Architecture snapshot is inconsistent with canonical layer model: "
+                            f"{getattr(lf, 'message', str(lf))}",
+                            {"layer_finding": lf.to_dict() if hasattr(lf, "to_dict") else {}},
+                        )
+                    )
             except Exception as exc:
-                findings.append(_warn(
-                    _GUARD_COHERENCE,
-                    f"check_layer_model_consistent() raised an exception: {exc}",
-                    {"exception": str(exc)},
-                ))
+                findings.append(
+                    _warn(
+                        _GUARD_COHERENCE,
+                        f"check_layer_model_consistent() raised an exception: {exc}",
+                        {"exception": str(exc)},
+                    )
+                )
 
     if not findings:
-        findings.append(_info(
-            _GUARD_COHERENCE,
-            "Architecture declaration coherence guard passed: canonical "
-            "five-layer model is self-consistent and all NOT-policy sentinels "
-            "are present.",
-        ))
+        findings.append(
+            _info(
+                _GUARD_COHERENCE,
+                "Architecture declaration coherence guard passed: canonical "
+                "five-layer model is self-consistent and all NOT-policy sentinels "
+                "are present.",
+            )
+        )
 
     return findings
 
@@ -1002,6 +1077,7 @@ def check_architecture_declaration_coherence(
 # ---------------------------------------------------------------------------
 # Aggregate runner
 # ---------------------------------------------------------------------------
+
 
 def run_terminal_audit_guards(
     snapshot: Optional[Dict[str, Any]] = None,
@@ -1046,23 +1122,22 @@ def run_terminal_audit_guards(
             findings = guard_fn(snapshot)
             report.extend(findings)
         except Exception as exc:
-            report.add(_warn(
-                guard_name,
-                f"Guard '{guard_name}' raised an unexpected exception: {exc}. "
-                "Guard result is unavailable.",
-                {"exception": str(exc)},
-            ))
+            report.add(
+                _warn(
+                    guard_name,
+                    f"Guard '{guard_name}' raised an unexpected exception: {exc}. " "Guard result is unavailable.",
+                    {"exception": str(exc)},
+                )
+            )
 
     if report.overall_passed:
         logger.debug(
-            "Terminal architecture audit guards: all checks passed "
-            "(warnings=%d)",
+            "Terminal architecture audit guards: all checks passed " "(warnings=%d)",
             report.warning_count,
         )
     else:
         logger.warning(
-            "Terminal architecture audit guards: %d error(s) found — "
-            "overall_passed=False",
+            "Terminal architecture audit guards: %d error(s) found — " "overall_passed=False",
             report.error_count,
         )
 

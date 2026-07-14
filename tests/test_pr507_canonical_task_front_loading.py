@@ -56,6 +56,7 @@ from core.task_adapter import (
 # Optional: detect whether fastapi-dependent modules can be imported.
 try:
     import fastapi as _fastapi  # noqa: F401
+
     _FASTAPI_AVAILABLE = True
 except ImportError:
     _FASTAPI_AVAILABLE = False
@@ -64,6 +65,7 @@ except ImportError:
 # ===========================================================================
 # Fixtures
 # ===========================================================================
+
 
 @pytest.fixture(autouse=True)
 def reset_state():
@@ -78,9 +80,11 @@ def reset_state():
 # A) Sentinels — all four front-loading sentinels are importable
 # ===========================================================================
 
+
 @pytest.mark.skipif(not _FASTAPI_AVAILABLE, reason="fastapi not installed")
 def test_A1_api_ingress_sentinel_importable():
     from core.routes.tasks import CANONICAL_TASK_API_INGRESS_FRONT_LOADED
+
     assert CANONICAL_TASK_API_INGRESS_FRONT_LOADED
     assert "API_INGRESS" in CANONICAL_TASK_API_INGRESS_FRONT_LOADED
 
@@ -90,18 +94,21 @@ def test_A2_orchestrator_sentinel_importable():
     from galaxy_gateway.orchestrator.task_orchestrator import (
         CANONICAL_TASK_ORCHESTRATOR_FRONT_LOADED,
     )
+
     assert CANONICAL_TASK_ORCHESTRATOR_FRONT_LOADED
     assert "ORCHESTRATOR" in CANONICAL_TASK_ORCHESTRATOR_FRONT_LOADED
 
 
 def test_A3_scheduler_sentinel_importable():
     from core.scheduler import CANONICAL_TASK_SCHEDULER_FRONT_LOADED
+
     assert CANONICAL_TASK_SCHEDULER_FRONT_LOADED
     assert "SCHEDULER" in CANONICAL_TASK_SCHEDULER_FRONT_LOADED
 
 
 def test_A4_kernel_sentinel_importable():
     from core.agent.kernel import CANONICAL_TASK_KERNEL_FRONT_LOADED
+
     assert CANONICAL_TASK_KERNEL_FRONT_LOADED
     assert "KERNEL" in CANONICAL_TASK_KERNEL_FRONT_LOADED
 
@@ -110,21 +117,25 @@ def test_A4_kernel_sentinel_importable():
 # B) API ingress sentinel value
 # ===========================================================================
 
+
 @pytest.mark.skipif(not _FASTAPI_AVAILABLE, reason="fastapi not installed")
 def test_B1_api_sentinel_mentions_canonical_task():
     from core.routes.tasks import CANONICAL_TASK_API_INGRESS_FRONT_LOADED
+
     assert "CANONICAL_TASK" in CANONICAL_TASK_API_INGRESS_FRONT_LOADED
 
 
 @pytest.mark.skipif(not _FASTAPI_AVAILABLE, reason="fastapi not installed")
 def test_B2_api_sentinel_mentions_adapt():
     from core.routes.tasks import CANONICAL_TASK_API_INGRESS_FRONT_LOADED
+
     assert "adapt_to_canonical_task" in CANONICAL_TASK_API_INGRESS_FRONT_LOADED
 
 
 @pytest.mark.skipif(not _FASTAPI_AVAILABLE, reason="fastapi not installed")
 def test_B3_api_sentinel_mentions_create_task():
     from core.routes.tasks import CANONICAL_TASK_API_INGRESS_FRONT_LOADED
+
     assert "create_task" in CANONICAL_TASK_API_INGRESS_FRONT_LOADED
 
 
@@ -132,11 +143,13 @@ def test_B3_api_sentinel_mentions_create_task():
 # C) Orchestrator ingress sentinel value
 # ===========================================================================
 
+
 @pytest.mark.skipif(not _FASTAPI_AVAILABLE, reason="fastapi not installed")
 def test_C1_orchestrator_sentinel_mentions_submit_task():
     from galaxy_gateway.orchestrator.task_orchestrator import (
         CANONICAL_TASK_ORCHESTRATOR_FRONT_LOADED,
     )
+
     assert "submit_task" in CANONICAL_TASK_ORCHESTRATOR_FRONT_LOADED
 
 
@@ -145,6 +158,7 @@ def test_C2_orchestrator_sentinel_mentions_adapt():
     from galaxy_gateway.orchestrator.task_orchestrator import (
         CANONICAL_TASK_ORCHESTRATOR_FRONT_LOADED,
     )
+
     assert "adapt_to_canonical_task" in CANONICAL_TASK_ORCHESTRATOR_FRONT_LOADED
 
 
@@ -152,13 +166,16 @@ def test_C2_orchestrator_sentinel_mentions_adapt():
 # D) Scheduler ingress sentinel value
 # ===========================================================================
 
+
 def test_D1_scheduler_sentinel_mentions_exec_send():
     from core.scheduler import CANONICAL_TASK_SCHEDULER_FRONT_LOADED
+
     assert "_exec_send_to_device" in CANONICAL_TASK_SCHEDULER_FRONT_LOADED
 
 
 def test_D2_scheduler_sentinel_mentions_adapt():
     from core.scheduler import CANONICAL_TASK_SCHEDULER_FRONT_LOADED
+
     assert "adapt_to_canonical_task" in CANONICAL_TASK_SCHEDULER_FRONT_LOADED
 
 
@@ -166,24 +183,29 @@ def test_D2_scheduler_sentinel_mentions_adapt():
 # E) Kernel ingress sentinel value
 # ===========================================================================
 
+
 def test_E1_kernel_sentinel_mentions_process():
     from core.agent.kernel import CANONICAL_TASK_KERNEL_FRONT_LOADED
+
     assert "_process" in CANONICAL_TASK_KERNEL_FRONT_LOADED
 
 
 def test_E2_kernel_sentinel_mentions_adapt():
     from core.agent.kernel import CANONICAL_TASK_KERNEL_FRONT_LOADED
+
     assert "adapt_to_canonical_task" in CANONICAL_TASK_KERNEL_FRONT_LOADED
 
 
 def test_E3_kernel_sentinel_mentions_task_execute():
     from core.agent.kernel import CANONICAL_TASK_KERNEL_FRONT_LOADED
+
     assert "task_execute" in CANONICAL_TASK_KERNEL_FRONT_LOADED
 
 
 # ===========================================================================
 # F) adapt_to_canonical_task — API-shaped dict
 # ===========================================================================
+
 
 def test_F1_api_dict_produces_canonical_task():
     task = adapt_to_canonical_task(
@@ -228,6 +250,7 @@ def test_F4_api_dict_canonical_task_trace_id_set():
 # G) adapt_to_canonical_task — orchestrator dict
 # ===========================================================================
 
+
 def test_G1_orchestrator_dict_produces_canonical_task():
     task = adapt_to_canonical_task(
         {
@@ -266,6 +289,7 @@ def test_G3_orchestrator_task_targets_propagated():
 # H) adapt_to_canonical_task — scheduler dict
 # ===========================================================================
 
+
 def test_H1_scheduler_dict_produces_canonical_task():
     task = adapt_to_canonical_task(
         {
@@ -300,6 +324,7 @@ def test_H3_scheduler_task_id_propagated_when_provided():
 # I) adapt_to_canonical_task — AI-intent dict
 # ===========================================================================
 
+
 def test_I1_ai_intent_dict_produces_canonical_task():
     task = adapt_to_canonical_task(
         {
@@ -323,6 +348,7 @@ def test_I2_ai_intent_origin_is_ai_intent():
 # ===========================================================================
 # J) project_to_task_envelope — produces envelope from CanonicalTask
 # ===========================================================================
+
 
 def test_J1_project_produces_envelope():
     task = build_canonical_task(
@@ -359,6 +385,7 @@ def test_J3_projected_envelope_has_task_id():
 # ===========================================================================
 # K) TaskEnvelope carries canonical_task_id in metadata
 # ===========================================================================
+
 
 def test_K1_envelope_metadata_has_canonical_task_id():
     task = build_canonical_task(
@@ -397,6 +424,7 @@ def test_K3_envelope_metadata_has_canonical_origin():
 # L) TaskEnvelope shares task_id with source CanonicalTask
 # ===========================================================================
 
+
 def test_L1_envelope_task_id_matches_canonical():
     task = build_canonical_task(
         goal="open camera",
@@ -421,6 +449,7 @@ def test_L2_adapt_then_project_task_ids_match():
 # ===========================================================================
 # M) Legacy dict shapes routed through adapt_to_canonical_task
 # ===========================================================================
+
 
 def test_M1_minimal_empty_dict_still_produces_canonical():
     task = adapt_to_canonical_task({})
@@ -456,6 +485,7 @@ def test_M3_skill_invocation_dict_produces_canonical():
 # N) CanonicalTask registered in runtime after adapt_to_canonical_task
 # ===========================================================================
 
+
 def test_N1_canonical_task_registered_after_adapt():
     task = adapt_to_canonical_task(
         {"tool_name": "ping", "args": {}},
@@ -468,10 +498,7 @@ def test_N1_canonical_task_registered_after_adapt():
 
 
 def test_N2_multiple_adapts_all_registered():
-    tasks = [
-        adapt_to_canonical_task({"tool_name": f"tool_{i}"}, origin=TaskOrigin.SCHEDULER)
-        for i in range(3)
-    ]
+    tasks = [adapt_to_canonical_task({"tool_name": f"tool_{i}"}, origin=TaskOrigin.SCHEDULER) for i in range(3)]
     runtime = get_canonical_task_runtime()
     for task in tasks:
         assert runtime.get_by_task_id(task.identity.task_id) is not None
@@ -480,6 +507,7 @@ def test_N2_multiple_adapts_all_registered():
 # ===========================================================================
 # O) CanonicalTask passthrough — adapt(canonical_task) is a no-op
 # ===========================================================================
+
 
 def test_O1_canonical_task_passthrough_returns_same():
     original = build_canonical_task(
@@ -508,6 +536,7 @@ def test_O2_canonical_task_passthrough_logged_as_passthrough():
 # ===========================================================================
 # P) Adaptation log records each ingress call
 # ===========================================================================
+
 
 def test_P1_adaptation_log_grows_on_each_call():
     initial = len(get_adaptation_log())

@@ -41,10 +41,6 @@ import json
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Imports under test
-# ---------------------------------------------------------------------------
-
 from contracts.distributed_subject_contract_v1 import (
     CONTRACT_FIELD_LABEL_IS_EXPLICIT_POLICY,
     DISTRIBUTED_SUBJECT_CONTRACT_V1_FIELDS,
@@ -61,7 +57,6 @@ from contracts.distributed_subject_contract_v1 import (
     get_fields_by_dimension,
     get_fields_by_label,
 )
-
 from contracts.participant_lifecycle_schema import (
     PARTICIPANT_LIFECYCLE_SCHEMA_SENTINEL,
     PARTICIPANT_ROLE_IS_ASSIGNED_BY_CENTER,
@@ -76,6 +71,10 @@ from contracts.participant_lifecycle_schema import (
     build_participant_record,
     get_allowed_transitions,
 )
+
+# ---------------------------------------------------------------------------
+# Imports under test
+# ---------------------------------------------------------------------------
 
 
 # ===========================================================================
@@ -381,10 +380,7 @@ class TestTransitionsTable:
 
     def test_L4_attach_path_present(self):
         """UNREGISTERED → ATTACHING → ATTACHED path must exist."""
-        triggers = {
-            (t.from_state, t.to_state): t.trigger
-            for t in PARTICIPANT_STATE_TRANSITIONS
-        }
+        triggers = {(t.from_state, t.to_state): t.trigger for t in PARTICIPANT_STATE_TRANSITIONS}
         assert (
             ParticipantLifecycleState.UNREGISTERED,
             ParticipantLifecycleState.ATTACHING,
@@ -446,31 +442,23 @@ class TestParticipantRecordTransitions:
         assert r3.state == ParticipantLifecycleState.ATTACHED
 
     def test_N3_attached_to_dispatched(self):
-        r = build_participant_record(
-            "p1", "d1", state=ParticipantLifecycleState.ATTACHED
-        )
+        r = build_participant_record("p1", "d1", state=ParticipantLifecycleState.ATTACHED)
         r2 = r.apply_transition(ParticipantTransitionTrigger.DISPATCH_ISSUED)
         assert r2.state == ParticipantLifecycleState.DISPATCHED
 
     def test_N4_executing_to_waiting_result(self):
-        r = build_participant_record(
-            "p1", "d1", state=ParticipantLifecycleState.EXECUTING
-        )
+        r = build_participant_record("p1", "d1", state=ParticipantLifecycleState.EXECUTING)
         r2 = r.apply_transition(ParticipantTransitionTrigger.EXECUTION_COMPLETED)
         assert r2.state == ParticipantLifecycleState.WAITING_RESULT
 
     def test_N5_original_record_not_mutated(self):
-        r = build_participant_record(
-            "p1", "d1", state=ParticipantLifecycleState.ATTACHED
-        )
+        r = build_participant_record("p1", "d1", state=ParticipantLifecycleState.ATTACHED)
         original_state = r.state
         r.apply_transition(ParticipantTransitionTrigger.DISPATCH_ISSUED)
         assert r.state == original_state, "apply_transition must not mutate the original"
 
     def test_N6_detached_to_attached_on_reconnect(self):
-        r = build_participant_record(
-            "p1", "d1", state=ParticipantLifecycleState.DETACHED
-        )
+        r = build_participant_record("p1", "d1", state=ParticipantLifecycleState.DETACHED)
         r2 = r.apply_transition(ParticipantTransitionTrigger.RECONNECT_SUCCEEDED)
         assert r2.state == ParticipantLifecycleState.ATTACHED
 
@@ -487,17 +475,13 @@ class TestParticipantRecordDisallowedTransitions:
             r.apply_transition(ParticipantTransitionTrigger.DISPATCH_ISSUED)
 
     def test_O2_terminal_cannot_transition(self):
-        r = build_participant_record(
-            "p1", "d1", state=ParticipantLifecycleState.TERMINAL
-        )
+        r = build_participant_record("p1", "d1", state=ParticipantLifecycleState.TERMINAL)
         with pytest.raises(ValueError):
             r.apply_transition(ParticipantTransitionTrigger.ATTACH_SUCCESS)
 
     def test_O3_executing_cannot_directly_reach_result_accepted(self):
         """executing → result_accepted is not a direct transition."""
-        r = build_participant_record(
-            "p1", "d1", state=ParticipantLifecycleState.EXECUTING
-        )
+        r = build_participant_record("p1", "d1", state=ParticipantLifecycleState.EXECUTING)
         with pytest.raises(ValueError):
             r.apply_transition(ParticipantTransitionTrigger.RESULT_ACCEPTED_BY_CENTER)
 
@@ -518,7 +502,8 @@ class TestBuildParticipantRecord:
 
     def test_P2_custom_role_and_state(self):
         r = build_participant_record(
-            "p3", "d3",
+            "p3",
+            "d3",
             role=ParticipantRole.FALLBACK,
             state=ParticipantLifecycleState.ATTACHED,
         )
@@ -651,11 +636,17 @@ class TestContractsInitReexports:
 class TestSentinelConstants:
     def test_T1_distributed_subject_sentinel_non_empty(self):
         assert DISTRIBUTED_SUBJECT_CONTRACT_V1_SENTINEL
-        assert "v1" in DISTRIBUTED_SUBJECT_CONTRACT_V1_SENTINEL.lower() or "contracts" in DISTRIBUTED_SUBJECT_CONTRACT_V1_SENTINEL
+        assert (
+            "v1" in DISTRIBUTED_SUBJECT_CONTRACT_V1_SENTINEL.lower()
+            or "contracts" in DISTRIBUTED_SUBJECT_CONTRACT_V1_SENTINEL
+        )
 
     def test_T2_lifecycle_governed_by_center_sentinel(self):
         assert PARTICIPANT_LIFECYCLE_IS_GOVERNED_BY_CENTER
-        assert "V2" in PARTICIPANT_LIFECYCLE_IS_GOVERNED_BY_CENTER or "canonical" in PARTICIPANT_LIFECYCLE_IS_GOVERNED_BY_CENTER
+        assert (
+            "V2" in PARTICIPANT_LIFECYCLE_IS_GOVERNED_BY_CENTER
+            or "canonical" in PARTICIPANT_LIFECYCLE_IS_GOVERNED_BY_CENTER
+        )
 
     def test_T3_evidence_not_canonical_truth_sentinel(self):
         assert SUBJECT_EVIDENCE_IS_NOT_CANONICAL_TRUTH

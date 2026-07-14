@@ -14,14 +14,14 @@
 日期：2026-02-06
 """
 
-import json
-import uuid
-import time
 import asyncio
+import json
 import logging
-from typing import Dict, List, Optional, Any, Callable
+import time
+import uuid
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger("NodeProtocol")
 
@@ -30,8 +30,10 @@ logger = logging.getLogger("NodeProtocol")
 # 消息类型
 # ============================================================================
 
+
 class MessageType(Enum):
     """消息类型"""
+
     # 请求/响应
     REQUEST = "request"
     RESPONSE = "response"
@@ -57,6 +59,7 @@ class MessageType(Enum):
 
 class MessagePriority(Enum):
     """消息优先级"""
+
     LOW = 0
     NORMAL = 1
     HIGH = 2
@@ -67,9 +70,11 @@ class MessagePriority(Enum):
 # 消息定义
 # ============================================================================
 
+
 @dataclass
 class MessageHeader:
     """消息头"""
+
     message_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     message_type: MessageType = MessageType.REQUEST
     timestamp: float = field(default_factory=time.time)
@@ -88,11 +93,11 @@ class MessageHeader:
             "target_node": self.target_node,
             "correlation_id": self.correlation_id,
             "priority": self.priority.value,
-            "ttl": self.ttl
+            "ttl": self.ttl,
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'MessageHeader':
+    def from_dict(cls, data: Dict[str, Any]) -> "MessageHeader":
         return cls(
             message_id=data.get("message_id", str(uuid.uuid4())),
             message_type=MessageType(data.get("message_type", "request")),
@@ -101,13 +106,14 @@ class MessageHeader:
             target_node=data.get("target_node", ""),
             correlation_id=data.get("correlation_id"),
             priority=MessagePriority(data.get("priority", 1)),
-            ttl=data.get("ttl", 30)
+            ttl=data.get("ttl", 30),
         )
 
 
 @dataclass
 class Message:
     """标准消息"""
+
     header: MessageHeader
     action: str = ""
     payload: Dict[str, Any] = field(default_factory=dict)
@@ -118,23 +124,23 @@ class Message:
             "header": self.header.to_dict(),
             "action": self.action,
             "payload": self.payload,
-            "metadata": self.metadata
+            "metadata": self.metadata,
         }
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), ensure_ascii=False)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Message':
+    def from_dict(cls, data: Dict[str, Any]) -> "Message":
         return cls(
             header=MessageHeader.from_dict(data.get("header", {})),
             action=data.get("action", ""),
             payload=data.get("payload", {}),
-            metadata=data.get("metadata", {})
+            metadata=data.get("metadata", {}),
         )
 
     @classmethod
-    def from_json(cls, json_str: str) -> 'Message':
+    def from_json(cls, json_str: str) -> "Message":
         return cls.from_dict(json.loads(json_str))
 
     def is_expired(self) -> bool:
@@ -146,6 +152,7 @@ class Message:
 # 请求/响应消息
 # ============================================================================
 
+
 @dataclass
 class Request(Message):
     """请求消息"""
@@ -154,24 +161,28 @@ class Request(Message):
         self.header.message_type = MessageType.REQUEST
 
     @classmethod
-    def create(cls, source: str, target: str, action: str,
-               params: Dict[str, Any] = None, priority: MessagePriority = MessagePriority.NORMAL) -> 'Request':
+    def create(
+        cls,
+        source: str,
+        target: str,
+        action: str,
+        params: Dict[str, Any] = None,
+        priority: MessagePriority = MessagePriority.NORMAL,
+    ) -> "Request":
         """创建请求"""
         return cls(
             header=MessageHeader(
-                source_node=source,
-                target_node=target,
-                message_type=MessageType.REQUEST,
-                priority=priority
+                source_node=source, target_node=target, message_type=MessageType.REQUEST, priority=priority
             ),
             action=action,
-            payload=params or {}
+            payload=params or {},
         )
 
 
 @dataclass
 class Response(Message):
     """响应消息"""
+
     success: bool = True
     error: Optional[str] = None
 
@@ -185,20 +196,21 @@ class Response(Message):
         return data
 
     @classmethod
-    def from_request(cls, request: Request, success: bool = True,
-                     data: Dict[str, Any] = None, error: str = None) -> 'Response':
+    def from_request(
+        cls, request: Request, success: bool = True, data: Dict[str, Any] = None, error: str = None
+    ) -> "Response":
         """从请求创建响应"""
         return cls(
             header=MessageHeader(
                 source_node=request.header.target_node,
                 target_node=request.header.source_node,
                 message_type=MessageType.RESPONSE,
-                correlation_id=request.header.message_id
+                correlation_id=request.header.message_id,
             ),
             action=request.action,
             payload=data or {},
             success=success,
-            error=error
+            error=error,
         )
 
 
@@ -206,9 +218,11 @@ class Response(Message):
 # 事件消息
 # ============================================================================
 
+
 @dataclass
 class Event(Message):
     """事件消息"""
+
     event_type: str = ""
 
     def __post_init__(self):
@@ -220,16 +234,12 @@ class Event(Message):
         return data
 
     @classmethod
-    def create(cls, source: str, event_type: str,
-               data: Dict[str, Any] = None) -> 'Event':
+    def create(cls, source: str, event_type: str, data: Dict[str, Any] = None) -> "Event":
         """创建事件"""
         return cls(
-            header=MessageHeader(
-                source_node=source,
-                message_type=MessageType.EVENT
-            ),
+            header=MessageHeader(source_node=source, message_type=MessageType.EVENT),
             event_type=event_type,
-            payload=data or {}
+            payload=data or {},
         )
 
 
@@ -237,9 +247,11 @@ class Event(Message):
 # 流式消息
 # ============================================================================
 
+
 @dataclass
 class StreamMessage(Message):
     """流式消息"""
+
     stream_id: str = ""
     sequence: int = 0
     is_final: bool = False
@@ -269,12 +281,10 @@ class StreamSession:
         self.started = True
         return StreamMessage(
             header=MessageHeader(
-                source_node=self.source,
-                target_node=self.target,
-                message_type=MessageType.STREAM_START
+                source_node=self.source, target_node=self.target, message_type=MessageType.STREAM_START
             ),
             stream_id=self.stream_id,
-            sequence=0
+            sequence=0,
         )
 
     def send(self, data: Any) -> StreamMessage:
@@ -282,13 +292,11 @@ class StreamSession:
         self.sequence += 1
         return StreamMessage(
             header=MessageHeader(
-                source_node=self.source,
-                target_node=self.target,
-                message_type=MessageType.STREAM_DATA
+                source_node=self.source, target_node=self.target, message_type=MessageType.STREAM_DATA
             ),
             stream_id=self.stream_id,
             sequence=self.sequence,
-            payload={"data": data}
+            payload={"data": data},
         )
 
     def end(self, final_data: Any = None) -> StreamMessage:
@@ -296,21 +304,18 @@ class StreamSession:
         self.ended = True
         self.sequence += 1
         return StreamMessage(
-            header=MessageHeader(
-                source_node=self.source,
-                target_node=self.target,
-                message_type=MessageType.STREAM_END
-            ),
+            header=MessageHeader(source_node=self.source, target_node=self.target, message_type=MessageType.STREAM_END),
             stream_id=self.stream_id,
             sequence=self.sequence,
             payload={"data": final_data} if final_data else {},
-            is_final=True
+            is_final=True,
         )
 
 
 # ============================================================================
 # 消息路由器
 # ============================================================================
+
 
 class MessageRouter:
     """消息路由器"""
@@ -356,11 +361,7 @@ class MessageRouter:
         handlers = self.handlers.get(action, [])
 
         if not handlers:
-            return Response.from_request(
-                request,
-                success=False,
-                error=f"未找到处理器: {action}"
-            )
+            return Response.from_request(request, success=False, error=f"未找到处理器: {action}")
 
         try:
             # 调用第一个处理器
@@ -408,9 +409,7 @@ class MessageRouter:
 
             if message.header.message_type == MessageType.STREAM_START:
                 self.streams[stream_id] = StreamSession(
-                    stream_id,
-                    message.header.source_node,
-                    message.header.target_node
+                    stream_id, message.header.source_node, message.header.target_node
                 )
             elif message.header.message_type == MessageType.STREAM_DATA:
                 if stream_id in self.streams:
@@ -426,9 +425,9 @@ class MessageRouter:
                 source_node=message.header.target_node,
                 target_node=message.header.source_node,
                 message_type=MessageType.PONG,
-                correlation_id=message.header.message_id
+                correlation_id=message.header.message_id,
             ),
-            payload={"timestamp": time.time()}
+            payload={"timestamp": time.time()},
         )
 
     async def send_request(self, request: Request, timeout: float = 30.0) -> Response:
@@ -450,6 +449,7 @@ class MessageRouter:
 # 协议适配器
 # ============================================================================
 
+
 class ProtocolAdapter:
     """协议适配器 - 用于与外部系统通信"""
 
@@ -463,7 +463,7 @@ class ProtocolAdapter:
             "data": message.payload,
             "timestamp": int(message.header.timestamp * 1000),  # 毫秒
             "source": message.header.source_node,
-            "target": message.header.target_node
+            "target": message.header.target_node,
         }
 
     @staticmethod
@@ -475,10 +475,10 @@ class ProtocolAdapter:
                 message_type=MessageType(data.get("type", "request")),
                 timestamp=data.get("timestamp", time.time() * 1000) / 1000,
                 source_node=data.get("source", ""),
-                target_node=data.get("target", "")
+                target_node=data.get("target", ""),
             ),
             action=data.get("action", ""),
-            payload=data.get("data", {})
+            payload=data.get("data", {}),
         )
 
     @staticmethod
@@ -497,6 +497,7 @@ class ProtocolAdapter:
 # ============================================================================
 
 if __name__ == "__main__":
+
     async def test():
         router = MessageRouter()
 

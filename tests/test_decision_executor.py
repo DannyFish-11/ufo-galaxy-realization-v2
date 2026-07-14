@@ -43,10 +43,10 @@ from core.execution.decision_executor import (
 )
 from core.system_api.platform_api import AppLaunchResult, NoOpSystemAPI
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_continuum(action_level: str = "observe", execution_target: Optional[str] = None) -> Dict[str, Any]:
     state: Dict[str, Any] = {
@@ -83,6 +83,7 @@ def _make_executor(
 # A) _extract_action_level
 # ---------------------------------------------------------------------------
 
+
 class TestExtractActionLevel:
     def test_none_returns_observe(self):
         assert _extract_action_level(None) == "observe"
@@ -113,6 +114,7 @@ class TestExtractActionLevel:
 # B) _extract_execution_target
 # ---------------------------------------------------------------------------
 
+
 class TestExtractExecutionTarget:
     def test_none_returns_none(self):
         assert _extract_execution_target(None) is None
@@ -137,6 +139,7 @@ class TestExtractExecutionTarget:
 # C) PolicyGate construction and is_enabled
 # ---------------------------------------------------------------------------
 
+
 class TestPolicyGateConstruction:
     def test_default_disabled(self):
         pg = PolicyGate()
@@ -154,6 +157,7 @@ class TestPolicyGateConstruction:
 # ---------------------------------------------------------------------------
 # D) PolicyGate.allows
 # ---------------------------------------------------------------------------
+
 
 class TestPolicyGateAllows:
     def test_disabled_always_denies(self):
@@ -185,6 +189,7 @@ class TestPolicyGateAllows:
 # E) PolicyGate.check_action_level
 # ---------------------------------------------------------------------------
 
+
 class TestPolicyGateCheckActionLevel:
     def test_observe_false(self):
         pg = PolicyGate()
@@ -204,6 +209,7 @@ class TestPolicyGateCheckActionLevel:
 # F) ExecutionResult defaults
 # ---------------------------------------------------------------------------
 
+
 class TestExecutionResultDefaults:
     def test_defaults(self):
         r = ExecutionResult()
@@ -217,6 +223,7 @@ class TestExecutionResultDefaults:
 # ---------------------------------------------------------------------------
 # G) observe / hint → noop fast path
 # ---------------------------------------------------------------------------
+
 
 class TestNoopFastPath:
     @pytest.mark.parametrize("level", ["observe", "hint"])
@@ -237,6 +244,7 @@ class TestNoopFastPath:
 # H) Disabled (enable_system_actions=false)
 # ---------------------------------------------------------------------------
 
+
 class TestDisabledExecution:
     def test_assist_disabled(self):
         executor = _make_executor(enabled=False)
@@ -255,6 +263,7 @@ class TestDisabledExecution:
 # I) assist: no target configured → noop
 # ---------------------------------------------------------------------------
 
+
 class TestAssistNoTarget:
     def test_no_assist_app_configured(self):
         api = NoOpSystemAPI()
@@ -267,6 +276,7 @@ class TestAssistNoTarget:
 # ---------------------------------------------------------------------------
 # J) assist: target configured, focus succeeds
 # ---------------------------------------------------------------------------
+
 
 class TestAssistFocusSucceeds:
     def test_focus_window_called(self):
@@ -289,6 +299,7 @@ class TestAssistFocusSucceeds:
 # K) assist: focus fails, launch triggered
 # ---------------------------------------------------------------------------
 
+
 class TestAssistFocusFallbackToLaunch:
     def test_launch_called_when_focus_fails(self):
         api = MagicMock()
@@ -310,6 +321,7 @@ class TestAssistFocusFallbackToLaunch:
 # L) execute: no target → noop
 # ---------------------------------------------------------------------------
 
+
 class TestExecuteNoTarget:
     def test_no_target_noop(self):
         api = MagicMock()
@@ -327,6 +339,7 @@ class TestExecuteNoTarget:
 # ---------------------------------------------------------------------------
 # M) execute: target not in allowlist → blocked
 # ---------------------------------------------------------------------------
+
 
 class TestExecuteNotAllowlisted:
     def test_blocked(self):
@@ -346,6 +359,7 @@ class TestExecuteNotAllowlisted:
 # ---------------------------------------------------------------------------
 # N) execute: allowlisted target → launched
 # ---------------------------------------------------------------------------
+
 
 class TestExecuteAllowlisted:
     def test_launched(self):
@@ -367,6 +381,7 @@ class TestExecuteAllowlisted:
 # O) Internal error is swallowed
 # ---------------------------------------------------------------------------
 
+
 class TestErrorIsolation:
     def test_exception_swallowed(self):
         executor = DecisionExecutor()
@@ -380,6 +395,7 @@ class TestErrorIsolation:
 # ---------------------------------------------------------------------------
 # P) _get_policy caches the PolicyGate
 # ---------------------------------------------------------------------------
+
 
 class TestPolicyCache:
     def test_same_instance_returned(self):
@@ -401,6 +417,7 @@ class TestPolicyCache:
 # ---------------------------------------------------------------------------
 # Q) entry_mode gating (PR-2)
 # ---------------------------------------------------------------------------
+
 
 class TestEntryModeGating:
     """Validate mode-aware execution gating introduced in PR-2."""
@@ -489,6 +506,7 @@ class TestEntryModeGating:
     def test_cross_device_skipped_log_contains_structured_fields(self, caplog):
         """Verify structured log is emitted when cross_device blocks execution."""
         import logging
+
         executor = _make_executor(enabled=True, allowlist=["notepad.exe"])
         state = _make_continuum(action_level="execute", execution_target="notepad.exe")
         state["metadata"]["trace_id"] = "trace-abc-123"
@@ -519,6 +537,7 @@ class TestEntryModeGating:
 # ---------------------------------------------------------------------------
 # R) _extract_trace_id helper
 # ---------------------------------------------------------------------------
+
 
 class TestExtractTraceId:
     def test_none_returns_empty(self):

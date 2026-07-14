@@ -27,10 +27,10 @@ from core.continuum.metrics import ContinuumMetrics
 from core.continuum.orchestrator import ContinuumOrchestrator
 from core.continuum.types import ContinuumPhase, ContinuumState
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_cfg(**flag_kwargs) -> ContinuumConfig:
     return ContinuumConfig(flags=FeatureFlags(**flag_kwargs))
@@ -65,7 +65,9 @@ class TestTimeBudgetGuardrail:
         with patch("core.continuum.orchestrator.get_continuum_metrics", return_value=metrics):
             orch = ContinuumOrchestrator(config=cfg)
 
-        with patch.object(orch, "_run_pipeline", side_effect=lambda **kw: (time.sleep(sleep_s), original_pipeline(orch, **kw))[1]):
+        with patch.object(
+            orch, "_run_pipeline", side_effect=lambda **kw: (time.sleep(sleep_s), original_pipeline(orch, **kw))[1]
+        ):
             result = orch.run(trace_id="budget-test")
 
         return result, metrics
@@ -129,6 +131,7 @@ class TestTimeBudgetGuardrail:
     def test_budget_exceeded_emits_warning_log(self, caplog):
         """Budget exceeded path emits a WARNING log entry."""
         import logging
+
         metrics = ContinuumMetrics()
         cfg = _make_cfg(max_tick_ms=0.001)
         with patch("core.continuum.orchestrator.get_continuum_metrics", return_value=metrics):
@@ -237,6 +240,7 @@ class TestSamplingRateGuardrail:
     def test_sampling_debug_log_when_skipped(self, caplog):
         """sampling_rate=0 with debug=True emits a SKIPPED log entry."""
         import logging
+
         metrics = ContinuumMetrics()
         cfg = _make_cfg(sampling_rate=0.0, debug=True)
         with patch("core.continuum.orchestrator.get_continuum_metrics", return_value=metrics):

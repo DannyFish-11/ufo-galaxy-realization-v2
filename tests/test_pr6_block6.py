@@ -23,25 +23,27 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
 # ---------------------------------------------------------------------------
 
 
 def _reset_routers() -> None:
-    from core.unified.llm_router import reset_unified_llm_router, reset_routing_telemetry
+    from core.unified.llm_router import reset_routing_telemetry, reset_unified_llm_router
+
     reset_unified_llm_router()
     reset_routing_telemetry()
 
 
 def _reset_nodes() -> None:
     from core.nodes.node_fabric_registry import reset_node_fabric_registry
+
     reset_node_fabric_registry()
 
 
 def _reset_cap_registry() -> None:
     from core.agent.capability_registry import CapabilityRegistry
+
     CapabilityRegistry._instance = None
 
 
@@ -53,17 +55,20 @@ def _reset_cap_registry() -> None:
 class TestLLMRoutingPolicy:
     def test_load_policy_returns_dict(self) -> None:
         from core.unified.llm_router import _load_routing_policy
+
         policy = _load_routing_policy()
         assert isinstance(policy, dict)
 
     def test_policy_has_task_routing_section(self) -> None:
         from core.unified.llm_router import _load_routing_policy
+
         policy = _load_routing_policy()
         if policy:  # may be empty if yaml not installed
             assert "task_routing" in policy
 
     def test_policy_general_has_priorities(self) -> None:
         from core.unified.llm_router import _load_routing_policy
+
         policy = _load_routing_policy()
         if not policy:
             pytest.skip("Policy YAML not available")
@@ -73,6 +78,7 @@ class TestLLMRoutingPolicy:
 
     def test_policy_has_global_fallback(self) -> None:
         from core.unified.llm_router import _load_routing_policy
+
         policy = _load_routing_policy()
         if not policy:
             pytest.skip("Policy YAML not available")
@@ -81,6 +87,7 @@ class TestLLMRoutingPolicy:
 
     def test_policy_has_global_slo(self) -> None:
         from core.unified.llm_router import _load_routing_policy
+
         policy = _load_routing_policy()
         if not policy:
             pytest.skip("Policy YAML not available")
@@ -90,13 +97,20 @@ class TestLLMRoutingPolicy:
 
     def test_all_task_types_have_priorities(self) -> None:
         from core.unified.llm_router import _load_routing_policy
+
         policy = _load_routing_policy()
         if not policy:
             pytest.skip("Policy YAML not available")
         task_routing = policy.get("task_routing", {})
         expected_types = [
-            "reasoning", "fast_response", "coding", "creative",
-            "analysis", "planning", "agent_control", "general",
+            "reasoning",
+            "fast_response",
+            "coding",
+            "creative",
+            "analysis",
+            "planning",
+            "agent_control",
+            "general",
         ]
         for t in expected_types:
             assert t in task_routing, f"Missing task type: {t}"
@@ -112,10 +126,12 @@ class TestLLMRoutingPolicy:
 class TestRoutingTelemetry:
     def setup_method(self) -> None:
         from core.unified.llm_router import reset_routing_telemetry
+
         reset_routing_telemetry()
 
     def test_record_and_success_rate(self) -> None:
         from core.unified.llm_router import get_routing_telemetry
+
         tel = get_routing_telemetry()
 
         tel.record("openai", success=True, latency_ms=200)
@@ -128,6 +144,7 @@ class TestRoutingTelemetry:
 
     def test_avg_latency(self) -> None:
         from core.unified.llm_router import get_routing_telemetry
+
         tel = get_routing_telemetry()
 
         tel.record("anthropic", success=True, latency_ms=100)
@@ -138,6 +155,7 @@ class TestRoutingTelemetry:
 
     def test_fallback_rate(self) -> None:
         from core.unified.llm_router import get_routing_telemetry
+
         tel = get_routing_telemetry()
 
         tel.record("deepseek", success=True, latency_ms=100, is_fallback=True)
@@ -148,6 +166,7 @@ class TestRoutingTelemetry:
 
     def test_cost_tracking(self) -> None:
         from core.unified.llm_router import get_routing_telemetry
+
         tel = get_routing_telemetry()
 
         tel.record("openai", success=True, latency_ms=200, cost_usd=0.001)
@@ -158,6 +177,7 @@ class TestRoutingTelemetry:
 
     def test_multiple_providers_isolated(self) -> None:
         from core.unified.llm_router import get_routing_telemetry
+
         tel = get_routing_telemetry()
 
         tel.record("openai", success=True, latency_ms=100)
@@ -169,6 +189,7 @@ class TestRoutingTelemetry:
 
     def test_slo_violation_latency(self) -> None:
         from core.unified.llm_router import get_routing_telemetry
+
         tel = get_routing_telemetry()
 
         for _ in range(5):
@@ -179,6 +200,7 @@ class TestRoutingTelemetry:
 
     def test_slo_violation_success_rate(self) -> None:
         from core.unified.llm_router import get_routing_telemetry
+
         tel = get_routing_telemetry()
 
         for _ in range(5):
@@ -189,6 +211,7 @@ class TestRoutingTelemetry:
 
     def test_no_slo_violation_fresh_provider(self) -> None:
         from core.unified.llm_router import get_routing_telemetry
+
         tel = get_routing_telemetry()
         slo = {"max_latency_ms": 30000, "min_success_rate": 0.90}
         # No calls → not violated
@@ -216,28 +239,33 @@ class TestResolveProviderOrder:
 
     def setup_method(self) -> None:
         from core.unified.llm_router import reset_routing_telemetry
+
         reset_routing_telemetry()
 
     def test_preferred_provider_moved_to_front(self) -> None:
         from core.unified.llm_router import _resolve_provider_order, get_routing_telemetry
+
         tel = get_routing_telemetry()
         order, _ = _resolve_provider_order("general", self._policy(), tel, preferred_provider="anthropic")
         assert order[0] == "anthropic"
 
     def test_fallback_providers_appended(self) -> None:
         from core.unified.llm_router import _resolve_provider_order, get_routing_telemetry
+
         tel = get_routing_telemetry()
         order, _ = _resolve_provider_order("general", self._policy(), tel)
         assert "deepseek" in order
 
     def test_unknown_task_type_uses_global_fallback(self) -> None:
         from core.unified.llm_router import _resolve_provider_order, get_routing_telemetry
+
         tel = get_routing_telemetry()
         order, _ = _resolve_provider_order("nonexistent_task", self._policy(), tel)
         assert "deepseek" in order or "openai" in order
 
     def test_slo_violated_provider_moved_to_back(self) -> None:
         from core.unified.llm_router import _resolve_provider_order, get_routing_telemetry
+
         tel = get_routing_telemetry()
 
         # Make "openai" violate SLO
@@ -269,14 +297,17 @@ class TestCheckCostBudget:
 
     def test_within_budget(self) -> None:
         from core.unified.llm_router import _check_cost_budget
+
         assert _check_cost_budget(0.10, "reasoning", self._policy()) is True
 
     def test_exceeds_budget(self) -> None:
         from core.unified.llm_router import _check_cost_budget
+
         assert _check_cost_budget(0.20, "reasoning", self._policy()) is False
 
     def test_uses_global_budget_for_unknown_task(self) -> None:
         from core.unified.llm_router import _check_cost_budget
+
         assert _check_cost_budget(0.05, "unknown_task", self._policy()) is True
         assert _check_cost_budget(0.10, "unknown_task", self._policy()) is False
 
@@ -292,6 +323,7 @@ class TestUnifiedLLMRouterStatus:
 
     def test_get_status_no_backend(self) -> None:
         from core.unified.llm_router import UnifiedLLMRouter
+
         router = UnifiedLLMRouter()
         router._backend = None
         status = router.get_status()
@@ -300,25 +332,28 @@ class TestUnifiedLLMRouterStatus:
 
     def test_get_telemetry_returns_dict(self) -> None:
         from core.unified.llm_router import UnifiedLLMRouter
+
         router = UnifiedLLMRouter()
         tel = router.get_telemetry()
         assert isinstance(tel, dict)
 
     def test_get_policy_returns_dict(self) -> None:
         from core.unified.llm_router import UnifiedLLMRouter
+
         router = UnifiedLLMRouter()
         policy = router.get_policy()
         assert isinstance(policy, dict)
 
     def test_reload_policy(self) -> None:
         from core.unified.llm_router import UnifiedLLMRouter
+
         router = UnifiedLLMRouter()
         router.reload_policy()  # Should not raise
         assert isinstance(router.get_policy(), dict)
 
     def test_no_backend_raises_on_chat(self) -> None:
-        from core.unified.llm_router import UnifiedLLMRouter
         from core.unified.exceptions import NoAvailableProviderError
+        from core.unified.llm_router import UnifiedLLMRouter
         from core.unified.models import LLMRequest, LLMTaskType
 
         router = UnifiedLLMRouter()
@@ -337,12 +372,14 @@ class TestUnifiedLLMRouterStatus:
 
         router = UnifiedLLMRouter()
         mock_backend = MagicMock()
-        mock_backend.chat = AsyncMock(return_value={
-            "content": "hello world",
-            "provider": "openai",
-            "model": "gpt-4o",
-            "usage": {"total_tokens": 50},
-        })
+        mock_backend.chat = AsyncMock(
+            return_value={
+                "content": "hello world",
+                "provider": "openai",
+                "model": "gpt-4o",
+                "usage": {"total_tokens": 50},
+            }
+        )
         router._backend = mock_backend
 
         request = LLMRequest(
@@ -365,12 +402,14 @@ class TestUnifiedLLMRouterStatus:
 
         router = UnifiedLLMRouter()
         mock_backend = MagicMock()
-        mock_backend.chat = AsyncMock(return_value={
-            "content": "ok",
-            "provider": "anthropic",
-            "model": "claude-3",
-            "usage": {"total_tokens": 100},
-        })
+        mock_backend.chat = AsyncMock(
+            return_value={
+                "content": "ok",
+                "provider": "anthropic",
+                "model": "claude-3",
+                "usage": {"total_tokens": 100},
+            }
+        )
         router._backend = mock_backend
 
         request = LLMRequest(
@@ -390,8 +429,8 @@ class TestUnifiedLLMRouterStatus:
         assert metrics["anthropic"]["success_rate"] == 1.0
 
     def test_chat_all_providers_fail(self) -> None:
-        from core.unified.llm_router import UnifiedLLMRouter
         from core.unified.exceptions import LLMProviderError
+        from core.unified.llm_router import UnifiedLLMRouter
         from core.unified.models import LLMRequest, LLMTaskType
 
         router = UnifiedLLMRouter()
@@ -423,12 +462,14 @@ class TestNodeFabricRegistry:
 
     def test_singleton_identity(self) -> None:
         from core.nodes.node_fabric_registry import get_node_fabric_registry
+
         r1 = get_node_fabric_registry()
         r2 = get_node_fabric_registry()
         assert r1 is r2
 
     def test_register_and_get(self) -> None:
-        from core.nodes.node_fabric_registry import get_node_fabric_registry, NodeInfo, NodeRole
+        from core.nodes.node_fabric_registry import NodeInfo, NodeRole, get_node_fabric_registry
+
         fab = get_node_fabric_registry()
         n = NodeInfo(node_id="pr6-node-01", role=NodeRole.WORKER)
         fab.register(n)
@@ -436,16 +477,19 @@ class TestNodeFabricRegistry:
 
     def test_unregister_returns_false_for_unknown(self) -> None:
         from core.nodes.node_fabric_registry import get_node_fabric_registry
+
         fab = get_node_fabric_registry()
         assert fab.unregister("ghost") is False
 
     def test_heartbeat_returns_false_for_unknown(self) -> None:
         from core.nodes.node_fabric_registry import get_node_fabric_registry
+
         fab = get_node_fabric_registry()
         assert fab.heartbeat("ghost") is False
 
     def test_list_by_role(self) -> None:
-        from core.nodes.node_fabric_registry import get_node_fabric_registry, NodeInfo, NodeRole
+        from core.nodes.node_fabric_registry import NodeInfo, NodeRole, get_node_fabric_registry
+
         fab = get_node_fabric_registry()
         fab.register(NodeInfo(node_id="ag-01", role=NodeRole.AGENT))
         fab.register(NodeInfo(node_id="wk-01", role=NodeRole.WORKER))
@@ -454,14 +498,16 @@ class TestNodeFabricRegistry:
         assert all(n.role == NodeRole.AGENT for n in agents)
 
     def test_health_score_full_for_fresh_node(self) -> None:
-        from core.nodes.node_fabric_registry import get_node_fabric_registry, NodeInfo, NodeRole
+        from core.nodes.node_fabric_registry import NodeInfo, NodeRole, get_node_fabric_registry
+
         fab = get_node_fabric_registry()
         n = NodeInfo(node_id="fresh-01", role=NodeRole.WORKER)
         fab.register(n)
         assert fab.get("fresh-01").health_score() == 1.0  # type: ignore[union-attr]
 
     def test_health_score_zero_for_stale(self) -> None:
-        from core.nodes.node_fabric_registry import get_node_fabric_registry, NodeInfo, NodeRole
+        from core.nodes.node_fabric_registry import NodeInfo, NodeRole, get_node_fabric_registry
+
         fab = get_node_fabric_registry()
         n = NodeInfo(node_id="stale-01", role=NodeRole.WORKER)
         n.last_heartbeat = time.monotonic() - 9999
@@ -469,7 +515,8 @@ class TestNodeFabricRegistry:
         assert fab.get("stale-01").health_score() == 0.0  # type: ignore[union-attr]
 
     def test_list_healthy_excludes_stale(self) -> None:
-        from core.nodes.node_fabric_registry import get_node_fabric_registry, NodeInfo, NodeRole
+        from core.nodes.node_fabric_registry import NodeInfo, NodeRole, get_node_fabric_registry
+
         fab = get_node_fabric_registry()
         fresh = NodeInfo(node_id="healthy-01", role=NodeRole.WORKER)
         stale = NodeInfo(node_id="stale-h-01", role=NodeRole.WORKER)
@@ -483,7 +530,8 @@ class TestNodeFabricRegistry:
         assert "stale-h-01" not in ids
 
     def test_get_metrics(self) -> None:
-        from core.nodes.node_fabric_registry import get_node_fabric_registry, NodeInfo, NodeRole, NodeStatus
+        from core.nodes.node_fabric_registry import NodeInfo, NodeRole, NodeStatus, get_node_fabric_registry
+
         fab = get_node_fabric_registry()
         for i in range(5):
             fab.register(NodeInfo(node_id=f"m-node-{i}", role=NodeRole.WORKER, status=NodeStatus.HEALTHY))
@@ -504,7 +552,8 @@ class TestCapabilityRegistryInjectItem:
         _reset_cap_registry()
 
     def test_inject_node_item(self) -> None:
-        from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
+        from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
+
         reg = CapabilityRegistry.get_instance()
         item = CapabilityItem(
             name="node__test-inject__cap1",
@@ -518,7 +567,8 @@ class TestCapabilityRegistryInjectItem:
         assert found.source == "node"
 
     def test_inject_item_empty_name_skipped(self) -> None:
-        from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
+        from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
+
         reg = CapabilityRegistry.get_instance()
         item = CapabilityItem(name="", description="no name", source="node", source_id="x")
         reg.inject_item(item)  # Should not raise
@@ -526,7 +576,8 @@ class TestCapabilityRegistryInjectItem:
         assert reg.get("") is None
 
     def test_list_tools_includes_injected_node_item(self) -> None:
-        from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
+        from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
+
         reg = CapabilityRegistry.get_instance()
         item = CapabilityItem(
             name="node__list-test__cap",
@@ -539,7 +590,8 @@ class TestCapabilityRegistryInjectItem:
         assert any(t.name == "node__list-test__cap" for t in tools)
 
     def test_stats_includes_node_source(self) -> None:
-        from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
+        from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
+
         reg = CapabilityRegistry.get_instance()
         item = CapabilityItem(
             name="node__stats-test__cap",

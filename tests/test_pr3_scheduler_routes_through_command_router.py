@@ -30,11 +30,11 @@ Validates:
 
 from __future__ import annotations
 
-import sys
-import os
-import json
-import unittest
 import asyncio
+import json
+import os
+import sys
+import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -111,6 +111,7 @@ class TestSchedulerSpineIngress(unittest.TestCase):
 
     def setUp(self):
         from core.execution_spine import reset_ingress_log
+
         reset_ingress_log()
 
     def _make_scheduler(self):
@@ -126,12 +127,15 @@ class TestSchedulerSpineIngress(unittest.TestCase):
 
     def test_08_send_to_device_records_ingress(self):
         from core.execution_spine import get_ingress_log
+
         sched = self._make_scheduler()
         # context has no ws_sender → falls back to queued path
-        _run(sched._exec_send_to_device(
-            {"device_id": "dev_test", "task_type": "screenshot"},
-            {},
-        ))
+        _run(
+            sched._exec_send_to_device(
+                {"device_id": "dev_test", "task_type": "screenshot"},
+                {},
+            )
+        )
         log = get_ingress_log()
         self.assertTrue(len(log) >= 1)
 
@@ -140,10 +144,12 @@ class TestSchedulerSpineIngress(unittest.TestCase):
         mock_router.route_envelope = AsyncMock(return_value={"success": True, "routed_via_spine": True})
         sched = self._make_scheduler()
         context = {"command_router": mock_router}
-        result_str = _run(sched._exec_send_to_device(
-            {"device_id": "dev_test", "task_type": "screenshot"},
-            context,
-        ))
+        result_str = _run(
+            sched._exec_send_to_device(
+                {"device_id": "dev_test", "task_type": "screenshot"},
+                context,
+            )
+        )
         result = json.loads(result_str)
         self.assertTrue(result.get("routed_via_spine") or result.get("success"))
         mock_router.route_envelope.assert_called_once()
@@ -159,10 +165,12 @@ class TestSchedulerSpineIngress(unittest.TestCase):
         context = {"ws_sender": fake_ws}
         # Ensure no command_router so we exercise WS path
         with patch("core.command_router.get_command_router", side_effect=ImportError("no router")):
-            result_str = _run(sched._exec_send_to_device(
-                {"device_id": "dev_ws", "task_type": "open_app"},
-                context,
-            ))
+            result_str = _run(
+                sched._exec_send_to_device(
+                    {"device_id": "dev_ws", "task_type": "open_app"},
+                    context,
+                )
+            )
         result = json.loads(result_str)
         self.assertEqual(ws_called.get("device_id"), "dev_ws")
 
@@ -170,10 +178,12 @@ class TestSchedulerSpineIngress(unittest.TestCase):
         sched = self._make_scheduler()
         # No ws_sender, no executor, no command_router
         with patch("core.command_router.get_command_router", side_effect=ImportError):
-            result_str = _run(sched._exec_send_to_device(
-                {"device_id": "dev_q", "task_type": "screenshot"},
-                {},
-            ))
+            result_str = _run(
+                sched._exec_send_to_device(
+                    {"device_id": "dev_q", "task_type": "screenshot"},
+                    {},
+                )
+            )
         result = json.loads(result_str)
         # Should be queued status or an error dict
         self.assertIn(result.get("status", result.get("error", "")), ["queued", ""])
@@ -182,32 +192,36 @@ class TestSchedulerSpineIngress(unittest.TestCase):
 
     def test_12_relay_records_ingress(self):
         from core.execution_spine import get_ingress_log
+
         sched = self._make_scheduler()
         with patch("core.proxy_relay.get_proxy_relay", side_effect=ImportError):
-            _run(sched._exec_relay(
-                {"source_device": "a", "target_device": "b", "payload": {}},
-                {},
-            ))
+            _run(
+                sched._exec_relay(
+                    {"source_device": "a", "target_device": "b", "payload": {}},
+                    {},
+                )
+            )
         log = get_ingress_log()
         self.assertTrue(len(log) >= 1)
 
     def test_13_mesh_send_records_ingress(self):
         from core.execution_spine import get_ingress_log
+
         sched = self._make_scheduler()
         with patch("core.mesh_coordinator.get_mesh_coordinator", side_effect=ImportError):
-            _run(sched._exec_mesh_send(
-                {"target_device": "dev_mesh", "payload": {}}
-            ))
+            _run(sched._exec_mesh_send({"target_device": "dev_mesh", "payload": {}}))
         log = get_ingress_log()
         self.assertTrue(len(log) >= 1)
 
     def test_14_send_to_device_result_json_decodable(self):
         sched = self._make_scheduler()
         with patch("core.command_router.get_command_router", side_effect=ImportError):
-            result_str = _run(sched._exec_send_to_device(
-                {"device_id": "dev_j", "task_type": "screenshot"},
-                {},
-            ))
+            result_str = _run(
+                sched._exec_send_to_device(
+                    {"device_id": "dev_j", "task_type": "screenshot"},
+                    {},
+                )
+            )
         result = json.loads(result_str)
         self.assertIsInstance(result, dict)
 
@@ -215,15 +229,18 @@ class TestSchedulerSpineIngress(unittest.TestCase):
         mock_router = MagicMock()
         mock_router.route_envelope = AsyncMock(return_value={"spine_result": "ok"})
         sched = self._make_scheduler()
-        result_str = _run(sched._exec_send_to_device(
-            {"device_id": "dev_r", "task_type": "click"},
-            {"command_router": mock_router},
-        ))
+        result_str = _run(
+            sched._exec_send_to_device(
+                {"device_id": "dev_r", "task_type": "click"},
+                {"command_router": mock_router},
+            )
+        )
         result = json.loads(result_str)
         self.assertEqual(result.get("spine_result"), "ok")
 
     def test_16_send_to_device_ingress_source_scheduler(self):
-        from core.execution_spine import get_ingress_log, ExecutionIngressSource
+        from core.execution_spine import ExecutionIngressSource, get_ingress_log
+
         sched = self._make_scheduler()
         with patch("core.command_router.get_command_router", side_effect=ImportError):
             _run(sched._exec_send_to_device({"device_id": "d", "task_type": "t"}, {}))
@@ -232,7 +249,8 @@ class TestSchedulerSpineIngress(unittest.TestCase):
         self.assertIn(ExecutionIngressSource.SCHEDULER, sources)
 
     def test_17_relay_ingress_source_scheduler(self):
-        from core.execution_spine import get_ingress_log, ExecutionIngressSource
+        from core.execution_spine import ExecutionIngressSource, get_ingress_log
+
         sched = self._make_scheduler()
         with patch("core.proxy_relay.get_proxy_relay", side_effect=ImportError):
             _run(sched._exec_relay({"source_device": "a", "target_device": "b"}, {}))
@@ -241,7 +259,8 @@ class TestSchedulerSpineIngress(unittest.TestCase):
         self.assertIn(ExecutionIngressSource.SCHEDULER, sources)
 
     def test_18_mesh_send_ingress_source_scheduler(self):
-        from core.execution_spine import get_ingress_log, ExecutionIngressSource
+        from core.execution_spine import ExecutionIngressSource, get_ingress_log
+
         sched = self._make_scheduler()
         with patch("core.mesh_coordinator.get_mesh_coordinator", side_effect=ImportError):
             _run(sched._exec_mesh_send({"target_device": "d", "payload": {}}))
@@ -251,6 +270,7 @@ class TestSchedulerSpineIngress(unittest.TestCase):
 
     def test_19_normalize_legacy_ingress_in_scheduler_context(self):
         from core.command_router import CommandRouter
+
         router = CommandRouter.__new__(CommandRouter)
         envelope = router.normalize_legacy_ingress(
             {"task_type": "screenshot", "device_id": "dev_1"},
@@ -261,13 +281,16 @@ class TestSchedulerSpineIngress(unittest.TestCase):
 
     def test_20_ingress_log_grows_with_multiple_calls(self):
         from core.execution_spine import get_ingress_log
+
         sched = self._make_scheduler()
         with patch("core.command_router.get_command_router", side_effect=ImportError):
             for i in range(3):
-                _run(sched._exec_send_to_device(
-                    {"device_id": f"dev_{i}", "task_type": "screenshot"},
-                    {},
-                ))
+                _run(
+                    sched._exec_send_to_device(
+                        {"device_id": f"dev_{i}", "task_type": "screenshot"},
+                        {},
+                    )
+                )
         log = get_ingress_log()
         self.assertGreaterEqual(len(log), 3)
 

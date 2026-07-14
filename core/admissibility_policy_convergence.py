@@ -205,6 +205,7 @@ def _get_readiness(device_id: str) -> Optional[Any]:
     """Return a DeviceReadinessSummary, or None on failure."""
     try:
         from core.device_readiness import get_device_readiness  # type: ignore
+
         return get_device_readiness(device_id)
     except ImportError:
         logger.debug("PolicyConvergence: device_readiness unavailable")
@@ -223,6 +224,7 @@ def _get_participation(device_id: str) -> Optional[Any]:
     """Return a ParticipationSummary, or None on failure."""
     try:
         from core.device_participation import get_device_participation  # type: ignore
+
         return get_device_participation(device_id)
     except ImportError:
         logger.debug("PolicyConvergence: device_participation unavailable")
@@ -245,6 +247,7 @@ def _get_validation(
     """Return a TargetDeviceValidationResult, or None on failure."""
     try:
         from core.target_device_validator import validate_target_device  # type: ignore
+
         return validate_target_device(
             device_id,
             required_capabilities=required_capabilities,
@@ -434,24 +437,16 @@ def evaluate_policy_convergence(
         # Populate live route truth from readiness routability sub-summary
         routability = getattr(readiness, "routability", None)
         if routability is not None:
-            output.transport_present = bool(
-                getattr(routability, "transport_present", False)
-            )
-            output.transport_usable = bool(
-                getattr(routability, "transport_usable", False)
-            )
+            output.transport_present = bool(getattr(routability, "transport_present", False))
+            output.transport_usable = bool(getattr(routability, "transport_usable", False))
             output.device_routable = bool(
-                getattr(routability, "device_routable", False)
-                or getattr(routability, "effective_routable", False)
+                getattr(routability, "device_routable", False) or getattr(routability, "effective_routable", False)
             )
             output.effective_path = str(
-                getattr(routability, "effective_path", None)
-                or getattr(routability, "preferred_path", "none")
+                getattr(routability, "effective_path", None) or getattr(routability, "preferred_path", "none")
             )
             output.route_preference = output.effective_path
-        output.sources["readiness"] = (
-            readiness.to_dict() if hasattr(readiness, "to_dict") else {}
-        )
+        output.sources["readiness"] = readiness.to_dict() if hasattr(readiness, "to_dict") else {}
     else:
         output.reasons.append("readiness-unavailable")
 
@@ -461,24 +456,18 @@ def evaluate_policy_convergence(
         # Participation may only contribute enrichment data to sources.
         # It must NOT override transport_present/transport_usable/device_routable
         # which came from Layer-1 canonical readiness.
-        output.sources["participation"] = (
-            participation.to_dict() if hasattr(participation, "to_dict") else {}
-        )
+        output.sources["participation"] = participation.to_dict() if hasattr(participation, "to_dict") else {}
     else:
         output.reasons.append("participation-unavailable")
 
     # ── Layer 3: Target validation ─────────────────────────────────────
-    validation = _get_validation(
-        device_id, required_capabilities, require_orchestration_eligible
-    )
+    validation = _get_validation(device_id, required_capabilities, require_orchestration_eligible)
     if validation is not None:
         output.eligibility = bool(getattr(validation, "valid", False))
         output.capability_fit = bool(getattr(validation, "capability_match", False))
         val_reasons = list(getattr(validation, "reasons", []) or [])
         output.reasons.extend(val_reasons)
-        output.sources["validation"] = (
-            validation.to_dict() if hasattr(validation, "to_dict") else {}
-        )
+        output.sources["validation"] = validation.to_dict() if hasattr(validation, "to_dict") else {}
     else:
         output.reasons.append("validation-unavailable")
 
@@ -494,8 +483,7 @@ def evaluate_policy_convergence(
 
     if output.eligibility:
         output.selected_target_reason = (
-            f"device eligible: score={output.policy_score:.3f} "
-            f"path={output.effective_path}"
+            f"device eligible: score={output.policy_score:.3f} " f"path={output.effective_path}"
         )
         logger.debug(
             "PolicyConvergence: device=%s eligible=True score=%.3f path=%s",
@@ -513,12 +501,9 @@ def evaluate_policy_convergence(
         _fd = _classify_failure_domain(output)
         output.failure_domain = _fd
         output.degradation_reason = _build_degradation_reason(output)
-        output.selected_target_reason = (
-            f"device not selected: {output.degradation_reason or 'ineligible'}"
-        )
+        output.selected_target_reason = f"device not selected: {output.degradation_reason or 'ineligible'}"
         logger.debug(
-            "PolicyConvergence: device=%s eligible=False "
-            "failure_domain=%s reasons=%s",
+            "PolicyConvergence: device=%s eligible=False " "failure_domain=%s reasons=%s",
             device_id,
             output.failure_domain,
             output.reasons,

@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-
 # Mapping from persona mood to avatar expression
 _MOOD_TO_EXPRESSION: Dict[str, str] = {
     "calm": "neutral",

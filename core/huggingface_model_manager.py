@@ -52,14 +52,19 @@ def get_download_status(model_id: Optional[str] = None) -> Dict[str, Any]:
     return dict(_download_status)
 
 
-def _set_status(m: str, s: str, p: float = 0.0, dl: float = 0.0,
-                tot: float = 0.0, spd: float = 0.0, eta: int = 0,
-                err: str = "") -> None:
+def _set_status(
+    m: str, s: str, p: float = 0.0, dl: float = 0.0, tot: float = 0.0, spd: float = 0.0, eta: int = 0, err: str = ""
+) -> None:
     _download_status[m] = {
-        "model_id": m, "status": s, "progress": p,
-        "downloaded_mb": dl, "total_mb": tot,
-        "speed_mbps": spd, "eta_seconds": eta,
-        "error": err, "timestamp": time.time(),
+        "model_id": m,
+        "status": s,
+        "progress": p,
+        "downloaded_mb": dl,
+        "total_mb": tot,
+        "speed_mbps": spd,
+        "eta_seconds": eta,
+        "error": err,
+        "timestamp": time.time(),
     }
 
 
@@ -67,36 +72,39 @@ def _set_status(m: str, s: str, p: float = 0.0, dl: float = 0.0,
 # Model Format — 支持的模型格式
 # ---------------------------------------------------------------------------
 
+
 class ModelFormat(str, Enum):
-    GGUF = "gguf"                      # llama.cpp 原生格式
-    TRANSFORMERS = "transformers"       # PyTorch / Safetensors
-    ONNX = "onnx"                       # ONNX Runtime
-    AWQ = "awq"                         # AWQ 量化
-    GPTQ = "gptq"                       # GPTQ 量化
+    GGUF = "gguf"  # llama.cpp 原生格式
+    TRANSFORMERS = "transformers"  # PyTorch / Safetensors
+    ONNX = "onnx"  # ONNX Runtime
+    AWQ = "awq"  # AWQ 量化
+    GPTQ = "gptq"  # GPTQ 量化
 
 
 class ModelFamily(str, Enum):
-    LLM = "llm"                         # 文本生成
-    VLM = "vlm"                         # 视觉语言模型
-    ASR = "asr"                         # 语音识别
-    TTS = "tts"                         # 语音合成
-    EMBEDDING = "embedding"             # 向量嵌入
-    RERANKER = "reranker"               # 重排序
+    LLM = "llm"  # 文本生成
+    VLM = "vlm"  # 视觉语言模型
+    ASR = "asr"  # 语音识别
+    TTS = "tts"  # 语音合成
+    EMBEDDING = "embedding"  # 向量嵌入
+    RERANKER = "reranker"  # 重排序
 
 
 # ---------------------------------------------------------------------------
 # Model Registry Entry — 单个模型的注册信息
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ModelRegistryEntry:
     """已注册模型的元数据"""
-    model_id: str                      # HuggingFace model ID, e.g. "Qwen/Qwen2.5-14B-Instruct"
+
+    model_id: str  # HuggingFace model ID, e.g. "Qwen/Qwen2.5-14B-Instruct"
     family: ModelFamily
     format: ModelFormat
-    local_path: str                    # 本地存储路径
+    local_path: str  # 本地存储路径
     size_mb: int
-    quantization: str = "none"         # "none", "q4", "q5", "q8", "awq", "gptq"
+    quantization: str = "none"  # "none", "q4", "q5", "q8", "awq", "gptq"
     download_time: float = 0.0
     last_used: float = 0.0
     use_count: int = 0
@@ -115,6 +123,7 @@ class ModelRegistryEntry:
 # ---------------------------------------------------------------------------
 # Model Registry — 本地模型注册表
 # ---------------------------------------------------------------------------
+
 
 class ModelRegistry:
     """本地模型注册表 — 管理已下载的模型"""
@@ -188,6 +197,7 @@ class ModelRegistry:
 # HuggingFace Model Manager
 # ---------------------------------------------------------------------------
 
+
 class HuggingFaceModelManager:
     """HuggingFace 模型管理器
 
@@ -207,10 +217,14 @@ class HuggingFaceModelManager:
 
     # ── 下载模型 ──
 
-    async def download(self, model_id: str, family: ModelFamily,
-                       format: ModelFormat = ModelFormat.GGUF,
-                       quantization: str = "q4",
-                       force: bool = False) -> ModelRegistryEntry:
+    async def download(
+        self,
+        model_id: str,
+        family: ModelFamily,
+        format: ModelFormat = ModelFormat.GGUF,
+        quantization: str = "q4",
+        force: bool = False,
+    ) -> ModelRegistryEntry:
         """从 HuggingFace Hub 下载模型
 
         Args:
@@ -236,39 +250,31 @@ class HuggingFaceModelManager:
             os.makedirs(local_path, exist_ok=True)
 
             try:
-                from huggingface_hub import snapshot_download, hf_hub_download
+                from huggingface_hub import hf_hub_download, snapshot_download  # noqa: F401
 
                 if format == ModelFormat.GGUF:
                     # GGUF: 下载特定量化文件
-                    entry = await self._download_gguf(
-                        model_id, family, quantization, local_path
-                    )
+                    entry = await self._download_gguf(model_id, family, quantization, local_path)
                 elif format == ModelFormat.TRANSFORMERS:
                     # transformers: 完整 snapshot 下载
-                    entry = await self._download_transformers(
-                        model_id, family, local_path
-                    )
+                    entry = await self._download_transformers(model_id, family, local_path)
                 else:
                     raise ValueError(f"Unsupported format: {format.value}")
 
                 self.registry.register(entry)
-                logger.info(
-                    "Model downloaded: %s (%s, %s) → %s",
-                    model_id, format.value, quantization, local_path
-                )
+                logger.info("Model downloaded: %s (%s, %s) → %s", model_id, format.value, quantization, local_path)
                 return entry
 
             except ImportError:
-                logger.error(
-                    "huggingface_hub not installed. Run: pip install huggingface_hub"
-                )
+                logger.error("huggingface_hub not installed. Run: pip install huggingface_hub")
                 raise
             except Exception as exc:
                 logger.error("Failed to download %s: %s", model_id, exc)
                 raise
 
-    async def _download_gguf(self, model_id: str, family: ModelFamily,
-                             quantization: str, local_path: str) -> ModelRegistryEntry:
+    async def _download_gguf(
+        self, model_id: str, family: ModelFamily, quantization: str, local_path: str
+    ) -> ModelRegistryEntry:
         """下载 GGUF 格式模型（llama.cpp 专用）"""
         from huggingface_hub import hf_hub_download
 
@@ -286,6 +292,7 @@ class HuggingFaceModelManager:
         for pattern in patterns:
             try:
                 from huggingface_hub import HfApi
+
                 api = HfApi()
                 files = api.list_repo_files(model_id)
                 matches = [f for f in files if f.endswith(".gguf") and quantization.lower() in f.lower()]
@@ -315,7 +322,9 @@ class HuggingFaceModelManager:
                     if self.n and self.total:
                         pct = self.n / self.total
                         _set_status(
-                            model_id, "downloading", pct,
+                            model_id,
+                            "downloading",
+                            pct,
                             dl=round(self.n / 1024 / 1024, 1),
                             tot=round(self.total / 1024 / 1024, 1) if self.total else 0,
                         )
@@ -353,8 +362,7 @@ class HuggingFaceModelManager:
             description=f"GGUF model from {model_id}, {quantization} quantization",
         )
 
-    async def _download_transformers(self, model_id: str, family: ModelFamily,
-                                     local_path: str) -> ModelRegistryEntry:
+    async def _download_transformers(self, model_id: str, family: ModelFamily, local_path: str) -> ModelRegistryEntry:
         """下载 transformers 格式模型"""
         from huggingface_hub import snapshot_download
 
@@ -411,13 +419,16 @@ class HuggingFaceModelManager:
 
     # ── 后台异步下载 (PR-MODEL-DL) ──
 
-    def download_background(self, model_id: str, family: ModelFamily = ModelFamily.LLM,
-                            fmt: ModelFormat = ModelFormat.GGUF,
-                            quantization: str = "q4") -> asyncio.Task:
+    def download_background(
+        self,
+        model_id: str,
+        family: ModelFamily = ModelFamily.LLM,
+        fmt: ModelFormat = ModelFormat.GGUF,
+        quantization: str = "q4",
+    ) -> asyncio.Task:
         """Start a background download task. Returns the Task immediately
         so the caller (e.g., startup code) is not blocked."""
-        global _download_tasks
-
+        # _download_tasks 仅做键值增删(原地变更),无重绑定,无需 global 声明
         if model_id in _download_tasks and not _download_tasks[model_id].done():
             logger.info("[MODEL-DL] %s already downloading in background", model_id)
             return _download_tasks[model_id]

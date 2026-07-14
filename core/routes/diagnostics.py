@@ -43,6 +43,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """并发管理器状态"""
         try:
             from core.concurrency_manager import get_concurrency_manager
+
             mgr = get_concurrency_manager()
             return JSONResponse(mgr.get_status())
         except Exception as e:
@@ -53,6 +54,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """错误追踪概览"""
         try:
             from core.error_framework import get_error_tracker
+
             tracker = get_error_tracker()
             return JSONResponse(tracker.get_summary())
         except Exception as e:
@@ -63,6 +65,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """节点发现服务状态"""
         try:
             from core.node_discovery import get_node_discovery
+
             disc = get_node_discovery()
             return JSONResponse(disc.get_status())
         except Exception as e:
@@ -73,6 +76,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """安全审计日志（最近 50 条）"""
         try:
             from core.security_middleware import get_security_manager
+
             sec = get_security_manager()
             return JSONResponse(sec.audit.get_recent(50))
         except Exception as e:
@@ -83,6 +87,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """安全统计仪表盘"""
         try:
             from core.security_middleware import get_security_manager
+
             sec = get_security_manager()
             return JSONResponse(sec.get_dashboard())
         except Exception as e:
@@ -93,6 +98,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """配置管理器状态"""
         try:
             from core.config_hot_reload import get_config_manager
+
             mgr = get_config_manager()
             return JSONResponse(mgr.get_status())
         except Exception as e:
@@ -103,6 +109,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """配置版本历史"""
         try:
             from core.config_hot_reload import get_config_manager
+
             mgr = get_config_manager()
             return JSONResponse(mgr.versions.get_history(20))
         except Exception as e:

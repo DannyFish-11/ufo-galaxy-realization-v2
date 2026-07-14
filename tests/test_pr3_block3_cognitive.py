@@ -21,6 +21,7 @@ Tests covering:
 9.  openclawd integration — _record_turn populates working memory.
 10. config.json — Block-3 flags present.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -41,13 +42,13 @@ ROOT = pathlib.Path(__file__).parents[1]
 
 def _reset_all() -> None:
     """Reset all Block-3 singletons before each test."""
-    from core.cognitive.continuous_state import reset_cognitive_state
     from core.cognitive.cognitive_field_engine import reset_cognitive_field_engine
-    from core.cognitive.state_interpreter import reset_state_interpreter
-    from core.cognitive.liminal_dynamics import reset_liminal_dynamics
+    from core.cognitive.continuous_state import reset_cognitive_state
     from core.cognitive.decay_controller import reset_decay_controller
-    from core.cognitive.working_memory import reset_working_memory
+    from core.cognitive.liminal_dynamics import reset_liminal_dynamics
     from core.cognitive.long_term_memory import reset_long_term_memory
+    from core.cognitive.state_interpreter import reset_state_interpreter
+    from core.cognitive.working_memory import reset_working_memory
 
     reset_cognitive_state()
     reset_cognitive_field_engine()
@@ -69,6 +70,7 @@ class TestCognitiveState:
 
     def test_default_values_in_range(self) -> None:
         from core.cognitive.continuous_state import CognitiveState
+
         s = CognitiveState()
         assert 0.0 <= s.activation <= 1.0
         assert 0.0 <= s.intent_strength <= 1.0
@@ -80,6 +82,7 @@ class TestCognitiveState:
 
     def test_update_clamps_values(self) -> None:
         from core.cognitive.continuous_state import CognitiveState
+
         s = CognitiveState()
         s.update(activation=2.0, manifest_pressure=-1.0, stability=0.5)
         assert s.activation == 1.0
@@ -88,6 +91,7 @@ class TestCognitiveState:
 
     def test_update_refreshes_timestamp(self) -> None:
         from core.cognitive.continuous_state import CognitiveState
+
         s = CognitiveState()
         old_ts = s.timestamp
         time.sleep(0.01)
@@ -96,12 +100,14 @@ class TestCognitiveState:
 
     def test_update_raises_on_unknown_field(self) -> None:
         from core.cognitive.continuous_state import CognitiveState
+
         s = CognitiveState()
         with pytest.raises(ValueError, match="unknown fields"):
             s.update(nonexistent_field=0.5)
 
     def test_snapshot_returns_dict(self) -> None:
         from core.cognitive.continuous_state import CognitiveState
+
         s = CognitiveState(activation=0.4, intent_strength=0.6)
         snap = s.snapshot()
         assert isinstance(snap, dict)
@@ -110,27 +116,32 @@ class TestCognitiveState:
 
     def test_snapshot_excludes_lock(self) -> None:
         from core.cognitive.continuous_state import CognitiveState
+
         snap = CognitiveState().snapshot()
         assert "_lock" not in snap
 
     def test_apply_input_increases_manifest_pressure(self) -> None:
         from core.cognitive.continuous_state import CognitiveState
+
         s = CognitiveState(activation=0.5, intent_strength=0.5, manifest_pressure=0.1)
         s.apply_input(intent_delta=0.3, activation_delta=0.2)
         assert s.manifest_pressure > 0.1
 
     def test_apply_input_uncertainty_override(self) -> None:
         from core.cognitive.continuous_state import CognitiveState
+
         s = CognitiveState(uncertainty=0.9)
         s.apply_input(uncertainty_override=0.2)
         assert s.uncertainty == pytest.approx(0.2)
 
     def test_singleton_same_instance(self) -> None:
         from core.cognitive.continuous_state import get_cognitive_state
+
         assert get_cognitive_state() is get_cognitive_state()
 
     def test_reset_creates_new_instance(self) -> None:
         from core.cognitive.continuous_state import get_cognitive_state, reset_cognitive_state
+
         a = get_cognitive_state()
         reset_cognitive_state()
         b = get_cognitive_state()
@@ -149,6 +160,7 @@ class TestCognitiveFieldEngine:
     def test_notify_request_raises_manifest_pressure(self) -> None:
         from core.cognitive.cognitive_field_engine import CognitiveFieldEngine
         from core.cognitive.continuous_state import CognitiveState
+
         state = CognitiveState()
         engine = CognitiveFieldEngine(state=state, enabled=False, tick_interval_s=60.0)
         engine.notify_request(intent_delta=0.5, activation_delta=0.4)
@@ -157,6 +169,7 @@ class TestCognitiveFieldEngine:
     def test_notify_request_emits_event(self) -> None:
         from core.cognitive.cognitive_field_engine import CognitiveFieldEngine
         from core.cognitive.continuous_state import CognitiveState
+
         state = CognitiveState()
         engine = CognitiveFieldEngine(state=state, enabled=False, tick_interval_s=60.0)
         # notify_request does NOT call tick listeners — listeners are only called on tick.
@@ -167,6 +180,7 @@ class TestCognitiveFieldEngine:
     def test_tick_listener_called_on_tick(self) -> None:
         from core.cognitive.cognitive_field_engine import CognitiveFieldEngine
         from core.cognitive.continuous_state import CognitiveState
+
         ticks: List[Dict] = []
         state = CognitiveState()
         engine = CognitiveFieldEngine(state=state, enabled=True, tick_interval_s=60.0)
@@ -183,6 +197,7 @@ class TestCognitiveFieldEngine:
     def test_tick_decays_manifest_pressure(self) -> None:
         from core.cognitive.cognitive_field_engine import CognitiveFieldEngine
         from core.cognitive.continuous_state import CognitiveState
+
         state = CognitiveState(manifest_pressure=0.8, activation=0.7)
         engine = CognitiveFieldEngine(state=state, enabled=True, tick_interval_s=60.0)
         engine._last_request_ts = 0.0  # simulate long idle
@@ -194,6 +209,7 @@ class TestCognitiveFieldEngine:
     def test_tick_count_increments(self) -> None:
         from core.cognitive.cognitive_field_engine import CognitiveFieldEngine
         from core.cognitive.continuous_state import CognitiveState
+
         engine = CognitiveFieldEngine(state=CognitiveState(), enabled=True, tick_interval_s=60.0)
         asyncio.run(engine._do_tick())
         asyncio.run(engine._do_tick())
@@ -202,6 +218,7 @@ class TestCognitiveFieldEngine:
     def test_disabled_engine_not_started(self) -> None:
         from core.cognitive.cognitive_field_engine import CognitiveFieldEngine
         from core.cognitive.continuous_state import CognitiveState
+
         engine = CognitiveFieldEngine(state=CognitiveState(), enabled=False, tick_interval_s=1.0)
 
         async def run():
@@ -213,6 +230,7 @@ class TestCognitiveFieldEngine:
     def test_remove_tick_listener(self) -> None:
         from core.cognitive.cognitive_field_engine import CognitiveFieldEngine
         from core.cognitive.continuous_state import CognitiveState
+
         ticks: List = []
         engine = CognitiveFieldEngine(state=CognitiveState(), enabled=True, tick_interval_s=60.0)
         engine.add_tick_listener(ticks.append)
@@ -222,6 +240,7 @@ class TestCognitiveFieldEngine:
 
     def test_singleton(self) -> None:
         from core.cognitive.cognitive_field_engine import get_cognitive_field_engine
+
         assert get_cognitive_field_engine() is get_cognitive_field_engine()
 
 
@@ -235,8 +254,9 @@ class TestStateInterpreter:
         _reset_all()
 
     def test_passive_region_low_pressure(self) -> None:
-        from core.cognitive.state_interpreter import StateInterpreter
         from core.cognitive.continuous_state import CognitiveState
+        from core.cognitive.state_interpreter import StateInterpreter
+
         state = CognitiveState(activation=0.05, intent_strength=0.05, manifest_pressure=0.05, uncertainty=0.5)
         interp = StateInterpreter(state=state)
         r = interp.interpret(state)
@@ -244,8 +264,9 @@ class TestStateInterpreter:
         assert r.region.value == "silent"
 
     def test_manifest_region_high_pressure_low_uncertainty(self) -> None:
-        from core.cognitive.state_interpreter import StateInterpreter
         from core.cognitive.continuous_state import CognitiveState
+        from core.cognitive.state_interpreter import StateInterpreter
+
         state = CognitiveState(activation=0.9, intent_strength=0.9, manifest_pressure=0.9, uncertainty=0.1)
         interp = StateInterpreter(state=state)
         # Hysteresis: passive → liminal first call, then liminal → manifest second call
@@ -254,8 +275,9 @@ class TestStateInterpreter:
         assert r.tristate == "manifest"
 
     def test_liminal_region_moderate(self) -> None:
-        from core.cognitive.state_interpreter import StateInterpreter
         from core.cognitive.continuous_state import CognitiveState
+        from core.cognitive.state_interpreter import StateInterpreter
+
         state = CognitiveState(activation=0.4, intent_strength=0.4, manifest_pressure=0.4, uncertainty=0.3)
         interp = StateInterpreter(state=state)
         # From passive, score 0.34 is above passive_threshold (0.20) → enters liminal
@@ -263,8 +285,9 @@ class TestStateInterpreter:
         assert r.tristate == "liminal"
 
     def test_uncertainty_cap_blocks_manifest(self) -> None:
-        from core.cognitive.state_interpreter import StateInterpreter
         from core.cognitive.continuous_state import CognitiveState
+        from core.cognitive.state_interpreter import StateInterpreter
+
         state = CognitiveState(activation=0.95, intent_strength=0.95, manifest_pressure=0.95, uncertainty=0.8)
         interp = StateInterpreter(state=state, uncertainty_cap=0.70)
         r = interp.interpret(state)
@@ -277,8 +300,9 @@ class TestStateInterpreter:
         ``passive_threshold + 0.10`` to jump to passive; otherwise the system
         transitions back through liminal.  This prevents manifest → passive snapping.
         """
-        from core.cognitive.state_interpreter import StateInterpreter, CognitiveRegion
         from core.cognitive.continuous_state import CognitiveState
+        from core.cognitive.state_interpreter import CognitiveRegion, StateInterpreter
+
         state_high = CognitiveState(activation=0.9, manifest_pressure=0.9, uncertainty=0.1)
         interp = StateInterpreter(state=state_high, manifest_threshold=0.65, passive_threshold=0.20)
         interp.interpret(state_high)  # passive → liminal
@@ -294,26 +318,30 @@ class TestStateInterpreter:
 
     def test_interpret_snapshot_dict(self) -> None:
         from core.cognitive.state_interpreter import StateInterpreter
+
         interp = StateInterpreter()
         r = interp.interpret_snapshot({"manifest_pressure": 0.05, "activation": 0.05, "uncertainty": 0.5})
         assert r.tristate == "silent"
 
     def test_result_source_is_interpreter(self) -> None:
-        from core.cognitive.state_interpreter import StateInterpreter
         from core.cognitive.continuous_state import CognitiveState
+        from core.cognitive.state_interpreter import StateInterpreter
+
         state = CognitiveState()
         r = StateInterpreter(state=state).interpret(state)
         assert r.source == "interpreter"
 
     def test_to_dict_has_required_fields(self) -> None:
-        from core.cognitive.state_interpreter import StateInterpreter
         from core.cognitive.continuous_state import CognitiveState
+        from core.cognitive.state_interpreter import StateInterpreter
+
         d = StateInterpreter(state=CognitiveState()).interpret().to_dict()
         for field in ("region", "tristate", "score", "uncertainty", "manifest_pressure", "activation", "source"):
             assert field in d, f"Missing field: {field}"
 
     def test_singleton(self) -> None:
         from core.cognitive.state_interpreter import get_state_interpreter
+
         assert get_state_interpreter() is get_state_interpreter()
 
 
@@ -328,27 +356,32 @@ class TestLiminalDynamics:
 
     def test_can_transition_when_not_in_liminal(self) -> None:
         from core.cognitive.liminal_dynamics import LiminalDynamics
+
         ld = LiminalDynamics(min_dwell_s=1.5)
         assert ld.can_transition_to_manifest() is True
 
     def test_dwell_guard_blocks_fast_transition(self) -> None:
         from core.cognitive.liminal_dynamics import LiminalDynamics
+
         ld = LiminalDynamics(min_dwell_s=100.0)
         ld.record_transition("silent", "liminal")
         assert ld.can_transition_to_manifest() is False
 
     def test_dwell_guard_allows_after_min_dwell(self) -> None:
         from core.cognitive.liminal_dynamics import LiminalDynamics
+
         ld = LiminalDynamics(min_dwell_s=0.0)
         ld.record_transition("silent", "liminal")
         assert ld.can_transition_to_manifest() is True
 
     def test_volatility_zero_with_no_transitions(self) -> None:
         from core.cognitive.liminal_dynamics import LiminalDynamics
+
         assert LiminalDynamics().volatility() == 0.0
 
     def test_volatility_increases_with_flips(self) -> None:
         from core.cognitive.liminal_dynamics import LiminalDynamics
+
         ld = LiminalDynamics(volatility_window=4)
         ld.record_transition("silent", "liminal")
         ld.record_transition("liminal", "manifest")
@@ -358,10 +391,12 @@ class TestLiminalDynamics:
 
     def test_threshold_adjustment_non_negative(self) -> None:
         from core.cognitive.liminal_dynamics import LiminalDynamics
+
         assert LiminalDynamics().manifest_threshold_adjustment() >= 0.0
 
     def test_liminal_dwell_increases_over_time(self) -> None:
         from core.cognitive.liminal_dynamics import LiminalDynamics
+
         ld = LiminalDynamics()
         ld.record_transition("silent", "liminal")
         time.sleep(0.05)
@@ -369,12 +404,14 @@ class TestLiminalDynamics:
 
     def test_state_dict_has_required_keys(self) -> None:
         from core.cognitive.liminal_dynamics import LiminalDynamics
+
         d = LiminalDynamics().state_dict()
         for k in ("liminal_dwell_s", "volatility", "threshold_adjustment", "min_dwell_s"):
             assert k in d
 
     def test_singleton(self) -> None:
         from core.cognitive.liminal_dynamics import get_liminal_dynamics
+
         assert get_liminal_dynamics() is get_liminal_dynamics()
 
 
@@ -388,8 +425,9 @@ class TestDecayController:
         _reset_all()
 
     def test_sync_decay_step_reduces_pressure(self) -> None:
-        from core.cognitive.decay_controller import DecayController
         from core.cognitive.continuous_state import CognitiveState
+        from core.cognitive.decay_controller import DecayController
+
         state = CognitiveState(manifest_pressure=0.8, activation=0.7)
         dc = DecayController(state=state, decay_rate=0.20, step_interval_s=0.01, num_steps=1)
         dc._sync_decay_step(task_id="t1", trace_id="tr1")
@@ -397,32 +435,31 @@ class TestDecayController:
         assert state.activation < 0.7
 
     def test_async_decay_sequence_smooth_reduction(self) -> None:
-        from core.cognitive.decay_controller import DecayController
         from core.cognitive.continuous_state import CognitiveState
+        from core.cognitive.decay_controller import DecayController
+
         state = CognitiveState(manifest_pressure=0.9, activation=0.8)
         dc = DecayController(state=state, decay_rate=0.20, step_interval_s=0.001, num_steps=5)
 
-        asyncio.run(
-            dc._async_decay_sequence(task_id="t1", trace_id="tr1")
-        )
+        asyncio.run(dc._async_decay_sequence(task_id="t1", trace_id="tr1"))
         assert state.manifest_pressure < 0.9
         assert state.activation < 0.8
 
     def test_decay_stops_when_fully_decayed(self) -> None:
-        from core.cognitive.decay_controller import DecayController
         from core.cognitive.continuous_state import CognitiveState
+        from core.cognitive.decay_controller import DecayController
+
         state = CognitiveState(manifest_pressure=0.001, activation=0.001)
         dc = DecayController(state=state, decay_rate=0.99, step_interval_s=0.001, num_steps=20)
 
-        asyncio.run(
-            dc._async_decay_sequence(task_id="t2", trace_id="tr2")
-        )
+        asyncio.run(dc._async_decay_sequence(task_id="t2", trace_id="tr2"))
         # Should have stopped early
         assert state.manifest_pressure == pytest.approx(0.0, abs=0.01)
 
     def test_subscribe_to_task_lifecycle_idempotent(self) -> None:
-        from core.cognitive.decay_controller import DecayController
         from core.cognitive.continuous_state import CognitiveState
+        from core.cognitive.decay_controller import DecayController
+
         dc = DecayController(state=CognitiveState(), decay_rate=0.1)
         dc.subscribe_to_task_lifecycle()
         dc.subscribe_to_task_lifecycle()
@@ -430,8 +467,9 @@ class TestDecayController:
 
     def test_trigger_decay_sync_fallback(self) -> None:
         """trigger_decay uses sync fallback when no event loop is running."""
-        from core.cognitive.decay_controller import DecayController
         from core.cognitive.continuous_state import CognitiveState
+        from core.cognitive.decay_controller import DecayController
+
         state = CognitiveState(manifest_pressure=0.6, activation=0.5)
         dc = DecayController(state=state, decay_rate=0.3, step_interval_s=0.01, num_steps=2)
         dc.trigger_decay(task_id="t3", trace_id="tr3")
@@ -440,6 +478,7 @@ class TestDecayController:
 
     def test_singleton(self) -> None:
         from core.cognitive.decay_controller import get_decay_controller
+
         assert get_decay_controller() is get_decay_controller()
 
 
@@ -457,12 +496,14 @@ class TestWorkingMemory:
         # 融合(域3)后 WM 对 SM 认识的会话透传 SM —— 隔离 SM 单例与状态文件,
         # 避免其它测试写进全局 data/sessions.json 的同名会话(如 "s1")交叉污染。
         import core.session_manager as smmod
+
         monkeypatch.setattr(smmod, "_SESSION_FILE", str(tmp_path / "sessions.json"))
         monkeypatch.setattr(smmod, "_session_manager", smmod.SessionManager())
         yield
 
     def test_add_and_get(self) -> None:
         from core.cognitive.working_memory import WorkingMemory
+
         wm = WorkingMemory(capacity=5)
         wm.add(session_id="s1", role="user", content="hello", trace_id="t1")
         entries = wm.get(session_id="s1")
@@ -473,6 +514,7 @@ class TestWorkingMemory:
 
     def test_capacity_eviction(self) -> None:
         from core.cognitive.working_memory import WorkingMemory
+
         wm = WorkingMemory(capacity=3)
         for i in range(5):
             wm.add(session_id="s1", role="user", content=f"msg{i}")
@@ -482,6 +524,7 @@ class TestWorkingMemory:
 
     def test_get_last_n(self) -> None:
         from core.cognitive.working_memory import WorkingMemory
+
         wm = WorkingMemory(capacity=10)
         for i in range(6):
             wm.add(session_id="s1", role="user", content=f"msg{i}")
@@ -491,6 +534,7 @@ class TestWorkingMemory:
 
     def test_clear_removes_session(self) -> None:
         from core.cognitive.working_memory import WorkingMemory
+
         wm = WorkingMemory(capacity=5)
         wm.add(session_id="s1", role="user", content="hello")
         wm.clear(session_id="s1")
@@ -498,16 +542,19 @@ class TestWorkingMemory:
 
     def test_get_empty_for_unknown_session(self) -> None:
         from core.cognitive.working_memory import WorkingMemory
+
         assert WorkingMemory().get(session_id="nonexistent") == []
 
     def test_disabled_returns_empty(self) -> None:
         from core.cognitive.working_memory import WorkingMemory
+
         wm = WorkingMemory(enabled=False)
         wm.add(session_id="s1", role="user", content="hello")
         assert wm.get(session_id="s1") == []
 
     def test_active_sessions(self) -> None:
         from core.cognitive.working_memory import WorkingMemory
+
         wm = WorkingMemory()
         wm.add(session_id="s1", role="user", content="x")
         wm.add(session_id="s2", role="user", content="y")
@@ -517,6 +564,7 @@ class TestWorkingMemory:
 
     def test_multiple_sessions_isolated(self) -> None:
         from core.cognitive.working_memory import WorkingMemory
+
         wm = WorkingMemory(capacity=5)
         wm.add(session_id="s1", role="user", content="s1_msg")
         wm.add(session_id="s2", role="user", content="s2_msg")
@@ -525,6 +573,7 @@ class TestWorkingMemory:
 
     def test_singleton(self) -> None:
         from core.cognitive.working_memory import get_working_memory
+
         assert get_working_memory() is get_working_memory()
 
 
@@ -539,16 +588,19 @@ class TestLongTermMemory:
 
     def test_store_and_retrieve(self) -> None:
         from core.cognitive.long_term_memory import LongTermMemory
+
         ltm = LongTermMemory()
         ltm.store(key="lang", value="zh-CN", namespace="preferences", trace_id="t1")
         assert ltm.retrieve(key="lang", namespace="preferences") == "zh-CN"
 
     def test_retrieve_default_when_not_found(self) -> None:
         from core.cognitive.long_term_memory import LongTermMemory
+
         assert LongTermMemory().retrieve(key="missing", default="fallback") == "fallback"
 
     def test_namespace_isolation(self) -> None:
         from core.cognitive.long_term_memory import LongTermMemory
+
         ltm = LongTermMemory()
         ltm.store(key="x", value="a", namespace="ns1")
         ltm.store(key="x", value="b", namespace="ns2")
@@ -557,6 +609,7 @@ class TestLongTermMemory:
 
     def test_retrieve_all_sorted_by_time(self) -> None:
         from core.cognitive.long_term_memory import LongTermMemory
+
         ltm = LongTermMemory()
         ltm.store(key="k1", value=1, namespace="ns")
         time.sleep(0.01)
@@ -567,6 +620,7 @@ class TestLongTermMemory:
 
     def test_forget_removes_key(self) -> None:
         from core.cognitive.long_term_memory import LongTermMemory
+
         ltm = LongTermMemory()
         ltm.store(key="del_me", value="v", namespace="ns")
         assert ltm.forget(key="del_me", namespace="ns") is True
@@ -574,6 +628,7 @@ class TestLongTermMemory:
 
     def test_forget_namespace(self) -> None:
         from core.cognitive.long_term_memory import LongTermMemory
+
         ltm = LongTermMemory()
         ltm.store(key="k1", value=1, namespace="ns")
         ltm.store(key="k2", value=2, namespace="ns")
@@ -583,6 +638,7 @@ class TestLongTermMemory:
 
     def test_capacity_eviction(self) -> None:
         from core.cognitive.long_term_memory import LongTermMemory
+
         ltm = LongTermMemory(max_entries=3)
         for i in range(5):
             ltm.store(key=f"k{i}", value=i, namespace="ns")
@@ -590,6 +646,7 @@ class TestLongTermMemory:
 
     def test_disabled_returns_none(self) -> None:
         from core.cognitive.long_term_memory import LongTermMemory
+
         ltm = LongTermMemory(enabled=False)
         ltm.store(key="k", value="v")
         assert ltm.retrieve(key="k") is None
@@ -597,12 +654,14 @@ class TestLongTermMemory:
 
     def test_stats_keys(self) -> None:
         from core.cognitive.long_term_memory import LongTermMemory
+
         stats = LongTermMemory().stats()
         for k in ("total_entries", "max_entries", "namespaces", "enabled"):
             assert k in stats
 
     def test_retrieve_entry_dict(self) -> None:
         from core.cognitive.long_term_memory import LongTermMemory
+
         ltm = LongTermMemory()
         ltm.store(key="k1", value="v1", namespace="ns", trace_id="t1", session_id="s1")
         entry = ltm.retrieve_entry(key="k1", namespace="ns")
@@ -612,6 +671,7 @@ class TestLongTermMemory:
 
     def test_singleton(self) -> None:
         from core.cognitive.long_term_memory import get_long_term_memory
+
         assert get_long_term_memory() is get_long_term_memory()
 
 
@@ -672,9 +732,7 @@ class TestDesktopPresenceRuntimeCognitiveIntegration:
 
         with (
             patch("core.openclawd.get_openclawd") as mock_get,
-            patch(
-                "core.cognitive.cognitive_field_engine.get_cognitive_field_engine"
-            ) as mock_cfe,
+            patch("core.cognitive.cognitive_field_engine.get_cognitive_field_engine") as mock_cfe,
         ):
             mock_clawd = MagicMock()
             mock_clawd.process = AsyncMock(return_value=self._make_openclawd_result())
@@ -703,6 +761,7 @@ class TestOpenClawdWorkingMemoryIntegration:
 
         with patch("core.openclawd.get_openclawd"):
             from core.openclawd import OpenClawd
+
             clawd = OpenClawd.__new__(OpenClawd)
             clawd._session_memory = {}
             clawd._current_trace_id = "trace_test"
@@ -716,8 +775,8 @@ class TestOpenClawdWorkingMemoryIntegration:
     @pytest.mark.asyncio
     async def test_record_turn_role_preserved(self) -> None:
         from core.cognitive.working_memory import get_working_memory
-
         from core.openclawd import OpenClawd
+
         clawd = OpenClawd.__new__(OpenClawd)
         clawd._session_memory = {}
         clawd._current_trace_id = ""

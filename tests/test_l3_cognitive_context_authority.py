@@ -123,17 +123,20 @@ if _REPO_ROOT not in sys.path:
 
 def test_01_llm_context_authority_sentinel_importable():
     from core.llm.context_authority import LLM_CONTEXT_AUTHORITY
+
     assert LLM_CONTEXT_AUTHORITY is not None
 
 
 def test_02_llm_context_authority_sentinel_non_empty():
     from core.llm.context_authority import LLM_CONTEXT_AUTHORITY
+
     assert isinstance(LLM_CONTEXT_AUTHORITY, str)
     assert len(LLM_CONTEXT_AUTHORITY) > 0
 
 
 def test_03_llm_context_authority_sentinel_identifies_class():
     from core.llm.context_authority import LLM_CONTEXT_AUTHORITY
+
     assert "CognitiveContextAuthority" in LLM_CONTEXT_AUTHORITY
 
 
@@ -144,21 +147,25 @@ def test_03_llm_context_authority_sentinel_identifies_class():
 
 def test_04_cognitive_context_authority_class_importable():
     from core.llm.context_authority import CognitiveContextAuthority
+
     assert CognitiveContextAuthority is not None
 
 
 def test_05_cognitive_context_request_class_importable():
     from core.llm.context_authority import CognitiveContextRequest
+
     assert CognitiveContextRequest is not None
 
 
 def test_06_cognitive_context_assembly_class_importable():
     from core.llm.context_authority import CognitiveContextAssembly
+
     assert CognitiveContextAssembly is not None
 
 
 def test_07_get_cognitive_context_authority_importable():
     from core.llm.context_authority import get_cognitive_context_authority
+
     assert callable(get_cognitive_context_authority)
 
 
@@ -172,12 +179,14 @@ def test_08_get_cognitive_context_authority_returns_instance():
         CognitiveContextAuthority,
         get_cognitive_context_authority,
     )
+
     auth = get_cognitive_context_authority()
     assert isinstance(auth, CognitiveContextAuthority)
 
 
 def test_09_get_cognitive_context_authority_singleton():
     from core.llm.context_authority import get_cognitive_context_authority
+
     a1 = get_cognitive_context_authority()
     a2 = get_cognitive_context_authority()
     assert a1 is a2
@@ -186,9 +195,10 @@ def test_09_get_cognitive_context_authority_singleton():
 def test_10_refresh_cognitive_context_authority_returns_fresh_instance():
     from core.llm.context_authority import (
         CognitiveContextAuthority,
-        refresh_cognitive_context_authority,
         get_cognitive_context_authority,
+        refresh_cognitive_context_authority,
     )
+
     original = get_cognitive_context_authority()
     fresh = refresh_cognitive_context_authority()
     assert isinstance(fresh, CognitiveContextAuthority)
@@ -202,18 +212,21 @@ def test_10_refresh_cognitive_context_authority_returns_fresh_instance():
 
 def test_11_cognitive_context_request_default_task_type():
     from core.llm.context_authority import CognitiveContextRequest
+
     req = CognitiveContextRequest()
     assert req.task_type == "general"
 
 
 def test_12_cognitive_context_request_default_max_history_turns():
     from core.llm.context_authority import CognitiveContextRequest
+
     req = CognitiveContextRequest()
     assert req.max_history_turns == 8
 
 
 def test_13_cognitive_context_request_max_history_turns_clamped():
     from core.llm.context_authority import CognitiveContextRequest
+
     req = CognitiveContextRequest(max_history_turns=-5)
     assert req.max_history_turns == 0
 
@@ -225,21 +238,24 @@ def test_13_cognitive_context_request_max_history_turns_clamped():
 
 def test_14_cognitive_context_assembly_authority_default():
     from core.llm.context_authority import (
-        CognitiveContextAssembly,
         LLM_CONTEXT_AUTHORITY,
+        CognitiveContextAssembly,
     )
+
     asm = CognitiveContextAssembly()
     assert asm.authority == LLM_CONTEXT_AUTHORITY
 
 
 def test_15_cognitive_context_assembly_is_canonical_default():
     from core.llm.context_authority import CognitiveContextAssembly
+
     asm = CognitiveContextAssembly()
     assert asm.is_canonical is True
 
 
 def test_16_cognitive_context_assembly_to_dict_messages_key():
     from core.llm.context_authority import CognitiveContextAssembly
+
     asm = CognitiveContextAssembly()
     d = asm.to_dict()
     assert "messages" in d
@@ -247,6 +263,7 @@ def test_16_cognitive_context_assembly_to_dict_messages_key():
 
 def test_17_cognitive_context_assembly_to_dict_tool_manifest_key():
     from core.llm.context_authority import CognitiveContextAssembly
+
     asm = CognitiveContextAssembly()
     d = asm.to_dict()
     assert "tool_manifest" in d
@@ -254,6 +271,7 @@ def test_17_cognitive_context_assembly_to_dict_tool_manifest_key():
 
 def test_18_cognitive_context_assembly_to_dict_assembly_trace_key():
     from core.llm.context_authority import CognitiveContextAssembly
+
     asm = CognitiveContextAssembly()
     d = asm.to_dict()
     assert "assembly_trace" in d
@@ -261,6 +279,7 @@ def test_18_cognitive_context_assembly_to_dict_assembly_trace_key():
 
 def test_19_cognitive_context_assembly_to_dict_authority_key():
     from core.llm.context_authority import CognitiveContextAssembly
+
     asm = CognitiveContextAssembly()
     d = asm.to_dict()
     assert "authority" in d
@@ -268,9 +287,10 @@ def test_19_cognitive_context_assembly_to_dict_authority_key():
 
 def test_20_cognitive_context_assembly_to_dict_authority_value():
     from core.llm.context_authority import (
-        CognitiveContextAssembly,
         LLM_CONTEXT_AUTHORITY,
+        CognitiveContextAssembly,
     )
+
     asm = CognitiveContextAssembly()
     d = asm.to_dict()
     assert d["authority"] == LLM_CONTEXT_AUTHORITY
@@ -278,6 +298,7 @@ def test_20_cognitive_context_assembly_to_dict_authority_value():
 
 def test_21_cognitive_context_assembly_to_dict_is_canonical_key():
     from core.llm.context_authority import CognitiveContextAssembly
+
     asm = CognitiveContextAssembly()
     d = asm.to_dict()
     assert "is_canonical" in d
@@ -285,6 +306,7 @@ def test_21_cognitive_context_assembly_to_dict_is_canonical_key():
 
 def test_22_cognitive_context_assembly_to_dict_source_request_key():
     from core.llm.context_authority import CognitiveContextAssembly
+
     asm = CognitiveContextAssembly()
     d = asm.to_dict()
     assert "source_request" in d
@@ -297,16 +319,18 @@ def test_22_cognitive_context_assembly_to_dict_source_request_key():
 
 def test_23_cognitive_context_authority_has_assemble_method():
     from core.llm.context_authority import CognitiveContextAuthority
+
     assert hasattr(CognitiveContextAuthority, "assemble")
     assert callable(CognitiveContextAuthority.assemble)
 
 
 def test_24_assemble_returns_cognitive_context_assembly():
     from core.llm.context_authority import (
-        CognitiveContextAuthority,
         CognitiveContextAssembly,
+        CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
     result = auth.assemble(CognitiveContextRequest())
     assert isinstance(result, CognitiveContextAssembly)
@@ -314,10 +338,11 @@ def test_24_assemble_returns_cognitive_context_assembly():
 
 def test_25_assemble_result_authority_equals_sentinel():
     from core.llm.context_authority import (
+        LLM_CONTEXT_AUTHORITY,
         CognitiveContextAuthority,
         CognitiveContextRequest,
-        LLM_CONTEXT_AUTHORITY,
     )
+
     auth = CognitiveContextAuthority()
     result = auth.assemble(CognitiveContextRequest())
     assert result.authority == LLM_CONTEXT_AUTHORITY
@@ -328,6 +353,7 @@ def test_26_assemble_result_is_canonical_true():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
     result = auth.assemble(CognitiveContextRequest())
     assert result.is_canonical is True
@@ -338,6 +364,7 @@ def test_27_assemble_result_includes_source_request():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     req = CognitiveContextRequest(task_type="coding")
     auth = CognitiveContextAuthority()
     result = auth.assemble(req)
@@ -354,6 +381,7 @@ def test_28_assemble_produces_at_least_one_system_message():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
     result = auth.assemble(CognitiveContextRequest())
     assert len(result.messages) >= 1
@@ -364,6 +392,7 @@ def test_29_assemble_system_message_is_first():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
     result = auth.assemble(CognitiveContextRequest(user_message="Hi"))
     assert result.messages[0]["role"] == "system"
@@ -374,6 +403,7 @@ def test_30_assemble_system_message_role_is_system():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
     result = auth.assemble(CognitiveContextRequest())
     system_msgs = [m for m in result.messages if m.get("role") == "system"]
@@ -385,10 +415,9 @@ def test_31_assemble_user_message_appended_as_last_message():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
-    result = auth.assemble(
-        CognitiveContextRequest(user_message="What can you do?")
-    )
+    result = auth.assemble(CognitiveContextRequest(user_message="What can you do?"))
     assert result.messages[-1]["role"] == "user"
     assert result.messages[-1]["content"] == "What can you do?"
 
@@ -398,6 +427,7 @@ def test_32_assemble_no_user_message_does_not_append_user():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
     result = auth.assemble(CognitiveContextRequest(user_message=None))
     user_msgs = [m for m in result.messages if m.get("role") == "user"]
@@ -414,10 +444,9 @@ def test_33_assemble_custom_system_prefix_in_system_message():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
-    result = auth.assemble(
-        CognitiveContextRequest(system_prefix="You are a coding assistant.")
-    )
+    result = auth.assemble(CognitiveContextRequest(system_prefix="You are a coding assistant."))
     system_content = result.messages[0]["content"]
     assert "coding assistant" in system_content
 
@@ -427,6 +456,7 @@ def test_34_assemble_default_system_prefix_when_not_provided():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
     result = auth.assemble(CognitiveContextRequest())
     system_content = result.messages[0]["content"]
@@ -438,10 +468,9 @@ def test_35_assemble_user_policy_in_system_message():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
-    result = auth.assemble(
-        CognitiveContextRequest(user_policy="Always reply in English.")
-    )
+    result = auth.assemble(CognitiveContextRequest(user_policy="Always reply in English."))
     system_content = result.messages[0]["content"]
     assert "English" in system_content
 
@@ -451,6 +480,7 @@ def test_36_assemble_soul_policy_in_system_message():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
     result = auth.assemble(
         CognitiveContextRequest(
@@ -467,10 +497,9 @@ def test_37_assemble_agents_policy_in_system_message():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
-    result = auth.assemble(
-        CognitiveContextRequest(agents_policy="Agents must confirm before deleting.")
-    )
+    result = auth.assemble(CognitiveContextRequest(agents_policy="Agents must confirm before deleting."))
     system_content = result.messages[0]["content"]
     assert "confirm before deleting" in system_content
 
@@ -480,10 +509,9 @@ def test_38_assemble_memory_context_in_system_message():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
-    result = auth.assemble(
-        CognitiveContextRequest(memory_context="User prefers Python for scripting.")
-    )
+    result = auth.assemble(CognitiveContextRequest(memory_context="User prefers Python for scripting."))
     system_content = result.messages[0]["content"]
     assert "prefers Python" in system_content
 
@@ -493,12 +521,9 @@ def test_39_assemble_continuity_context_in_system_message():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
-    result = auth.assemble(
-        CognitiveContextRequest(
-            continuity_context="Resuming task from session abc123."
-        )
-    )
+    result = auth.assemble(CognitiveContextRequest(continuity_context="Resuming task from session abc123."))
     system_content = result.messages[0]["content"]
     assert "abc123" in system_content
 
@@ -508,10 +533,9 @@ def test_40_assemble_policy_constraints_in_system_message():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
-    result = auth.assemble(
-        CognitiveContextRequest(policy_constraints=["Constraint A", "Constraint B"])
-    )
+    result = auth.assemble(CognitiveContextRequest(policy_constraints=["Constraint A", "Constraint B"]))
     system_content = result.messages[0]["content"]
     assert "Constraint A" in system_content
     assert "Constraint B" in system_content
@@ -522,12 +546,9 @@ def test_41_assemble_execution_metadata_in_system_message():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
-    result = auth.assemble(
-        CognitiveContextRequest(
-            execution_metadata={"retry_count": 2, "recovery": True}
-        )
-    )
+    result = auth.assemble(CognitiveContextRequest(execution_metadata={"retry_count": 2, "recovery": True}))
     system_content = result.messages[0]["content"]
     assert "retry_count" in system_content
 
@@ -542,14 +563,13 @@ def test_42_assemble_conversation_history_included():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     history = [
         {"role": "user", "content": "Hello"},
         {"role": "assistant", "content": "Hi there!"},
     ]
     auth = CognitiveContextAuthority()
-    result = auth.assemble(
-        CognitiveContextRequest(conversation_history=history)
-    )
+    result = auth.assemble(CognitiveContextRequest(conversation_history=history))
     assert any(m["content"] == "Hello" for m in result.messages)
     assert any(m["content"] == "Hi there!" for m in result.messages)
 
@@ -559,19 +579,12 @@ def test_43_assemble_conversation_history_bounded_by_max_turns():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
-    history = [
-        {"role": "user", "content": f"Turn {i}"}
-        for i in range(20)
-    ]
+
+    history = [{"role": "user", "content": f"Turn {i}"} for i in range(20)]
     auth = CognitiveContextAuthority()
-    result = auth.assemble(
-        CognitiveContextRequest(
-            conversation_history=history, max_history_turns=3
-        )
-    )
+    result = auth.assemble(CognitiveContextRequest(conversation_history=history, max_history_turns=3))
     history_in_messages = [
-        m for m in result.messages if m.get("role") == "user"
-        and m.get("content", "").startswith("Turn ")
+        m for m in result.messages if m.get("role") == "user" and m.get("content", "").startswith("Turn ")
     ]
     assert len(history_in_messages) <= 3
 
@@ -581,6 +594,7 @@ def test_44_assemble_history_before_user_message():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     history = [{"role": "user", "content": "Old question"}]
     auth = CognitiveContextAuthority()
     result = auth.assemble(
@@ -591,14 +605,8 @@ def test_44_assemble_history_before_user_message():
     )
     roles = [m["role"] for m in result.messages]
     # Find positions
-    old_idx = next(
-        i for i, m in enumerate(result.messages)
-        if m.get("content") == "Old question"
-    )
-    new_idx = next(
-        i for i, m in enumerate(result.messages)
-        if m.get("content") == "New question"
-    )
+    old_idx = next(i for i, m in enumerate(result.messages) if m.get("content") == "Old question")
+    new_idx = next(i for i, m in enumerate(result.messages) if m.get("content") == "New question")
     assert old_idx < new_idx
 
 
@@ -607,18 +615,12 @@ def test_45_assemble_history_after_system_message():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     history = [{"role": "user", "content": "Old question"}]
     auth = CognitiveContextAuthority()
-    result = auth.assemble(
-        CognitiveContextRequest(conversation_history=history)
-    )
-    system_idx = next(
-        i for i, m in enumerate(result.messages) if m.get("role") == "system"
-    )
-    old_idx = next(
-        i for i, m in enumerate(result.messages)
-        if m.get("content") == "Old question"
-    )
+    result = auth.assemble(CognitiveContextRequest(conversation_history=history))
+    system_idx = next(i for i, m in enumerate(result.messages) if m.get("role") == "system")
+    old_idx = next(i for i, m in enumerate(result.messages) if m.get("content") == "Old question")
     assert system_idx < old_idx
 
 
@@ -627,6 +629,7 @@ def test_46_assemble_max_history_turns_zero_includes_no_history():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     history = [{"role": "user", "content": f"H{i}"} for i in range(5)]
     auth = CognitiveContextAuthority()
     result = auth.assemble(
@@ -637,10 +640,7 @@ def test_46_assemble_max_history_turns_zero_includes_no_history():
         )
     )
     # Only system message + user_message ("Now") should be present
-    history_in_messages = [
-        m for m in result.messages
-        if m.get("content", "").startswith("H")
-    ]
+    history_in_messages = [m for m in result.messages if m.get("content", "").startswith("H")]
     assert len(history_in_messages) == 0
 
 
@@ -654,6 +654,7 @@ def test_47_assemble_trace_is_non_empty_list():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
     result = auth.assemble(CognitiveContextRequest())
     assert isinstance(result.assembly_trace, list)
@@ -665,6 +666,7 @@ def test_48_assemble_trace_includes_system_message_assembled():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
     result = auth.assemble(CognitiveContextRequest())
     assert any("system_message" in t for t in result.assembly_trace)
@@ -675,10 +677,9 @@ def test_49_assemble_trace_records_soul_policy_injection():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
-    result = auth.assemble(
-        CognitiveContextRequest(soul_policy="Do not harm.")
-    )
+    result = auth.assemble(CognitiveContextRequest(soul_policy="Do not harm."))
     soul_entries = [t for t in result.assembly_trace if "soul_policy" in t]
     assert len(soul_entries) >= 1
     assert any("injected" in t for t in soul_entries)
@@ -689,13 +690,10 @@ def test_50_assemble_trace_records_user_policy_injection():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
-    result = auth.assemble(
-        CognitiveContextRequest(user_policy="Be concise.")
-    )
-    user_policy_entries = [
-        t for t in result.assembly_trace if "user_policy" in t
-    ]
+    result = auth.assemble(CognitiveContextRequest(user_policy="Be concise."))
+    user_policy_entries = [t for t in result.assembly_trace if "user_policy" in t]
     assert any("injected" in t for t in user_policy_entries)
 
 
@@ -704,13 +702,10 @@ def test_51_assemble_trace_records_memory_context_injection():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
-    result = auth.assemble(
-        CognitiveContextRequest(memory_context="Some memory.")
-    )
-    memory_entries = [
-        t for t in result.assembly_trace if "memory_context" in t
-    ]
+    result = auth.assemble(CognitiveContextRequest(memory_context="Some memory."))
+    memory_entries = [t for t in result.assembly_trace if "memory_context" in t]
     assert any("injected" in t for t in memory_entries)
 
 
@@ -719,6 +714,7 @@ def test_52_assemble_trace_records_absence_of_soul_policy():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
     result = auth.assemble(CognitiveContextRequest(soul_policy=None))
     soul_entries = [t for t in result.assembly_trace if "soul_policy" in t]
@@ -730,11 +726,10 @@ def test_53_assemble_trace_records_absence_of_memory_context():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
     result = auth.assemble(CognitiveContextRequest(memory_context=None))
-    memory_entries = [
-        t for t in result.assembly_trace if "memory_context" in t
-    ]
+    memory_entries = [t for t in result.assembly_trace if "memory_context" in t]
     assert any("absent" in t for t in memory_entries)
 
 
@@ -743,14 +738,11 @@ def test_54_assemble_trace_records_history_turn_count():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     history = [{"role": "user", "content": "Hi"}]
     auth = CognitiveContextAuthority()
-    result = auth.assemble(
-        CognitiveContextRequest(conversation_history=history)
-    )
-    history_entries = [
-        t for t in result.assembly_trace if "conversation_history" in t
-    ]
+    result = auth.assemble(CognitiveContextRequest(conversation_history=history))
+    history_entries = [t for t in result.assembly_trace if "conversation_history" in t]
     assert len(history_entries) >= 1
     # Should record at least the "1" turn count
     assert any("1" in t for t in history_entries)
@@ -761,13 +753,10 @@ def test_55_assemble_trace_records_user_message_appended():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
-    result = auth.assemble(
-        CognitiveContextRequest(user_message="Ping")
-    )
-    user_msg_entries = [
-        t for t in result.assembly_trace if "user_message" in t
-    ]
+    result = auth.assemble(CognitiveContextRequest(user_message="Ping"))
+    user_msg_entries = [t for t in result.assembly_trace if "user_message" in t]
     assert any("appended" in t for t in user_msg_entries)
 
 
@@ -776,11 +765,10 @@ def test_56_assemble_trace_records_absence_of_user_message():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
     result = auth.assemble(CognitiveContextRequest(user_message=None))
-    user_msg_entries = [
-        t for t in result.assembly_trace if "user_message" in t
-    ]
+    user_msg_entries = [t for t in result.assembly_trace if "user_message" in t]
     assert any("absent" in t for t in user_msg_entries)
 
 
@@ -794,6 +782,7 @@ def test_57_assemble_tool_manifest_none_when_not_provided():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
     result = auth.assemble(CognitiveContextRequest())
     assert result.tool_manifest is None
@@ -804,11 +793,10 @@ def test_58_assemble_tool_manifest_passed_through():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     tools = [{"name": "search", "description": "Search the web"}]
     auth = CognitiveContextAuthority()
-    result = auth.assemble(
-        CognitiveContextRequest(tool_manifest=tools)
-    )
+    result = auth.assemble(CognitiveContextRequest(tool_manifest=tools))
     assert result.tool_manifest == tools
 
 
@@ -817,17 +805,14 @@ def test_59_assemble_trace_records_tool_manifest_count():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     tools = [
         {"name": "tool_a"},
         {"name": "tool_b"},
     ]
     auth = CognitiveContextAuthority()
-    result = auth.assemble(
-        CognitiveContextRequest(tool_manifest=tools)
-    )
-    tool_entries = [
-        t for t in result.assembly_trace if "tool_manifest" in t
-    ]
+    result = auth.assemble(CognitiveContextRequest(tool_manifest=tools))
+    tool_entries = [t for t in result.assembly_trace if "tool_manifest" in t]
     assert any("2" in t for t in tool_entries)
 
 
@@ -836,6 +821,7 @@ def test_60_assemble_to_dict_json_serialisable():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
     result = auth.assemble(
         CognitiveContextRequest(
@@ -861,6 +847,7 @@ def test_61_assemble_policy_order_soul_before_agents_before_user():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
     result = auth.assemble(
         CognitiveContextRequest(
@@ -881,6 +868,7 @@ def test_62_assemble_policy_order_policies_before_memory():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
     result = auth.assemble(
         CognitiveContextRequest(
@@ -899,6 +887,7 @@ def test_63_assemble_policy_order_memory_before_continuity():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
     result = auth.assemble(
         CognitiveContextRequest(
@@ -917,6 +906,7 @@ def test_64_assemble_message_order_system_then_history_then_user():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     history = [{"role": "assistant", "content": "HIST_CONTENT"}]
     auth = CognitiveContextAuthority()
     result = auth.assemble(
@@ -925,17 +915,9 @@ def test_64_assemble_message_order_system_then_history_then_user():
             user_message="USER_CONTENT",
         )
     )
-    system_idx = next(
-        i for i, m in enumerate(result.messages) if m["role"] == "system"
-    )
-    hist_idx = next(
-        i for i, m in enumerate(result.messages)
-        if m.get("content") == "HIST_CONTENT"
-    )
-    user_idx = next(
-        i for i, m in enumerate(result.messages)
-        if m.get("content") == "USER_CONTENT"
-    )
+    system_idx = next(i for i, m in enumerate(result.messages) if m["role"] == "system")
+    hist_idx = next(i for i, m in enumerate(result.messages) if m.get("content") == "HIST_CONTENT")
+    user_idx = next(i for i, m in enumerate(result.messages) if m.get("content") == "USER_CONTENT")
     assert system_idx < hist_idx < user_idx
 
 
@@ -949,6 +931,7 @@ def test_65_retry_path_same_request_produces_same_message_count():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     req = CognitiveContextRequest(
         user_message="Hello",
         user_policy="Be helpful.",
@@ -965,15 +948,14 @@ def test_66_retry_path_execution_metadata_in_trace():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     req = CognitiveContextRequest(
         user_message="Retry me",
         execution_metadata={"retry_count": 1},
     )
     auth = CognitiveContextAuthority()
     result = auth.assemble(req)
-    meta_entries = [
-        t for t in result.assembly_trace if "execution_metadata" in t
-    ]
+    meta_entries = [t for t in result.assembly_trace if "execution_metadata" in t]
     assert any("injected" in t for t in meta_entries)
 
 
@@ -982,6 +964,7 @@ def test_67_fallback_path_same_system_message_content():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     req = CognitiveContextRequest(
         system_prefix="You are a fallback assistant.",
         user_message="Fallback test",
@@ -989,10 +972,7 @@ def test_67_fallback_path_same_system_message_content():
     auth = CognitiveContextAuthority()
     normal_asm = auth.assemble(req)
     fallback_asm = auth.assemble(req)
-    assert (
-        normal_asm.messages[0]["content"]
-        == fallback_asm.messages[0]["content"]
-    )
+    assert normal_asm.messages[0]["content"] == fallback_asm.messages[0]["content"]
 
 
 # ---------------------------------------------------------------------------
@@ -1002,26 +982,31 @@ def test_67_fallback_path_same_system_message_content():
 
 def test_68_llm_context_authority_re_exported_from_core_llm():
     from core.llm import LLM_CONTEXT_AUTHORITY
+
     assert LLM_CONTEXT_AUTHORITY is not None
 
 
 def test_69_cognitive_context_request_re_exported_from_core_llm():
     from core.llm import CognitiveContextRequest
+
     assert CognitiveContextRequest is not None
 
 
 def test_70_cognitive_context_assembly_re_exported_from_core_llm():
     from core.llm import CognitiveContextAssembly
+
     assert CognitiveContextAssembly is not None
 
 
 def test_71_cognitive_context_authority_re_exported_from_core_llm():
     from core.llm import CognitiveContextAuthority
+
     assert CognitiveContextAuthority is not None
 
 
 def test_72_get_cognitive_context_authority_re_exported_from_core_llm():
     from core.llm import get_cognitive_context_authority
+
     assert callable(get_cognitive_context_authority)
 
 
@@ -1033,12 +1018,14 @@ def test_72_get_cognitive_context_authority_re_exported_from_core_llm():
 def test_73_llm_context_authority_differs_from_llm_route_authority():
     from core.llm.context_authority import LLM_CONTEXT_AUTHORITY
     from core.llm.route_authority import LLM_ROUTE_AUTHORITY
+
     assert LLM_CONTEXT_AUTHORITY != LLM_ROUTE_AUTHORITY
 
 
 def test_74_llm_context_authority_differs_from_llm_supply_authority():
     from core.llm.context_authority import LLM_CONTEXT_AUTHORITY
     from core.llm.supply_authority import LLM_SUPPLY_AUTHORITY
+
     assert LLM_CONTEXT_AUTHORITY != LLM_SUPPLY_AUTHORITY
 
 
@@ -1048,54 +1035,42 @@ def test_74_llm_context_authority_differs_from_llm_supply_authority():
 
 
 def test_75_docs_contain_llm_context_authority():
-    doc_path = os.path.join(
-        _REPO_ROOT, "docs", "MODEL_ROUTING_AUTHORITY.md"
-    )
+    doc_path = os.path.join(_REPO_ROOT, "docs", "MODEL_ROUTING_AUTHORITY.md")
     with open(doc_path, encoding="utf-8") as fh:
         content = fh.read()
     assert "LLM_CONTEXT_AUTHORITY" in content
 
 
 def test_76_docs_contain_cognitive_context_authority():
-    doc_path = os.path.join(
-        _REPO_ROOT, "docs", "MODEL_ROUTING_AUTHORITY.md"
-    )
+    doc_path = os.path.join(_REPO_ROOT, "docs", "MODEL_ROUTING_AUTHORITY.md")
     with open(doc_path, encoding="utf-8") as fh:
         content = fh.read()
     assert "CognitiveContextAuthority" in content
 
 
 def test_77_docs_contain_cognitive_context_request():
-    doc_path = os.path.join(
-        _REPO_ROOT, "docs", "MODEL_ROUTING_AUTHORITY.md"
-    )
+    doc_path = os.path.join(_REPO_ROOT, "docs", "MODEL_ROUTING_AUTHORITY.md")
     with open(doc_path, encoding="utf-8") as fh:
         content = fh.read()
     assert "CognitiveContextRequest" in content
 
 
 def test_78_docs_contain_cognitive_context_assembly():
-    doc_path = os.path.join(
-        _REPO_ROOT, "docs", "MODEL_ROUTING_AUTHORITY.md"
-    )
+    doc_path = os.path.join(_REPO_ROOT, "docs", "MODEL_ROUTING_AUTHORITY.md")
     with open(doc_path, encoding="utf-8") as fh:
         content = fh.read()
     assert "CognitiveContextAssembly" in content
 
 
 def test_79_docs_contain_get_cognitive_context_authority():
-    doc_path = os.path.join(
-        _REPO_ROOT, "docs", "MODEL_ROUTING_AUTHORITY.md"
-    )
+    doc_path = os.path.join(_REPO_ROOT, "docs", "MODEL_ROUTING_AUTHORITY.md")
     with open(doc_path, encoding="utf-8") as fh:
         content = fh.read()
     assert "get_cognitive_context_authority" in content
 
 
 def test_80_docs_section_11_exists():
-    doc_path = os.path.join(
-        _REPO_ROOT, "docs", "MODEL_ROUTING_AUTHORITY.md"
-    )
+    doc_path = os.path.join(_REPO_ROOT, "docs", "MODEL_ROUTING_AUTHORITY.md")
     with open(doc_path, encoding="utf-8") as fh:
         content = fh.read()
     assert "## 11." in content
@@ -1108,12 +1083,14 @@ def test_80_docs_section_11_exists():
 
 def test_81_cognitive_context_authority_importable_without_error():
     import importlib
+
     mod = importlib.import_module("core.llm.context_authority")
     assert mod is not None
 
 
 def test_82_core_llm_init_exports_llm_context_authority_without_error():
     import importlib
+
     mod = importlib.import_module("core.llm")
     assert hasattr(mod, "LLM_CONTEXT_AUTHORITY")
 
@@ -1128,6 +1105,7 @@ def test_83_assemble_empty_conversation_history_produces_no_history_entries():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
     result = auth.assemble(
         CognitiveContextRequest(
@@ -1144,10 +1122,9 @@ def test_84_to_dict_source_request_has_soul_policy_true_when_set():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
-    result = auth.assemble(
-        CognitiveContextRequest(soul_policy="SOUL")
-    )
+    result = auth.assemble(CognitiveContextRequest(soul_policy="SOUL"))
     d = result.to_dict()
     assert d["source_request"]["has_soul_policy"] is True
 
@@ -1157,10 +1134,9 @@ def test_85_to_dict_source_request_has_user_policy_true_when_set():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
-    result = auth.assemble(
-        CognitiveContextRequest(user_policy="USER")
-    )
+    result = auth.assemble(CognitiveContextRequest(user_policy="USER"))
     d = result.to_dict()
     assert d["source_request"]["has_user_policy"] is True
 
@@ -1170,15 +1146,14 @@ def test_86_to_dict_source_request_history_turns_matches_provided():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     history = [
         {"role": "user", "content": "A"},
         {"role": "assistant", "content": "B"},
         {"role": "user", "content": "C"},
     ]
     auth = CognitiveContextAuthority()
-    result = auth.assemble(
-        CognitiveContextRequest(conversation_history=history)
-    )
+    result = auth.assemble(CognitiveContextRequest(conversation_history=history))
     d = result.to_dict()
     assert d["source_request"]["history_turns"] == 3
 
@@ -1188,10 +1163,9 @@ def test_87_to_dict_source_request_has_tool_manifest_true_when_set():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
-    result = auth.assemble(
-        CognitiveContextRequest(tool_manifest=[{"name": "my_tool"}])
-    )
+    result = auth.assemble(CognitiveContextRequest(tool_manifest=[{"name": "my_tool"}]))
     d = result.to_dict()
     assert d["source_request"]["has_tool_manifest"] is True
 
@@ -1201,10 +1175,9 @@ def test_88_to_dict_source_request_has_user_message_true_when_set():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
-    result = auth.assemble(
-        CognitiveContextRequest(user_message="Hello!")
-    )
+    result = auth.assemble(CognitiveContextRequest(user_message="Hello!"))
     d = result.to_dict()
     assert d["source_request"]["has_user_message"] is True
 
@@ -1214,10 +1187,9 @@ def test_89_to_dict_source_request_has_memory_context_true_when_set():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
-    result = auth.assemble(
-        CognitiveContextRequest(memory_context="memory data")
-    )
+    result = auth.assemble(CognitiveContextRequest(memory_context="memory data"))
     d = result.to_dict()
     assert d["source_request"]["has_memory_context"] is True
 
@@ -1227,10 +1199,9 @@ def test_90_to_dict_source_request_task_type_preserved():
         CognitiveContextAuthority,
         CognitiveContextRequest,
     )
+
     auth = CognitiveContextAuthority()
-    result = auth.assemble(
-        CognitiveContextRequest(task_type="reasoning")
-    )
+    result = auth.assemble(CognitiveContextRequest(task_type="reasoning"))
     d = result.to_dict()
     assert d["source_request"]["task_type"] == "reasoning"
 
@@ -1247,6 +1218,7 @@ def test_91_soul_policy_with_chat_only_execution_mode_logs_warning(caplog):
     must be visible in the warning log so it can be detected and corrected.
     """
     import logging
+
     from core.llm.context_authority import (
         CognitiveContextAuthority,
         CognitiveContextRequest,
@@ -1269,8 +1241,5 @@ def test_91_soul_policy_with_chat_only_execution_mode_logs_warning(caplog):
     system_content = result.messages[0]["content"]
     assert "SOUL constraints here" in system_content
     # The contract violation must appear in the warning log
-    warning_records = [
-        r for r in caplog.records
-        if r.levelno >= logging.WARNING and "chat_only" in r.message
-    ]
+    warning_records = [r for r in caplog.records if r.levelno >= logging.WARNING and "chat_only" in r.message]
     assert len(warning_records) >= 1

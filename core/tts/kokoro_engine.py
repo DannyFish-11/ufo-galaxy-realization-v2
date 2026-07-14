@@ -16,6 +16,7 @@ GALAXY_KOKORO_AUTOFETCH=0 关闭);下载完成后下次引擎选择/进程重启
 继承 EdgeTTSEngine 跨平台实现。任何运行期失败都由 speech_output 的降级链
 兜底(→ sapi),绝不让语音整段静默。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -31,7 +32,7 @@ from .edge_tts_engine import EdgeTTSEngine
 
 logger = logging.getLogger("Galaxy.TTS.Kokoro")
 
-_HF_REPO = "fastrtc/kokoro-onnx"   # kokoro-onnx 官方发布件的 HF 镜像(可走国内 HF_ENDPOINT)
+_HF_REPO = "fastrtc/kokoro-onnx"  # kokoro-onnx 官方发布件的 HF 镜像(可走国内 HF_ENDPOINT)
 _MODEL_FILE_DEFAULT = "kokoro-v1.0.onnx"
 _VOICES_FILE = "voices-v1.0.bin"
 
@@ -56,7 +57,10 @@ def kick_background_fetch() -> None:
     """后台线程拉取模型文件(幂等,至多一次;GALAXY_KOKORO_AUTOFETCH=0 关闭)。"""
     global _fetch_started
     if os.environ.get("GALAXY_KOKORO_AUTOFETCH", "1").strip().lower() in (
-        "0", "false", "no", "off",
+        "0",
+        "false",
+        "no",
+        "off",
     ):
         return
     with _fetch_lock:
@@ -67,6 +71,7 @@ def kick_background_fetch() -> None:
     def _fetch() -> None:
         try:
             from huggingface_hub import hf_hub_download
+
             d = _model_dir()
             d.mkdir(parents=True, exist_ok=True)
             for fname in (_model_file(), _VOICES_FILE):
@@ -76,6 +81,7 @@ def kick_background_fetch() -> None:
                 got = hf_hub_download(repo_id=_HF_REPO, filename=fname)
                 # 落到目标目录(hf 缓存 → 稳定路径,拷贝而非软链,便于用户迁移)
                 import shutil
+
                 shutil.copyfile(got, d / fname)
             logger.info("Kokoro 模型就绪(%s)——下次语音引擎选择/重启后启用", _model_dir())
         except Exception as exc:  # noqa: BLE001
@@ -110,6 +116,7 @@ class KokoroTTSEngine(EdgeTTSEngine):
     def _ensure_loaded(self) -> Any:
         if self._kokoro is None:
             from kokoro_onnx import Kokoro
+
             d = _model_dir()
             self._kokoro = Kokoro(str(d / _model_file()), str(d / _VOICES_FILE))
             try:
@@ -136,13 +143,14 @@ class KokoroTTSEngine(EdgeTTSEngine):
         text: str,
         output_path: Optional[str] = None,
         voice: Optional[str] = None,
-        rate: Optional[str] = None,   # 接口兼容;Kokoro 用 speed 概念,此处不映射
+        rate: Optional[str] = None,  # 接口兼容;Kokoro 用 speed 概念,此处不映射
     ) -> str:
         def _run() -> str:
             kokoro = self._ensure_loaded()
             use_voice = voice or self._pick_voice(text)
             lang = os.environ.get(
-                "GALAXY_KOKORO_LANG", "cmn" if _has_cjk(text) else "en-us",
+                "GALAXY_KOKORO_LANG",
+                "cmn" if _has_cjk(text) else "en-us",
             )
             samples, sample_rate = kokoro.create(text, voice=use_voice, lang=lang)
             path = output_path
@@ -151,6 +159,7 @@ class KokoroTTSEngine(EdgeTTSEngine):
                 tmp.close()
                 path = tmp.name
             import numpy as np
+
             pcm = np.clip(samples, -1.0, 1.0)
             pcm16 = (pcm * 32767.0).astype("<i2")
             with wave.open(path, "wb") as wf:

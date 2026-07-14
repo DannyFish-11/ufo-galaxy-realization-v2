@@ -59,7 +59,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ===========================================================================
 # Helpers / fixtures
 # ===========================================================================
@@ -68,6 +67,7 @@ import pytest
 def _fresh_registry():
     """Return a fresh MainlineConvergenceRegistry (not the module singleton)."""
     from core.mainline_convergence import MainlineConvergenceRegistry
+
     return MainlineConvergenceRegistry()
 
 
@@ -128,29 +128,29 @@ class TestMainlineChainAuthority:
         assert "unknown" in values
 
     def test_stage_authority_covers_all_stages(self):
-        from core.mainline_convergence import MainlineChainStage, STAGE_AUTHORITY
+        from core.mainline_convergence import STAGE_AUTHORITY, MainlineChainStage
 
         for stage in MainlineChainStage:
             assert stage in STAGE_AUTHORITY, f"Missing authority for {stage}"
 
     def test_openclawd_authority_stage_maps_to_openclawd(self):
-        from core.mainline_convergence import MainlineChainStage, MainlineChainAuthority, STAGE_AUTHORITY
+        from core.mainline_convergence import STAGE_AUTHORITY, MainlineChainAuthority, MainlineChainStage
 
         assert STAGE_AUTHORITY[MainlineChainStage.OPENCLAWD_AUTHORITY] == MainlineChainAuthority.OPENCLAWD
 
     def test_knowledge_stages_map_to_rag_memory(self):
-        from core.mainline_convergence import MainlineChainStage, MainlineChainAuthority, STAGE_AUTHORITY
+        from core.mainline_convergence import STAGE_AUTHORITY, MainlineChainAuthority, MainlineChainStage
 
         assert STAGE_AUTHORITY[MainlineChainStage.KNOWLEDGE_RECALL] == MainlineChainAuthority.RAG_MEMORY
         assert STAGE_AUTHORITY[MainlineChainStage.KNOWLEDGE_WRITEBACK] == MainlineChainAuthority.RAG_MEMORY
 
     def test_capability_dispatch_maps_to_capability_bus(self):
-        from core.mainline_convergence import MainlineChainStage, MainlineChainAuthority, STAGE_AUTHORITY
+        from core.mainline_convergence import STAGE_AUTHORITY, MainlineChainAuthority, MainlineChainStage
 
         assert STAGE_AUTHORITY[MainlineChainStage.CAPABILITY_DISPATCH] == MainlineChainAuthority.CAPABILITY_BUS
 
     def test_engineering_loop_maps_to_self_healing_loop(self):
-        from core.mainline_convergence import MainlineChainStage, MainlineChainAuthority, STAGE_AUTHORITY
+        from core.mainline_convergence import STAGE_AUTHORITY, MainlineChainAuthority, MainlineChainStage
 
         assert STAGE_AUTHORITY[MainlineChainStage.ENGINEERING_LOOP] == MainlineChainAuthority.SELF_HEALING_LOOP
 
@@ -249,7 +249,7 @@ class TestMainlineMetadataFrame:
         assert f.trace_id == "abc"
 
     def test_to_dict_contains_all_canonical_fields(self):
-        from core.mainline_convergence import MainlineMetadataFrame, CANONICAL_METADATA_FIELDS
+        from core.mainline_convergence import CANONICAL_METADATA_FIELDS, MainlineMetadataFrame
 
         d = MainlineMetadataFrame().to_dict()
         for field in CANONICAL_METADATA_FIELDS:
@@ -311,7 +311,7 @@ class TestMainlineMetadataFrame:
         assert f.coverage_ratio == 0.0
 
     def test_coverage_ratio_full(self):
-        from core.mainline_convergence import MainlineMetadataFrame, CANONICAL_METADATA_FIELDS
+        from core.mainline_convergence import CANONICAL_METADATA_FIELDS, MainlineMetadataFrame
 
         kwargs = {field: "x" for field in CANONICAL_METADATA_FIELDS}
         f = MainlineMetadataFrame(**kwargs)
@@ -340,7 +340,7 @@ class TestMainlineExecutionTrace:
         assert len(t.trace_id) > 0
 
     def test_add_stage_first_sets_entry_stage(self):
-        from core.mainline_convergence import MainlineExecutionTrace, MainlineChainStage
+        from core.mainline_convergence import MainlineChainStage, MainlineExecutionTrace
 
         t = MainlineExecutionTrace()
         t.add_stage(MainlineChainStage.REQUEST_INGRESS)
@@ -348,7 +348,7 @@ class TestMainlineExecutionTrace:
         assert "request_ingress" in t.stages_visited
 
     def test_add_stage_no_duplicate(self):
-        from core.mainline_convergence import MainlineExecutionTrace, MainlineChainStage
+        from core.mainline_convergence import MainlineChainStage, MainlineExecutionTrace
 
         t = MainlineExecutionTrace()
         t.add_stage(MainlineChainStage.OPENCLAWD_AUTHORITY)
@@ -356,7 +356,7 @@ class TestMainlineExecutionTrace:
         assert t.stages_visited.count("openclawd_authority") == 1
 
     def test_add_multiple_stages_in_order(self):
-        from core.mainline_convergence import MainlineExecutionTrace, MainlineChainStage
+        from core.mainline_convergence import MainlineChainStage, MainlineExecutionTrace
 
         t = MainlineExecutionTrace()
         t.add_stage(MainlineChainStage.REQUEST_INGRESS)
@@ -400,7 +400,7 @@ class TestMainlineExecutionTrace:
         assert t.elapsed_ms >= 0
 
     def test_visits_openclawd(self):
-        from core.mainline_convergence import MainlineExecutionTrace, MainlineChainStage
+        from core.mainline_convergence import MainlineChainStage, MainlineExecutionTrace
 
         t = MainlineExecutionTrace()
         assert not t.visits_openclawd
@@ -408,7 +408,7 @@ class TestMainlineExecutionTrace:
         assert t.visits_openclawd
 
     def test_visits_capability_dispatch(self):
-        from core.mainline_convergence import MainlineExecutionTrace, MainlineChainStage
+        from core.mainline_convergence import MainlineChainStage, MainlineExecutionTrace
 
         t = MainlineExecutionTrace()
         assert not t.visits_capability_dispatch
@@ -416,7 +416,7 @@ class TestMainlineExecutionTrace:
         assert t.visits_capability_dispatch
 
     def test_visits_knowledge_recall(self):
-        from core.mainline_convergence import MainlineExecutionTrace, MainlineChainStage
+        from core.mainline_convergence import MainlineChainStage, MainlineExecutionTrace
 
         t = MainlineExecutionTrace()
         assert not t.visits_knowledge
@@ -424,14 +424,14 @@ class TestMainlineExecutionTrace:
         assert t.visits_knowledge
 
     def test_visits_knowledge_writeback(self):
-        from core.mainline_convergence import MainlineExecutionTrace, MainlineChainStage
+        from core.mainline_convergence import MainlineChainStage, MainlineExecutionTrace
 
         t = MainlineExecutionTrace()
         t.add_stage(MainlineChainStage.KNOWLEDGE_WRITEBACK)
         assert t.visits_knowledge
 
     def test_to_dict_round_trip(self):
-        from core.mainline_convergence import MainlineExecutionTrace, MainlineChainStage
+        from core.mainline_convergence import MainlineChainStage, MainlineExecutionTrace
 
         t = MainlineExecutionTrace(trace_id="t99", session_id="s1", execution_path="local")
         t.add_stage(MainlineChainStage.OPENCLAWD_AUTHORITY)
@@ -445,7 +445,7 @@ class TestMainlineExecutionTrace:
         assert d["elapsed_ms"] is not None
 
     def test_from_dict_round_trip(self):
-        from core.mainline_convergence import MainlineExecutionTrace, MainlineChainStage
+        from core.mainline_convergence import MainlineChainStage, MainlineExecutionTrace
 
         t = MainlineExecutionTrace(trace_id="t100", session_id="s2")
         t.add_stage(MainlineChainStage.OPENCLAWD_AUTHORITY)
@@ -526,7 +526,7 @@ class TestNormalizeCrossSubsystemMetadata:
         assert frame.authority_role == "subject_decision_authority"
 
     def test_authority_role_openclawd_promoted(self):
-        from core.mainline_convergence import normalize_cross_subsystem_metadata, OPENCLAWD_AUTHORITY_ROLE
+        from core.mainline_convergence import OPENCLAWD_AUTHORITY_ROLE, normalize_cross_subsystem_metadata
 
         frame = normalize_cross_subsystem_metadata({"authority_role": "openclawd"})
         assert frame.authority_role == OPENCLAWD_AUTHORITY_ROLE
@@ -552,11 +552,13 @@ class TestNormalizeCrossSubsystemMetadata:
     def test_trace_id_prefers_trace_id_over_fallbacks(self):
         from core.mainline_convergence import normalize_cross_subsystem_metadata
 
-        frame = normalize_cross_subsystem_metadata({
-            "trace_id": "primary",
-            "runtime_session_id": "fallback1",
-            "request_id": "fallback2",
-        })
+        frame = normalize_cross_subsystem_metadata(
+            {
+                "trace_id": "primary",
+                "runtime_session_id": "fallback1",
+                "request_id": "fallback2",
+            }
+        )
         assert frame.trace_id == "primary"
 
     def test_execution_path_passed_through(self):
@@ -586,10 +588,12 @@ class TestNormalizeCrossSubsystemMetadata:
     def test_explicit_resource_type_not_overwritten(self):
         from core.mainline_convergence import normalize_cross_subsystem_metadata
 
-        frame = normalize_cross_subsystem_metadata({
-            "source": "github__ingest",
-            "resource_type": "custom",
-        })
+        frame = normalize_cross_subsystem_metadata(
+            {
+                "source": "github__ingest",
+                "resource_type": "custom",
+            }
+        )
         assert frame.resource_type == "custom"
 
     def test_session_id_passed_through(self):
@@ -625,10 +629,12 @@ class TestNormalizeCrossSubsystemMetadata:
     def test_unknown_keys_ignored(self):
         from core.mainline_convergence import normalize_cross_subsystem_metadata
 
-        frame = normalize_cross_subsystem_metadata({
-            "totally_unknown_field": "value",
-            "trace_id": "t1",
-        })
+        frame = normalize_cross_subsystem_metadata(
+            {
+                "totally_unknown_field": "value",
+                "trace_id": "t1",
+            }
+        )
         assert frame.trace_id == "t1"
         assert not hasattr(frame, "totally_unknown_field")
 
@@ -670,20 +676,20 @@ class TestBuildMainlineTrace:
         assert trace.trace_id == "my_trace"
 
     def test_entry_stage_recorded(self):
-        from core.mainline_convergence import build_mainline_trace, MainlineChainStage
+        from core.mainline_convergence import MainlineChainStage, build_mainline_trace
 
         trace = build_mainline_trace(entry_stage=MainlineChainStage.OPENCLAWD_AUTHORITY)
         assert trace.entry_stage == "openclawd_authority"
         assert "openclawd_authority" in trace.stages_visited
 
     def test_openclawd_stage_sets_authority_role_default(self):
-        from core.mainline_convergence import build_mainline_trace, MainlineChainStage, OPENCLAWD_AUTHORITY_ROLE
+        from core.mainline_convergence import OPENCLAWD_AUTHORITY_ROLE, MainlineChainStage, build_mainline_trace
 
         trace = build_mainline_trace(entry_stage=MainlineChainStage.OPENCLAWD_AUTHORITY)
         assert trace.authority_role == OPENCLAWD_AUTHORITY_ROLE
 
     def test_explicit_authority_role_wins(self):
-        from core.mainline_convergence import build_mainline_trace, MainlineChainStage
+        from core.mainline_convergence import MainlineChainStage, build_mainline_trace
 
         trace = build_mainline_trace(
             entry_stage=MainlineChainStage.OPENCLAWD_AUTHORITY,
@@ -692,13 +698,13 @@ class TestBuildMainlineTrace:
         assert trace.authority_role == "custom_role"
 
     def test_path_class_default_mainline(self):
-        from core.mainline_convergence import build_mainline_trace, MainlinePathClass
+        from core.mainline_convergence import MainlinePathClass, build_mainline_trace
 
         trace = build_mainline_trace()
         assert trace.path_class == MainlinePathClass.MAINLINE.value
 
     def test_path_class_compat(self):
-        from core.mainline_convergence import build_mainline_trace, MainlinePathClass
+        from core.mainline_convergence import MainlinePathClass, build_mainline_trace
 
         trace = build_mainline_trace(path_class=MainlinePathClass.COMPAT)
         assert trace.path_class == MainlinePathClass.COMPAT.value
@@ -725,13 +731,14 @@ class TestBuildMainlineTrace:
 class TestRecordMainlineExecution:
     def setup_method(self):
         from core.mainline_convergence import reset_mainline_convergence_registry
+
         reset_mainline_convergence_registry()
 
     def test_records_in_registry(self):
         from core.mainline_convergence import (
-            record_mainline_execution,
-            get_mainline_convergence_registry,
             MainlineChainStage,
+            get_mainline_convergence_registry,
+            record_mainline_execution,
         )
 
         trace = record_mainline_execution(
@@ -746,8 +753,8 @@ class TestRecordMainlineExecution:
 
     def test_trace_is_closed(self):
         from core.mainline_convergence import (
-            record_mainline_execution,
             MainlineChainStage,
+            record_mainline_execution,
         )
 
         trace = record_mainline_execution(
@@ -756,7 +763,7 @@ class TestRecordMainlineExecution:
         assert not trace.is_open
 
     def test_stages_recorded(self):
-        from core.mainline_convergence import record_mainline_execution, MainlineChainStage
+        from core.mainline_convergence import MainlineChainStage, record_mainline_execution
 
         trace = record_mainline_execution(
             stages=[
@@ -835,7 +842,7 @@ class TestMainlineConvergenceRegistryRecord:
         assert snap.legacy_count == 1
 
     def test_stage_visit_counts_updated(self):
-        from core.mainline_convergence import MainlineExecutionTrace, MainlineChainStage
+        from core.mainline_convergence import MainlineChainStage, MainlineExecutionTrace
 
         reg = _fresh_registry()
         t = MainlineExecutionTrace()
@@ -850,6 +857,7 @@ class TestMainlineConvergenceRegistryRecord:
 
     def test_non_mainline_path_emits_warning(self, caplog):
         import logging
+
         from core.mainline_convergence import MainlineExecutionTrace, MainlinePathClass
 
         reg = _fresh_registry()
@@ -1022,7 +1030,7 @@ class TestMainlineConvergenceRegistrySnapshot:
         assert len(snap.recent_traces) <= 10
 
     def test_openclawd_coverage(self):
-        from core.mainline_convergence import MainlineExecutionTrace, MainlineChainStage
+        from core.mainline_convergence import MainlineChainStage, MainlineExecutionTrace
 
         reg = _fresh_registry()
         # 2 traces visit openclawd, 1 does not
@@ -1039,7 +1047,7 @@ class TestMainlineConvergenceRegistrySnapshot:
         assert snap.openclawd_coverage == pytest.approx(2 / 3)
 
     def test_knowledge_coverage_nonzero(self):
-        from core.mainline_convergence import MainlineExecutionTrace, MainlineChainStage
+        from core.mainline_convergence import MainlineChainStage, MainlineExecutionTrace
 
         reg = _fresh_registry()
         t = MainlineExecutionTrace()
@@ -1052,6 +1060,7 @@ class TestMainlineConvergenceRegistrySnapshot:
 
     def test_snapshot_to_dict_serialisable(self):
         import json
+
         from core.mainline_convergence import MainlineExecutionTrace
 
         reg = _fresh_registry()
@@ -1147,6 +1156,7 @@ class TestMainlineConvergenceRegistryMaxTraces:
 class TestMainlineConvergenceRegistryThreadSafety:
     def test_concurrent_records_do_not_corrupt(self):
         import threading
+
         from core.mainline_convergence import MainlineConvergenceRegistry, MainlineExecutionTrace
 
         reg = MainlineConvergenceRegistry(max_traces=1000)
@@ -1186,10 +1196,11 @@ class TestSingletonAccessors:
 
     def test_reset_clears_module_registry(self):
         from core.mainline_convergence import (
+            MainlineExecutionTrace,
             get_mainline_convergence_registry,
             reset_mainline_convergence_registry,
-            MainlineExecutionTrace,
         )
+
         reg = get_mainline_convergence_registry()
         t = MainlineExecutionTrace()
         t.close()
@@ -1278,11 +1289,11 @@ class TestAcceptanceCriteriaA_MainlineChainCoherence:
 
     def test_full_mainline_stages_can_be_recorded(self):
         from core.mainline_convergence import (
-            record_mainline_execution,
-            get_mainline_convergence_registry,
-            reset_mainline_convergence_registry,
             MainlineChainStage,
             MainlinePathClass,
+            get_mainline_convergence_registry,
+            record_mainline_execution,
+            reset_mainline_convergence_registry,
         )
 
         reset_mainline_convergence_registry()
@@ -1312,7 +1323,7 @@ class TestAcceptanceCriteriaA_MainlineChainCoherence:
         assert reg.snapshot().mainline_count == 1
 
     def test_mainline_trace_visits_openclawd(self):
-        from core.mainline_convergence import build_mainline_trace, MainlineChainStage
+        from core.mainline_convergence import MainlineChainStage, build_mainline_trace
 
         trace = build_mainline_trace(
             entry_stage=MainlineChainStage.OPENCLAWD_AUTHORITY,
@@ -1328,9 +1339,9 @@ class TestAcceptanceCriteriaA_MainlineChainCoherence:
 
     def test_authority_role_is_subject_decision_authority(self):
         from core.mainline_convergence import (
-            build_mainline_trace,
-            MainlineChainStage,
             OPENCLAWD_AUTHORITY_ROLE,
+            MainlineChainStage,
+            build_mainline_trace,
         )
 
         trace = build_mainline_trace(entry_stage=MainlineChainStage.OPENCLAWD_AUTHORITY)
@@ -1342,25 +1353,27 @@ class TestAcceptanceCriteriaB_NoHiddenBypasses:
     to function; they all have canonical stage representations."""
 
     def test_github_resource_has_stage(self):
-        from core.mainline_convergence import MainlineChainStage, STAGE_AUTHORITY, MainlineChainAuthority
+        from core.mainline_convergence import STAGE_AUTHORITY, MainlineChainAuthority, MainlineChainStage
 
         # GitHub goes through resource_resolution → execution
         assert MainlineChainStage.RESOURCE_RESOLUTION in STAGE_AUTHORITY
-        assert STAGE_AUTHORITY[MainlineChainStage.RESOURCE_RESOLUTION] == MainlineChainAuthority.SYSTEM_RESOURCE_REGISTRY
+        assert (
+            STAGE_AUTHORITY[MainlineChainStage.RESOURCE_RESOLUTION] == MainlineChainAuthority.SYSTEM_RESOURCE_REGISTRY
+        )
 
     def test_academic_resource_has_stage(self):
-        from core.mainline_convergence import MainlineChainStage, STAGE_AUTHORITY
+        from core.mainline_convergence import STAGE_AUTHORITY, MainlineChainStage
 
         assert MainlineChainStage.CAPABILITY_DISPATCH in STAGE_AUTHORITY
 
     def test_engineering_loop_has_dedicated_stage(self):
-        from core.mainline_convergence import MainlineChainStage, STAGE_AUTHORITY, MainlineChainAuthority
+        from core.mainline_convergence import STAGE_AUTHORITY, MainlineChainAuthority, MainlineChainStage
 
         assert MainlineChainStage.ENGINEERING_LOOP in STAGE_AUTHORITY
         assert STAGE_AUTHORITY[MainlineChainStage.ENGINEERING_LOOP] == MainlineChainAuthority.SELF_HEALING_LOOP
 
     def test_knowledge_writeback_has_dedicated_stage(self):
-        from core.mainline_convergence import MainlineChainStage, STAGE_AUTHORITY, MainlineChainAuthority
+        from core.mainline_convergence import STAGE_AUTHORITY, MainlineChainAuthority, MainlineChainStage
 
         assert MainlineChainStage.KNOWLEDGE_WRITEBACK in STAGE_AUTHORITY
         assert STAGE_AUTHORITY[MainlineChainStage.KNOWLEDGE_WRITEBACK] == MainlineChainAuthority.RAG_MEMORY
@@ -1465,7 +1478,7 @@ class TestAcceptanceCriteriaC_MetadataNormalization:
         assert frame.trace_id == "legacy_rs"
 
     def test_frame_to_dict_includes_all_canonical_fields(self):
-        from core.mainline_convergence import normalize_cross_subsystem_metadata, CANONICAL_METADATA_FIELDS
+        from core.mainline_convergence import CANONICAL_METADATA_FIELDS, normalize_cross_subsystem_metadata
 
         frame = normalize_cross_subsystem_metadata({"trace_id": "check"})
         d = frame.to_dict()

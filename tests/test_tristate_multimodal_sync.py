@@ -13,25 +13,27 @@
      就 manifest、阈限态几毫秒被跳过"。非流式调用保持原时序;零输出请求
      仍补齐 canonical 三段轨迹(liminal→manifest→silent)。
 """
+
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # 1. 桥端:speaking 不被相位踩灭 + 说话深度地板
 # ---------------------------------------------------------------------------
+
 
 class TestBridgeSpeakingOwnership:
     @pytest.mark.asyncio
     async def test_phase_silent_does_not_stomp_speaking(self):
         from core.lumiv_websocket_bridge import GalaxyPresenceBridge
+
         bridge = GalaxyPresenceBridge.get_instance()
         bridge._loop = asyncio.get_running_loop()
-        bridge._speaking = True   # TTS 播放中(set_ai_speaking(True) 已置)
+        bridge._speaking = True  # TTS 播放中(set_ai_speaking(True) 已置)
 
-        bridge._on_phase_silent({})     # 响应完成,runtime 回 SILENT
+        bridge._on_phase_silent({})  # 响应完成,runtime 回 SILENT
         assert bridge._speaking is True, "相位切换不得踩掉 speaking(播放未结束)"
         assert bridge._current_mode == "static"
 
@@ -44,29 +46,31 @@ class TestBridgeSpeakingOwnership:
     async def test_speaking_floor_holds_visible_depth(self):
         """SILENT+speaking:广播的 depth 维持地板(≥liminal),说完落回相位深度。"""
         from core.lumiv_websocket_bridge import (
-            GalaxyPresenceBridge, MODE_DEPTH_MAP,
+            MODE_DEPTH_MAP,
+            GalaxyPresenceBridge,
         )
+
         bridge = GalaxyPresenceBridge.get_instance()
         bridge._loop = asyncio.get_running_loop()
         bridge._on_phase_silent({})
 
         bridge._speaking = True
         msg = bridge._build_message()
-        assert msg["payload"]["depth_factor"] >= MODE_DEPTH_MAP["liminal"], \
-            "说话中即使相位已静默,也要维持可见在场深度"
+        assert msg["payload"]["depth_factor"] >= MODE_DEPTH_MAP["liminal"], "说话中即使相位已静默,也要维持可见在场深度"
         assert msg["payload"]["speaking"] is True
 
         bridge._speaking = False
         msg = bridge._build_message()
-        assert msg["payload"]["depth_factor"] == MODE_DEPTH_MAP["static"], \
-            "说完自然落回相位深度(渲染端弹簧缓落)"
+        assert msg["payload"]["depth_factor"] == MODE_DEPTH_MAP["static"], "说完自然落回相位深度(渲染端弹簧缓落)"
 
     @pytest.mark.asyncio
     async def test_manifest_depth_not_lowered_by_floor(self):
         """MANIFEST(0.92)本就高于地板:地板只抬不压。"""
         from core.lumiv_websocket_bridge import (
-            GalaxyPresenceBridge, MODE_DEPTH_MAP,
+            MODE_DEPTH_MAP,
+            GalaxyPresenceBridge,
         )
+
         bridge = GalaxyPresenceBridge.get_instance()
         bridge._loop = asyncio.get_running_loop()
         bridge._on_phase_manifest({})
@@ -81,9 +85,11 @@ class TestBridgeSpeakingOwnership:
 # 2. runtime:MANIFEST 由首输出驱动
 # ---------------------------------------------------------------------------
 
+
 def _phase_recorder():
     """订阅三个相位事件,返回 (记录列表, 退订函数)。"""
     from core.state_event_bus import get_state_event_bus
+
     bus = get_state_event_bus()
     seen = []
     tokens = [
@@ -102,8 +108,7 @@ def _phase_recorder():
 
 
 def _ok_result():
-    return {"success": True, "response": "OK", "intent": "chat",
-            "metadata": {"session_id": "s1"}}
+    return {"success": True, "response": "OK", "intent": "chat", "metadata": {"session_id": "s1"}}
 
 
 class TestManifestOnFirstToken:
@@ -122,7 +127,7 @@ class TestManifestOnFirstToken:
         async def _mock_process(**kwargs):
             # 思考期:尚未流出任何 token → 不得已进 MANIFEST
             phase_at_feed["before"] = list(seen)
-            sink.feed("第一段")           # ← 首输出瞬间
+            sink.feed("第一段")  # ← 首输出瞬间
             phase_at_feed["after"] = list(seen)
             return _ok_result()
 
@@ -137,10 +142,8 @@ class TestManifestOnFirstToken:
             cleanup()
 
         assert result["tristate"] == "silent"
-        assert "manifest" not in phase_at_feed["before"], \
-            "思考期(无输出)不得提前进 MANIFEST"
-        assert "manifest" in phase_at_feed["after"], \
-            "首 token 流出瞬间必须进 MANIFEST"
+        assert "manifest" not in phase_at_feed["before"], "思考期(无输出)不得提前进 MANIFEST"
+        assert "manifest" in phase_at_feed["after"], "首 token 流出瞬间必须进 MANIFEST"
         # canonical 三段轨迹完整且有序
         assert seen.index("liminal") < seen.index("manifest") < seen.index("silent")
 
@@ -161,8 +164,7 @@ class TestManifestOnFirstToken:
             with use_stream(sink):
                 await rt.handle_request(message="hi", source="chat")
 
-        assert sink._on_delta is orig_cb, \
-            "请求结束必须恢复 sink 回调(伪流式兜底不得触发死会话的相位钩子)"
+        assert sink._on_delta is orig_cb, "请求结束必须恢复 sink 回调(伪流式兜底不得触发死会话的相位钩子)"
 
     @pytest.mark.asyncio
     async def test_zero_output_request_still_emits_canonical_order(self, monkeypatch):

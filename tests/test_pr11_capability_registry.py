@@ -58,11 +58,11 @@ import types
 from typing import Any, Dict, List
 from unittest.mock import MagicMock, patch
 
-
 # ---------------------------------------------------------------------------
 # Helper: build a minimal fake device_registry module so tests run without
 # needing the full Galaxy runtime.
 # ---------------------------------------------------------------------------
+
 
 def _make_fake_device(device_id: str, capabilities: List[str]):
     """Return a simple object that mimics Device well enough for tests."""
@@ -89,30 +89,37 @@ def _make_fake_registry(devices_by_id: Dict[str, Any]):
 # A) Module structure
 # ============================================================================
 
+
 class TestModuleStructure:
     def test_authority_sentinel_importable(self):
         from core.capability_registry import CAPABILITY_REGISTRY_AUTHORITY
+
         assert isinstance(CAPABILITY_REGISTRY_AUTHORITY, str)
         assert "PR-11" in CAPABILITY_REGISTRY_AUTHORITY
 
     def test_device_capability_summary_importable(self):
         from core.capability_registry import DeviceCapabilitySummary
+
         assert DeviceCapabilitySummary is not None
 
     def test_capability_match_result_importable(self):
         from core.capability_registry import CapabilityMatchResult
+
         assert CapabilityMatchResult is not None
 
     def test_get_device_capability_summary_importable(self):
         from core.capability_registry import get_device_capability_summary
+
         assert callable(get_device_capability_summary)
 
     def test_device_matches_capabilities_importable(self):
         from core.capability_registry import device_matches_capabilities
+
         assert callable(device_matches_capabilities)
 
     def test_get_devices_matching_capabilities_importable(self):
         from core.capability_registry import get_devices_matching_capabilities
+
         assert callable(get_devices_matching_capabilities)
 
 
@@ -120,9 +127,11 @@ class TestModuleStructure:
 # B) DeviceCapabilitySummary — data model
 # ============================================================================
 
+
 class TestDeviceCapabilitySummary:
     def test_default_construction(self):
         from core.capability_registry import DeviceCapabilitySummary
+
         summary = DeviceCapabilitySummary(device_id="dev_001")
         assert summary.device_id == "dev_001"
         assert summary.available is False
@@ -133,6 +142,7 @@ class TestDeviceCapabilitySummary:
 
     def test_to_dict_contains_all_keys(self):
         from core.capability_registry import DeviceCapabilitySummary
+
         summary = DeviceCapabilitySummary(
             device_id="dev_x",
             available=True,
@@ -154,6 +164,7 @@ class TestDeviceCapabilitySummary:
 
     def test_to_dict_is_json_serialisable(self):
         from core.capability_registry import DeviceCapabilitySummary
+
         summary = DeviceCapabilitySummary(
             device_id="dev_json",
             available=True,
@@ -170,9 +181,11 @@ class TestDeviceCapabilitySummary:
 # C) CapabilityMatchResult — data model
 # ============================================================================
 
+
 class TestCapabilityMatchResult:
     def test_default_construction(self):
         from core.capability_registry import CapabilityMatchResult
+
         result = CapabilityMatchResult(device_id="dev_002")
         assert result.device_id == "dev_002"
         assert result.matched is False
@@ -183,6 +196,7 @@ class TestCapabilityMatchResult:
 
     def test_to_dict_contains_all_keys(self):
         from core.capability_registry import CapabilityMatchResult
+
         result = CapabilityMatchResult(
             device_id="dev_y",
             required_capabilities=["camera"],
@@ -204,6 +218,7 @@ class TestCapabilityMatchResult:
 
     def test_to_dict_is_json_serialisable(self):
         from core.capability_registry import CapabilityMatchResult
+
         result = CapabilityMatchResult(
             device_id="dev_json2",
             required_capabilities=["screen"],
@@ -219,15 +234,19 @@ class TestCapabilityMatchResult:
 # D) get_device_capability_summary
 # ============================================================================
 
+
 class TestGetDeviceCapabilitySummary:
     def test_returns_summary_instance(self):
         from core.capability_registry import (
-            get_device_capability_summary,
             DeviceCapabilitySummary,
+            get_device_capability_summary,
         )
-        with patch("core.capability_registry._collect_from_device_registry") as dr_mock, \
-             patch("core.capability_registry._collect_from_capability_bus") as cb_mock, \
-             patch("core.capability_registry._collect_from_gateway_registry") as gw_mock:
+
+        with (
+            patch("core.capability_registry._collect_from_device_registry") as dr_mock,
+            patch("core.capability_registry._collect_from_capability_bus") as cb_mock,
+            patch("core.capability_registry._collect_from_gateway_registry") as gw_mock,
+        ):
             dr_mock.return_value = {"caps": [], "available": False, "reason": "not found"}
             cb_mock.return_value = {"caps": [], "reason": None}
             gw_mock.return_value = {"caps": [], "reason": None}
@@ -236,9 +255,12 @@ class TestGetDeviceCapabilitySummary:
 
     def test_summary_contains_device_id(self):
         from core.capability_registry import get_device_capability_summary
-        with patch("core.capability_registry._collect_from_device_registry") as dr_mock, \
-             patch("core.capability_registry._collect_from_capability_bus") as cb_mock, \
-             patch("core.capability_registry._collect_from_gateway_registry") as gw_mock:
+
+        with (
+            patch("core.capability_registry._collect_from_device_registry") as dr_mock,
+            patch("core.capability_registry._collect_from_capability_bus") as cb_mock,
+            patch("core.capability_registry._collect_from_gateway_registry") as gw_mock,
+        ):
             dr_mock.return_value = {"caps": [], "available": False, "reason": "not found"}
             cb_mock.return_value = {"caps": [], "reason": None}
             gw_mock.return_value = {"caps": [], "reason": None}
@@ -247,9 +269,12 @@ class TestGetDeviceCapabilitySummary:
 
     def test_summary_with_device_registry_entry_available_true(self):
         from core.capability_registry import get_device_capability_summary
-        with patch("core.capability_registry._collect_from_device_registry") as dr_mock, \
-             patch("core.capability_registry._collect_from_capability_bus") as cb_mock, \
-             patch("core.capability_registry._collect_from_gateway_registry") as gw_mock:
+
+        with (
+            patch("core.capability_registry._collect_from_device_registry") as dr_mock,
+            patch("core.capability_registry._collect_from_capability_bus") as cb_mock,
+            patch("core.capability_registry._collect_from_gateway_registry") as gw_mock,
+        ):
             dr_mock.return_value = {
                 "caps": ["screen", "camera"],
                 "available": True,
@@ -264,9 +289,12 @@ class TestGetDeviceCapabilitySummary:
 
     def test_missing_device_degrades_gracefully(self):
         from core.capability_registry import get_device_capability_summary
-        with patch("core.capability_registry._collect_from_device_registry") as dr_mock, \
-             patch("core.capability_registry._collect_from_capability_bus") as cb_mock, \
-             patch("core.capability_registry._collect_from_gateway_registry") as gw_mock:
+
+        with (
+            patch("core.capability_registry._collect_from_device_registry") as dr_mock,
+            patch("core.capability_registry._collect_from_capability_bus") as cb_mock,
+            patch("core.capability_registry._collect_from_gateway_registry") as gw_mock,
+        ):
             dr_mock.return_value = {
                 "caps": [],
                 "available": False,
@@ -281,9 +309,12 @@ class TestGetDeviceCapabilitySummary:
 
     def test_summary_sources_contains_all_three_keys(self):
         from core.capability_registry import get_device_capability_summary
-        with patch("core.capability_registry._collect_from_device_registry") as dr_mock, \
-             patch("core.capability_registry._collect_from_capability_bus") as cb_mock, \
-             patch("core.capability_registry._collect_from_gateway_registry") as gw_mock:
+
+        with (
+            patch("core.capability_registry._collect_from_device_registry") as dr_mock,
+            patch("core.capability_registry._collect_from_capability_bus") as cb_mock,
+            patch("core.capability_registry._collect_from_gateway_registry") as gw_mock,
+        ):
             dr_mock.return_value = {"caps": ["screen"], "available": True, "reason": None}
             cb_mock.return_value = {"caps": ["tap"], "reason": None}
             gw_mock.return_value = {"caps": ["screenshot"], "reason": None}
@@ -294,9 +325,12 @@ class TestGetDeviceCapabilitySummary:
 
     def test_resolved_capabilities_is_deduplicated_union(self):
         from core.capability_registry import get_device_capability_summary
-        with patch("core.capability_registry._collect_from_device_registry") as dr_mock, \
-             patch("core.capability_registry._collect_from_capability_bus") as cb_mock, \
-             patch("core.capability_registry._collect_from_gateway_registry") as gw_mock:
+
+        with (
+            patch("core.capability_registry._collect_from_device_registry") as dr_mock,
+            patch("core.capability_registry._collect_from_capability_bus") as cb_mock,
+            patch("core.capability_registry._collect_from_gateway_registry") as gw_mock,
+        ):
             # 'screen' appears in two sources — should appear once in resolved
             dr_mock.return_value = {"caps": ["screen", "camera"], "available": True, "reason": None}
             cb_mock.return_value = {"caps": ["screen", "tap"], "reason": None}
@@ -311,14 +345,17 @@ class TestGetDeviceCapabilitySummary:
 # E) device_matches_capabilities
 # ============================================================================
 
+
 class TestDeviceMatchesCapabilities:
     def test_returns_match_result_instance(self):
         from core.capability_registry import (
-            device_matches_capabilities,
             CapabilityMatchResult,
+            device_matches_capabilities,
         )
+
         with patch("core.capability_registry.get_device_capability_summary") as mock_summary:
             from core.capability_registry import DeviceCapabilitySummary
+
             mock_summary.return_value = DeviceCapabilitySummary(
                 device_id="dev_01",
                 available=True,
@@ -328,7 +365,8 @@ class TestDeviceMatchesCapabilities:
         assert isinstance(result, CapabilityMatchResult)
 
     def test_match_succeeds_when_all_requirements_satisfied(self):
-        from core.capability_registry import device_matches_capabilities, DeviceCapabilitySummary
+        from core.capability_registry import DeviceCapabilitySummary, device_matches_capabilities
+
         with patch("core.capability_registry.get_device_capability_summary") as mock_summary:
             mock_summary.return_value = DeviceCapabilitySummary(
                 device_id="dev_match",
@@ -340,7 +378,8 @@ class TestDeviceMatchesCapabilities:
         assert result.missing_capabilities == []
 
     def test_match_fails_with_explicit_missing_capabilities(self):
-        from core.capability_registry import device_matches_capabilities, DeviceCapabilitySummary
+        from core.capability_registry import DeviceCapabilitySummary, device_matches_capabilities
+
         with patch("core.capability_registry.get_device_capability_summary") as mock_summary:
             mock_summary.return_value = DeviceCapabilitySummary(
                 device_id="dev_partial",
@@ -353,7 +392,8 @@ class TestDeviceMatchesCapabilities:
         assert "screen" not in result.missing_capabilities
 
     def test_match_fails_for_unknown_device(self):
-        from core.capability_registry import device_matches_capabilities, DeviceCapabilitySummary
+        from core.capability_registry import DeviceCapabilitySummary, device_matches_capabilities
+
         with patch("core.capability_registry.get_device_capability_summary") as mock_summary:
             mock_summary.return_value = DeviceCapabilitySummary(
                 device_id="unknown_xyz",
@@ -365,7 +405,8 @@ class TestDeviceMatchesCapabilities:
         assert result.matched is False
 
     def test_partial_capabilities_returns_missing_list(self):
-        from core.capability_registry import device_matches_capabilities, DeviceCapabilitySummary
+        from core.capability_registry import DeviceCapabilitySummary, device_matches_capabilities
+
         with patch("core.capability_registry.get_device_capability_summary") as mock_summary:
             mock_summary.return_value = DeviceCapabilitySummary(
                 device_id="dev_some",
@@ -377,7 +418,8 @@ class TestDeviceMatchesCapabilities:
         assert result.missing_capabilities == ["lidar"]
 
     def test_empty_requirements_always_matches_available_device(self):
-        from core.capability_registry import device_matches_capabilities, DeviceCapabilitySummary
+        from core.capability_registry import DeviceCapabilitySummary, device_matches_capabilities
+
         with patch("core.capability_registry.get_device_capability_summary") as mock_summary:
             mock_summary.return_value = DeviceCapabilitySummary(
                 device_id="dev_empty_req",
@@ -393,24 +435,27 @@ class TestDeviceMatchesCapabilities:
 # F) get_devices_matching_capabilities
 # ============================================================================
 
+
 class TestGetDevicesMatchingCapabilities:
     def test_returns_list(self):
         from core.capability_registry import get_devices_matching_capabilities
-        with patch("core.capability_registry.device_matches_capabilities") as mock_match, \
-             patch("core.device_registry.device_registry") as mock_dr:
+
+        with (
+            patch("core.capability_registry.device_matches_capabilities") as mock_match,
+            patch("core.device_registry.device_registry") as mock_dr,
+        ):
             mock_dr.list_devices.return_value = []
-            with patch("core.capability_registry.get_devices_matching_capabilities",
-                       wraps=get_devices_matching_capabilities):
+            with patch(
+                "core.capability_registry.get_devices_matching_capabilities", wraps=get_devices_matching_capabilities
+            ):
                 pass  # just exercise the import path
         # Call with patched device_registry import inside the function
-        with patch.dict("sys.modules", {"core.device_registry": MagicMock(
-            device_registry=_make_fake_registry({})
-        )}):
+        with patch.dict("sys.modules", {"core.device_registry": MagicMock(device_registry=_make_fake_registry({}))}):
             result = get_devices_matching_capabilities(["screen"])
         assert isinstance(result, list)
 
     def test_filters_only_matching_devices(self):
-        from core.capability_registry import get_devices_matching_capabilities, DeviceCapabilitySummary
+        from core.capability_registry import DeviceCapabilitySummary, get_devices_matching_capabilities
 
         fake_devices = {
             "dev_a": _make_fake_device("dev_a", ["screen", "camera"]),
@@ -420,18 +465,21 @@ class TestGetDevicesMatchingCapabilities:
         fake_reg = _make_fake_registry(fake_devices)
 
         # Patch device_registry singleton + per-device summaries
-        with patch("core.capability_registry._collect_from_capability_bus",
-                   return_value={"caps": [], "reason": None}), \
-             patch("core.capability_registry._collect_from_gateway_registry",
-                   return_value={"caps": [], "reason": None}):
+        with (
+            patch("core.capability_registry._collect_from_capability_bus", return_value={"caps": [], "reason": None}),
+            patch("core.capability_registry._collect_from_gateway_registry", return_value={"caps": [], "reason": None}),
+        ):
 
             # Patch device_registry inside the module
             import core.capability_registry as cr_mod
+
             original_dr = None
             try:
                 import core.device_registry as _dr_mod
+
                 original_dr = _dr_mod.device_registry
                 _dr_mod.device_registry = fake_reg
+
                 # Also patch _collect_from_device_registry to use fake_reg
                 def _fake_collect(device_id):
                     dev = fake_reg.get(device_id)
@@ -442,15 +490,17 @@ class TestGetDevicesMatchingCapabilities:
                         "available": True,
                         "reason": None,
                     }
+
                 with patch.object(cr_mod, "_collect_from_device_registry", side_effect=_fake_collect):
                     result = get_devices_matching_capabilities(["screen", "camera"])
             finally:
                 if original_dr is not None:
                     import core.device_registry as _dr_mod
+
                     _dr_mod.device_registry = original_dr
 
         assert "dev_a" in result
-        assert "dev_b" not in result   # has screen but not camera
+        assert "dev_b" not in result  # has screen but not camera
         assert "dev_c" not in result
 
     def test_returns_empty_list_gracefully_when_registry_unavailable(self):
@@ -461,8 +511,10 @@ class TestGetDevicesMatchingCapabilities:
         saved = sys.modules.pop("core.device_registry", None)
         try:
             # Also patch the import inside the function to raise
-            import core.capability_registry as cr_mod
             import builtins
+
+            import core.capability_registry as cr_mod
+
             real_import = builtins.__import__
 
             def _failing_import(name, *args, **kwargs):
@@ -483,16 +535,17 @@ class TestGetDevicesMatchingCapabilities:
 # G) Observability / logging
 # ============================================================================
 
+
 class TestObservabilityLogging:
     def test_degraded_resolution_does_not_raise(self):
         """get_device_capability_summary must not raise when all sources fail."""
         from core.capability_registry import get_device_capability_summary
-        with patch("core.capability_registry._collect_from_device_registry",
-                   side_effect=Exception("source error")), \
-             patch("core.capability_registry._collect_from_capability_bus",
-                   side_effect=Exception("bus error")), \
-             patch("core.capability_registry._collect_from_gateway_registry",
-                   side_effect=Exception("gw error")):
+
+        with (
+            patch("core.capability_registry._collect_from_device_registry", side_effect=Exception("source error")),
+            patch("core.capability_registry._collect_from_capability_bus", side_effect=Exception("bus error")),
+            patch("core.capability_registry._collect_from_gateway_registry", side_effect=Exception("gw error")),
+        ):
             # Should not raise — all source errors are caught in helpers
             # (helpers themselves swallow errors; patching at summary level
             # to verify outer function is also robust)
@@ -503,18 +556,22 @@ class TestObservabilityLogging:
                 pass  # mark as acceptable for this test variant
 
         # Re-run without side-effects to confirm normal path is clean
-        from core.capability_registry import get_device_capability_summary, DeviceCapabilitySummary
-        with patch("core.capability_registry._collect_from_device_registry",
-                   return_value={"caps": [], "available": False, "reason": "not found"}), \
-             patch("core.capability_registry._collect_from_capability_bus",
-                   return_value={"caps": [], "reason": None}), \
-             patch("core.capability_registry._collect_from_gateway_registry",
-                   return_value={"caps": [], "reason": None}):
+        from core.capability_registry import DeviceCapabilitySummary, get_device_capability_summary
+
+        with (
+            patch(
+                "core.capability_registry._collect_from_device_registry",
+                return_value={"caps": [], "available": False, "reason": "not found"},
+            ),
+            patch("core.capability_registry._collect_from_capability_bus", return_value={"caps": [], "reason": None}),
+            patch("core.capability_registry._collect_from_gateway_registry", return_value={"caps": [], "reason": None}),
+        ):
             summary = get_device_capability_summary("fail_device")
         assert isinstance(summary, DeviceCapabilitySummary)
 
     def test_mismatch_result_has_non_empty_reasons(self):
-        from core.capability_registry import device_matches_capabilities, DeviceCapabilitySummary
+        from core.capability_registry import DeviceCapabilitySummary, device_matches_capabilities
+
         with patch("core.capability_registry.get_device_capability_summary") as mock_summary:
             mock_summary.return_value = DeviceCapabilitySummary(
                 device_id="dev_mismatch",

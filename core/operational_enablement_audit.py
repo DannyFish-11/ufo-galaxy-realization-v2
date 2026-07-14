@@ -43,9 +43,7 @@ from typing import Dict, List
 OPERATIONAL_ENABLEMENT_AUDIT_AUTHORITY: str = "core.operational_enablement_audit"
 
 AUDIT_SCOPE: str = (
-    "V2=DannyFish-11/ufo-galaxy-realization-v2 "
-    "APK=DannyFish-11/ufo-galaxy-android "
-    "evidence=real-source-code-only"
+    "V2=DannyFish-11/ufo-galaxy-realization-v2 " "APK=DannyFish-11/ufo-galaxy-android " "evidence=real-source-code-only"
 )
 
 # ===========================================================================
@@ -71,19 +69,20 @@ class V2ConfigSource(str, Enum):
     Canonical config source layers, ordered lowest → highest precedence.
     Source: core/unified_config.py docstring "Config source precedence" section.
     """
-    STATIC_CONFIG_JSON = "config.json (root)"          # lowest; read-only static defaults
-    RUNTIME_CONFIG_JSON = "runtime/config.json"         # written by ConfigService/ConfigStore
-    RUNTIME_SECRETS_ENV = "runtime/secrets.env"         # written by ConfigService/ConfigStore
-    LEGACY_DOT_ENV = ".env"                        # user-managed legacy secrets file
-    PROCESS_ENVIRONMENT = "os.environ"                  # highest; CLI / Docker / CI overrides
+
+    STATIC_CONFIG_JSON = "config.json (root)"  # lowest; read-only static defaults
+    RUNTIME_CONFIG_JSON = "runtime/config.json"  # written by ConfigService/ConfigStore
+    RUNTIME_SECRETS_ENV = "runtime/secrets.env"  # written by ConfigService/ConfigStore
+    LEGACY_DOT_ENV = ".env"  # user-managed legacy secrets file
+    PROCESS_ENVIRONMENT = "os.environ"  # highest; CLI / Docker / CI overrides
 
 
 V2_CONFIG_SOURCE_PRECEDENCE: List[V2ConfigSource] = [
-    V2ConfigSource.STATIC_CONFIG_JSON,     # lowest
+    V2ConfigSource.STATIC_CONFIG_JSON,  # lowest
     V2ConfigSource.RUNTIME_CONFIG_JSON,
     V2ConfigSource.RUNTIME_SECRETS_ENV,
     V2ConfigSource.LEGACY_DOT_ENV,
-    V2ConfigSource.PROCESS_ENVIRONMENT,    # highest
+    V2ConfigSource.PROCESS_ENVIRONMENT,  # highest
 ]
 """
 Config source precedence list (low → high).
@@ -110,8 +109,13 @@ GALAXY_API_TOKEN is required only when the auth middleware is active.
 """
 
 V2_VALID_PROVIDERS: List[str] = [
-    "openai", "anthropic", "gemini", "deepseek",
-    "groq", "openrouter", "oneapi",
+    "openai",
+    "anthropic",
+    "gemini",
+    "deepseek",
+    "groq",
+    "openrouter",
+    "oneapi",
 ]
 """
 Recognised LLM provider IDs.
@@ -193,21 +197,23 @@ Sources: main.py --setup shortcut; core/routes/vault.py; core/unified_config.py;
 #   app/src/main/java/.../config/RemoteConfigFetcher.kt — M3: GET /api/v1/config auto-fill
 # ---------------------------------------------------------------------------
 
+
 class AndroidConfigLayer(str, Enum):
     """
     Android configuration hierarchy, ordered lowest → highest precedence.
     Source: app/src/main/assets/config.properties header comment
             and app/build.gradle comment on GALAXY_SERVER_URL.
     """
+
     BUILD_CONFIG = "BuildConfig (app/build.gradle)"
     ASSET_DEFAULTS = "assets/config.properties"
     SHARED_PREFS = "SharedPreferences (AppSettings)"
 
 
 ANDROID_CONFIG_PRECEDENCE: List[AndroidConfigLayer] = [
-    AndroidConfigLayer.BUILD_CONFIG,    # lowest: last-resort fallback
+    AndroidConfigLayer.BUILD_CONFIG,  # lowest: last-resort fallback
     AndroidConfigLayer.ASSET_DEFAULTS,  # middle: packaged defaults
-    AndroidConfigLayer.SHARED_PREFS,    # highest: user-saved settings
+    AndroidConfigLayer.SHARED_PREFS,  # highest: user-saved settings
 ]
 """
 Source: UFOGalaxyApplication.kt initConfig() commentary and AppSettings.kt seeding logic.
@@ -301,8 +307,10 @@ Failures are logged and local config is preserved unchanged.
 #   core/routes/projection.py                       — GET /api/v1/projection/* endpoints
 # ---------------------------------------------------------------------------
 
+
 class DesktopBoardCapability(str, Enum):
     """What the status_board_v2 package is capable of."""
+
     STATUS_READ_ONLY = "read_only_status_projection"
     CONFIG_WRITE_PROVIDER = "config_write_provider_enable_disable"
     CONFIG_WRITE_ROUTING = "config_write_routing_policy"
@@ -387,14 +395,16 @@ DESKTOP_BOARD_VERDICT: str = (
 #   core/system_mode.py                        — SystemMode enum (fabric/deployment modes)
 # ---------------------------------------------------------------------------
 
+
 class TriStateMode(str, Enum):
     """
     Canonical subject lifecycle tri-state.
     Source: core/desktop_presence_runtime.py class TriState(str, Enum).
     This is the 'three states' the user referred to.
     """
-    SILENT = "silent"    # at rest; multimodal ingress continues
-    LIMINAL = "liminal"   # request received; OpenClawd cognition in progress
+
+    SILENT = "silent"  # at rest; multimodal ingress continues
+    LIMINAL = "liminal"  # request received; OpenClawd cognition in progress
     MANIFEST = "manifest"  # actively producing output / controlling devices
 
 
@@ -446,8 +456,9 @@ class UIShellMode(str, Enum):
     These describe how the desktop UI shell is rendered, not what the subject is doing.
     Source: system_integration/hardware_trigger.py class SystemState(str, Enum).
     """
-    DORMANT = "dormant"    # clothing hidden / collapsed
-    ISLAND = "island"     # compact clothing mode (dynamic island style)
+
+    DORMANT = "dormant"  # clothing hidden / collapsed
+    ISLAND = "island"  # compact clothing mode (dynamic island style)
     SIDESHEET = "sidesheet"  # side panel clothing expansion
     FULLAGENT = "fullagent"  # full clothing expansion
 
@@ -457,7 +468,8 @@ class FabricMode(str, Enum):
     Fabric / deployment modes — resolved once at startup from env vars.
     Source: core/system_mode.py class SystemMode(str, Enum).
     """
-    DESKTOP_LOCAL = "desktop-local"        # default; no cross-device fabric
+
+    DESKTOP_LOCAL = "desktop-local"  # default; no cross-device fabric
     DESKTOP_CROSS_DEVICE = "desktop-cross-device"  # opt-in; NATS / control-plane active
 
 
@@ -492,38 +504,38 @@ THREE_STATE_DISAMBIGUATION: Dict[str, str] = {
 
 ANDROID_MODELS: List[Dict] = [
     {
-        "model_id":         "mobilevlm",
-        "role":             "MobileVLM V2-1.7B — UI planning / task planning",
-        "runtime_type":     "llama.cpp GGUF",
-        "file":             "ggml-model-q4_k.gguf",
+        "model_id": "mobilevlm",
+        "role": "MobileVLM V2-1.7B — UI planning / task planning",
+        "runtime_type": "llama.cpp GGUF",
+        "file": "ggml-model-q4_k.gguf",
         "size_bytes_approx": 950_000_000,
         "huggingface_repo": "ZiangWu/MobileVLM_V2-1.7B-GGUF",
-        "huggingface_url":  "https://huggingface.co/ZiangWu/MobileVLM_V2-1.7B-GGUF/resolve/main/ggml-model-q4_k.gguf",
-        "sha256":           "15d4bd09293404831902c23dd898aa2cc7b4b223b6c39a64e330601ef72d99db",
+        "huggingface_url": "https://huggingface.co/ZiangWu/MobileVLM_V2-1.7B-GGUF/resolve/main/ggml-model-q4_k.gguf",
+        "sha256": "15d4bd09293404831902c23dd898aa2cc7b4b223b6c39a64e330601ef72d99db",
         # Source: ModelAssetManager.kt MOBILEVLM_SHA256 — real non-null hash as of 2026-05-02
-        "sha256_note":      "Hardcoded in ModelAssetManager.kt; enforced by ModelDownloader.downloadSync()",
+        "sha256_note": "Hardcoded in ModelAssetManager.kt; enforced by ModelDownloader.downloadSync()",
     },
     {
-        "model_id":         "seeclick",
-        "role":             "SeeClick NCNN param file — UI grounding / element coordinate",
-        "runtime_type":     "NCNN",
-        "file":             "seeclick.ncnn.param",
+        "model_id": "seeclick",
+        "role": "SeeClick NCNN param file — UI grounding / element coordinate",
+        "runtime_type": "NCNN",
+        "file": "seeclick.ncnn.param",
         "size_bytes_approx": 50_000_000,
         "huggingface_repo": "cckevinn/SeeClick",
-        "huggingface_url":  "https://huggingface.co/cckevinn/SeeClick/resolve/main/ncnn/seeclick.ncnn.param",
-        "sha256":           None,  # Source: ModelAssetManager.SEECLICK_SHA256 = null (by design)
-        "sha256_note":      "Null at code time; computed via persistComputedChecksum after first download",
+        "huggingface_url": "https://huggingface.co/cckevinn/SeeClick/resolve/main/ncnn/seeclick.ncnn.param",
+        "sha256": None,  # Source: ModelAssetManager.SEECLICK_SHA256 = null (by design)
+        "sha256_note": "Null at code time; computed via persistComputedChecksum after first download",
     },
     {
-        "model_id":         "seeclick_bin",
-        "role":             "SeeClick NCNN bin weights — UI grounding / element coordinate",
-        "runtime_type":     "NCNN",
-        "file":             "seeclick.ncnn.bin",
+        "model_id": "seeclick_bin",
+        "role": "SeeClick NCNN bin weights — UI grounding / element coordinate",
+        "runtime_type": "NCNN",
+        "file": "seeclick.ncnn.bin",
         "size_bytes_approx": 400_000_000,
         "huggingface_repo": "cckevinn/SeeClick",
-        "huggingface_url":  "https://huggingface.co/cckevinn/SeeClick/resolve/main/ncnn/seeclick.ncnn.bin",
-        "sha256":           None,  # Source: ModelAssetManager.SEECLICK_BIN_SHA256 = null (by design)
-        "sha256_note":      "Null at code time; computed via persistComputedChecksum after first download",
+        "huggingface_url": "https://huggingface.co/cckevinn/SeeClick/resolve/main/ncnn/seeclick.ncnn.bin",
+        "sha256": None,  # Source: ModelAssetManager.SEECLICK_BIN_SHA256 = null (by design)
+        "sha256_note": "Null at code time; computed via persistComputedChecksum after first download",
     },
 ]
 """
@@ -570,23 +582,19 @@ ANDROID_MODEL_PROVISIONING_LIMITATIONS: List[str] = [
     "'15d4bd09293404831902c23dd898aa2cc7b4b223b6c39a64e330601ef72d99db'. "
     "Integrity verification is enforced by ModelDownloader.downloadSync() for MobileVLM. "
     "Source: ModelAssetManager.kt companion object MOBILEVLM_SHA256.",
-
     "SeeClick SHA-256 (param and bin) is null at code time — computed via "
     "persistComputedChecksum after first successful download and stored in .checksums.json. "
     "On subsequent runs the stored hash is enforced. First download has no pre-seeded hash. "
     "Source: ModelAssetManager.kt SEECLICK_SHA256 / SEECLICK_BIN_SHA256 = null (by design).",
-
     # ── Runtime bundling ────────────────────────────────────────────────────
     "llama.cpp Android JNI runtime IS NOW in build.gradle: "
     "'com.github.ggerganov:llama.cpp:b4833' (resolved from JitPack). "
     "LlamaCppPlannerService uses external fun JNI declarations mapped to libllama.so. "
     "Source: app/build.gradle; planner/LlamaCppPlannerService.kt.",
-
     "NCNN Android inference runtime IS NOW in build.gradle: "
     "'com.github.nihui:ncnn-android-vulkan:20240410' (resolved from JitPack). "
     "NcnnGroundingService uses external fun JNI declarations mapped to libncnn.so. "
     "Source: app/build.gradle; grounding/NcnnGroundingService.kt.",
-
     # ── Remaining operational prerequisites ────────────────────────────────
     "Total model download size is ~1.65 GB (MobileVLM ~900 MB + SeeClick ~450 MB + param). "
     "A first-run on a device without Wi-Fi or with < 2 GB free storage will likely fail. "
@@ -621,9 +629,11 @@ ANDROID_MODEL_PROVISIONING_VERDICT: str = (
 # ===========================================================================
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class RunbookStep:
     """A single operator action in the clone-to-run sequence."""
+
     seq: int
     action: str
     required: bool
@@ -722,10 +732,7 @@ ANDROID_RUNBOOK: List[RunbookStep] = [
         action="Grant: Accessibility Service + Overlay permission",
         required=True,
         rebuild_needed=False,
-        notes=(
-            "Required for UI automation execution. "
-            "Source: ReadinessChecker in UFOGalaxyApplication."
-        ),
+        notes=("Required for UI automation execution. " "Source: ReadinessChecker in UFOGalaxyApplication."),
     ),
     RunbookStep(
         seq=6,
@@ -775,10 +782,12 @@ UFOGalaxyApplication.kt, ui/NetworkSettingsScreen.kt, and model provisioning cod
 # ===========================================================================
 # ---------------------------------------------------------------------------
 
+
 class OperabilityTier(str, Enum):
     """
     Operability tier for the integrated dual-repo system.
     """
+
     MATURE_CONFIGURABLE_APP = "mature_configurable_application"
     IMPL_COMPLETE_DEVOPS_ORIENTED = "implementation_complete_developer_ops_oriented"
     PARTIALLY_COMPLETE = "partially_complete"
@@ -878,6 +887,7 @@ CHINESE_SUMMARY: str = """
 # ===========================================================================
 # Public API
 # ===========================================================================
+
 
 def get_audit_summary() -> Dict:
     """Return a JSON-serialisable audit summary dict."""

@@ -29,12 +29,14 @@ sys.path.insert(0, PROJECT_ROOT)
 # 1. IntentParser 集成测试
 # ============================================================================
 
+
 class TestIntentParser:
     """测试意图解析器的规则引擎和 LLM 回退"""
 
     @pytest.fixture
     def parser(self):
         from core.ai_intent import IntentParser
+
         return IntentParser()
 
     @pytest.mark.asyncio
@@ -86,6 +88,7 @@ class TestIntentParser:
 # 2. ConversationMemory 集成测试
 # ============================================================================
 
+
 class TestConversationMemory:
     """测试对话记忆系统"""
 
@@ -94,6 +97,7 @@ class TestConversationMemory:
         # 融合(域3)后 CM 直写/透读唯一属主 SessionManager —— 隔离其单例与状态文件,
         # 避免测试轮次写进全局 data/sessions.json 并与其它测试的同名会话交叉污染。
         import core.session_manager as smmod
+
         monkeypatch.setattr(smmod, "_SESSION_FILE", str(tmp_path / "sessions.json"))
         monkeypatch.setattr(smmod, "_session_manager", smmod.SessionManager())
         yield
@@ -101,6 +105,7 @@ class TestConversationMemory:
     @pytest.fixture
     def memory(self):
         from core.ai_intent import ConversationMemory
+
         return ConversationMemory()
 
     @pytest.mark.asyncio
@@ -165,12 +170,14 @@ class TestConversationMemory:
 # 3. GalaxyCore call_node 错误处理测试
 # ============================================================================
 
+
 class TestGalaxyCoreCallNode:
     """测试 call_node 的错误处理"""
 
     @pytest.fixture
     def core(self):
         from core.galaxy_core import GalaxyCore
+
         c = GalaxyCore()
         # 确保测试用节点 "04" 存在（无论 node_registry.json 内容如何）
         c.nodes.setdefault("04", {"name": "Router", "port": 8004, "capabilities": ["route"]})
@@ -227,6 +234,7 @@ class TestGalaxyCoreCallNode:
 # 4. 统一响应格式测试
 # ============================================================================
 
+
 class TestDashboardRetired:
     """终态(用户裁决):dashboard/ 整体删除(ui_surface_authority: DELETED)。
     原三组用例(UnifiedResponse 格式 / 现代意图集成 / 端到端 chat 流)的被测
@@ -234,9 +242,9 @@ class TestDashboardRetired:
     DesktopPresenceRuntime(有各自的套件专钉),此处只钉退役不复活。"""
 
     def test_dashboard_backend_retired(self):
-        assert not os.path.exists(os.path.join(PROJECT_ROOT, "dashboard")), (
-            "dashboard/ 已按用户裁决整体退役删除,不得复活"
-        )
+        assert not os.path.exists(
+            os.path.join(PROJECT_ROOT, "dashboard")
+        ), "dashboard/ 已按用户裁决整体退役删除,不得复活"
 
     def test_canonical_chat_surface_exists(self):
         # 对话主链路的 canonical 承载(core 路由)仍在

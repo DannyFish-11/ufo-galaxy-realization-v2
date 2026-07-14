@@ -20,6 +20,7 @@
 三层门各管一事(均在统一执行器 core.node_invocation 内,顺序执行):
   治理门(节点状态可调否)→ 权限门(节点被允许做此动作否)→ 本门(这次要不要问人)
 """
+
 from __future__ import annotations
 
 import json
@@ -53,9 +54,24 @@ def autonomy_level() -> AutonomyLevel:
 # 读 = 只观察不改变设备状态(guided 档自动放行)。写 = 其余一切(点击/输入/shell…)。
 # 模式与节点白名单同用 fnmatch;宁可把拿不准的动作当"写"(fail-safe 到要审批)。
 _READ_ACTION_PATTERNS: List[str] = [
-    "get_*", "list_*", "find_*", "locate*", "screenshot", "status", "health",
-    "help", "devices", "device_info", "connected_devices", "current_device",
-    "adb_path", "packages", "position", "screen_size", "get", "list",
+    "get_*",
+    "list_*",
+    "find_*",
+    "locate*",
+    "screenshot",
+    "status",
+    "health",
+    "help",
+    "devices",
+    "device_info",
+    "connected_devices",
+    "current_device",
+    "adb_path",
+    "packages",
+    "position",
+    "screen_size",
+    "get",
+    "list",
 ]
 
 
@@ -114,8 +130,10 @@ class GrantStore:
                 self._session.add(key)
             else:
                 self._always[key] = {
-                    "node_id": node_id, "action": action,
-                    "granted_at": time.time(), "operator": operator or "user",
+                    "node_id": node_id,
+                    "action": action,
+                    "granted_at": time.time(),
+                    "operator": operator or "user",
                 }
                 self._save_always()
         logger.info("授权记录 %s scope=%s", key, scope.value)
@@ -189,13 +207,16 @@ class AutonomyDecision:
     node_id: str = ""
     action: str = ""
     reason: str = ""
-    grant_used: str = ""     # 命中的授权档位(once/session/always),有则免审批
+    grant_used: str = ""  # 命中的授权档位(once/session/always),有则免审批
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "needs_approval": self.needs_approval, "level": self.level,
-            "node_id": self.node_id, "action": self.action,
-            "reason": self.reason, "grant_used": self.grant_used,
+            "needs_approval": self.needs_approval,
+            "level": self.level,
+            "node_id": self.node_id,
+            "action": self.action,
+            "reason": self.reason,
+            "grant_used": self.grant_used,
         }
 
 
@@ -209,6 +230,7 @@ def evaluate_autonomy(node_id: str, action: str) -> AutonomyDecision:
     # v1 范围:只对声明了权限白名单的敏感节点生效
     try:
         from core.node_action_permissions import _load_permissions, _node_num
+
         num = _node_num(node_id)
         declared = num is not None and num in _load_permissions()
     except Exception:  # noqa: BLE001 — 权限模块不可用则不拦
@@ -222,16 +244,13 @@ def evaluate_autonomy(node_id: str, action: str) -> AutonomyDecision:
     # safe 档任何动作 / guided 档写操作 → 查授权,无授权则要审批
     used = get_grant_store().consume_or_check(node_id, action)
     if used:
-        return AutonomyDecision(False, level.value, node_id, action,
-                                f"已有授权({used})", grant_used=used)
+        return AutonomyDecision(False, level.value, node_id, action, f"已有授权({used})", grant_used=used)
     what = "任何动作" if level is AutonomyLevel.SAFE else "写操作"
-    return AutonomyDecision(True, level.value, node_id, action,
-                            f"{level.value} 档:敏感节点{what}需人工审批")
+    return AutonomyDecision(True, level.value, node_id, action, f"{level.value} 档:敏感节点{what}需人工审批")
 
 
 # ── 审批请求(复用 ApprovalRegistry;去重,排队不跳过)───────────────────────────
-def ensure_approval_request(node_id: str, action: str,
-                            params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def ensure_approval_request(node_id: str, action: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """确保存在一条针对 (node_id, action) 的 pending 审批;返回请求摘要。
 
     已有同目标 pending → 复用(重试不刷屏)。人不在线就一直排在 pending 列表里,
@@ -250,7 +269,8 @@ def ensure_approval_request(node_id: str, action: str,
         risk_level=RiskLevel.MEDIUM if is_read_action(action) else RiskLevel.HIGH,
         requestor="node_invocation.autonomy_gate",
         context={
-            "node_id": node_id, "node_action": action,
+            "node_id": node_id,
+            "node_action": action,
             "params_preview": {k: str(v)[:120] for k, v in (params or {}).items()},
             "grant_choices": [s.value for s in GrantScope] + ["deny"],
         },

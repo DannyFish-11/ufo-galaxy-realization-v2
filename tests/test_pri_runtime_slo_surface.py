@@ -39,7 +39,6 @@ import threading
 import unittest
 from unittest.mock import patch
 
-
 # ---------------------------------------------------------------------------
 # 1–3. Dispatch recording
 # ---------------------------------------------------------------------------
@@ -48,6 +47,7 @@ from unittest.mock import patch
 class TestDispatchRecording(unittest.TestCase):
     def _fresh(self, **kw):
         from core.operational_slo_metrics import OperationalSLOMetrics
+
         return OperationalSLOMetrics(**kw)
 
     def test_attempts_accumulate(self):
@@ -118,6 +118,7 @@ class TestDispatchRecording(unittest.TestCase):
 class TestRouteRejection(unittest.TestCase):
     def _fresh(self, **kw):
         from core.operational_slo_metrics import OperationalSLOMetrics
+
         return OperationalSLOMetrics(**kw)
 
     def test_total_accumulates(self):
@@ -159,6 +160,7 @@ class TestRouteRejection(unittest.TestCase):
 class TestFallbackRecording(unittest.TestCase):
     def _fresh(self, **kw):
         from core.operational_slo_metrics import OperationalSLOMetrics
+
         return OperationalSLOMetrics(**kw)
 
     def test_total_accumulates(self):
@@ -200,6 +202,7 @@ class TestFallbackRecording(unittest.TestCase):
 class TestRecoveryRecording(unittest.TestCase):
     def _fresh(self, **kw):
         from core.operational_slo_metrics import OperationalSLOMetrics
+
         return OperationalSLOMetrics(**kw)
 
     def test_attempts_accumulate(self):
@@ -275,6 +278,7 @@ class TestRecoveryRecording(unittest.TestCase):
 class TestStartupRecoveryScan(unittest.TestCase):
     def _fresh(self):
         from core.operational_slo_metrics import OperationalSLOMetrics
+
         return OperationalSLOMetrics()
 
     def test_starts_at_zero(self):
@@ -314,6 +318,7 @@ class TestStartupRecoveryScan(unittest.TestCase):
 class TestAuditPersistence(unittest.TestCase):
     def _fresh(self):
         from core.operational_slo_metrics import OperationalSLOMetrics
+
         return OperationalSLOMetrics()
 
     def test_successes_accumulate(self):
@@ -329,9 +334,7 @@ class TestAuditPersistence(unittest.TestCase):
         m.record_audit_persist_failure(reason="io_error")
         snap = m.snapshot()
         self.assertEqual(snap["audit_persistence"]["persist_failures_total"], 2)
-        self.assertEqual(
-            snap["audit_persistence"]["persist_failure_reason_counts"]["io_error"], 2
-        )
+        self.assertEqual(snap["audit_persistence"]["persist_failure_reason_counts"]["io_error"], 2)
 
     def test_failure_rate_all_failure(self):
         m = self._fresh()
@@ -352,13 +355,12 @@ class TestAuditPersistence(unittest.TestCase):
 
     def test_failure_reason_bounded(self):
         from core.operational_slo_metrics import OperationalSLOMetrics
+
         m = OperationalSLOMetrics(audit_failure_reasons_max=2)
         for i in range(10):
             m.record_audit_persist_failure(reason=f"reason_{i}")
         snap = m.snapshot()
-        self.assertLessEqual(
-            len(snap["audit_persistence"]["persist_failure_reason_counts"]), 2
-        )
+        self.assertLessEqual(len(snap["audit_persistence"]["persist_failure_reason_counts"]), 2)
 
 
 # ---------------------------------------------------------------------------
@@ -369,6 +371,7 @@ class TestAuditPersistence(unittest.TestCase):
 class TestSnapshot(unittest.TestCase):
     def _populated(self):
         from core.operational_slo_metrics import OperationalSLOMetrics
+
         m = OperationalSLOMetrics()
         m.record_dispatch_attempt()
         m.record_dispatch_success()
@@ -471,6 +474,7 @@ class TestSnapshot(unittest.TestCase):
 
     def test_empty_snapshot_all_zero(self):
         from core.operational_slo_metrics import OperationalSLOMetrics
+
         snap = OperationalSLOMetrics().snapshot()
         self.assertEqual(snap["dispatch"]["attempts_total"], 0)
         self.assertEqual(snap["dispatch"]["successes_total"], 0)
@@ -490,6 +494,7 @@ class TestSnapshot(unittest.TestCase):
 class TestPrometheusText(unittest.TestCase):
     def _populated(self):
         from core.operational_slo_metrics import OperationalSLOMetrics
+
         m = OperationalSLOMetrics()
         m.record_dispatch_attempt()
         m.record_dispatch_success()
@@ -562,6 +567,7 @@ class TestPrometheusText(unittest.TestCase):
 class TestReset(unittest.TestCase):
     def test_reset_clears_all_counters(self):
         from core.operational_slo_metrics import OperationalSLOMetrics
+
         m = OperationalSLOMetrics()
         m.record_dispatch_attempt()
         m.record_dispatch_success()
@@ -605,6 +611,7 @@ class TestReset(unittest.TestCase):
 class TestThreadSafety(unittest.TestCase):
     def test_concurrent_dispatch_writes(self):
         from core.operational_slo_metrics import OperationalSLOMetrics
+
         m = OperationalSLOMetrics()
         errors = []
 
@@ -635,6 +642,7 @@ class TestThreadSafety(unittest.TestCase):
 
     def test_concurrent_recovery_writes(self):
         from core.operational_slo_metrics import OperationalSLOMetrics
+
         m = OperationalSLOMetrics()
         errors = []
 
@@ -659,6 +667,7 @@ class TestThreadSafety(unittest.TestCase):
 
     def test_concurrent_audit_writes(self):
         from core.operational_slo_metrics import OperationalSLOMetrics
+
         m = OperationalSLOMetrics()
         errors = []
 
@@ -691,6 +700,7 @@ class TestSingleton(unittest.TestCase):
     def test_same_instance_across_calls(self):
         import core.operational_slo_metrics as _mod
         from core.operational_slo_metrics import get_operational_slo_metrics
+
         orig = _mod._ops_metrics
         _mod._ops_metrics = None
         try:
@@ -706,6 +716,7 @@ class TestSingleton(unittest.TestCase):
             get_operational_slo_metrics,
             reset_operational_slo_metrics,
         )
+
         orig = _mod._ops_metrics
         try:
             _mod._ops_metrics = None
@@ -729,11 +740,13 @@ class TestSingleton(unittest.TestCase):
 class TestSentinels(unittest.TestCase):
     def test_authority_sentinel_present(self):
         from core.operational_slo_metrics import OPERATIONAL_SLO_METRICS_IS_AUTHORITY
+
         self.assertIsInstance(OPERATIONAL_SLO_METRICS_IS_AUTHORITY, str)
         self.assertGreater(len(OPERATIONAL_SLO_METRICS_IS_AUTHORITY), 0)
 
     def test_pr_i_sentinel_present(self):
         from core.operational_slo_metrics import OPERATIONAL_SLO_METRICS_PR_I_SENTINEL
+
         self.assertIsInstance(OPERATIONAL_SLO_METRICS_PR_I_SENTINEL, str)
         self.assertGreater(len(OPERATIONAL_SLO_METRICS_PR_I_SENTINEL), 0)
 
@@ -742,6 +755,7 @@ class TestSentinels(unittest.TestCase):
             OPERATIONAL_SLO_METRICS_IS_AUTHORITY,
             OPERATIONAL_SLO_METRICS_PR_I_SENTINEL,
         )
+
         self.assertNotEqual(
             OPERATIONAL_SLO_METRICS_IS_AUTHORITY,
             OPERATIONAL_SLO_METRICS_PR_I_SENTINEL,
@@ -749,6 +763,7 @@ class TestSentinels(unittest.TestCase):
 
     def test_sentinels_in_all(self):
         import core.operational_slo_metrics as _mod
+
         self.assertIn("OPERATIONAL_SLO_METRICS_IS_AUTHORITY", _mod.__all__)
         self.assertIn("OPERATIONAL_SLO_METRICS_PR_I_SENTINEL", _mod.__all__)
 
@@ -761,6 +776,7 @@ class TestSentinels(unittest.TestCase):
 class TestBoundsEnforcement(unittest.TestCase):
     def test_rejection_reasons_not_exceeded(self):
         from core.operational_slo_metrics import OperationalSLOMetrics
+
         m = OperationalSLOMetrics(rejection_reasons_max=5)
         for i in range(20):
             m.record_route_rejection(reason=f"r{i}")
@@ -769,6 +785,7 @@ class TestBoundsEnforcement(unittest.TestCase):
 
     def test_existing_rejection_reason_increments_after_cap(self):
         from core.operational_slo_metrics import OperationalSLOMetrics
+
         m = OperationalSLOMetrics(rejection_reasons_max=2)
         m.record_route_rejection(reason="known_reason")
         m.record_route_rejection(reason="other_reason")
@@ -782,6 +799,7 @@ class TestBoundsEnforcement(unittest.TestCase):
 
     def test_fallback_kinds_not_exceeded(self):
         from core.operational_slo_metrics import OperationalSLOMetrics
+
         m = OperationalSLOMetrics(fallback_kinds_max=3)
         for i in range(15):
             m.record_fallback_triggered(fallback_kind=f"kind_{i}")
@@ -790,6 +808,7 @@ class TestBoundsEnforcement(unittest.TestCase):
 
     def test_dispatch_failure_reasons_not_exceeded(self):
         from core.operational_slo_metrics import OperationalSLOMetrics
+
         m = OperationalSLOMetrics(failure_reasons_max=4)
         for i in range(20):
             m.record_dispatch_failure(reason=f"r{i}")
@@ -798,13 +817,12 @@ class TestBoundsEnforcement(unittest.TestCase):
 
     def test_audit_failure_reasons_not_exceeded(self):
         from core.operational_slo_metrics import OperationalSLOMetrics
+
         m = OperationalSLOMetrics(audit_failure_reasons_max=3)
         for i in range(15):
             m.record_audit_persist_failure(reason=f"r{i}")
         snap = m.snapshot()
-        self.assertLessEqual(
-            len(snap["audit_persistence"]["persist_failure_reason_counts"]), 3
-        )
+        self.assertLessEqual(len(snap["audit_persistence"]["persist_failure_reason_counts"]), 3)
 
 
 # ---------------------------------------------------------------------------
@@ -879,24 +897,40 @@ class TestHttpEndpoints(unittest.TestCase):
         self._skip_if_unavailable()
         data = self.client.get("/api/v1/slo/operational").json()
         d = data["dispatch"]
-        for key in ("attempts_total", "successes_total", "failures_total",
-                    "success_rate", "failure_rate", "failure_reason_counts"):
+        for key in (
+            "attempts_total",
+            "successes_total",
+            "failures_total",
+            "success_rate",
+            "failure_rate",
+            "failure_reason_counts",
+        ):
             self.assertIn(key, d)
 
     def test_operational_recovery_sub_keys(self):
         self._skip_if_unavailable()
         data = self.client.get("/api/v1/slo/operational").json()
         rec = data["recovery"]
-        for key in ("attempts_total", "resumed_total", "replayed_total",
-                    "reissued_total", "failed_total", "success_rate"):
+        for key in (
+            "attempts_total",
+            "resumed_total",
+            "replayed_total",
+            "reissued_total",
+            "failed_total",
+            "success_rate",
+        ):
             self.assertIn(key, rec)
 
     def test_operational_audit_sub_keys(self):
         self._skip_if_unavailable()
         data = self.client.get("/api/v1/slo/operational").json()
         ap = data["audit_persistence"]
-        for key in ("persist_successes_total", "persist_failures_total",
-                    "persist_failure_rate", "persist_failure_reason_counts"):
+        for key in (
+            "persist_successes_total",
+            "persist_failures_total",
+            "persist_failure_rate",
+            "persist_failure_reason_counts",
+        ):
             self.assertIn(key, ap)
 
     # /api/v1/slo/metrics (PR-G2 parity)
@@ -951,6 +985,7 @@ class TestUnifiedReliabilityView(unittest.TestCase):
 
     def _fresh(self):
         from core.operational_slo_metrics import OperationalSLOMetrics
+
         return OperationalSLOMetrics()
 
     def _sample_contract(self):

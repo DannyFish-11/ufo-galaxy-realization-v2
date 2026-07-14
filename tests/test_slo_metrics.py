@@ -30,14 +30,15 @@ import time
 import unittest
 from unittest.mock import MagicMock, patch
 
-
 # ---------------------------------------------------------------------------
 # 1. record_startup
 # ---------------------------------------------------------------------------
 
+
 class TestRecordStartup(unittest.TestCase):
     def _fresh(self):
         from core.slo_metrics import SLOMetrics
+
         return SLOMetrics()
 
     def test_records_first_call(self):
@@ -65,9 +66,11 @@ class TestRecordStartup(unittest.TestCase):
 # 2–4. record_heartbeat / heartbeat_loss_rate
 # ---------------------------------------------------------------------------
 
+
 class TestHeartbeat(unittest.TestCase):
     def _fresh(self):
         from core.slo_metrics import SLOMetrics
+
         return SLOMetrics(heartbeat_window=10)
 
     def test_all_success(self):
@@ -123,9 +126,11 @@ class TestHeartbeat(unittest.TestCase):
 # 5. record_reconnect
 # ---------------------------------------------------------------------------
 
+
 class TestReconnect(unittest.TestCase):
     def _fresh(self):
         from core.slo_metrics import SLOMetrics
+
         return SLOMetrics()
 
     def test_starts_at_zero(self):
@@ -143,9 +148,11 @@ class TestReconnect(unittest.TestCase):
 # 6–8. record_command_latency / percentiles
 # ---------------------------------------------------------------------------
 
+
 class TestCommandLatency(unittest.TestCase):
     def _fresh(self, window=100):
         from core.slo_metrics import SLOMetrics
+
         return SLOMetrics(latency_window=window)
 
     def test_no_samples_nan(self):
@@ -183,9 +190,11 @@ class TestCommandLatency(unittest.TestCase):
 # 9. snapshot()
 # ---------------------------------------------------------------------------
 
+
 class TestSnapshot(unittest.TestCase):
     def test_snapshot_structure(self):
         from core.slo_metrics import SLOMetrics
+
         m = SLOMetrics()
         m.record_startup(500.0)
         m.record_heartbeat(True)
@@ -223,6 +232,7 @@ class TestSnapshot(unittest.TestCase):
 
     def test_snapshot_null_when_no_data(self):
         from core.slo_metrics import SLOMetrics
+
         m = SLOMetrics()
         snap = m.snapshot()
         self.assertIsNone(snap["startup"]["duration_ms"])
@@ -234,9 +244,11 @@ class TestSnapshot(unittest.TestCase):
 # 10–11. prometheus_text()
 # ---------------------------------------------------------------------------
 
+
 class TestPrometheusText(unittest.TestCase):
     def _populated(self):
         from core.slo_metrics import SLOMetrics
+
         m = SLOMetrics()
         m.record_startup(1000.0)
         for _ in range(3):
@@ -290,9 +302,11 @@ class TestPrometheusText(unittest.TestCase):
 # 12. Thread safety
 # ---------------------------------------------------------------------------
 
+
 class TestThreadSafety(unittest.TestCase):
     def test_concurrent_heartbeat_writes(self):
         from core.slo_metrics import SLOMetrics
+
         m = SLOMetrics()
         errors = []
 
@@ -318,6 +332,7 @@ class TestThreadSafety(unittest.TestCase):
 
     def test_concurrent_latency_writes(self):
         from core.slo_metrics import SLOMetrics
+
         m = SLOMetrics(latency_window=10000)
         errors = []
 
@@ -346,10 +361,12 @@ class TestThreadSafety(unittest.TestCase):
 # 13. get_slo_metrics() singleton
 # ---------------------------------------------------------------------------
 
+
 class TestSingleton(unittest.TestCase):
     def test_same_instance(self):
-        from core.slo_metrics import get_slo_metrics, _slo_lock
         import core.slo_metrics as _mod
+        from core.slo_metrics import _slo_lock, get_slo_metrics
+
         # Reset singleton for isolation
         orig = _mod._slo_metrics
         _mod._slo_metrics = None
@@ -364,6 +381,7 @@ class TestSingleton(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 14–15. HTTP endpoints (FastAPI TestClient)
 # ---------------------------------------------------------------------------
+
 
 class TestHttpEndpoints(unittest.TestCase):
     """Test the /metrics and /api/v1/slo/metrics endpoints via TestClient."""

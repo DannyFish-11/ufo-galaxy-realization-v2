@@ -44,10 +44,10 @@ from typing import Any, Dict, Optional
 import pytest
 
 from contracts.dispatch_continuity import (
+    CONTINUITY_CONTEXT_SURVIVES_RECONNECT_POLICY,
     DISPATCH_CONTINUITY_CONTEXT_IS_DURABLE,
     RECOVERABLE_INTERRUPTION_REQUIRES_CONTINUITY_CONTEXT_POLICY,
     TERMINAL_LOSS_IS_NON_RESUMABLE_POLICY,
-    CONTINUITY_CONTEXT_SURVIVES_RECONNECT_POLICY,
     DispatchContinuityClass,
     DispatchContinuityContext,
     ExecutionInterruptionClass,
@@ -55,7 +55,6 @@ from contracts.dispatch_continuity import (
     build_dispatch_continuity_context,
     build_execution_interruption_record,
 )
-
 
 # ---------------------------------------------------------------------------
 # A. DispatchContinuityClass enum values
@@ -388,17 +387,20 @@ class TestSourceDispatchPlanContinuityContext:
 
     def test_default_is_none(self):
         from contracts.source_dispatch import SourceDispatchPlan
+
         plan = SourceDispatchPlan()
         assert plan.continuity_context is None
 
     def test_set_continuity_context(self):
         from contracts.source_dispatch import SourceDispatchPlan
+
         ctx_dict = {"continuity_id": "abc", "prior_dispatch_id": "d_001"}
         plan = SourceDispatchPlan(continuity_context=ctx_dict)
         assert plan.continuity_context == ctx_dict
 
     def test_round_trip_preserves_continuity_context(self):
         from contracts.source_dispatch import SourceDispatchPlan
+
         ctx_dict = {"continuity_id": "abc", "prior_dispatch_id": "d_001"}
         plan = SourceDispatchPlan(continuity_context=ctx_dict)
         restored = SourceDispatchPlan.from_dict(plan.to_dict())
@@ -415,12 +417,14 @@ class TestBuildSourceDispatchPlanContinuityContext:
 
     def test_continuity_context_forwarded(self):
         from contracts.source_dispatch import build_source_dispatch_plan
+
         ctx_dict = {"continuity_id": "x", "prior_session_id": "s_001"}
         plan = build_source_dispatch_plan(continuity_context=ctx_dict)
         assert plan.continuity_context == ctx_dict
 
     def test_none_by_default(self):
         from contracts.source_dispatch import build_source_dispatch_plan
+
         plan = build_source_dispatch_plan()
         assert plan.continuity_context is None
 
@@ -435,17 +439,20 @@ class TestSourceDispatchResultContinuityContext:
 
     def test_default_is_none(self):
         from contracts.source_dispatch import SourceDispatchResult
+
         result = SourceDispatchResult()
         assert result.continuity_context is None
 
     def test_set_continuity_context(self):
         from contracts.source_dispatch import SourceDispatchResult
+
         ctx_dict = {"continuity_id": "abc", "prior_task_id": "t_001"}
         result = SourceDispatchResult(continuity_context=ctx_dict)
         assert result.continuity_context == ctx_dict
 
     def test_round_trip_preserves_continuity_context(self):
         from contracts.source_dispatch import SourceDispatchResult
+
         ctx_dict = {"continuity_id": "abc", "prior_task_id": "t_001"}
         result = SourceDispatchResult(continuity_context=ctx_dict)
         restored = SourceDispatchResult.from_dict(result.to_dict())
@@ -462,12 +469,14 @@ class TestBuildSourceDispatchResultContinuityContext:
 
     def test_continuity_context_forwarded(self):
         from contracts.source_dispatch import build_source_dispatch_result
+
         ctx_dict = {"continuity_id": "y", "prior_trace_id": "tr_001"}
         result = build_source_dispatch_result(continuity_context=ctx_dict)
         assert result.continuity_context == ctx_dict
 
     def test_none_by_default(self):
         from contracts.source_dispatch import build_source_dispatch_result
+
         result = build_source_dispatch_result()
         assert result.continuity_context is None
 
@@ -482,6 +491,7 @@ class TestCompactSummaryHasContinuityContext:
 
     def test_false_when_none(self):
         from contracts.source_dispatch import SourceDispatchResult
+
         result = SourceDispatchResult()
         summary = result.to_compact_summary()
         assert "has_continuity_context" in summary
@@ -489,6 +499,7 @@ class TestCompactSummaryHasContinuityContext:
 
     def test_true_when_set(self):
         from contracts.source_dispatch import SourceDispatchResult
+
         result = SourceDispatchResult(continuity_context={"continuity_id": "abc"})
         summary = result.to_compact_summary()
         assert summary["has_continuity_context"] is True
@@ -504,11 +515,13 @@ class TestTaskEnvelopeContinuityContextField:
 
     def test_default_is_none(self):
         from core.schemas.task_envelope import TaskEnvelope
+
         env = TaskEnvelope()
         assert env.continuity_context is None
 
     def test_set_continuity_context(self):
         from core.schemas.task_envelope import TaskEnvelope
+
         ctx_dict = {"continuity_id": "abc", "prior_dispatch_id": "d_001"}
         env = TaskEnvelope(continuity_context=ctx_dict)
         assert env.continuity_context == ctx_dict
@@ -516,6 +529,7 @@ class TestTaskEnvelopeContinuityContextField:
     def test_set_to_dict_serialised(self):
         from contracts.dispatch_continuity import build_dispatch_continuity_context
         from core.schemas.task_envelope import TaskEnvelope
+
         ctx = build_dispatch_continuity_context(prior_dispatch_id="d_env")
         env = TaskEnvelope(continuity_context=ctx.to_dict())
         assert env.continuity_context["prior_dispatch_id"] == "d_env"
@@ -531,6 +545,7 @@ class TestTaskEnvelopeContinuityContextRoundTrip:
 
     def test_model_dump_round_trip(self):
         from core.schemas.task_envelope import TaskEnvelope
+
         ctx_dict = {"continuity_id": "abc", "prior_session_id": "s_01"}
         env = TaskEnvelope(continuity_context=ctx_dict)
         dumped = env.model_dump()
@@ -548,6 +563,7 @@ class TestAssociateResumedExecution:
     def _make_active_coordinator(self):
         """Return a coordinator with one active session."""
         from unittest.mock import MagicMock
+
         from core.mesh.mesh_session_lifecycle import MeshSessionLifecycleCoordinator
 
         store = MagicMock()
@@ -641,6 +657,7 @@ class TestAssociateResumedExecutionUnknownSession:
 
     def test_unknown_session_returns_none(self):
         from unittest.mock import MagicMock
+
         from core.mesh.mesh_session_lifecycle import MeshSessionLifecycleCoordinator
 
         store = MagicMock()
@@ -659,6 +676,7 @@ class TestAssociateResumedExecutionTerminalSession:
 
     def test_terminal_session_returns_none(self):
         from unittest.mock import MagicMock
+
         from core.mesh.mesh_session_lifecycle import MeshSessionLifecycleCoordinator
 
         store = MagicMock()
@@ -683,13 +701,15 @@ class TestModuleLevelAssociateResumedExecution:
 
     def test_module_level_helper_importable(self):
         from core.mesh.mesh_session_lifecycle import associate_resumed_execution_with_session
+
         assert callable(associate_resumed_execution_with_session)
 
     def test_module_level_helper_uses_coordinator(self):
         from unittest.mock import MagicMock, patch
+
         from core.mesh.mesh_session_lifecycle import (
-            associate_resumed_execution_with_session,
             MeshSessionLifecycleCoordinator,
+            associate_resumed_execution_with_session,
             reset_lifecycle_coordinator,
         )
 
@@ -750,6 +770,7 @@ class TestPRFSentinelsInOrchestrator:
         from core.runtime.source_dispatch_orchestrator import (
             DISPATCH_CONTINUITY_RECOVERY_CONTEXT_PR_F_SENTINEL,
         )
+
         assert DISPATCH_CONTINUITY_RECOVERY_CONTEXT_PR_F_SENTINEL
         assert "PR-F" in DISPATCH_CONTINUITY_RECOVERY_CONTEXT_PR_F_SENTINEL
 
@@ -757,12 +778,14 @@ class TestPRFSentinelsInOrchestrator:
         from core.runtime.source_dispatch_orchestrator import (
             CONTINUITY_CONTEXT_CONNECTS_DISPATCH_SESSION_STATE_PR_F_POLICY,
         )
+
         assert "DispatchContinuityContext" in CONTINUITY_CONTEXT_CONNECTS_DISPATCH_SESSION_STATE_PR_F_POLICY
 
     def test_recoverable_vs_terminal_policy(self):
         from core.runtime.source_dispatch_orchestrator import (
             RECOVERABLE_VS_TERMINAL_DISTINCTION_IS_EXPLICIT_PR_F_POLICY,
         )
+
         assert "recoverable" in RECOVERABLE_VS_TERMINAL_DISTINCTION_IS_EXPLICIT_PR_F_POLICY.lower()
         assert "terminal" in RECOVERABLE_VS_TERMINAL_DISTINCTION_IS_EXPLICIT_PR_F_POLICY.lower()
 
@@ -770,12 +793,14 @@ class TestPRFSentinelsInOrchestrator:
         from core.runtime.source_dispatch_orchestrator import (
             RESTORATION_HOOK_ASSOCIATES_RESUMED_EXECUTION_PR_F_POLICY,
         )
+
         assert "associate_resumed_execution" in RESTORATION_HOOK_ASSOCIATES_RESUMED_EXECUTION_PR_F_POLICY
 
     def test_migration_compatibility_policy(self):
         from core.runtime.source_dispatch_orchestrator import (
             EXISTING_EXECUTION_PATHS_REMAIN_FUNCTIONAL_DURING_MIGRATION_PR_F_POLICY,
         )
+
         assert "backward" in EXISTING_EXECUTION_PATHS_REMAIN_FUNCTIONAL_DURING_MIGRATION_PR_F_POLICY.lower()
 
 
@@ -791,6 +816,7 @@ class TestResumedExecutionAssociationSentinel:
         from core.mesh.mesh_session_lifecycle import (
             RESUMED_EXECUTION_ASSOCIATION_IS_RESTORATION_PATH_POLICY,
         )
+
         assert RESUMED_EXECUTION_ASSOCIATION_IS_RESTORATION_PATH_POLICY
         assert "associate_resumed_execution" in RESUMED_EXECUTION_ASSOCIATION_IS_RESTORATION_PATH_POLICY
 
@@ -804,13 +830,15 @@ class TestBackwardCompatibilityNoContext:
     """Existing execution paths remain functional without continuity_context."""
 
     def test_source_dispatch_plan_works_without_continuity(self):
-        from contracts.source_dispatch import build_source_dispatch_plan, SourceDispatchMode
+        from contracts.source_dispatch import SourceDispatchMode, build_source_dispatch_plan
+
         plan = build_source_dispatch_plan(mode=SourceDispatchMode.local)
         assert plan.mode == SourceDispatchMode.local
         assert plan.continuity_context is None
 
     def test_source_dispatch_result_works_without_continuity(self):
-        from contracts.source_dispatch import build_source_dispatch_result, SourceDispatchMode
+        from contracts.source_dispatch import SourceDispatchMode, build_source_dispatch_result
+
         result = build_source_dispatch_result(
             mode=SourceDispatchMode.fallback_local,
             success=True,
@@ -820,12 +848,14 @@ class TestBackwardCompatibilityNoContext:
 
     def test_task_envelope_works_without_continuity(self):
         from core.schemas.task_envelope import TaskEnvelope
+
         env = TaskEnvelope(tool_name="test_tool", source="test")
         assert env.continuity_context is None
         assert env.tool_name == "test_tool"
 
     def test_failure_dispatch_result_works_without_continuity(self):
-        from contracts.source_dispatch import failure_dispatch_result, SourceDispatchMode
+        from contracts.source_dispatch import SourceDispatchMode, failure_dispatch_result
+
         result = failure_dispatch_result(
             dispatch_id="d_test",
             mode=SourceDispatchMode.remote_handoff,

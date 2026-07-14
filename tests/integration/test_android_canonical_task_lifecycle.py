@@ -98,6 +98,7 @@ def _make_ws() -> MagicMock:
 @pytest.fixture()
 def bridge():
     from galaxy_gateway.android_bridge import AndroidBridge
+
     return AndroidBridge()
 
 
@@ -106,12 +107,14 @@ def _reset_truth_chain_ledger():
     """Clear the IncompleteResultLedger before each test so tests are isolated."""
     try:
         from core.task_result_canonical_truth_chain import get_incomplete_result_ledger
+
         get_incomplete_result_ledger().clear()
     except ImportError:
         pass
     yield
     try:
         from core.task_result_canonical_truth_chain import get_incomplete_result_ledger
+
         get_incomplete_result_ledger().clear()
     except ImportError:
         pass
@@ -122,12 +125,14 @@ def _reset_registration_gaps():
     """Clear registration gap records before each test."""
     try:
         from galaxy_gateway.android.handlers.registration import clear_registration_gaps
+
         clear_registration_gaps()
     except ImportError:
         pass
     yield
     try:
         from galaxy_gateway.android.handlers.registration import clear_registration_gaps
+
         clear_registration_gaps()
     except ImportError:
         pass
@@ -161,18 +166,16 @@ class TestRegistrationAndHeartbeat:
         ack = await bridge.handle_message(ws, msg)
 
         assert ack is not None, "device_register must return an ack — not None"
-        assert ack.get("type") == "device_register_ack", (
-            f"SEGMENT 1 CLOSED: expected type=device_register_ack, got {ack.get('type')!r}"
-        )
-        assert ack.get("success") is True, (
-            "SEGMENT 1 CLOSED: device_register_ack.success must be True"
-        )
-        assert ack.get("device_id") == device_id, (
-            "SEGMENT 1 CLOSED: device_register_ack.device_id must match the registering device"
-        )
-        assert ack.get("runtime_attachment_session_id"), (
-            "SEGMENT 1 CLOSED: device_register_ack must echo back runtime_attachment_session_id"
-        )
+        assert (
+            ack.get("type") == "device_register_ack"
+        ), f"SEGMENT 1 CLOSED: expected type=device_register_ack, got {ack.get('type')!r}"
+        assert ack.get("success") is True, "SEGMENT 1 CLOSED: device_register_ack.success must be True"
+        assert (
+            ack.get("device_id") == device_id
+        ), "SEGMENT 1 CLOSED: device_register_ack.device_id must match the registering device"
+        assert ack.get(
+            "runtime_attachment_session_id"
+        ), "SEGMENT 1 CLOSED: device_register_ack must echo back runtime_attachment_session_id"
 
     @pytest.mark.asyncio
     async def test_registration_gap_state_is_observable(self, bridge: Any) -> None:
@@ -196,9 +199,9 @@ class TestRegistrationAndHeartbeat:
 
         ack = await bridge.handle_message(ws, msg)
 
-        assert ack.get("type") == "device_register_ack", (
-            "device_register must still return ack even when downstream steps fail"
-        )
+        assert (
+            ack.get("type") == "device_register_ack"
+        ), "device_register must still return ack even when downstream steps fail"
         assert ack.get("success") is True, (
             "Partial registration (missing downstream steps) must still return success=True "
             "at the transport level — it is registered, just not fully attached"
@@ -212,22 +215,16 @@ class TestRegistrationAndHeartbeat:
         ack_gaps = ack.get("registration_gaps", [])
 
         assert isinstance(gaps, list), "get_registration_gaps must return a list"
-        assert isinstance(fully_attached, bool), (
-            "is_registration_fully_attached must return a bool"
-        )
+        assert isinstance(fully_attached, bool), "is_registration_fully_attached must return a bool"
         # ACK fields must be consistent with the module-level store.
-        assert ack_fully_attached == fully_attached, (
-            "ACK registration_fully_attached must match is_registration_fully_attached()"
-        )
-        assert set(ack_gaps) == set(gaps), (
-            "ACK registration_gaps must match get_registration_gaps()"
-        )
+        assert (
+            ack_fully_attached == fully_attached
+        ), "ACK registration_fully_attached must match is_registration_fully_attached()"
+        assert set(ack_gaps) == set(gaps), "ACK registration_gaps must match get_registration_gaps()"
 
         # Verdict label in assertion message so CI logs are unambiguous.
         if fully_attached:
-            assert gaps == [], (
-                "SEGMENT 1 CLOSED: device is fully attached — no registration gaps expected"
-            )
+            assert gaps == [], "SEGMENT 1 CLOSED: device is fully attached — no registration gaps expected"
         else:
             assert len(gaps) > 0, (
                 "SEGMENT 1 UNRESOLVED (observable): device has registration gaps — "
@@ -266,9 +263,9 @@ class TestRegistrationAndHeartbeat:
         hb_ack = await bridge.handle_message(ws, _v3("heartbeat", device_id))
 
         assert hb_ack is not None, "heartbeat must return ack"
-        assert hb_ack.get("type") == "heartbeat_ack", (
-            f"SEGMENT 1 CLOSED: expected heartbeat_ack, got {hb_ack.get('type')!r}"
-        )
+        assert (
+            hb_ack.get("type") == "heartbeat_ack"
+        ), f"SEGMENT 1 CLOSED: expected heartbeat_ack, got {hb_ack.get('type')!r}"
 
 
 # ===========================================================================
@@ -316,9 +313,7 @@ class TestTaskAssignDispatch:
         # Simulate Android answering the task immediately
         async def _dispatch_and_answer():
             dispatch_fut = asyncio.ensure_future(
-                bridge.send_to_device(
-                    device_id, task_assign_msg, wait_response=True, timeout=3.0
-                )
+                bridge.send_to_device(device_id, task_assign_msg, wait_response=True, timeout=3.0)
             )
             # Small yield so the future is registered before we send task_result
             await asyncio.sleep(0.05)
@@ -339,9 +334,7 @@ class TestTaskAssignDispatch:
             "SEGMENT 2 CLOSED via bridge: send_to_device future must be resolved "
             "after task_result arrives — the dispatch/result loop is closed."
         )
-        assert result.get("task_id") == task_id, (
-            "SEGMENT 2 CLOSED: resolved result must carry the correct task_id"
-        )
+        assert result.get("task_id") == task_id, "SEGMENT 2 CLOSED: resolved result must carry the correct task_id"
 
 
 # ===========================================================================
@@ -400,9 +393,9 @@ class TestTaskResultAndTruthChain:
         """
         try:
             from core.task_result_canonical_truth_chain import (
-                run_task_result_truth_chain,
-                get_incomplete_result_ledger,
                 StepStatus,
+                get_incomplete_result_ledger,
+                run_task_result_truth_chain,
             )
         except ImportError:
             pytest.skip(
@@ -438,9 +431,7 @@ class TestTaskResultAndTruthChain:
 
         if outcome.is_truth_chain_complete:
             # All four steps ran successfully — this segment is CLOSED.
-            assert ledger.get(task_id) is None, (
-                "SEGMENT 3 CLOSED: complete truth chain must NOT appear in the ledger"
-            )
+            assert ledger.get(task_id) is None, "SEGMENT 3 CLOSED: complete truth chain must NOT appear in the ledger"
         else:
             # Some steps are unavailable (expected in CI) — assert that the
             # incompleteness is machine-observable via the ledger.
@@ -451,12 +442,8 @@ class TestTaskResultAndTruthChain:
                 f"incomplete_reason={outcome.incomplete_reason!r}. "
                 "The ledger must capture this so it can be monitored."
             )
-            assert recorded.is_truth_chain_complete is False, (
-                "Ledger entry must have is_truth_chain_complete=False"
-            )
-            assert recorded.incomplete_reason, (
-                "Ledger entry must have a non-empty incomplete_reason"
-            )
+            assert recorded.is_truth_chain_complete is False, "Ledger entry must have is_truth_chain_complete=False"
+            assert recorded.incomplete_reason, "Ledger entry must have a non-empty incomplete_reason"
             # Log which specific steps are missing so CI output is actionable.
             missing_steps = []
             if recorded.truth_ingress_status == StepStatus.SKIPPED_MODULE_UNAVAILABLE:
@@ -482,9 +469,9 @@ class TestTaskResultAndTruthChain:
         chains entirely.
         """
         from core.task_result_canonical_truth_chain import (
-            get_incomplete_result_ledger,
-            TruthChainOutcome,
             StepStatus,
+            TruthChainOutcome,
+            get_incomplete_result_ledger,
         )
 
         ledger = get_incomplete_result_ledger()
@@ -574,10 +561,10 @@ class TestTaskResultIdempotency:
                 check_result_idempotency,
                 record_result_idempotency,
             )
+
             # Idempotency module available — guard is active.
             assert check_result_idempotency(task_id) is True, (
-                "SEGMENT 4 CLOSED: after two deliveries, idempotency store must "
-                "report task_id as already processed"
+                "SEGMENT 4 CLOSED: after two deliveries, idempotency store must " "report task_id as already processed"
             )
         except ImportError:
             # Module unavailable in this environment.
@@ -622,12 +609,10 @@ class TestFullCanonicalLifecycleRoundtrip:
         ws = _make_ws()
 
         # ── Segment 1: register ───────────────────────────────────────────
-        reg_ack = await bridge.handle_message(
-            ws, _v3("device_register", device_id, model="LifecyclePhone")
-        )
-        assert reg_ack.get("type") == "device_register_ack", (
-            f"SEGMENT 1 FAILED: expected device_register_ack, got {reg_ack.get('type')!r}"
-        )
+        reg_ack = await bridge.handle_message(ws, _v3("device_register", device_id, model="LifecyclePhone"))
+        assert (
+            reg_ack.get("type") == "device_register_ack"
+        ), f"SEGMENT 1 FAILED: expected device_register_ack, got {reg_ack.get('type')!r}"
         assert reg_ack.get("success") is True, "SEGMENT 1 FAILED: success must be True"
 
         # ── Segment 1b: registration gap observable ───────────────────────
@@ -635,17 +620,18 @@ class TestFullCanonicalLifecycleRoundtrip:
             get_registration_gaps,
             is_registration_fully_attached,
         )
+
         gaps = get_registration_gaps(device_id)
-        seg1_verdict = "CLOSED" if is_registration_fully_attached(device_id) else (
-            f"PARTIAL/UNRESOLVED-OBSERVABLE (gaps={gaps})"
+        seg1_verdict = (
+            "CLOSED" if is_registration_fully_attached(device_id) else (f"PARTIAL/UNRESOLVED-OBSERVABLE (gaps={gaps})")
         )
         logger.info("SEGMENT 1 registration attachment verdict: %s", seg1_verdict)
 
         # ── Segment 2: heartbeat ──────────────────────────────────────────
         hb_ack = await bridge.handle_message(ws, _v3("heartbeat", device_id))
-        assert hb_ack.get("type") == "heartbeat_ack", (
-            f"SEGMENT 2 FAILED: expected heartbeat_ack, got {hb_ack.get('type')!r}"
-        )
+        assert (
+            hb_ack.get("type") == "heartbeat_ack"
+        ), f"SEGMENT 2 FAILED: expected heartbeat_ack, got {hb_ack.get('type')!r}"
 
         # ── Segments 3+4: task_assign dispatch + task_result resolution ───
         task_assign_msg = {
@@ -661,15 +647,12 @@ class TestFullCanonicalLifecycleRoundtrip:
 
         async def _dispatch_then_answer():
             fut = asyncio.ensure_future(
-                bridge.send_to_device(
-                    device_id, task_assign_msg, wait_response=True, timeout=3.0
-                )
+                bridge.send_to_device(device_id, task_assign_msg, wait_response=True, timeout=3.0)
             )
             await asyncio.sleep(0.05)
             await bridge.handle_message(
                 ws,
-                _v3("task_result", device_id, task_id=task_id, status="completed",
-                    result={"output": "tap_ok"}),
+                _v3("task_result", device_id, task_id=task_id, status="completed", result={"output": "tap_ok"}),
             )
             return await asyncio.wait_for(fut, timeout=3.0)
 
@@ -678,13 +661,12 @@ class TestFullCanonicalLifecycleRoundtrip:
             "SEGMENT 3+4 FAILED: task_assign → task_result → future resolution "
             "did not close — the center dispatch/result loop is broken."
         )
-        assert resolved.get("task_id") == task_id, (
-            "SEGMENT 3+4 FAILED: resolved result must carry the correct task_id"
-        )
+        assert resolved.get("task_id") == task_id, "SEGMENT 3+4 FAILED: resolved result must carry the correct task_id"
 
         # ── Segment 5: truth chain observable state ───────────────────────
         try:
             from core.task_result_canonical_truth_chain import get_incomplete_result_ledger
+
             ledger = get_incomplete_result_ledger()
             # We processed this task_id earlier in this test (in _dispatch_then_answer).
             # Check whether the truth chain was complete for it.
@@ -692,10 +674,7 @@ class TestFullCanonicalLifecycleRoundtrip:
             if incomplete_entry is None:
                 seg5_verdict = "CLOSED (no entry in incomplete ledger)"
             else:
-                seg5_verdict = (
-                    f"UNRESOLVED-OBSERVABLE: "
-                    f"incomplete_reason={incomplete_entry.incomplete_reason!r}"
-                )
+                seg5_verdict = f"UNRESOLVED-OBSERVABLE: " f"incomplete_reason={incomplete_entry.incomplete_reason!r}"
         except ImportError:
             seg5_verdict = "UNRESOLVED: truth chain module unavailable"
 
@@ -708,12 +687,12 @@ class TestFullCanonicalLifecycleRoundtrip:
         # Both outcomes satisfy the requirement: "not silently swallowed".
         try:
             from core.task_result_canonical_truth_chain import get_incomplete_result_ledger
+
             ledger2 = get_incomplete_result_ledger()
             entry = ledger2.get(task_id)
             if entry is not None:
                 assert entry.is_truth_chain_complete is False, (
-                    "Ledger entry must have is_truth_chain_complete=False "
-                    "if it is in the incomplete ledger"
+                    "Ledger entry must have is_truth_chain_complete=False " "if it is in the incomplete ledger"
                 )
         except ImportError:
             pass
@@ -729,25 +708,19 @@ class TestFullCanonicalLifecycleRoundtrip:
         device_id = f"lifecycle-ackf-{uuid.uuid4().hex[:8]}"
         ws = _make_ws()
 
-        ack = await bridge.handle_message(
-            ws, _v3("device_register", device_id)
-        )
+        ack = await bridge.handle_message(ws, _v3("device_register", device_id))
 
         assert "registration_fully_attached" in ack, (
             "CLOSED: device_register_ack must contain 'registration_fully_attached' bool field — "
             "this is the minimal observable surface for attachment completeness"
         )
-        assert isinstance(ack["registration_fully_attached"], bool), (
-            "registration_fully_attached must be a bool"
-        )
+        assert isinstance(ack["registration_fully_attached"], bool), "registration_fully_attached must be a bool"
         if not ack["registration_fully_attached"]:
             assert "registration_gaps" in ack, (
                 "When registration_fully_attached=False, "
                 "'registration_gaps' must be present in the ACK listing failed steps"
             )
-            assert isinstance(ack["registration_gaps"], list), (
-                "registration_gaps must be a list"
-            )
-            assert len(ack["registration_gaps"]) > 0, (
-                "registration_gaps must be non-empty when registration_fully_attached=False"
-            )
+            assert isinstance(ack["registration_gaps"], list), "registration_gaps must be a list"
+            assert (
+                len(ack["registration_gaps"]) > 0
+            ), "registration_gaps must be non-empty when registration_fully_attached=False"

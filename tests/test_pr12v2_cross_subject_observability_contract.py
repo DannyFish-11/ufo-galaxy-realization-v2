@@ -81,7 +81,6 @@ from core.cross_subject_observability_contract import (
     get_surfaces_by_visibility,
 )
 
-
 # ---------------------------------------------------------------------------
 # 1. Authority and PR-12V2 sentinel — non-empty with expected keywords
 # ---------------------------------------------------------------------------
@@ -91,9 +90,7 @@ def test_authority_sentinel_is_non_empty_and_contains_expected_keywords():
     assert CROSS_SUBJECT_OBSERVABILITY_CONTRACT_AUTHORITY
     assert isinstance(CROSS_SUBJECT_OBSERVABILITY_CONTRACT_AUTHORITY, str)
     assert "AUTHORITY" in CROSS_SUBJECT_OBSERVABILITY_CONTRACT_AUTHORITY
-    assert "cross_subject_observability_contract" in (
-        CROSS_SUBJECT_OBSERVABILITY_CONTRACT_AUTHORITY
-    )
+    assert "cross_subject_observability_contract" in (CROSS_SUBJECT_OBSERVABILITY_CONTRACT_AUTHORITY)
     assert "visibility" in CROSS_SUBJECT_OBSERVABILITY_CONTRACT_AUTHORITY.lower()
 
 
@@ -268,26 +265,24 @@ def test_registry_is_non_empty():
 
 
 def test_registry_contains_local_visible_surfaces():
-    local = [s for s in get_observability_surface_registry()
-             if s.visibility_level == VisibilityLevel.local_visible]
+    local = [s for s in get_observability_surface_registry() if s.visibility_level == VisibilityLevel.local_visible]
     assert len(local) >= 1
 
 
 def test_registry_contains_runtime_visible_surfaces():
-    runtime = [s for s in get_observability_surface_registry()
-               if s.visibility_level == VisibilityLevel.runtime_visible]
+    runtime = [s for s in get_observability_surface_registry() if s.visibility_level == VisibilityLevel.runtime_visible]
     assert len(runtime) >= 1
 
 
 def test_registry_contains_operator_visible_surfaces():
-    operator = [s for s in get_observability_surface_registry()
-                if s.visibility_level == VisibilityLevel.operator_visible]
+    operator = [
+        s for s in get_observability_surface_registry() if s.visibility_level == VisibilityLevel.operator_visible
+    ]
     assert len(operator) >= 1
 
 
 def test_registry_contains_product_visible_surfaces():
-    product = [s for s in get_observability_surface_registry()
-               if s.visibility_level == VisibilityLevel.product_visible]
+    product = [s for s in get_observability_surface_registry() if s.visibility_level == VisibilityLevel.product_visible]
     assert len(product) >= 1
 
 
@@ -299,9 +294,7 @@ def test_registry_contains_product_visible_surfaces():
 def test_every_surface_has_non_empty_notes():
     registry = get_observability_surface_registry()
     for surface in registry:
-        assert surface.notes.strip(), (
-            f"Surface '{surface.surface_id}' has an empty notes field."
-        )
+        assert surface.notes.strip(), f"Surface '{surface.surface_id}' has an empty notes field."
 
 
 # ---------------------------------------------------------------------------
@@ -383,14 +376,10 @@ def test_build_snapshot_counts_are_correct():
 def test_snapshot_total_equals_sum_of_level_counts():
     snap = build_cross_subject_observability_snapshot()
     level_sum = (
-        snap.local_visible_count
-        + snap.runtime_visible_count
-        + snap.operator_visible_count
-        + snap.product_visible_count
+        snap.local_visible_count + snap.runtime_visible_count + snap.operator_visible_count + snap.product_visible_count
     )
     assert snap.total_surfaces == level_sum, (
-        f"total_surfaces={snap.total_surfaces} != "
-        f"sum of level counts={level_sum}"
+        f"total_surfaces={snap.total_surfaces} != " f"sum of level counts={level_sum}"
     )
 
 
@@ -457,38 +446,27 @@ def test_product_visible_non_authority_surfaces_cannot_write_canonical_truth():
 
 
 def test_runtime_visible_uplink_includes_android_participant_truth_ingress():
-    uplink_surfaces = [
-        s for s in get_observability_surface_registry()
-        if s.is_uplink_path
-    ]
+    uplink_surfaces = [s for s in get_observability_surface_registry() if s.is_uplink_path]
     surface_ids = {s.surface_id for s in uplink_surfaces}
     assert "android_participant_truth_ingress" in surface_ids, (
-        "android_participant_truth_ingress must be in the declared "
-        "uplink path surfaces."
+        "android_participant_truth_ingress must be in the declared " "uplink path surfaces."
     )
 
 
 def test_runtime_visible_uplink_includes_android_evaluator_artifact_ingress():
-    uplink_surfaces = [
-        s for s in get_observability_surface_registry()
-        if s.is_uplink_path
-    ]
+    uplink_surfaces = [s for s in get_observability_surface_registry() if s.is_uplink_path]
     surface_ids = {s.surface_id for s in uplink_surfaces}
     assert "android_evaluator_artifact_ingress_runtime" in surface_ids, (
-        "android_evaluator_artifact_ingress must be in the declared "
-        "uplink path surfaces."
+        "android_evaluator_artifact_ingress must be in the declared " "uplink path surfaces."
     )
 
 
 def test_runtime_visible_uplink_includes_gateway_handlers():
-    uplink_surfaces = [
-        s for s in get_observability_surface_registry()
-        if s.is_uplink_path
-    ]
+    uplink_surfaces = [s for s in get_observability_surface_registry() if s.is_uplink_path]
     surface_ids = {s.surface_id for s in uplink_surfaces}
-    assert "galaxy_gateway_android_handlers" in surface_ids, (
-        "galaxy_gateway.android.handlers must be in the uplink path."
-    )
+    assert (
+        "galaxy_gateway_android_handlers" in surface_ids
+    ), "galaxy_gateway.android.handlers must be in the uplink path."
 
 
 # ---------------------------------------------------------------------------
@@ -580,9 +558,7 @@ def test_runtime_truth_policy_references_v2_canonical():
 @pytest.mark.parametrize("level", list(VisibilityLevel))
 def test_at_least_one_surface_per_visibility_level(level):
     surfaces = get_surfaces_by_visibility(level)
-    assert len(surfaces) >= 1, (
-        f"No surfaces registered for visibility level '{level.value}'."
-    )
+    assert len(surfaces) >= 1, f"No surfaces registered for visibility level '{level.value}'."
 
 
 # ---------------------------------------------------------------------------
@@ -593,7 +569,8 @@ def test_at_least_one_surface_per_visibility_level(level):
 def test_uplink_path_surfaces_are_canonical_not_transitional():
     """The declared uplink surfaces supersede the old TRANSITIONAL contract field."""
     uplink_surfaces = [
-        s for s in get_observability_surface_registry()
+        s
+        for s in get_observability_surface_registry()
         if s.distributed_subject_contract_v1_field == "participant_diagnostics_uplink"
     ]
     # There must be at least one surface that maps to this field
@@ -673,8 +650,7 @@ def test_local_visible_includes_android_runtime_controller():
     local = get_surfaces_by_visibility(VisibilityLevel.local_visible)
     ids = {s.surface_id for s in local}
     assert "android_runtime_controller_local" in ids, (
-        "android_runtime_controller_local must be registered as a "
-        "local_visible Android diagnostics surface."
+        "android_runtime_controller_local must be registered as a " "local_visible Android diagnostics surface."
     )
 
 
@@ -682,8 +658,7 @@ def test_local_visible_includes_android_local_loop_executor():
     local = get_surfaces_by_visibility(VisibilityLevel.local_visible)
     ids = {s.surface_id for s in local}
     assert "android_local_loop_executor" in ids, (
-        "android_local_loop_executor must be registered as a "
-        "local_visible Android diagnostics surface."
+        "android_local_loop_executor must be registered as a " "local_visible Android diagnostics surface."
     )
 
 
@@ -713,8 +688,7 @@ def test_product_visible_includes_outward_runtime_truth_compile():
     product = get_surfaces_by_visibility(VisibilityLevel.product_visible)
     ids = {s.surface_id for s in product}
     assert "outward_runtime_truth_compile" in ids, (
-        "outward_runtime_truth_compile must be registered as a product_visible "
-        "surface (Stage 2 canonical output)."
+        "outward_runtime_truth_compile must be registered as a product_visible " "surface (Stage 2 canonical output)."
     )
 
 
@@ -739,10 +713,7 @@ def test_no_local_visible_surface_claims_runtime_truth():
 
 
 def test_all_uplink_path_surfaces_are_runtime_visible():
-    uplink_surfaces = [
-        s for s in get_observability_surface_registry()
-        if s.is_uplink_path
-    ]
+    uplink_surfaces = [s for s in get_observability_surface_registry() if s.is_uplink_path]
     for surface in uplink_surfaces:
         assert surface.visibility_level == VisibilityLevel.runtime_visible, (
             f"Uplink path surface '{surface.surface_id}' has visibility "
@@ -758,11 +729,7 @@ def test_all_uplink_path_surfaces_are_runtime_visible():
 
 def test_snapshot_uplink_path_surfaces_matches_registry():
     snap = build_cross_subject_observability_snapshot()
-    expected_uplink = {
-        s.surface_id
-        for s in get_observability_surface_registry()
-        if s.is_uplink_path
-    }
+    expected_uplink = {s.surface_id for s in get_observability_surface_registry() if s.is_uplink_path}
     assert set(snap.uplink_path_surfaces) == expected_uplink
 
 
@@ -781,8 +748,7 @@ def test_evidence_kind_counts_sum_to_total_surfaces():
         + snap.runtime_truth_count
     )
     assert snap.total_surfaces == kind_sum, (
-        f"total_surfaces={snap.total_surfaces} != "
-        f"sum of evidence kind counts={kind_sum}"
+        f"total_surfaces={snap.total_surfaces} != " f"sum of evidence kind counts={kind_sum}"
     )
 
 
@@ -797,8 +763,7 @@ def test_contract_authority_sentinel_references_pr12v2_semantics():
     auth = CROSS_SUBJECT_OBSERVABILITY_CONTRACT_AUTHORITY.lower()
     # Must reference the superseding of the transitional field
     assert "supersedes" in auth or "transitional" in auth, (
-        "Authority sentinel must reference superseding the TRANSITIONAL "
-        "participant_diagnostics_uplink field."
+        "Authority sentinel must reference superseding the TRANSITIONAL " "participant_diagnostics_uplink field."
     )
     # Must reference the 4-level visibility taxonomy
     assert "4-level" in auth or "four" in auth or "local-visible" in auth or "local_visible" in auth

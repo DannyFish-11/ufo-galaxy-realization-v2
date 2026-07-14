@@ -34,7 +34,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict
 
-
 # ---------------------------------------------------------------------------
 # CapabilityConstraintFlags
 # ---------------------------------------------------------------------------
@@ -84,9 +83,7 @@ class CapabilityConstraintFlags:
             cross_device_restricted=bool(data.get("cross_device_restricted", False)),
             latency_sensitive=bool(data.get("latency_sensitive", False)),
             device_exclusive=bool(data.get("device_exclusive", False)),
-            requires_elevated_privilege=bool(
-                data.get("requires_elevated_privilege", False)
-            ),
+            requires_elevated_privilege=bool(data.get("requires_elevated_privilege", False)),
         )
 
     def has_any_constraint(self) -> bool:
@@ -133,7 +130,5 @@ LOCAL_ONLY = CapabilityConstraintFlags(cross_device_restricted=True)
 LATENCY_CRITICAL = CapabilityConstraintFlags(latency_sensitive=True)
 """Sentinel: route via low-latency path only."""
 
-EXCLUSIVE_LOCAL = CapabilityConstraintFlags(
-    cross_device_restricted=True, device_exclusive=True
-)
+EXCLUSIVE_LOCAL = CapabilityConstraintFlags(cross_device_restricted=True, device_exclusive=True)
 """Sentinel: local-only, mutually exclusive."""

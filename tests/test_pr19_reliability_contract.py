@@ -37,7 +37,6 @@ from typing import Any, Dict
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # 1. DeliveryMode enum
 # ---------------------------------------------------------------------------
@@ -97,7 +96,7 @@ class TestDeliveryMode:
             assert len(desc) > 10
 
     def test_descriptions_dict_covers_all_modes(self) -> None:
-        from core.reliability_contract import DeliveryMode, DELIVERY_MODE_DESCRIPTIONS
+        from core.reliability_contract import DELIVERY_MODE_DESCRIPTIONS, DeliveryMode
 
         for mode in DeliveryMode:
             assert mode.value in DELIVERY_MODE_DESCRIPTIONS
@@ -140,7 +139,7 @@ class TestAckStage:
             assert len(desc) > 5
 
     def test_descriptions_dict_covers_all_stages(self) -> None:
-        from core.reliability_contract import AckStage, ACK_STAGE_DESCRIPTIONS
+        from core.reliability_contract import ACK_STAGE_DESCRIPTIONS, AckStage
 
         for stage in AckStage:
             assert stage.value in ACK_STAGE_DESCRIPTIONS
@@ -199,11 +198,12 @@ class TestAckPolicy:
 
     def test_pre_built_sentinels(self) -> None:
         from core.reliability_contract import (
-            NO_ACK_POLICY,
             ACCEPTED_ACK_POLICY,
             COMPLETED_ACK_POLICY,
+            NO_ACK_POLICY,
             AckStage,
         )
+
         assert NO_ACK_POLICY.stage == AckStage.NO_ACK
         assert ACCEPTED_ACK_POLICY.stage == AckStage.ACCEPTED_ACK
         assert COMPLETED_ACK_POLICY.stage == AckStage.COMPLETED_ACK
@@ -275,11 +275,12 @@ class TestDeduplicationKey:
 
     def test_pre_built_path_dedup_keys_have_fields(self) -> None:
         from core.reliability_contract import (
-            NATS_TASK_DEDUP_KEY,
-            HANDOFF_DEDUP_KEY,
             COMMAND_ROUTER_DEDUP_KEY,
             DEVICE_WEBSOCKET_DEDUP_KEY,
+            HANDOFF_DEDUP_KEY,
+            NATS_TASK_DEDUP_KEY,
         )
+
         for key in [
             NATS_TASK_DEDUP_KEY,
             HANDOFF_DEDUP_KEY,
@@ -396,7 +397,7 @@ class TestTimeoutOwner:
             assert len(desc) > 10
 
     def test_descriptions_dict_covers_all_owners(self) -> None:
-        from core.reliability_contract import TimeoutOwner, TIMEOUT_OWNER_DESCRIPTIONS
+        from core.reliability_contract import TIMEOUT_OWNER_DESCRIPTIONS, TimeoutOwner
 
         for owner in TimeoutOwner:
             assert owner.value in TIMEOUT_OWNER_DESCRIPTIONS
@@ -450,7 +451,7 @@ class TestFallbackOwner:
             assert len(desc) > 5
 
     def test_descriptions_dict_covers_all_owners(self) -> None:
-        from core.reliability_contract import FallbackOwner, FALLBACK_OWNER_DESCRIPTIONS
+        from core.reliability_contract import FALLBACK_OWNER_DESCRIPTIONS, FallbackOwner
 
         for owner in FallbackOwner:
             assert owner.value in FALLBACK_OWNER_DESCRIPTIONS
@@ -464,11 +465,12 @@ class TestFallbackOwner:
 class TestReliabilitySummary:
     def test_default_construction(self) -> None:
         from core.reliability_contract import (
-            ReliabilitySummary,
             DeliveryMode,
-            TimeoutOwner,
             FallbackOwner,
+            ReliabilitySummary,
+            TimeoutOwner,
         )
+
         summary = ReliabilitySummary()
         assert summary.path_key == "unknown"
         assert summary.delivery_mode == DeliveryMode.UNKNOWN
@@ -505,11 +507,12 @@ class TestReliabilitySummary:
 
     def test_from_dict_roundtrip(self) -> None:
         from core.reliability_contract import (
-            ReliabilitySummary,
             DeliveryMode,
-            TimeoutOwner,
             FallbackOwner,
+            ReliabilitySummary,
+            TimeoutOwner,
         )
+
         original = ReliabilitySummary(
             path_key="roundtrip_test",
             description="Round-trip test",
@@ -526,7 +529,7 @@ class TestReliabilitySummary:
         assert restored.notes == original.notes
 
     def test_from_dict_unknown_delivery_mode_degrades(self) -> None:
-        from core.reliability_contract import ReliabilitySummary, DeliveryMode
+        from core.reliability_contract import DeliveryMode, ReliabilitySummary
 
         summary = ReliabilitySummary.from_dict({"delivery_mode": "nonexistent_mode"})
         assert summary.delivery_mode == DeliveryMode.UNKNOWN
@@ -538,20 +541,20 @@ class TestReliabilitySummary:
         assert summary.timeout_owner == TimeoutOwner.UNSPECIFIED
 
     def test_from_dict_unknown_fallback_owner_degrades(self) -> None:
-        from core.reliability_contract import ReliabilitySummary, FallbackOwner
+        from core.reliability_contract import FallbackOwner, ReliabilitySummary
 
         summary = ReliabilitySummary.from_dict({"fallback_owner": "nonexistent_owner"})
         assert summary.fallback_owner == FallbackOwner.UNSPECIFIED
 
     def test_from_dict_empty_dict_degrades_gracefully(self) -> None:
-        from core.reliability_contract import ReliabilitySummary, DeliveryMode
+        from core.reliability_contract import DeliveryMode, ReliabilitySummary
 
         summary = ReliabilitySummary.from_dict({})
         assert summary.path_key == "unknown"
         assert summary.delivery_mode == DeliveryMode.UNKNOWN
 
     def test_ack_policy_nested_roundtrip(self) -> None:
-        from core.reliability_contract import ReliabilitySummary, AckStage, ACCEPTED_ACK_POLICY
+        from core.reliability_contract import ACCEPTED_ACK_POLICY, AckStage, ReliabilitySummary
 
         original = ReliabilitySummary(path_key="ack_test", ack_policy=ACCEPTED_ACK_POLICY)
         restored = ReliabilitySummary.from_dict(original.to_dict())
@@ -568,9 +571,10 @@ class TestUnknownReliabilitySummary:
         from core.reliability_contract import (
             UNKNOWN_RELIABILITY_SUMMARY,
             DeliveryMode,
-            TimeoutOwner,
             FallbackOwner,
+            TimeoutOwner,
         )
+
         s = UNKNOWN_RELIABILITY_SUMMARY
         assert s.path_key == "unknown"
         assert s.delivery_mode == DeliveryMode.UNKNOWN
@@ -614,25 +618,19 @@ class TestReliabilityPathRegistry:
         from core.reliability_contract import RELIABILITY_PATH_REGISTRY, DeliveryMode
 
         for key, summary in RELIABILITY_PATH_REGISTRY.items():
-            assert summary.delivery_mode != DeliveryMode.UNKNOWN, (
-                f"Path {key!r} has UNKNOWN delivery mode"
-            )
+            assert summary.delivery_mode != DeliveryMode.UNKNOWN, f"Path {key!r} has UNKNOWN delivery mode"
 
     def test_all_paths_have_known_timeout_owner(self) -> None:
         from core.reliability_contract import RELIABILITY_PATH_REGISTRY, TimeoutOwner
 
         for key, summary in RELIABILITY_PATH_REGISTRY.items():
-            assert summary.timeout_owner != TimeoutOwner.UNSPECIFIED, (
-                f"Path {key!r} has UNSPECIFIED timeout owner"
-            )
+            assert summary.timeout_owner != TimeoutOwner.UNSPECIFIED, f"Path {key!r} has UNSPECIFIED timeout owner"
 
     def test_all_paths_have_known_fallback_owner(self) -> None:
         from core.reliability_contract import RELIABILITY_PATH_REGISTRY, FallbackOwner
 
         for key, summary in RELIABILITY_PATH_REGISTRY.items():
-            assert summary.fallback_owner != FallbackOwner.UNSPECIFIED, (
-                f"Path {key!r} has UNSPECIFIED fallback owner"
-            )
+            assert summary.fallback_owner != FallbackOwner.UNSPECIFIED, f"Path {key!r} has UNSPECIFIED fallback owner"
 
     def test_all_paths_have_source_module(self) -> None:
         from core.reliability_contract import RELIABILITY_PATH_REGISTRY
@@ -694,9 +692,10 @@ class TestGetSummaryForPath:
 
     def test_unknown_path_returns_sentinel(self) -> None:
         from core.reliability_contract import (
-            get_summary_for_path,
             UNKNOWN_RELIABILITY_SUMMARY,
+            get_summary_for_path,
         )
+
         summary = get_summary_for_path("completely_unknown_path_xyz")
         assert summary is UNKNOWN_RELIABILITY_SUMMARY
 
@@ -748,9 +747,10 @@ class TestGetReliabilityRegistrySnapshot:
 
     def test_total_paths_matches_registry(self) -> None:
         from core.reliability_contract import (
-            get_reliability_registry_snapshot,
             RELIABILITY_PATH_REGISTRY,
+            get_reliability_registry_snapshot,
         )
+
         snapshot = get_reliability_registry_snapshot()
         assert snapshot["total_paths"] == len(RELIABILITY_PATH_REGISTRY)
 
@@ -783,12 +783,13 @@ class TestGetReliabilityRegistrySnapshot:
 class TestMakeReliabilitySummary:
     def test_valid_inputs(self) -> None:
         from core.reliability_contract import (
-            make_reliability_summary,
-            DeliveryMode,
             AckStage,
-            TimeoutOwner,
+            DeliveryMode,
             FallbackOwner,
+            TimeoutOwner,
+            make_reliability_summary,
         )
+
         summary = make_reliability_summary(
             path_key="test_path",
             description="Test",
@@ -808,7 +809,7 @@ class TestMakeReliabilitySummary:
         assert summary.notes == "Test notes"
 
     def test_unknown_delivery_mode_degrades(self) -> None:
-        from core.reliability_contract import make_reliability_summary, DeliveryMode
+        from core.reliability_contract import DeliveryMode, make_reliability_summary
 
         summary = make_reliability_summary(
             path_key="test",
@@ -817,7 +818,7 @@ class TestMakeReliabilitySummary:
         assert summary.delivery_mode == DeliveryMode.UNKNOWN
 
     def test_unknown_ack_stage_degrades(self) -> None:
-        from core.reliability_contract import make_reliability_summary, AckStage
+        from core.reliability_contract import AckStage, make_reliability_summary
 
         summary = make_reliability_summary(
             path_key="test",
@@ -826,7 +827,7 @@ class TestMakeReliabilitySummary:
         assert summary.ack_policy.stage == AckStage.UNKNOWN
 
     def test_unknown_timeout_owner_degrades(self) -> None:
-        from core.reliability_contract import make_reliability_summary, TimeoutOwner
+        from core.reliability_contract import TimeoutOwner, make_reliability_summary
 
         summary = make_reliability_summary(
             path_key="test",
@@ -835,7 +836,7 @@ class TestMakeReliabilitySummary:
         assert summary.timeout_owner == TimeoutOwner.UNSPECIFIED
 
     def test_unknown_fallback_owner_degrades(self) -> None:
-        from core.reliability_contract import make_reliability_summary, FallbackOwner
+        from core.reliability_contract import FallbackOwner, make_reliability_summary
 
         summary = make_reliability_summary(
             path_key="test",
@@ -986,6 +987,7 @@ class TestReliabilityContractApiRoute:
             pytest.skip("fastapi not available")
 
         from fastapi import FastAPI
+
         from core.routes.contracts import create_router
 
         app = FastAPI()
@@ -1002,6 +1004,7 @@ class TestReliabilityContractApiRoute:
             pytest.skip("fastapi not available")
 
         from fastapi import FastAPI
+
         from core.routes.contracts import create_router
 
         app = FastAPI()
@@ -1021,6 +1024,7 @@ class TestReliabilityContractApiRoute:
             pytest.skip("fastapi not available")
 
         from fastapi import FastAPI
+
         from core.routes.contracts import create_router
 
         app = FastAPI()
@@ -1039,6 +1043,7 @@ class TestReliabilityContractApiRoute:
             pytest.skip("fastapi not available")
 
         from fastapi import FastAPI
+
         from core.routes.contracts import create_router
 
         app = FastAPI()

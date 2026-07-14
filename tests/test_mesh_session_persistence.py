@@ -43,13 +43,14 @@ from typing import Any, Dict, Optional
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_store(tmp_dir: Optional[str] = None):
     from core.mesh.mesh_session_persistence import MeshSessionPersistenceStore
+
     return MeshSessionPersistenceStore(store_dir=tmp_dir or tempfile.mkdtemp())
 
 
@@ -68,29 +69,35 @@ def _make_coordinator_dict(session_id: str = "sess-001", status: str = "coordina
 # 1–4: Sentinels and SnapshotRecord
 # ---------------------------------------------------------------------------
 
+
 class TestSentinels:
     def test_authority_sentinel(self):
         from core.mesh.mesh_session_persistence import MESH_SESSION_PERSISTENCE_IS_AUTHORITY
+
         assert isinstance(MESH_SESSION_PERSISTENCE_IS_AUTHORITY, str)
         assert "MESH_SESSION_PERSISTENCE_IS_AUTHORITY" in MESH_SESSION_PERSISTENCE_IS_AUTHORITY
 
     def test_gap_closure_sentinel(self):
         from core.mesh.mesh_session_persistence import MESH_SESSION_PERSISTENCE_GAP_CLOSURE_SENTINEL
+
         assert isinstance(MESH_SESSION_PERSISTENCE_GAP_CLOSURE_SENTINEL, str)
         assert "GAP_CLOSURE" in MESH_SESSION_PERSISTENCE_GAP_CLOSURE_SENTINEL
 
     def test_recovery_policy_sentinel(self):
         from core.mesh.mesh_session_persistence import RECOVERY_RESTORES_NON_TERMINAL_SESSIONS_POLICY
+
         assert isinstance(RECOVERY_RESTORES_NON_TERMINAL_SESSIONS_POLICY, str)
 
     def test_boundary_policy_sentinel(self):
         from core.mesh.mesh_session_persistence import PERSISTENCE_DOES_NOT_OWN_RUNTIME_TRUTH_POLICY
+
         assert isinstance(PERSISTENCE_DOES_NOT_OWN_RUNTIME_TRUTH_POLICY, str)
 
 
 class TestSnapshotRecord:
     def test_construction(self):
         from core.mesh.mesh_session_persistence import SnapshotRecord
+
         rec = SnapshotRecord(
             session_id="s1",
             coordinator_id="c1",
@@ -104,6 +111,7 @@ class TestSnapshotRecord:
 
     def test_to_dict_round_trip(self):
         from core.mesh.mesh_session_persistence import SnapshotRecord
+
         rec = SnapshotRecord(
             session_id="s2",
             coordinator_id="c2",
@@ -121,8 +129,11 @@ class TestSnapshotRecord:
 
     def test_is_terminal_for_completed(self):
         from core.mesh.mesh_session_persistence import SnapshotRecord
+
         rec = SnapshotRecord(
-            session_id="s3", coordinator_id="c", overall_status="completed",
+            session_id="s3",
+            coordinator_id="c",
+            overall_status="completed",
             snapshot_dict={},
         )
         assert rec.is_terminal() is True
@@ -130,24 +141,33 @@ class TestSnapshotRecord:
 
     def test_is_terminal_for_failed(self):
         from core.mesh.mesh_session_persistence import SnapshotRecord
+
         rec = SnapshotRecord(
-            session_id="s4", coordinator_id="c", overall_status="failed",
+            session_id="s4",
+            coordinator_id="c",
+            overall_status="failed",
             snapshot_dict={},
         )
         assert rec.is_terminal() is True
 
     def test_is_recoverable_for_non_terminal(self):
         from core.mesh.mesh_session_persistence import SnapshotRecord
+
         rec = SnapshotRecord(
-            session_id="s5", coordinator_id="c", overall_status="coordinating",
+            session_id="s5",
+            coordinator_id="c",
+            overall_status="coordinating",
             snapshot_dict={},
         )
         assert rec.is_recoverable() is True
 
     def test_is_recoverable_false_for_empty_session_id(self):
         from core.mesh.mesh_session_persistence import SnapshotRecord
+
         rec = SnapshotRecord(
-            session_id="", coordinator_id="c", overall_status="coordinating",
+            session_id="",
+            coordinator_id="c",
+            overall_status="coordinating",
             snapshot_dict={},
         )
         assert rec.is_recoverable() is False
@@ -156,6 +176,7 @@ class TestSnapshotRecord:
 # ---------------------------------------------------------------------------
 # 5–14: MeshSessionPersistenceStore
 # ---------------------------------------------------------------------------
+
 
 class TestMeshSessionPersistenceStore:
     def test_save_returns_record(self, tmp_path):
@@ -231,12 +252,14 @@ class TestMeshSessionPersistenceStore:
 # 15–18: Module-level functions
 # ---------------------------------------------------------------------------
 
+
 class TestModuleLevelFunctions:
     def test_save_mesh_session_snapshot(self, tmp_path):
         from core.mesh.mesh_session_persistence import (
-            save_mesh_session_snapshot,
             MeshSessionPersistenceStore,
+            save_mesh_session_snapshot,
         )
+
         store = MeshSessionPersistenceStore(store_dir=str(tmp_path))
         d = _make_coordinator_dict("fn-save")
         rec = save_mesh_session_snapshot(d, store=store)
@@ -245,10 +268,11 @@ class TestModuleLevelFunctions:
 
     def test_load_mesh_session_snapshot(self, tmp_path):
         from core.mesh.mesh_session_persistence import (
-            save_mesh_session_snapshot,
-            load_mesh_session_snapshot,
             MeshSessionPersistenceStore,
+            load_mesh_session_snapshot,
+            save_mesh_session_snapshot,
         )
+
         store = MeshSessionPersistenceStore(store_dir=str(tmp_path))
         save_mesh_session_snapshot(_make_coordinator_dict("fn-load"), store=store)
         loaded = load_mesh_session_snapshot("fn-load", store=store)
@@ -256,10 +280,11 @@ class TestModuleLevelFunctions:
 
     def test_recover_mesh_sessions(self, tmp_path):
         from core.mesh.mesh_session_persistence import (
-            save_mesh_session_snapshot,
-            recover_mesh_sessions,
             MeshSessionPersistenceStore,
+            recover_mesh_sessions,
+            save_mesh_session_snapshot,
         )
+
         store = MeshSessionPersistenceStore(store_dir=str(tmp_path))
         save_mesh_session_snapshot(_make_coordinator_dict("rec-1"), store=store)
         save_mesh_session_snapshot(_make_coordinator_dict("rec-2", status="completed"), store=store)
@@ -270,10 +295,11 @@ class TestModuleLevelFunctions:
 
     def test_list_recoverable_sessions(self, tmp_path):
         from core.mesh.mesh_session_persistence import (
-            save_mesh_session_snapshot,
-            list_recoverable_sessions,
             MeshSessionPersistenceStore,
+            list_recoverable_sessions,
+            save_mesh_session_snapshot,
         )
+
         store = MeshSessionPersistenceStore(store_dir=str(tmp_path))
         save_mesh_session_snapshot(_make_coordinator_dict("list-1"), store=store)
         ids = list_recoverable_sessions(store=store)
@@ -284,12 +310,14 @@ class TestModuleLevelFunctions:
 # 19–20: Singleton management
 # ---------------------------------------------------------------------------
 
+
 class TestSingleton:
     def test_get_persistence_store_returns_same_instance(self):
         from core.mesh.mesh_session_persistence import (
             get_persistence_store,
             reset_persistence_store,
         )
+
         reset_persistence_store()
         s1 = get_persistence_store()
         s2 = get_persistence_store()
@@ -300,6 +328,7 @@ class TestSingleton:
             get_persistence_store,
             reset_persistence_store,
         )
+
         reset_persistence_store()
         s1 = get_persistence_store()
         reset_persistence_store()
@@ -311,6 +340,7 @@ class TestSingleton:
 # 21–23: Object with to_dict / model_dump / None
 # ---------------------------------------------------------------------------
 
+
 class TestObjectInput:
     def test_save_object_with_to_dict(self, tmp_path):
         from core.mesh.mesh_session_persistence import MeshSessionPersistenceStore
@@ -319,6 +349,7 @@ class TestObjectInput:
             session_id = "obj-session"
             coordinator_id = "obj-coord"
             overall_status = "coordinating"
+
             def to_dict(self):
                 return {
                     "session_id": self.session_id,
@@ -333,6 +364,7 @@ class TestObjectInput:
 
     def test_save_none_returns_none(self, tmp_path):
         from core.mesh.mesh_session_persistence import MeshSessionPersistenceStore
+
         store = MeshSessionPersistenceStore(store_dir=str(tmp_path))
         rec = store.save(None)
         assert rec is None
@@ -342,9 +374,11 @@ class TestObjectInput:
 # 24: File-backed survival across re-instantiation
 # ---------------------------------------------------------------------------
 
+
 class TestFilePersistence:
     def test_save_survives_reinstantiation(self, tmp_path):
         from core.mesh.mesh_session_persistence import MeshSessionPersistenceStore
+
         store1 = MeshSessionPersistenceStore(store_dir=str(tmp_path))
         store1.save(_make_coordinator_dict("persist-1"))
 
@@ -356,6 +390,7 @@ class TestFilePersistence:
 
     def test_json_file_is_valid_json(self, tmp_path):
         from core.mesh.mesh_session_persistence import MeshSessionPersistenceStore
+
         store = MeshSessionPersistenceStore(store_dir=str(tmp_path))
         store.save(_make_coordinator_dict("json-check"))
         # Find the file
@@ -370,18 +405,20 @@ class TestFilePersistence:
 # 25: core.mesh __init__ exports
 # ---------------------------------------------------------------------------
 
+
 class TestCoreMeshInit:
     def test_persistence_symbols_exported(self):
         from core.mesh import (
+            MESH_SESSION_PERSISTENCE_IS_AUTHORITY,
             MeshSessionPersistenceStore,
             SnapshotRecord,
-            save_mesh_session_snapshot,
+            get_persistence_store,
+            list_recoverable_sessions,
             load_mesh_session_snapshot,
             recover_mesh_sessions,
-            list_recoverable_sessions,
-            get_persistence_store,
             reset_persistence_store,
-            MESH_SESSION_PERSISTENCE_IS_AUTHORITY,
+            save_mesh_session_snapshot,
         )
+
         assert MeshSessionPersistenceStore is not None
         assert isinstance(MESH_SESSION_PERSISTENCE_IS_AUTHORITY, str)

@@ -102,33 +102,33 @@ core/orchestration_authority/ — PR-9 authority roles (upstream signal).
 
 from __future__ import annotations
 
+# PR-6: Re-export participation semantics so callers can import them from
+# the cross_device_policy package directly.
+from core.device_selection import DeviceParticipationStatus
+
+from .assignment_summary import (
+    IDLE_ASSIGNMENT_SUMMARY,
+    CrossDeviceAssignmentSummary,
+    attach_cross_device_to_projection,
+    build_assignment_summary,
+    get_assignment_hints,
+)
 from .device_role import (
-    DeviceRole,
     ROLE_PRECEDENCE,
-    role_description,
+    DeviceRole,
     DeviceRoleAssignment,
+    role_description,
 )
 from .routing_policy import (
-    RoutingPosture,
+    DEFAULT_LOCAL_ROUTING_POLICY,
     POSTURE_DESCRIPTIONS,
     RoutingPolicy,
-    DEFAULT_LOCAL_ROUTING_POLICY,
-)
-from .assignment_summary import (
-    CrossDeviceAssignmentSummary,
-    IDLE_ASSIGNMENT_SUMMARY,
-    build_assignment_summary,
-    attach_cross_device_to_projection,
-    get_assignment_hints,
+    RoutingPosture,
 )
 from .routing_resolver import (
     resolve_routing,
     resolve_routing_summary,
 )
-
-# PR-6: Re-export participation semantics so callers can import them from
-# the cross_device_policy package directly.
-from core.device_selection import DeviceParticipationStatus
 
 __all__ = [
     # Device role

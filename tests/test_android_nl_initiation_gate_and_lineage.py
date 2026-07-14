@@ -46,21 +46,26 @@ def test_goal_execution_task_assign_contains_canonical_lineage() -> None:
             }
         )
     )
-    with patch.object(ge, "_is_cross_device_enabled", lambda: True), patch.object(
-        ge,
-        "_evaluate_android_mode_readiness",
-        lambda **_: SimpleNamespace(is_dispatch_eligible=True, blocking_gates=[]),
-    ), patch.object(
-        ge,
-        "_evaluate_execution_governance",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            accepted=True,
-            blocking_gates=[],
-            rejection_reason="",
-            conflict=False,
-            active_conflicting_type=None,
+    with (
+        patch.object(ge, "_is_cross_device_enabled", lambda: True),
+        patch.object(
+            ge,
+            "_evaluate_android_mode_readiness",
+            lambda **_: SimpleNamespace(is_dispatch_eligible=True, blocking_gates=[]),
         ),
-    ), patch("core.desktop_presence_runtime.get_desktop_presence_runtime", return_value=fake_runtime):
+        patch.object(
+            ge,
+            "_evaluate_execution_governance",
+            lambda *_args, **_kwargs: SimpleNamespace(
+                accepted=True,
+                blocking_gates=[],
+                rejection_reason="",
+                conflict=False,
+                active_conflicting_type=None,
+            ),
+        ),
+        patch("core.desktop_presence_runtime.get_desktop_presence_runtime", return_value=fake_runtime),
+    ):
         result = asyncio.run(ge.handle_goal_execution(MagicMock(), MagicMock(), msg))
 
     lineage = result["payload"]["lineage"]
@@ -120,21 +125,26 @@ def test_goal_execution_blocked_when_main_chain_ingress_not_accepted() -> None:
             }
         )
     )
-    with patch.object(ge, "_is_cross_device_enabled", lambda: True), patch.object(
-        ge,
-        "_evaluate_android_mode_readiness",
-        lambda **_: SimpleNamespace(is_dispatch_eligible=True, blocking_gates=[]),
-    ), patch.object(
-        ge,
-        "_evaluate_execution_governance",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            accepted=True,
-            blocking_gates=[],
-            rejection_reason="",
-            conflict=False,
-            active_conflicting_type=None,
+    with (
+        patch.object(ge, "_is_cross_device_enabled", lambda: True),
+        patch.object(
+            ge,
+            "_evaluate_android_mode_readiness",
+            lambda **_: SimpleNamespace(is_dispatch_eligible=True, blocking_gates=[]),
         ),
-    ), patch("core.desktop_presence_runtime.get_desktop_presence_runtime", return_value=fake_runtime):
+        patch.object(
+            ge,
+            "_evaluate_execution_governance",
+            lambda *_args, **_kwargs: SimpleNamespace(
+                accepted=True,
+                blocking_gates=[],
+                rejection_reason="",
+                conflict=False,
+                active_conflicting_type=None,
+            ),
+        ),
+        patch("core.desktop_presence_runtime.get_desktop_presence_runtime", return_value=fake_runtime),
+    ):
         result = asyncio.run(ge.handle_goal_execution(MagicMock(), MagicMock(), msg))
 
     assert result["error_code"] == "ANDROID_MAIN_CHAIN_INGRESS_REJECTED"
@@ -144,19 +154,23 @@ def test_goal_execution_blocked_when_main_chain_ingress_not_accepted() -> None:
 
 def test_goal_execution_governance_reject_stamps_blocked_lineage() -> None:
     msg = _build_goal_execution_message(task_id="task-3")
-    with patch.object(ge, "_is_cross_device_enabled", lambda: True), patch.object(
-        ge,
-        "_evaluate_android_mode_readiness",
-        lambda **_: SimpleNamespace(is_dispatch_eligible=True, blocking_gates=[]),
-    ), patch.object(
-        ge,
-        "_evaluate_execution_governance",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            accepted=False,
-            blocking_gates=["takeover_conflict"],
-            rejection_reason="takeover in progress",
-            conflict=True,
-            active_conflicting_type=SimpleNamespace(value="takeover_request"),
+    with (
+        patch.object(ge, "_is_cross_device_enabled", lambda: True),
+        patch.object(
+            ge,
+            "_evaluate_android_mode_readiness",
+            lambda **_: SimpleNamespace(is_dispatch_eligible=True, blocking_gates=[]),
+        ),
+        patch.object(
+            ge,
+            "_evaluate_execution_governance",
+            lambda *_args, **_kwargs: SimpleNamespace(
+                accepted=False,
+                blocking_gates=["takeover_conflict"],
+                rejection_reason="takeover in progress",
+                conflict=True,
+                active_conflicting_type=SimpleNamespace(value="takeover_request"),
+            ),
         ),
     ):
         result = asyncio.run(ge.handle_goal_execution(MagicMock(), MagicMock(), msg))
@@ -178,8 +192,9 @@ def test_participation_boundary_model_never_allows_authority_override() -> None:
 
 def test_goal_execution_blocked_when_mode_gate_unavailable() -> None:
     msg = _build_goal_execution_message(task_id="task-3b")
-    with patch.object(ge, "_is_cross_device_enabled", lambda: True), patch.object(
-        ge, "_evaluate_android_mode_readiness", None
+    with (
+        patch.object(ge, "_is_cross_device_enabled", lambda: True),
+        patch.object(ge, "_evaluate_android_mode_readiness", None),
     ):
         result = asyncio.run(ge.handle_goal_execution(MagicMock(), MagicMock(), msg))
     assert result["error_code"] == "ANDROID_NL_INITIATION_BLOCKED"
@@ -205,25 +220,32 @@ def test_goal_execution_result_lineage_replay_assisted() -> None:
     fake_runtime = SimpleNamespace(on_goal_execution_result=AsyncMock())
     bridge = SimpleNamespace(_pending_responses={})
 
-    with patch.object(ge, "store_task_result", _capture_store), patch.object(
-        ge,
-        "_run_task_result_truth_chain",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            is_truth_chain_complete=True,
-            incomplete_reason="",
+    with (
+        patch.object(ge, "store_task_result", _capture_store),
+        patch.object(
+            ge,
+            "_run_task_result_truth_chain",
+            lambda *_args, **_kwargs: SimpleNamespace(
+                is_truth_chain_complete=True,
+                incomplete_reason="",
+            ),
         ),
-    ), patch(
-        "core.desktop_presence_runtime.get_desktop_presence_runtime",
-        return_value=fake_runtime,
-    ), patch(
-        "core.durable_result_idempotency.check_result_idempotency",
-        return_value=False,
-    ), patch(
-        "core.durable_result_idempotency.record_result_idempotency",
-        return_value=None,
-    ), patch(
-        "contracts.cross_repo_schema_version_gate.evaluate_android_uplink_schema_gate",
-        return_value=None,
+        patch(
+            "core.desktop_presence_runtime.get_desktop_presence_runtime",
+            return_value=fake_runtime,
+        ),
+        patch(
+            "core.durable_result_idempotency.check_result_idempotency",
+            return_value=False,
+        ),
+        patch(
+            "core.durable_result_idempotency.record_result_idempotency",
+            return_value=None,
+        ),
+        patch(
+            "contracts.cross_repo_schema_version_gate.evaluate_android_uplink_schema_gate",
+            return_value=None,
+        ),
     ):
         asyncio.run(ge.handle_goal_execution_result(bridge, MagicMock(), message))
 
@@ -255,25 +277,29 @@ def test_parallel_subtask_blocked_when_main_chain_ingress_unavailable() -> None:
             }
         )
     )
-    with patch.object(ge, "_is_cross_device_enabled", lambda: True), patch.object(
-        ge,
-        "_evaluate_android_mode_readiness",
-        lambda **_: SimpleNamespace(is_dispatch_eligible=True, blocking_gates=[]),
-    ), patch.object(
-        ge,
-        "_evaluate_execution_governance",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            accepted=True,
-            blocking_gates=[],
-            rejection_reason="",
-            conflict=False,
-            active_conflicting_type=None,
+    with (
+        patch.object(ge, "_is_cross_device_enabled", lambda: True),
+        patch.object(
+            ge,
+            "_evaluate_android_mode_readiness",
+            lambda **_: SimpleNamespace(is_dispatch_eligible=True, blocking_gates=[]),
         ),
-    ), patch.object(
-        ge, "_accept_android_originated_nl_into_main_chain", None
-    ), patch(
-        "core.desktop_presence_runtime.get_desktop_presence_runtime",
-        return_value=fake_runtime,
+        patch.object(
+            ge,
+            "_evaluate_execution_governance",
+            lambda *_args, **_kwargs: SimpleNamespace(
+                accepted=True,
+                blocking_gates=[],
+                rejection_reason="",
+                conflict=False,
+                active_conflicting_type=None,
+            ),
+        ),
+        patch.object(ge, "_accept_android_originated_nl_into_main_chain", None),
+        patch(
+            "core.desktop_presence_runtime.get_desktop_presence_runtime",
+            return_value=fake_runtime,
+        ),
     ):
         result = asyncio.run(ge.handle_parallel_subtask(MagicMock(), MagicMock(), message))
 
@@ -298,25 +324,29 @@ def test_goal_execution_blocked_when_main_chain_context_builder_unavailable() ->
             }
         )
     )
-    with patch.object(ge, "_is_cross_device_enabled", lambda: True), patch.object(
-        ge,
-        "_evaluate_android_mode_readiness",
-        lambda **_: SimpleNamespace(is_dispatch_eligible=True, blocking_gates=[]),
-    ), patch.object(
-        ge,
-        "_evaluate_execution_governance",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            accepted=True,
-            blocking_gates=[],
-            rejection_reason="",
-            conflict=False,
-            active_conflicting_type=None,
+    with (
+        patch.object(ge, "_is_cross_device_enabled", lambda: True),
+        patch.object(
+            ge,
+            "_evaluate_android_mode_readiness",
+            lambda **_: SimpleNamespace(is_dispatch_eligible=True, blocking_gates=[]),
         ),
-    ), patch.object(
-        ge, "_build_android_originated_governance_context", None
-    ), patch(
-        "core.desktop_presence_runtime.get_desktop_presence_runtime",
-        return_value=fake_runtime,
+        patch.object(
+            ge,
+            "_evaluate_execution_governance",
+            lambda *_args, **_kwargs: SimpleNamespace(
+                accepted=True,
+                blocking_gates=[],
+                rejection_reason="",
+                conflict=False,
+                active_conflicting_type=None,
+            ),
+        ),
+        patch.object(ge, "_build_android_originated_governance_context", None),
+        patch(
+            "core.desktop_presence_runtime.get_desktop_presence_runtime",
+            return_value=fake_runtime,
+        ),
     ):
         result = asyncio.run(ge.handle_goal_execution(MagicMock(), MagicMock(), msg))
 

@@ -51,8 +51,8 @@ All tests are self-contained (no live servers, no real devices).
 from __future__ import annotations
 
 import asyncio
-import sys
 import os
+import sys
 from typing import Any, Dict, List, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -254,8 +254,8 @@ class TestOrchestrationPackageExports:
     def test_package_exports_plan_types(self):
         from core.orchestration import (
             OrchestrationDecision,
-            OrchestrationPlan,
             OrchestrationMemberResult,
+            OrchestrationPlan,
             OrchestrationResult,
             build_orchestration_plan,
             build_orchestration_result,
@@ -562,8 +562,7 @@ class TestSubstrateDoesNotOrchestrate:
 
         cr = CommandRouter.__new__(CommandRouter)
         assert not hasattr(cr, "scoring_engine"), (
-            "CommandRouter should not have a scoring_engine — "
-            "scoring is an orchestration concern"
+            "CommandRouter should not have a scoring_engine — " "scoring is an orchestration concern"
         )
 
     def test_command_router_has_no_build_orchestration_plan(self):
@@ -571,13 +570,14 @@ class TestSubstrateDoesNotOrchestrate:
         the orchestration layer's responsibility."""
         from core.command_router import CommandRouter
 
-        assert not hasattr(CommandRouter, "build_orchestration_plan"), (
-            "CommandRouter should not have build_orchestration_plan"
-        )
+        assert not hasattr(
+            CommandRouter, "build_orchestration_plan"
+        ), "CommandRouter should not have build_orchestration_plan"
 
     def test_command_router_route_envelope_does_not_import_scoring(self):
         """route_envelope should not call DeviceScoringEngine directly."""
         import inspect
+
         from core.command_router import CommandRouter
 
         # route_envelope source should not reference scoring engine directly
@@ -591,9 +591,7 @@ class TestSubstrateDoesNotOrchestrate:
         """OrchestrationPlan is not referenced in CommandRouter's module."""
         import core.command_router as cr_mod
 
-        assert not hasattr(cr_mod, "OrchestrationPlan"), (
-            "OrchestrationPlan should not be in the substrate module"
-        )
+        assert not hasattr(cr_mod, "OrchestrationPlan"), "OrchestrationPlan should not be in the substrate module"
 
 
 # ---------------------------------------------------------------------------
@@ -635,8 +633,7 @@ class TestOpenClawdDelegationBoundary:
         oc = OpenClawd.__new__(OpenClawd)
         oc._config = {}
 
-        async def fake_dispatch_remote(message, intent=None, device_id=None,
-                                        session_id=None, trace_id=None):
+        async def fake_dispatch_remote(message, intent=None, device_id=None, session_id=None, trace_id=None):
             return {"success": True, "response": "single remote", "metadata": {}}
 
         oc._dispatch_remote_agent = fake_dispatch_remote
@@ -657,8 +654,9 @@ class TestOpenClawdDelegationBoundary:
         """_delegate_multi_device_orchestration is NOT the substrate path.
         The substrate path is _delegate_single_remote → _dispatch_remote_agent
         → CommandRouter.route_envelope."""
-        from core.openclawd import OpenClawd
         import inspect
+
+        from core.openclawd import OpenClawd
 
         # The multi-device orchestration method should NOT call route_envelope
         source = inspect.getsource(OpenClawd._delegate_multi_device_orchestration)
@@ -680,6 +678,7 @@ class TestSmartSchedulerOrchestrationRole:
     def test_scoring_engine_select_best_device_no_route_envelope(self):
         """select_best_device does not call route_envelope (substrate boundary)."""
         import inspect
+
         from core.control_plane.smart_scheduler import DeviceScoringEngine
 
         source = inspect.getsource(DeviceScoringEngine.select_best_device)
@@ -691,6 +690,7 @@ class TestSmartSchedulerOrchestrationRole:
     def test_scoring_engine_score_device_no_route_envelope(self):
         """score_device does not call route_envelope (substrate boundary)."""
         import inspect
+
         from core.control_plane.smart_scheduler import DeviceScoringEngine
 
         source = inspect.getsource(DeviceScoringEngine.score_device)
@@ -722,9 +722,7 @@ class TestSmartSchedulerOrchestrationRole:
         assert best.device_id == "dev_a"
         # Result is a score object — it is NOT a dispatch result
         assert hasattr(best, "total"), "Expected DeviceScore with total field"
-        assert not hasattr(best, "success"), (
-            "DeviceScore should not have 'success' — that is a substrate concept"
-        )
+        assert not hasattr(best, "success"), "DeviceScore should not have 'success' — that is a substrate concept"
 
     def test_scoring_engine_is_not_substrate(self):
         """DeviceScoringEngine does not have route_envelope or dispatch_agent_remote
@@ -732,9 +730,5 @@ class TestSmartSchedulerOrchestrationRole:
         from core.control_plane.smart_scheduler import DeviceScoringEngine
 
         engine = DeviceScoringEngine()
-        assert not hasattr(engine, "route_envelope"), (
-            "DeviceScoringEngine should not have route_envelope"
-        )
-        assert not hasattr(engine, "dispatch_agent_remote"), (
-            "DeviceScoringEngine should not have dispatch_agent_remote"
-        )
+        assert not hasattr(engine, "route_envelope"), "DeviceScoringEngine should not have route_envelope"
+        assert not hasattr(engine, "dispatch_agent_remote"), "DeviceScoringEngine should not have dispatch_agent_remote"

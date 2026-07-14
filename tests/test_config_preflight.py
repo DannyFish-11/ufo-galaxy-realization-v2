@@ -35,14 +35,15 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _fresh_checks(severity="CRITICAL", var="TEST_VAR", groups=None):
     """Build a minimal single-check list for isolation."""
     from core.config_preflight import EnvCheck, Severity
+
     return [
         EnvCheck(
             var=var,
@@ -58,9 +59,11 @@ def _fresh_checks(severity="CRITICAL", var="TEST_VAR", groups=None):
 # 1. _is_set — placeholder detection
 # ===========================================================================
 
+
 class TestIsSet(unittest.TestCase):
     def _call(self, var, value, allow_placeholder=True):
         from core.config_preflight import _is_set
+
         with patch.dict(os.environ, {var: value}, clear=False):
             return _is_set(var, allow_placeholder)
 
@@ -70,6 +73,7 @@ class TestIsSet(unittest.TestCase):
 
     def test_unset(self):
         from core.config_preflight import _is_set
+
         os.environ.pop("__GALAXY_TEST_UNSET__", None)
         present, _ = _is_set("__GALAXY_TEST_UNSET__")
         self.assertFalse(present)
@@ -98,9 +102,11 @@ class TestIsSet(unittest.TestCase):
 # 2. run_preflight — all checks present
 # ===========================================================================
 
+
 class TestRunPreflightAllPresent(unittest.TestCase):
     def test_ok_when_all_set(self):
         from core.config_preflight import run_preflight
+
         checks = _fresh_checks(severity="CRITICAL", var="__GALAXY_PREF_VAR__")
         with patch.dict(os.environ, {"__GALAXY_PREF_VAR__": "real-value"}, clear=False):
             report = run_preflight(dry_run=True, checks=checks, mode="all", verbose=False)
@@ -113,9 +119,11 @@ class TestRunPreflightAllPresent(unittest.TestCase):
 # 3. run_preflight — CRITICAL missing, fail_fast raises
 # ===========================================================================
 
+
 class TestRunPreflightCriticalMissing(unittest.TestCase):
     def test_raises_when_critical_missing(self):
-        from core.config_preflight import run_preflight, ConfigPreflightError
+        from core.config_preflight import ConfigPreflightError, run_preflight
+
         checks = _fresh_checks(severity="CRITICAL", var="__GALAXY_PREF_MISSING__")
         os.environ.pop("__GALAXY_PREF_MISSING__", None)
         with self.assertRaises(ConfigPreflightError) as ctx:
@@ -123,7 +131,8 @@ class TestRunPreflightCriticalMissing(unittest.TestCase):
         self.assertIn("__GALAXY_PREF_MISSING__", str(ctx.exception))
 
     def test_report_contains_critical_finding(self):
-        from core.config_preflight import run_preflight, ConfigPreflightError
+        from core.config_preflight import ConfigPreflightError, run_preflight
+
         checks = _fresh_checks(severity="CRITICAL", var="__GALAXY_PREF_MISSING__")
         os.environ.pop("__GALAXY_PREF_MISSING__", None)
         try:
@@ -137,9 +146,11 @@ class TestRunPreflightCriticalMissing(unittest.TestCase):
 # 4. run_preflight — dry_run never raises
 # ===========================================================================
 
+
 class TestRunPreflightDryRun(unittest.TestCase):
     def test_dry_run_no_raise(self):
         from core.config_preflight import run_preflight
+
         checks = _fresh_checks(severity="CRITICAL", var="__GALAXY_PREF_DRY__")
         os.environ.pop("__GALAXY_PREF_DRY__", None)
         # Should NOT raise
@@ -152,9 +163,11 @@ class TestRunPreflightDryRun(unittest.TestCase):
 # 5. run_preflight — WARNING missing does NOT block
 # ===========================================================================
 
+
 class TestRunPreflightWarningMissing(unittest.TestCase):
     def test_warning_missing_still_ok(self):
         from core.config_preflight import run_preflight
+
         checks = _fresh_checks(severity="WARNING", var="__GALAXY_PREF_WARN__")
         os.environ.pop("__GALAXY_PREF_WARN__", None)
         report = run_preflight(dry_run=False, fail_fast=True, checks=checks, mode="all", verbose=False)
@@ -167,9 +180,11 @@ class TestRunPreflightWarningMissing(unittest.TestCase):
 # 6. run_preflight — mode filtering
 # ===========================================================================
 
+
 class TestRunPreflightModeFiltering(unittest.TestCase):
     def test_gateway_group_not_run_in_core_mode(self):
-        from core.config_preflight import run_preflight, EnvCheck, Severity
+        from core.config_preflight import EnvCheck, Severity, run_preflight
+
         gateway_check = EnvCheck(
             var="__GALAXY_GATEWAY_ONLY__",
             severity=Severity.CRITICAL,
@@ -188,7 +203,8 @@ class TestRunPreflightModeFiltering(unittest.TestCase):
         self.assertEqual(len(report.findings), 0)
 
     def test_all_mode_includes_gateway(self):
-        from core.config_preflight import run_preflight, EnvCheck, Severity
+        from core.config_preflight import EnvCheck, Severity, run_preflight
+
         gateway_check = EnvCheck(
             var="__GALAXY_GATEWAY_ONLY_ALL__",
             severity=Severity.CRITICAL,
@@ -210,9 +226,11 @@ class TestRunPreflightModeFiltering(unittest.TestCase):
 # 7. PreflightReport.format()
 # ===========================================================================
 
+
 class TestPreflightReportFormat(unittest.TestCase):
     def test_format_contains_var_and_hint(self):
         from core.config_preflight import run_preflight
+
         checks = _fresh_checks(severity="CRITICAL", var="__GALAXY_FORMAT_VAR__")
         checks[0] = checks[0].__class__(
             var="__GALAXY_FORMAT_VAR__",
@@ -229,6 +247,7 @@ class TestPreflightReportFormat(unittest.TestCase):
 
     def test_format_ok_message_when_all_pass(self):
         from core.config_preflight import run_preflight
+
         checks = _fresh_checks(severity="CRITICAL", var="__GALAXY_FORMAT_OK__")
         with patch.dict(os.environ, {"__GALAXY_FORMAT_OK__": "real-value"}, clear=False):
             report = run_preflight(dry_run=True, checks=checks, mode="all", verbose=False)
@@ -241,9 +260,11 @@ class TestPreflightReportFormat(unittest.TestCase):
 # 8–9. require_env
 # ===========================================================================
 
+
 class TestRequireEnv(unittest.TestCase):
     def test_raises_on_missing(self):
         from core.config_preflight import require_env
+
         os.environ.pop("__REQ_MISSING__", None)
         with self.assertRaises(RuntimeError) as ctx:
             require_env("__REQ_MISSING__")
@@ -251,12 +272,14 @@ class TestRequireEnv(unittest.TestCase):
 
     def test_raises_on_placeholder(self):
         from core.config_preflight import require_env
+
         with patch.dict(os.environ, {"__REQ_PH__": "your_key_here"}, clear=False):
             with self.assertRaises(RuntimeError):
                 require_env("__REQ_PH__")
 
     def test_hint_in_error(self):
         from core.config_preflight import require_env
+
         os.environ.pop("__REQ_HINT__", None)
         with self.assertRaises(RuntimeError) as ctx:
             require_env("__REQ_HINT__", hint="generate with openssl")
@@ -264,6 +287,7 @@ class TestRequireEnv(unittest.TestCase):
 
     def test_returns_value_when_set(self):
         from core.config_preflight import require_env
+
         with patch.dict(os.environ, {"__REQ_OK__": "real-value"}, clear=False):
             self.assertEqual(require_env("__REQ_OK__"), "real-value")
 
@@ -272,10 +296,12 @@ class TestRequireEnv(unittest.TestCase):
 # 10. CLI exit codes
 # ===========================================================================
 
+
 class TestCliExitCodes(unittest.TestCase):
     def _run_cli(self, env_overrides, extra_args=None):
         """Run _main() and capture SystemExit code."""
         from core.config_preflight import _main
+
         args = ["prog", "--mode", "all"] + (extra_args or [])
         with patch.object(sys, "argv", args):
             with patch.dict(os.environ, env_overrides, clear=False):
@@ -288,11 +314,10 @@ class TestCliExitCodes(unittest.TestCase):
     def test_exit_0_when_all_critical_set(self):
         # Patch _CHECKS with only checks whose vars we can control
         from core import config_preflight
+
         original = config_preflight._CHECKS
         try:
-            config_preflight._CHECKS = _fresh_checks(
-                severity="CRITICAL", var="__CLI_OK__"
-            )
+            config_preflight._CHECKS = _fresh_checks(severity="CRITICAL", var="__CLI_OK__")
             code = self._run_cli({"__CLI_OK__": "real-value"})
             self.assertEqual(code, 0)
         finally:
@@ -300,11 +325,10 @@ class TestCliExitCodes(unittest.TestCase):
 
     def test_exit_1_when_critical_missing(self):
         from core import config_preflight
+
         original = config_preflight._CHECKS
         try:
-            config_preflight._CHECKS = _fresh_checks(
-                severity="CRITICAL", var="__CLI_MISS__"
-            )
+            config_preflight._CHECKS = _fresh_checks(severity="CRITICAL", var="__CLI_MISS__")
             env = dict(os.environ)
             env.pop("__CLI_MISS__", None)
             with patch.dict(os.environ, {}, clear=False):
@@ -316,11 +340,10 @@ class TestCliExitCodes(unittest.TestCase):
 
     def test_dry_run_exit_0_even_on_critical(self):
         from core import config_preflight
+
         original = config_preflight._CHECKS
         try:
-            config_preflight._CHECKS = _fresh_checks(
-                severity="CRITICAL", var="__CLI_DRY__"
-            )
+            config_preflight._CHECKS = _fresh_checks(severity="CRITICAL", var="__CLI_DRY__")
             with patch.dict(os.environ, {}, clear=False):
                 os.environ.pop("__CLI_DRY__", None)
                 code = self._run_cli({}, extra_args=["--dry-run"])
@@ -333,13 +356,16 @@ class TestCliExitCodes(unittest.TestCase):
 # 11. CredentialVault — default backend is "env"
 # ===========================================================================
 
+
 class TestCredentialVaultDefaultBackend(unittest.TestCase):
     def setUp(self):
         from core.credential_vault import reset_vault
+
         reset_vault()
 
     def tearDown(self):
         from core.credential_vault import reset_vault
+
         reset_vault()
         os.environ.pop("GALAXY_SECRET_BACKEND", None)
 
@@ -347,11 +373,13 @@ class TestCredentialVaultDefaultBackend(unittest.TestCase):
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("GALAXY_SECRET_BACKEND", None)
             from core.credential_vault import get_vault
+
             vault = get_vault()
             self.assertEqual(vault.backend_name, "env")
 
     def test_get_credential_reads_env(self):
         from core.credential_vault import get_vault
+
         with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test-123"}, clear=False):
             vault = get_vault()
             result = vault.get_credential("openai")
@@ -359,6 +387,7 @@ class TestCredentialVaultDefaultBackend(unittest.TestCase):
 
     def test_set_then_get_in_memory(self):
         from core.credential_vault import get_vault
+
         vault = get_vault()
         vault.set_credential("test_key", "test_value")
         self.assertEqual(vault.get_credential("test_key"), "test_value")
@@ -368,18 +397,22 @@ class TestCredentialVaultDefaultBackend(unittest.TestCase):
 # 12. CredentialVault — vault backend routes get/set to _SecretVaultBackend
 # ===========================================================================
 
+
 class TestCredentialVaultVaultBackend(unittest.TestCase):
     def setUp(self):
         from core.credential_vault import reset_vault
+
         reset_vault()
 
     def tearDown(self):
         from core.credential_vault import reset_vault
+
         reset_vault()
         os.environ.pop("GALAXY_SECRET_BACKEND", None)
 
     def _make_vault_with_mock_backend(self):
         from core.credential_vault import CredentialVault, _SecretVaultBackend
+
         mock_backend = MagicMock(spec=_SecretVaultBackend)
         mock_backend.get.return_value = None
         mock_backend.set.return_value = True
@@ -419,6 +452,7 @@ class TestCredentialVaultVaultBackend(unittest.TestCase):
 
     def test_backend_failure_falls_back_to_env(self):
         from core.credential_vault import CredentialVault, _SecretVaultBackend
+
         mock_backend = MagicMock(spec=_SecretVaultBackend)
         mock_backend.get.return_value = None  # backend unavailable
         mock_backend.set.return_value = False
@@ -429,10 +463,12 @@ class TestCredentialVaultVaultBackend(unittest.TestCase):
 
     def test_set_logs_warning_on_backend_failure(self):
         from core.credential_vault import CredentialVault, _SecretVaultBackend
+
         mock_backend = MagicMock(spec=_SecretVaultBackend)
         mock_backend.set.return_value = False
         vault = CredentialVault(backend=mock_backend)
         import logging
+
         with self.assertLogs("Galaxy.CredentialVault", level=logging.WARNING):
             vault.set_credential("some_key", "some_value")
 
@@ -441,19 +477,24 @@ class TestCredentialVaultVaultBackend(unittest.TestCase):
 # 13. CredentialVault — kms backend falls back to env
 # ===========================================================================
 
+
 class TestCredentialVaultKmsBackend(unittest.TestCase):
     def setUp(self):
         from core.credential_vault import reset_vault
+
         reset_vault()
 
     def tearDown(self):
         from core.credential_vault import reset_vault
+
         reset_vault()
         os.environ.pop("GALAXY_SECRET_BACKEND", None)
 
     def test_kms_falls_back_to_env_with_warning(self):
         import logging
+
         from core import credential_vault
+
         with patch.dict(os.environ, {"GALAXY_SECRET_BACKEND": "kms"}, clear=False):
             with self.assertLogs("Galaxy.CredentialVault", level=logging.WARNING):
                 backend = credential_vault._build_backend()
@@ -461,6 +502,7 @@ class TestCredentialVaultKmsBackend(unittest.TestCase):
 
     def test_kms_vault_backend_name_is_kms(self):
         from core.credential_vault import CredentialVault
+
         vault = CredentialVault(backend=None)
         with patch.dict(os.environ, {"GALAXY_SECRET_BACKEND": "kms"}, clear=False):
             # When there's no backend instance but env says kms, report kms
@@ -469,12 +511,17 @@ class TestCredentialVaultKmsBackend(unittest.TestCase):
     def test_kms_falls_back_to_env_for_get_credential(self):
         """When KMS backend is selected (but not implemented), credentials come from ENV."""
         from core.credential_vault import CredentialVault
+
         # KMS backend returns None from _build_backend, so vault has no backend
         vault = CredentialVault(backend=None)
-        with patch.dict(os.environ, {
-            "GALAXY_SECRET_BACKEND": "kms",
-            "OPENAI_API_KEY": "sk-kms-fallback",
-        }, clear=False):
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_SECRET_BACKEND": "kms",
+                "OPENAI_API_KEY": "sk-kms-fallback",
+            },
+            clear=False,
+        ):
             result = vault.get_credential("openai")
         self.assertEqual(result, "sk-kms-fallback")
 
@@ -483,19 +530,23 @@ class TestCredentialVaultKmsBackend(unittest.TestCase):
 # 14. _SecretVaultBackend.health — returns False when unreachable
 # ===========================================================================
 
+
 class TestSecretVaultBackendHealth(unittest.TestCase):
     def test_health_false_when_unreachable(self):
         from core.credential_vault import _SecretVaultBackend
+
         backend = _SecretVaultBackend(base_url="http://127.0.0.1:19999")
         self.assertFalse(backend.health())
 
     def test_get_none_when_unreachable(self):
         from core.credential_vault import _SecretVaultBackend
+
         backend = _SecretVaultBackend(base_url="http://127.0.0.1:19999")
         self.assertIsNone(backend.get("some_key"))
 
     def test_set_false_when_unreachable(self):
         from core.credential_vault import _SecretVaultBackend
+
         backend = _SecretVaultBackend(base_url="http://127.0.0.1:19999")
         self.assertFalse(backend.set("some_key", "some_value"))
 
@@ -504,18 +555,22 @@ class TestSecretVaultBackendHealth(unittest.TestCase):
 # 15–17. migrate_env_to_vault
 # ===========================================================================
 
+
 class TestMigrateEnvToVault(unittest.TestCase):
     def setUp(self):
         from core.credential_vault import reset_vault
+
         reset_vault()
 
     def tearDown(self):
         from core.credential_vault import reset_vault
+
         reset_vault()
         os.environ.pop("GALAXY_SECRET_BACKEND", None)
 
     def test_dry_run_returns_true_without_writing(self):
-        from core.credential_vault import migrate_env_to_vault, get_vault
+        from core.credential_vault import get_vault, migrate_env_to_vault
+
         with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-real"}, clear=False):
             results = migrate_env_to_vault(dry_run=True)
         vault = get_vault()
@@ -524,7 +579,8 @@ class TestMigrateEnvToVault(unittest.TestCase):
         self.assertTrue(results.get("openai", False))
 
     def test_live_migration_stores_credential(self):
-        from core.credential_vault import migrate_env_to_vault, get_vault
+        from core.credential_vault import get_vault, migrate_env_to_vault
+
         with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-real-migrate"}, clear=False):
             results = migrate_env_to_vault(dry_run=False)
         vault = get_vault()
@@ -533,12 +589,14 @@ class TestMigrateEnvToVault(unittest.TestCase):
 
     def test_skips_placeholder_values(self):
         from core.credential_vault import migrate_env_to_vault
+
         with patch.dict(os.environ, {"OPENAI_API_KEY": "your_openai_api_key_here"}, clear=False):
             results = migrate_env_to_vault(dry_run=False)
         self.assertFalse(results.get("openai", True))
 
     def test_skips_empty_values(self):
         from core.credential_vault import migrate_env_to_vault
+
         with patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False):
             results = migrate_env_to_vault(dry_run=False)
         self.assertFalse(results.get("openai", True))
@@ -548,9 +606,11 @@ class TestMigrateEnvToVault(unittest.TestCase):
 # 18. reset_vault — clears singleton
 # ===========================================================================
 
+
 class TestResetVault(unittest.TestCase):
     def test_reset_clears_singleton(self):
         from core import credential_vault
+
         v1 = credential_vault.get_vault()
         credential_vault.reset_vault()
         v2 = credential_vault.get_vault()
@@ -558,6 +618,7 @@ class TestResetVault(unittest.TestCase):
 
     def test_reset_allows_new_backend_selection(self):
         from core import credential_vault
+
         # First create with env backend
         v1 = credential_vault.get_vault()
         self.assertEqual(v1.backend_name, "env")

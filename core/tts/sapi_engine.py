@@ -11,6 +11,7 @@
 stdin 传入(避免引号转义地狱),SetOutputToWaveFile 落成 wav;播放/打断复用
 EdgeTTSEngine 的跨平台播放器(继承)。非 Windows 平台 available() 恒 False。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -54,7 +55,7 @@ class SapiTTSEngine(EdgeTTSEngine):
         self,
         text: str,
         output_path: Optional[str] = None,
-        voice: Optional[str] = None,   # SAPI 自动选中文嗓音;参数保留接口兼容
+        voice: Optional[str] = None,  # SAPI 自动选中文嗓音;参数保留接口兼容
         rate: Optional[str] = None,
     ) -> str:
         if not self.available():
@@ -70,18 +71,24 @@ class SapiTTSEngine(EdgeTTSEngine):
         env = {**os.environ, "GALAXY_SAPI_OUT": output_path}
         try:
             proc = await asyncio.create_subprocess_exec(
-                "powershell", "-NoProfile", "-NonInteractive", "-Command", _PS_SYNTH,
+                "powershell",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                _PS_SYNTH,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
                 env=env,
             )
             _, stderr = await asyncio.wait_for(
-                proc.communicate(text.encode("utf-8")), timeout=30.0,
+                proc.communicate(text.encode("utf-8")),
+                timeout=30.0,
             )
             if proc.returncode != 0:
                 raise RuntimeError(
-                    "SAPI 合成失败(code=%s): %s" % (
+                    "SAPI 合成失败(code=%s): %s"
+                    % (
                         proc.returncode,
                         (stderr or b"").decode("utf-8", errors="replace")[:200],
                     )

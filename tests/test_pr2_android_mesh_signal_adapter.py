@@ -107,12 +107,14 @@ try:
 except ImportError:
     _CENTER_STATE_AVAILABLE = False
 
-_ALL_AVAILABLE = all([
-    _ADAPTER_AVAILABLE,
-    _COORDINATOR_AVAILABLE,
-    _CONTRACTS_AVAILABLE,
-    _CENTER_STATE_AVAILABLE,
-])
+_ALL_AVAILABLE = all(
+    [
+        _ADAPTER_AVAILABLE,
+        _COORDINATOR_AVAILABLE,
+        _CONTRACTS_AVAILABLE,
+        _CENTER_STATE_AVAILABLE,
+    ]
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -131,7 +133,7 @@ def _build_live_coordinator(
     """Build a live coordinator with optional pre-registered participants."""
     state = _build_coordinator(session_id=session_id)
     coord = LiveMeshSessionCoordinator(state)
-    for did in (device_ids or []):
+    for did in device_ids or []:
         coord.add_participant(did)
     return coord
 
@@ -202,9 +204,18 @@ class TestGroupB_SignalKindEnum:
         assert "unknown" in kinds
 
     def test_b2_from_string_returns_correct_kind(self) -> None:
-        assert AndroidMeshParticipantSignalKind.from_string("readiness_confirmed") == AndroidMeshParticipantSignalKind.readiness_confirmed
-        assert AndroidMeshParticipantSignalKind.from_string("task_completed") == AndroidMeshParticipantSignalKind.task_completed
-        assert AndroidMeshParticipantSignalKind.from_string("barrier_reached") == AndroidMeshParticipantSignalKind.barrier_reached
+        assert (
+            AndroidMeshParticipantSignalKind.from_string("readiness_confirmed")
+            == AndroidMeshParticipantSignalKind.readiness_confirmed
+        )
+        assert (
+            AndroidMeshParticipantSignalKind.from_string("task_completed")
+            == AndroidMeshParticipantSignalKind.task_completed
+        )
+        assert (
+            AndroidMeshParticipantSignalKind.from_string("barrier_reached")
+            == AndroidMeshParticipantSignalKind.barrier_reached
+        )
 
     def test_b3_from_string_returns_unknown_for_empty(self) -> None:
         assert AndroidMeshParticipantSignalKind.from_string("") == AndroidMeshParticipantSignalKind.unknown
@@ -302,19 +313,17 @@ class TestGroupD_ParticipationRecord:
 
     def test_d4_task_completed_signal_stores_result(self) -> None:
         rec = AndroidMeshParticipationRecord(device_id="d1", session_id="s1")
-        rec.update_from_signal(_make_signal(
-            AndroidMeshParticipantSignalKind.task_completed, "d1",
-            result_payload={"answer": 42}
-        ))
+        rec.update_from_signal(
+            _make_signal(AndroidMeshParticipantSignalKind.task_completed, "d1", result_payload={"answer": 42})
+        )
         assert rec.task_completed
         assert rec.result_payload == {"answer": 42}
 
     def test_d5_task_failed_signal_stores_reason(self) -> None:
         rec = AndroidMeshParticipationRecord(device_id="d1", session_id="s1")
-        rec.update_from_signal(_make_signal(
-            AndroidMeshParticipantSignalKind.task_failed, "d1",
-            failure_reason="timeout"
-        ))
+        rec.update_from_signal(
+            _make_signal(AndroidMeshParticipantSignalKind.task_failed, "d1", failure_reason="timeout")
+        )
         assert rec.task_failed
         assert rec.failure_reason == "timeout"
 
@@ -428,8 +437,7 @@ class TestGroupF_SignalRoutingToCoordinator:
         coord.on_participant_ready("d1")
         coord.on_participant_working("d1")
         sig = _make_signal(
-            AndroidMeshParticipantSignalKind.task_completed, "d1", "sf3",
-            result_payload={"output": "test_result"}
+            AndroidMeshParticipantSignalKind.task_completed, "d1", "sf3", result_payload={"output": "test_result"}
         )
         outcome = apply_android_participation_signal(coord, sig)
         assert outcome.applied
@@ -491,10 +499,12 @@ class TestGroupG_RuntimeClosedFromAndroidSignals:
             _make_signal(AndroidMeshParticipantSignalKind.readiness_confirmed, "android_2", "sg1"),
             _make_signal(AndroidMeshParticipantSignalKind.barrier_reached, "android_1", "sg1"),
             _make_signal(AndroidMeshParticipantSignalKind.barrier_reached, "android_2", "sg1"),
-            _make_signal(AndroidMeshParticipantSignalKind.task_completed, "android_1", "sg1",
-                         result_payload={"output": "part_a"}),
-            _make_signal(AndroidMeshParticipantSignalKind.task_completed, "android_2", "sg1",
-                         result_payload={"output": "part_b"}),
+            _make_signal(
+                AndroidMeshParticipantSignalKind.task_completed, "android_1", "sg1", result_payload={"output": "part_a"}
+            ),
+            _make_signal(
+                AndroidMeshParticipantSignalKind.task_completed, "android_2", "sg1", result_payload={"output": "part_b"}
+            ),
         ]
         center_state = evaluate_center_runtime_status_with_android_signals(state, signals)
         assert center_state.status == MeshRuntimeCenterStatus.runtime_closed
@@ -505,8 +515,7 @@ class TestGroupG_RuntimeClosedFromAndroidSignals:
         state = _build_coordinator("sg2")
         signals = [
             _make_signal(AndroidMeshParticipantSignalKind.readiness_confirmed, "a1", "sg2"),
-            _make_signal(AndroidMeshParticipantSignalKind.task_completed, "a1", "sg2",
-                         result_payload={"ok": True}),
+            _make_signal(AndroidMeshParticipantSignalKind.task_completed, "a1", "sg2", result_payload={"ok": True}),
         ]
         center_state = evaluate_center_runtime_status_with_android_signals(state, signals)
         assert center_state.status == MeshRuntimeCenterStatus.runtime_closed
@@ -550,8 +559,9 @@ class TestGroupG_RuntimeClosedFromAndroidSignals:
         assert len(getattr(state, "participants", []) or []) == 0
         signals = [
             _make_signal(AndroidMeshParticipantSignalKind.readiness_confirmed, "android_phone", "sg6"),
-            _make_signal(AndroidMeshParticipantSignalKind.task_completed, "android_phone", "sg6",
-                         result_payload={"done": True}),
+            _make_signal(
+                AndroidMeshParticipantSignalKind.task_completed, "android_phone", "sg6", result_payload={"done": True}
+            ),
         ]
         center_state = evaluate_center_runtime_status_with_android_signals(
             state, signals, register_android_devices=True
@@ -642,8 +652,7 @@ class TestGroupI_ProofQualityMetadataPropagation:
     def test_i3_participation_summary_contains_device_records(self) -> None:
         state = _build_coordinator("si3")
         signals = [
-            _make_signal(AndroidMeshParticipantSignalKind.task_completed, "a1", "si3",
-                         result_payload={"data": "val"}),
+            _make_signal(AndroidMeshParticipantSignalKind.task_completed, "a1", "si3", result_payload={"data": "val"}),
         ]
         center_state = evaluate_center_runtime_status_with_android_signals(state, signals)
         summary = center_state.metadata.get("android_participation_summary", {})
@@ -682,10 +691,7 @@ class TestGroupJ_LiveCoordinatorAndroidSignalMethod:
         coord = _build_live_coordinator("sj2", device_ids=["d1"])
         coord.on_android_participant_signal("d1", "readiness_confirmed")
         coord.on_android_participant_signal("d1", "barrier_reached")
-        result = coord.on_android_participant_signal(
-            "d1", "task_completed",
-            result_payload={"answer": "ok"}
-        )
+        result = coord.on_android_participant_signal("d1", "task_completed", result_payload={"answer": "ok"})
         assert result is True
         assert "d1" in coord.partial_results
 

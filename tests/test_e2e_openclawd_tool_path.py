@@ -68,12 +68,14 @@ def _reset_all() -> None:
 
     try:
         from core.capability_bus import reset_capability_bus
+
         reset_capability_bus()
     except Exception:
         pass
 
     try:
         from core.skill_loader import SkillLoader
+
         SkillLoader._instance = None
     except Exception:
         pass
@@ -154,18 +156,14 @@ class TestToolCollection:
         monkeypatch.delenv("OPENCLAWD_LEGACY_NODE_SCAN_COMPAT_ENABLED", raising=False)
         oc = _make_minimal_openclawd()
         names = {t["function"]["name"] for t in oc._collect_tools() if "function" in t}
-        assert "node__06__list" not in names, (
-            "canonical 模式下静态 _CORE_NODE_ACTIONS 工具不得出现(PR-10)"
-        )
+        assert "node__06__list" not in names, "canonical 模式下静态 _CORE_NODE_ACTIONS 工具不得出现(PR-10)"
 
         # 显式 compat 开关:静态集合可用(过渡期兼容)
         monkeypatch.setenv("OPENCLAWD_LEGACY_NODE_SCAN_COMPAT_ENABLED", "true")
         oc = _make_minimal_openclawd()
         names = {t["function"]["name"] for t in oc._collect_tools() if "function" in t}
         for expected in ("node__06__list", "node__08__get", "node__09__execute"):
-            assert expected in names, (
-                f"compat 开启时静态节点工具 '{expected}' 应出现在 _collect_tools()"
-            )
+            assert expected in names, f"compat 开启时静态节点工具 '{expected}' 应出现在 _collect_tools()"
 
     def test_node_tools_all_have_node_prefix(self, monkeypatch):
         """Every tool produced from the node layer must start with 'node__'."""
@@ -173,16 +171,12 @@ class TestToolCollection:
         oc = _make_minimal_openclawd()
         collected = oc._collect_tools()
         node_tools = [
-            t["function"]["name"]
-            for t in collected
-            if t.get("function", {}).get("name", "").startswith("node__")
+            t["function"]["name"] for t in collected if t.get("function", {}).get("name", "").startswith("node__")
         ]
         assert len(node_tools) > 0, "No node tools returned by _collect_tools()"
         for name in node_tools:
             parts = name.split("__")
-            assert len(parts) >= 3, (
-                f"Node tool name '{name}' must have at least 3 '__'-separated parts"
-            )
+            assert len(parts) >= 3, f"Node tool name '{name}' must have at least 3 '__'-separated parts"
 
     def test_mcp_tool_appears_in_collect_tools(self):
         """A MCP tool registered via inject_mcp_tool() must appear in the
@@ -193,9 +187,7 @@ class TestToolCollection:
         collected = oc._collect_tools()
         names = [t["function"]["name"] for t in collected if "function" in t]
 
-        assert tool_name in names, (
-            f"Expected '{tool_name}' in _collect_tools() output; got: {names[:20]}"
-        )
+        assert tool_name in names, f"Expected '{tool_name}' in _collect_tools() output; got: {names[:20]}"
 
     @pytest.mark.asyncio
     async def test_skill_tool_appears_in_collect_tools(self):
@@ -215,9 +207,9 @@ class TestToolCollection:
         collected = oc._collect_tools()
         names = [t["function"]["name"] for t in collected if "function" in t]
 
-        assert f"skill__{skill_id}" in names, (
-            f"Expected 'skill__{skill_id}' in _collect_tools() output; got: {names[:20]}"
-        )
+        assert (
+            f"skill__{skill_id}" in names
+        ), f"Expected 'skill__{skill_id}' in _collect_tools() output; got: {names[:20]}"
 
     def test_collect_tools_schema_structure_for_node(self, monkeypatch):
         """Each collected node tool must have the required OpenAI schema fields."""
@@ -311,19 +303,16 @@ class TestDispatchToolCall:
         oc._node_id_to_key["node_dispatch_01"] = "Node_dispatch_01"
 
         node_output = {"status": "ok", "pong": True}
-        mock_invoke = AsyncMock(return_value=SimpleNamespace(
-            success=True, result=node_output, error=None))
+        mock_invoke = AsyncMock(return_value=SimpleNamespace(success=True, result=node_output, error=None))
 
         with patch("core.node_invocation.invoke_node", mock_invoke):
-            result = await oc._dispatch_tool_call(
-                "node__node_dispatch_01__ping", {"params": {}}
-            )
+            result = await oc._dispatch_tool_call("node__node_dispatch_01__ping", {"params": {}})
 
         assert result.get("success") is True, f"Node dispatch failed: {result}"
         mock_invoke.assert_awaited_once()
         args = mock_invoke.call_args
-        assert args[0][0] == "Node_dispatch_01"   # node_key 经注册表映射
-        assert args[0][1] == "ping"               # action 段正确拆出
+        assert args[0][0] == "Node_dispatch_01"  # node_key 经注册表映射
+        assert args[0][1] == "ping"  # action 段正确拆出
 
     @pytest.mark.asyncio
     async def test_dispatch_node_result_in_expected_structure(self):
@@ -334,13 +323,10 @@ class TestDispatchToolCall:
         from types import SimpleNamespace
 
         node_output = {"status": "ok", "value": 42}
-        mock_invoke = AsyncMock(return_value=SimpleNamespace(
-            success=True, result=node_output, error=None))
+        mock_invoke = AsyncMock(return_value=SimpleNamespace(success=True, result=node_output, error=None))
 
         with patch("core.node_invocation.invoke_node", mock_invoke):
-            result = await oc._dispatch_tool_call(
-                "node__node_result_01__status", {}
-            )
+            result = await oc._dispatch_tool_call("node__node_result_01__status", {})
 
         assert "success" in result
         assert result["success"] is True
@@ -364,9 +350,7 @@ class TestDispatchToolCall:
         # Patch get_skill_registry at its source module so the deferred import
         # inside _dispatch_tool_call picks up the mock.
         with patch("core.skill_registry.get_skill_registry", return_value=mock_reg):
-            result = await oc._dispatch_tool_call(
-                "skill__hello_world", {"name": "World"}
-            )
+            result = await oc._dispatch_tool_call("skill__hello_world", {"name": "World"})
 
         assert result.get("success") is True, f"Skill dispatch failed: {result}"
         assert result.get("result") == skill_output
@@ -385,9 +369,7 @@ class TestDispatchToolCall:
         mock_reg.invoke = AsyncMock(return_value=mock_resp)
 
         with patch("core.skill_registry.get_skill_registry", return_value=mock_reg):
-            result = await oc._dispatch_tool_call(
-                "skill__test_ping_skill", {"input": "ping"}
-            )
+            result = await oc._dispatch_tool_call("skill__test_ping_skill", {"input": "ping"})
 
         assert "success" in result
         assert result["success"] is True
@@ -409,16 +391,14 @@ class TestDispatchToolCall:
         mock_reg = MagicMock()
         mock_reg._emit_log = MagicMock()
 
-        with patch("core.mcp_loader.mcp_loader", mock_loader), \
-             patch("core.skill_registry.get_skill_registry", return_value=mock_reg):
-            result = await oc._dispatch_tool_call(
-                "mcp__test_server__echo", {"message": "hello"}
-            )
+        with (
+            patch("core.mcp_loader.mcp_loader", mock_loader),
+            patch("core.skill_registry.get_skill_registry", return_value=mock_reg),
+        ):
+            result = await oc._dispatch_tool_call("mcp__test_server__echo", {"message": "hello"})
 
         assert result.get("success") is True, f"MCP dispatch failed: {result}"
-        mock_loader.call_tool.assert_called_once_with(
-            "test_server", "echo", {"message": "hello"}
-        )
+        mock_loader.call_tool.assert_called_once_with("test_server", "echo", {"message": "hello"})
 
     @pytest.mark.asyncio
     async def test_dispatch_mcp_result_in_expected_structure(self):
@@ -432,11 +412,11 @@ class TestDispatchToolCall:
         mock_reg = MagicMock()
         mock_reg._emit_log = MagicMock()
 
-        with patch("core.mcp_loader.mcp_loader", mock_loader), \
-             patch("core.skill_registry.get_skill_registry", return_value=mock_reg):
-            result = await oc._dispatch_tool_call(
-                "mcp__data_server__fetch", {}
-            )
+        with (
+            patch("core.mcp_loader.mcp_loader", mock_loader),
+            patch("core.skill_registry.get_skill_registry", return_value=mock_reg),
+        ):
+            result = await oc._dispatch_tool_call("mcp__data_server__fetch", {})
 
         assert "success" in result
         assert result["success"] is True
@@ -458,8 +438,8 @@ class TestCapabilityResolverNodeSource:
     def test_node_item_visible_via_resolver(self):
         """A node CapabilityItem injected into the registry must be resolvable
         through the canonical CapabilityResolver."""
-        from core.unified.capability_resolver import get_capability_resolver
         from core.unified.capability_contract import CapabilitySource
+        from core.unified.capability_resolver import get_capability_resolver
 
         tool_name = _inject_node_capability("node_resolver_01", "ping")
 
@@ -469,14 +449,12 @@ class TestCapabilityResolverNodeSource:
         contracts = resolver.resolve_all(source=CapabilitySource.NODE)
         names = [c.name for c in contracts]
 
-        assert tool_name in names, (
-            f"Expected '{tool_name}' in resolver (NODE source); got: {names}"
-        )
+        assert tool_name in names, f"Expected '{tool_name}' in resolver (NODE source); got: {names}"
 
     def test_collect_tool_schemas_node_source(self):
         """collect_tool_schemas(sources=[NODE]) must include injected node tools."""
-        from core.unified.capability_resolver import get_capability_resolver
         from core.unified.capability_contract import CapabilitySource
+        from core.unified.capability_resolver import get_capability_resolver
 
         tool_name = _inject_node_capability("node_schema_01", "execute")
 
@@ -486,16 +464,14 @@ class TestCapabilityResolverNodeSource:
         schemas = resolver.collect_tool_schemas(sources=[CapabilitySource.NODE])
         schema_names = [s["function"]["name"] for s in schemas if "function" in s]
 
-        assert tool_name in schema_names, (
-            f"Expected '{tool_name}' in collect_tool_schemas(NODE); got: {schema_names}"
-        )
+        assert tool_name in schema_names, f"Expected '{tool_name}' in collect_tool_schemas(NODE); got: {schema_names}"
 
     def test_node_skill_mcp_resolver_isolation(self):
         """Filtering by source must be precise — node tools must not appear
         in SKILL/MCP slices, and vice versa."""
-        from core.unified.capability_resolver import get_capability_resolver
-        from core.unified.capability_contract import CapabilitySource
         from core.agent.capability_registry import CapabilityRegistry
+        from core.unified.capability_contract import CapabilitySource
+        from core.unified.capability_resolver import get_capability_resolver
 
         node_tool = _inject_node_capability("node_iso_01", "run")
         mcp_tool = _inject_mcp_capability("srv_iso_01", "call")
@@ -510,15 +486,9 @@ class TestCapabilityResolverNodeSource:
         resolver = get_capability_resolver()
         resolver.invalidate_cache()
 
-        node_names = {
-            c.name for c in resolver.resolve_all(source=CapabilitySource.NODE)
-        }
-        skill_names = {
-            c.name for c in resolver.resolve_all(source=CapabilitySource.SKILL)
-        }
-        mcp_names = {
-            c.name for c in resolver.resolve_all(source=CapabilitySource.MCP)
-        }
+        node_names = {c.name for c in resolver.resolve_all(source=CapabilitySource.NODE)}
+        skill_names = {c.name for c in resolver.resolve_all(source=CapabilitySource.SKILL)}
+        mcp_names = {c.name for c in resolver.resolve_all(source=CapabilitySource.MCP)}
 
         # Each tool must appear only in its own layer slice
         assert node_tool in node_names
@@ -588,11 +558,8 @@ class TestDispatchFailureBehaviour:
         oc = _make_minimal_openclawd()
         oc._node_id_to_key["node_nofusion"] = "Node_nofusion"
 
-        with patch("core.routes._helpers.nodes_root", "/fake/nodes"), \
-             patch("os.path.exists", return_value=False):
-            result = await oc._dispatch_tool_call(
-                "node__node_nofusion__run", {}
-            )
+        with patch("core.routes._helpers.nodes_root", "/fake/nodes"), patch("os.path.exists", return_value=False):
+            result = await oc._dispatch_tool_call("node__node_nofusion__run", {})
 
         assert result.get("success") is False
         assert "error" in result
@@ -625,15 +592,15 @@ class TestDispatchFailureBehaviour:
         oc = _make_minimal_openclawd()
 
         mock_loader = MagicMock()
-        mock_loader.call_tool = AsyncMock(
-            side_effect=RuntimeError("MCP server unavailable")
-        )
+        mock_loader.call_tool = AsyncMock(side_effect=RuntimeError("MCP server unavailable"))
 
         mock_reg = MagicMock()
         mock_reg._emit_log = MagicMock()
 
-        with patch("core.mcp_loader.mcp_loader", mock_loader), \
-             patch("core.skill_registry.get_skill_registry", return_value=mock_reg):
+        with (
+            patch("core.mcp_loader.mcp_loader", mock_loader),
+            patch("core.skill_registry.get_skill_registry", return_value=mock_reg),
+        ):
             result = await oc._dispatch_tool_call("mcp__broken_server__tool", {})
 
         assert result.get("success") is False
@@ -713,13 +680,10 @@ class TestLayerIndependenceRegression:
         from types import SimpleNamespace
 
         sentinel_result = {"isolated": "node_ok"}
-        mock_invoke = AsyncMock(return_value=SimpleNamespace(
-            success=True, result=sentinel_result, error=None))
+        mock_invoke = AsyncMock(return_value=SimpleNamespace(success=True, result=sentinel_result, error=None))
 
         with patch("core.node_invocation.invoke_node", mock_invoke):
-            result = await oc._dispatch_tool_call(
-                "node__isolated_node__run", {}
-            )
+            result = await oc._dispatch_tool_call("node__isolated_node__run", {})
 
         assert result["success"] is True
         assert result["result"] == sentinel_result
@@ -738,9 +702,7 @@ class TestLayerIndependenceRegression:
         mock_reg.invoke = AsyncMock(return_value=mock_resp)
 
         with patch("core.skill_registry.get_skill_registry", return_value=mock_reg):
-            result = await oc._dispatch_tool_call(
-                "skill__isolated_skill", {}
-            )
+            result = await oc._dispatch_tool_call("skill__isolated_skill", {})
 
         assert result["success"] is True
         assert result["result"] == sentinel_result
@@ -756,11 +718,11 @@ class TestLayerIndependenceRegression:
         mock_reg = MagicMock()
         mock_reg._emit_log = MagicMock()
 
-        with patch("core.mcp_loader.mcp_loader", mock_loader), \
-             patch("core.skill_registry.get_skill_registry", return_value=mock_reg):
-            result = await oc._dispatch_tool_call(
-                "mcp__isolated_srv__query", {}
-            )
+        with (
+            patch("core.mcp_loader.mcp_loader", mock_loader),
+            patch("core.skill_registry.get_skill_registry", return_value=mock_reg),
+        ):
+            result = await oc._dispatch_tool_call("mcp__isolated_srv__query", {})
 
         assert result["success"] is True
         assert result["result"] == sentinel_result

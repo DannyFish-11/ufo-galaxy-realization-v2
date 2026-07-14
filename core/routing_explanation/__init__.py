@@ -112,45 +112,45 @@ IDLE_EXPLANATION_SUMMARY
 """
 
 from .decision_basis import (
-    DecisionFactor,
     FACTOR_DESCRIPTIONS,
     DecisionBasis,
-    make_decision_basis,
-    basis_from_health_score,
-    basis_from_policy_posture,
+    DecisionFactor,
     basis_from_availability,
     basis_from_capability,
+    basis_from_health_score,
+    basis_from_policy_posture,
     basis_list_to_dicts,
     factor_description,
+    make_decision_basis,
+)
+from .explanation_summary import (
+    IDLE_EXPLANATION_SUMMARY,
+    RoutingExplanationSummary,
+    attach_explanation_to_projection,
+    build_explanation_summary,
+    get_explanation_hints,
+    resolve_explanation_from_projection,
+)
+from .live_decision import (
+    ROUTE_PATH_CROSS_DEVICE,
+    ROUTE_PATH_LOCAL,
+    ROUTE_PATH_PARALLEL_FANOUT,
+    ROUTE_PATH_WORKER,
+    LiveRoutingDecisionBuilder,
+    live_explanation_to_record_str,
 )
 from .route_confidence import (
-    ConfidenceBand,
     CONFIDENCE_BAND_DESCRIPTIONS,
+    UNDETERMINED_CONFIDENCE,
+    ConfidenceBand,
     RouteConfidence,
     compute_confidence,
-    UNDETERMINED_CONFIDENCE,
 )
 from .route_explanation import (
+    EMPTY_ROUTE_EXPLANATION,
     RejectedCandidate,
     RouteExplanation,
     build_route_explanation,
-    EMPTY_ROUTE_EXPLANATION,
-)
-from .explanation_summary import (
-    RoutingExplanationSummary,
-    build_explanation_summary,
-    attach_explanation_to_projection,
-    get_explanation_hints,
-    resolve_explanation_from_projection,
-    IDLE_EXPLANATION_SUMMARY,
-)
-from .live_decision import (
-    LiveRoutingDecisionBuilder,
-    live_explanation_to_record_str,
-    ROUTE_PATH_CROSS_DEVICE,
-    ROUTE_PATH_WORKER,
-    ROUTE_PATH_LOCAL,
-    ROUTE_PATH_PARALLEL_FANOUT,
 )
 
 __all__ = [

@@ -579,8 +579,7 @@ def build_coordination_role_snapshot(
             else:
                 # Multiple source controllers — authority is ambiguous.
                 logger.warning(
-                    "COORDINATION_AUTHORITY_AMBIGUOUS | task_id=%s "
-                    "first_controller=%s second_controller=%s",
+                    "COORDINATION_AUTHORITY_AMBIGUOUS | task_id=%s " "first_controller=%s second_controller=%s",
                     task_id,
                     source_controller_id,
                     rec.device_id,
@@ -594,9 +593,7 @@ def build_coordination_role_snapshot(
         elif rec.coordination_role == CoordinationRole.UNRESOLVED:
             unresolved_ids.append(rec.device_id)
 
-    is_authority_clear = (
-        source_controller_id is not None and len(unresolved_ids) == 0
-    )
+    is_authority_clear = source_controller_id is not None and len(unresolved_ids) == 0
 
     return CoordinationRoleSnapshot(
         task_id=task_id,
@@ -636,9 +633,7 @@ class CoordinationRoleRuntime:
 
     def __init__(self, max_size: int = _COORDINATION_ROLE_RUNTIME_RING_SIZE) -> None:
         self._max_size = max_size
-        self._records: Deque[CoordinationRoleRecord] = collections.deque(
-            maxlen=max_size
-        )
+        self._records: Deque[CoordinationRoleRecord] = collections.deque(maxlen=max_size)
 
     def record(self, rec: CoordinationRoleRecord) -> None:
         """Append *rec* to the ring buffer."""

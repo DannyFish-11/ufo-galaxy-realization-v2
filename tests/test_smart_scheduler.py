@@ -17,10 +17,10 @@ from core.control_plane.smart_scheduler import (
     ScoringWeights,
 )
 
-
 # ---------------------------------------------------------------------------
 # Model validation tests
 # ---------------------------------------------------------------------------
+
 
 class TestModels:
     def test_device_score_input_defaults(self):
@@ -61,6 +61,7 @@ class TestModels:
 # ---------------------------------------------------------------------------
 # Component score helpers
 # ---------------------------------------------------------------------------
+
 
 class TestComponentScores:
     def setup_method(self):
@@ -117,6 +118,7 @@ class TestComponentScores:
 # score_device tests
 # ---------------------------------------------------------------------------
 
+
 class TestScoreDevice:
     def setup_method(self):
         self.engine = DeviceScoringEngine()
@@ -132,9 +134,7 @@ class TestScoreDevice:
         )
 
     def test_perfect_device_high_score(self):
-        score = self.engine.score_device(
-            self._perfect_device(), required_capabilities=["screen"]
-        )
+        score = self.engine.score_device(self._perfect_device(), required_capabilities=["screen"])
         assert score.eligible
         assert score.total > 0.8
 
@@ -177,12 +177,8 @@ class TestScoreDevice:
         assert score.capability_score == 1.0
 
     def test_high_latency_lowers_score(self):
-        low_lat = DeviceScoreInput(
-            device_id="low", ping_latency_ms=50.0, capabilities=["screen"]
-        )
-        high_lat = DeviceScoreInput(
-            device_id="high", ping_latency_ms=1500.0, capabilities=["screen"]
-        )
+        low_lat = DeviceScoreInput(device_id="low", ping_latency_ms=50.0, capabilities=["screen"])
+        high_lat = DeviceScoreInput(device_id="high", ping_latency_ms=1500.0, capabilities=["screen"])
         s_low = self.engine.score_device(low_lat, required_capabilities=["screen"])
         s_high = self.engine.score_device(high_lat, required_capabilities=["screen"])
         assert s_low.total > s_high.total
@@ -213,6 +209,7 @@ class TestScoreDevice:
 # select_best_device tests
 # ---------------------------------------------------------------------------
 
+
 class TestSelectBestDevice:
     def setup_method(self):
         self.engine = DeviceScoringEngine()
@@ -228,16 +225,18 @@ class TestSelectBestDevice:
 
     def test_select_best_among_multiple(self):
         fast = DeviceScoreInput(
-            device_id="fast", ping_latency_ms=10.0, load_pct=5.0,
+            device_id="fast",
+            ping_latency_ms=10.0,
+            load_pct=5.0,
             capabilities=["screen", "touch"],
         )
         slow = DeviceScoreInput(
-            device_id="slow", ping_latency_ms=1000.0, load_pct=80.0,
+            device_id="slow",
+            ping_latency_ms=1000.0,
+            load_pct=80.0,
             capabilities=["screen", "touch"],
         )
-        best = self.engine.select_best_device(
-            [fast, slow], required_capabilities=["screen"]
-        )
+        best = self.engine.select_best_device([fast, slow], required_capabilities=["screen"])
         assert best is not None
         assert best.device_id == "fast"
 
@@ -249,12 +248,8 @@ class TestSelectBestDevice:
         # Two identical devices — lexicographically larger device_id wins
         d_a = DeviceScoreInput(device_id="device_a", capabilities=["x"])
         d_b = DeviceScoreInput(device_id="device_b", capabilities=["x"])
-        best_ab = self.engine.select_best_device(
-            [d_a, d_b], required_capabilities=["x"]
-        )
-        best_ba = self.engine.select_best_device(
-            [d_b, d_a], required_capabilities=["x"]
-        )
+        best_ab = self.engine.select_best_device([d_a, d_b], required_capabilities=["x"])
+        best_ba = self.engine.select_best_device([d_b, d_a], required_capabilities=["x"])
         # Same winner regardless of input order
         assert best_ab.device_id == best_ba.device_id
 
@@ -263,15 +258,12 @@ class TestSelectBestDevice:
 # rank_devices tests
 # ---------------------------------------------------------------------------
 
+
 class TestRankDevices:
     def test_rank_order(self):
         engine = DeviceScoringEngine()
-        fast = DeviceScoreInput(
-            device_id="fast", ping_latency_ms=10.0, capabilities=["s"]
-        )
-        slow = DeviceScoreInput(
-            device_id="slow", ping_latency_ms=1800.0, capabilities=["s"]
-        )
+        fast = DeviceScoreInput(device_id="fast", ping_latency_ms=10.0, capabilities=["s"])
+        slow = DeviceScoreInput(device_id="slow", ping_latency_ms=1800.0, capabilities=["s"])
         ranked = engine.rank_devices([fast, slow], required_capabilities=["s"])
         assert ranked[0].device_id == "fast"
         assert ranked[1].device_id == "slow"
@@ -279,9 +271,7 @@ class TestRankDevices:
     def test_ineligible_appended_last(self):
         engine = DeviceScoringEngine()
         good = DeviceScoreInput(device_id="good", capabilities=["s"])
-        bad = DeviceScoreInput(
-            device_id="bad", status=DeviceStatus.OFFLINE, capabilities=["s"]
-        )
+        bad = DeviceScoreInput(device_id="bad", status=DeviceStatus.OFFLINE, capabilities=["s"])
         ranked = engine.rank_devices([bad, good], required_capabilities=["s"])
         assert ranked[0].device_id == "good"
         assert ranked[-1].device_id == "bad"
@@ -289,16 +279,18 @@ class TestRankDevices:
 
     def test_custom_weights(self):
         # Heavily weight latency; other factors minimal
-        weights = ScoringWeights(
-            capability=0.01, latency=0.97, load=0.01, sandbox=0.01
-        )
+        weights = ScoringWeights(capability=0.01, latency=0.97, load=0.01, sandbox=0.01)
         engine = DeviceScoringEngine(weights=weights)
         nearby = DeviceScoreInput(
-            device_id="near", ping_latency_ms=1.0, load_pct=90.0,
+            device_id="near",
+            ping_latency_ms=1.0,
+            load_pct=90.0,
             capabilities=["x"],
         )
         far = DeviceScoreInput(
-            device_id="far", ping_latency_ms=1900.0, load_pct=0.0,
+            device_id="far",
+            ping_latency_ms=1900.0,
+            load_pct=0.0,
             capabilities=["x"],
         )
         ranked = engine.rank_devices([nearby, far], required_capabilities=["x"])

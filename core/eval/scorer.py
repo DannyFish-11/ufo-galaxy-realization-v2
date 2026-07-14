@@ -15,15 +15,15 @@ from core.eval.cases import EvalCase
 @dataclass
 class CaseScore:
     case_id: str
-    score: float                       # 0.0~1.0
-    passed: bool                       # score == 1.0(全部判据通过)
+    score: float  # 0.0~1.0
+    passed: bool  # score == 1.0(全部判据通过)
     checks: Dict[str, bool] = field(default_factory=dict)
     detail: str = ""
 
 
 def _tool_names(result: Dict[str, Any]) -> List[str]:
     names: List[str] = []
-    for tc in (result.get("tool_calls") or []):
+    for tc in result.get("tool_calls") or []:
         if isinstance(tc, dict):
             n = tc.get("tool") or tc.get("tool_name") or ""
             if n:
@@ -42,9 +42,7 @@ def score_case(case: EvalCase, result: Dict[str, Any]) -> CaseScore:
         checks[f"absent:{kw}"] = kw.lower() not in output
     if case.expect_tools:
         # 命中任一期望工具(名称子串匹配)即算通过该项
-        checks["tool_used"] = any(
-            any(exp.lower() in t for t in tools) for exp in case.expect_tools
-        )
+        checks["tool_used"] = any(any(exp.lower() in t for t in tools) for exp in case.expect_tools)
     if case.expect_success is not None:
         checks["success"] = bool(result.get("success", True)) == case.expect_success
 

@@ -33,6 +33,7 @@ Design rules
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
+
 logger = logging.getLogger(__name__)
 
 
@@ -41,7 +42,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 from .decision_basis import DecisionBasis, basis_list_to_dicts
-from .route_confidence import RouteConfidence, compute_confidence, UNDETERMINED_CONFIDENCE
+from .route_confidence import UNDETERMINED_CONFIDENCE, RouteConfidence, compute_confidence
 
 __all__ = [
     "RejectedCandidate",
@@ -87,9 +88,7 @@ class RejectedCandidate:
         return {
             "candidate_id": self.candidate_id,
             "rejection_reason": self.rejection_reason,
-            "health_score": (
-                round(self.health_score, 4) if self.health_score is not None else None
-            ),
+            "health_score": (round(self.health_score, 4) if self.health_score is not None else None),
             "capability_match": self.capability_match,
             "was_available": self.was_available,
         }
@@ -105,16 +104,8 @@ class RejectedCandidate:
             candidate_id=str(data.get("candidate_id", "unknown")),
             rejection_reason=str(data.get("rejection_reason", "not selected")),
             health_score=float(hs) if hs is not None else None,
-            capability_match=(
-                bool(data["capability_match"])
-                if data.get("capability_match") is not None
-                else None
-            ),
-            was_available=(
-                bool(data["was_available"])
-                if data.get("was_available") is not None
-                else None
-            ),
+            capability_match=(bool(data["capability_match"]) if data.get("capability_match") is not None else None),
+            was_available=(bool(data["was_available"]) if data.get("was_available") is not None else None),
         )
 
 
@@ -167,9 +158,7 @@ class RouteExplanation:
 
     selected_target: Optional[str] = None
     decision_bases: List[DecisionBasis] = dataclasses.field(default_factory=list)
-    confidence: RouteConfidence = dataclasses.field(
-        default_factory=lambda: UNDETERMINED_CONFIDENCE
-    )
+    confidence: RouteConfidence = dataclasses.field(default_factory=lambda: UNDETERMINED_CONFIDENCE)
     rejected_candidates: List[RejectedCandidate] = dataclasses.field(default_factory=list)
     policy_posture: str = "undecided"
     policy_reason: str = "no routing decision recorded"
@@ -336,7 +325,7 @@ def build_route_explanation(
             task_id=task_id,
             trace_id=trace_id,
         )
-    except Exception as exc:
+    except Exception:
         return EMPTY_ROUTE_EXPLANATION
 
 

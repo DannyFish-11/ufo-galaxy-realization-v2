@@ -25,6 +25,7 @@ dual_repo_system_completeness_review / system_final_acceptance_verdict
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
+
 logger = logging.getLogger(__name__)
 
 
@@ -63,15 +64,11 @@ __all__ = [
 
 
 SYSTEM_COMPLETION_STATUS_AUTHORITY = (
-    "SYSTEM_COMPLETION_STATUS_AUTHORITY::"
-    "core.system_completion_status::"
-    "unified-dual-repo-system-closure-surface"
+    "SYSTEM_COMPLETION_STATUS_AUTHORITY::" "core.system_completion_status::" "unified-dual-repo-system-closure-surface"
 )
 
 SYSTEM_COMPLETION_STATUS_SENTINEL = (
-    "SYSTEM_COMPLETION_STATUS_SENTINEL::"
-    "profile=system-closure-status-v1::"
-    "module=core.system_completion_status"
+    "SYSTEM_COMPLETION_STATUS_SENTINEL::" "profile=system-closure-status-v1::" "module=core.system_completion_status"
 )
 
 # PR-10 V2:完成度快照必须消费 core.v2_final_consolidation_coherence 的五维
@@ -183,18 +180,12 @@ def _compute_system_closure_pct(completeness_review: CompletenessReviewReport) -
         return 0.0
 
     pct = round(
-        sum(
-            _LABEL_COMPLETION_PCT.get(entry.label, 0.0)
-            for entry in completeness_review.dimensions
-        )
+        sum(_LABEL_COMPLETION_PCT.get(entry.label, 0.0) for entry in completeness_review.dimensions)
         / len(completeness_review.dimensions),
         2,
     )
 
-    if (
-        completeness_review.verdict != CompletenessVerdict.fully_closed
-        and pct >= 100.0
-    ):
+    if completeness_review.verdict != CompletenessVerdict.fully_closed and pct >= 100.0:
         return MAX_CLOSURE_PCT_WITHOUT_FULL_VERDICT
 
     return pct
@@ -283,6 +274,7 @@ def _build_v2_consolidation_coherence_snapshot() -> Dict[str, Any]:
         from core.v2_final_consolidation_coherence import (  # noqa: PLC0415
             get_v2_consolidation_coherence_report,
         )
+
         return dict(get_v2_consolidation_coherence_report().to_dict())
     except Exception as exc:  # noqa: BLE001
         logger.debug("v2 consolidation coherence snapshot unavailable: %s", exc)
@@ -335,6 +327,7 @@ def _build_v2_consolidation_evidence() -> Dict[str, Any]:
             from core.orchestration_review_surface import (  # type: ignore[import]
                 build_orchestration_review_snapshot,
             )
+
             snap = build_orchestration_review_snapshot()
             orchestration_snapshot_ok = True
             orchestration_partial = snap._partial
@@ -348,6 +341,7 @@ def _build_v2_consolidation_evidence() -> Dict[str, Any]:
             from core.flow_continuity_coordinator import (  # type: ignore[import]
                 get_flow_continuity_coordinator,
             )
+
             coord = get_flow_continuity_coordinator()
             continuity_coordinator_ok = coord is not None
         except Exception as exc:
@@ -374,9 +368,7 @@ def _build_v2_consolidation_evidence() -> Dict[str, Any]:
         "orchestration_review_partial": orchestration_partial,
         "continuity_coordinator_ok": continuity_coordinator_ok,
         "consolidation_verdict": (
-            "coherent"
-            if chain_coherent
-            else f"partial ({available_count}/{total_count} paths available)"
+            "coherent" if chain_coherent else f"partial ({available_count}/{total_count} paths available)"
         ),
     }
 
@@ -413,14 +405,10 @@ def _build_summary(
             lines.append("- PR-10 V2 收口一致性: 五维全部一致 (coherent)")
         else:
             lines.append(
-                f"- PR-10 V2 收口一致性: 存在差距,不一致维度数量 = "
-                f"{v2_coherence_incoherent_count} (incoherent)"
+                f"- PR-10 V2 收口一致性: 存在差距,不一致维度数量 = " f"{v2_coherence_incoherent_count} (incoherent)"
             )
 
-    if (
-        architecture_pct >= 100.0
-        and completeness_review.verdict != CompletenessVerdict.fully_closed
-    ):
+    if architecture_pct >= 100.0 and completeness_review.verdict != CompletenessVerdict.fully_closed:
         lines.append("- 状态错位: 架构面已显示 100%，但整系统仍未真正 100% 收口。")
 
     if remaining_items:
@@ -460,9 +448,7 @@ def build_system_completion_status() -> SystemCompletionStatus:
         ),
         # PR-10 V2 final consolidation: are all five canonical paths coherent?
         "v2_consolidation_chain_coherent": consolidation_coherent,
-        "v2_consolidation_coherence_complete": bool(
-            coherence_snapshot.get("overall_coherent", False)
-        ),
+        "v2_consolidation_coherence_complete": bool(coherence_snapshot.get("overall_coherent", False)),
     }
 
     summary = _build_summary(
@@ -473,14 +459,8 @@ def build_system_completion_status() -> SystemCompletionStatus:
         acceptance_report=acceptance,
         remaining_items=remaining_items,
         consolidation_evidence=consolidation_evidence,
-        v2_coherence_overall=(
-            bool(coherence_snapshot.get("overall_coherent"))
-            if coherence_snapshot
-            else None
-        ),
-        v2_coherence_incoherent_count=int(
-            coherence_snapshot.get("incoherent_count", 0) or 0
-        ),
+        v2_coherence_overall=(bool(coherence_snapshot.get("overall_coherent")) if coherence_snapshot else None),
+        v2_coherence_incoherent_count=int(coherence_snapshot.get("incoherent_count", 0) or 0),
     )
 
     return SystemCompletionStatus(

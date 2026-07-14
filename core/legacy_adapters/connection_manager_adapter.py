@@ -70,20 +70,22 @@ class LegacyConnectionManagerAdapter:
         if self._unified is None:
             try:
                 from core.unified.connection_manager import get_unified_connection_manager
+
                 self._unified = get_unified_connection_manager()
             except Exception as exc:
                 logger.warning(
                     "LegacyConnectionManagerAdapter: could not obtain "
-                    "UnifiedConnectionManager, falling back to legacy: %s", exc
+                    "UnifiedConnectionManager, falling back to legacy: %s",
+                    exc,
                 )
                 from core.connection_manager import get_connection_manager
+
                 self._unified = get_connection_manager()
         return self._unified
 
     def _log_delegation(self, method: str) -> None:
         logger.debug(
-            "legacy_connection_manager → unified | method=%s "
-            "entry_path=legacy via_legacy_adapter=True",
+            "legacy_connection_manager → unified | method=%s " "entry_path=legacy via_legacy_adapter=True",
             method,
         )
 

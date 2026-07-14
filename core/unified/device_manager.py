@@ -125,9 +125,7 @@ class UnifiedDeviceManager:
             device: UnifiedDevice Pydantic 模型实例。
         """
         if not isinstance(device, UnifiedDevice):
-            raise DeviceManagerError(
-                f"register_device requires a UnifiedDevice instance, got {type(device).__name__}"
-            )
+            raise DeviceManagerError(f"register_device requires a UnifiedDevice instance, got {type(device).__name__}")
 
         existing = self._devices.get(device.device_id)
         if existing is not None:
@@ -210,10 +208,22 @@ class UnifiedDeviceManager:
             ip_address=data.get("ip_address") or data.get("ip"),
             port=data.get("port"),
             capabilities=data.get("capabilities") or [],
-            metadata={k: v for k, v in data.items() if k not in {
-                "device_id", "device_name", "name", "device_type",
-                "status", "ip_address", "ip", "port", "capabilities",
-            }},
+            metadata={
+                k: v
+                for k, v in data.items()
+                if k
+                not in {
+                    "device_id",
+                    "device_name",
+                    "name",
+                    "device_type",
+                    "status",
+                    "ip_address",
+                    "ip",
+                    "port",
+                    "capabilities",
+                }
+            },
             source=data.get("source", "dict_registration"),
         )
         self.register_device(device)
@@ -273,6 +283,7 @@ class UnifiedDeviceManager:
             return
         try:
             from core.capability_bus import get_capability_bus  # noqa: PLC0415
+
             bus = get_capability_bus()
             for cap_str in caps:
                 bus.register_device_capability(
@@ -317,6 +328,7 @@ class UnifiedDeviceManager:
             return
         try:
             from core.capability_bus import get_capability_bus  # noqa: PLC0415
+
             bus = get_capability_bus()
             for cap_str in caps:
                 bus.unregister(f"device__{device_id}__{cap_str}")
@@ -350,6 +362,7 @@ class UnifiedDeviceManager:
         """
         try:
             from core.capability_assimilation import assimilate_device  # noqa: PLC0415
+
             caps = self._normalize_capabilities(device.capabilities)
             assimilate_device(
                 device_id=device.device_id,
@@ -402,9 +415,9 @@ class UnifiedDeviceManager:
                     preferred_device_ids=[device.device_id],
                     metadata={
                         "participant_kind": "device",
-                        "network_reachability": "reachable"
-                        if device.status == UnifiedDeviceStatus.ONLINE
-                        else "offline",
+                        "network_reachability": (
+                            "reachable" if device.status == UnifiedDeviceStatus.ONLINE else "offline"
+                        ),
                         "device_status": (
                             device.status.value if hasattr(device.status, "value") else str(device.status)
                         ),
@@ -696,8 +709,12 @@ class UnifiedDeviceManager:
             device.last_heartbeat = now
             device.updated_at = now
             device.state_version = (device.state_version or 0) + 1
-            active = {UnifiedDeviceStatus.ONLINE, UnifiedDeviceStatus.ONLINE.value,
-                      UnifiedDeviceStatus.BUSY, UnifiedDeviceStatus.BUSY.value}
+            active = {
+                UnifiedDeviceStatus.ONLINE,
+                UnifiedDeviceStatus.ONLINE.value,
+                UnifiedDeviceStatus.BUSY,
+                UnifiedDeviceStatus.BUSY.value,
+            }
             if device.status not in active:
                 device.status = UnifiedDeviceStatus.ONLINE
                 logger.info(
@@ -715,6 +732,7 @@ class UnifiedDeviceManager:
         # Block-4: feed heartbeat into health scorer
         try:
             from core.unified.device_health import get_device_health_scorer
+
             get_device_health_scorer().heartbeat(device_id)
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
@@ -743,8 +761,10 @@ class UnifiedDeviceManager:
         marked_offline: List[str] = []
 
         online_values = {
-            UnifiedDeviceStatus.ONLINE, UnifiedDeviceStatus.ONLINE.value,
-            UnifiedDeviceStatus.BUSY, UnifiedDeviceStatus.BUSY.value,
+            UnifiedDeviceStatus.ONLINE,
+            UnifiedDeviceStatus.ONLINE.value,
+            UnifiedDeviceStatus.BUSY,
+            UnifiedDeviceStatus.BUSY.value,
         }
 
         for device in list(self._devices.values()):
@@ -798,8 +818,10 @@ class UnifiedDeviceManager:
     def get_online_devices(self) -> List[UnifiedDevice]:
         """返回所有在线设备。"""
         online_values = {
-            UnifiedDeviceStatus.ONLINE.value, UnifiedDeviceStatus.ONLINE,
-            UnifiedDeviceStatus.BUSY.value, UnifiedDeviceStatus.BUSY,
+            UnifiedDeviceStatus.ONLINE.value,
+            UnifiedDeviceStatus.ONLINE,
+            UnifiedDeviceStatus.BUSY.value,
+            UnifiedDeviceStatus.BUSY,
         }
         return [d for d in self._devices.values() if d.status in online_values]
 
@@ -812,8 +834,9 @@ class UnifiedDeviceManager:
         """
         try:
             from core.unified.device_health import get_device_health_scorer
+
             return get_device_health_scorer().score(device_id)
-        except Exception as exc:
+        except Exception:
             return None
 
     def get_online_devices_by_health(self) -> List[UnifiedDevice]:
@@ -827,13 +850,14 @@ class UnifiedDeviceManager:
         devices = self.get_online_devices()
         try:
             from core.unified.device_health import get_device_health_scorer
+
             scorer = get_device_health_scorer()
             return sorted(
                 devices,
                 key=lambda d: scorer.score(d.device_id).total_score,
                 reverse=True,
             )
-        except Exception as exc:
+        except Exception:
             return devices
 
     def get_autonomous_devices(self) -> List[UnifiedDevice]:

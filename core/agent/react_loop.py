@@ -92,10 +92,10 @@ def is_repeating(history: List[str], window: int) -> bool:
 
 @dataclass
 class ToolLoopResult:
-    final_response: Any                # 最后一次 LLM 响应对象（调用方据此取 content/provider）
-    iterations: int                    # 实际 LLM 调用轮数
-    reflection_rounds: int             # 反思触发轮数
-    stop_reason: str                   # "final" | "max_iterations" | "loop_detected"
+    final_response: Any  # 最后一次 LLM 响应对象（调用方据此取 content/provider）
+    iterations: int  # 实际 LLM 调用轮数
+    reflection_rounds: int  # 反思触发轮数
+    stop_reason: str  # "final" | "max_iterations" | "loop_detected"
 
 
 async def run_react_tool_loop(
@@ -135,11 +135,7 @@ async def run_react_tool_loop(
         tool_calls = getattr(resp, "tool_calls", None)
         if not tool_calls:
             # 候选最终答案 —— 反思自检（有界；任何 None/异常都放行）
-            if (
-                reflect is not None
-                and reflection_rounds < max_reflection_rounds
-                and iteration < max_iterations
-            ):
+            if reflect is not None and reflection_rounds < max_reflection_rounds and iteration < max_iterations:
                 content = getattr(resp, "content", "") or ""
                 try:
                     verdict = await reflect(content)
@@ -150,10 +146,12 @@ async def run_react_tool_loop(
                     reflection_rounds += 1
                     critique = verdict.get("critique", "") or "结果可能不完整，请补全并复核后再给出最终答案。"
                     messages.append({"role": "assistant", "content": content})
-                    messages.append({
-                        "role": "user",
-                        "content": f"[自检] 上述回答存在不足：{critique}\n请据此修正或补全，然后给出最终结果。",
-                    })
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": f"[自检] 上述回答存在不足：{critique}\n请据此修正或补全，然后给出最终结果。",
+                        }
+                    )
                     continue
             return ToolLoopResult(resp, iteration, reflection_rounds, "final")
 
@@ -162,7 +160,8 @@ async def run_react_tool_loop(
         if is_repeating(sig_history, loop_detection_window):
             logger.info(
                 "ReAct loop-detection triggered (window=%d) — stopping early at iter=%d",
-                loop_detection_window, iteration,
+                loop_detection_window,
+                iteration,
             )
             return ToolLoopResult(resp, iteration, reflection_rounds, "loop_detected")
 
@@ -177,6 +176,7 @@ async def run_react_tool_loop(
             tc_name = tc_func.get("name", "")
             tc_id = tc.get("id", f"call_{tc_name}")
             import json as _json
+
             try:
                 tc_args = _json.loads(tc_func.get("arguments", "{}"))
             except (ValueError, TypeError):
@@ -190,10 +190,12 @@ async def run_react_tool_loop(
                     logger.debug("on_tool_result hook failed: %s", exc)
 
             result_str = str(result.get("result", result.get("error", "")))
-            messages.append({
-                "role": "tool",
-                "tool_call_id": tc_id,
-                "content": result_str[:4000],
-            })
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tc_id,
+                    "content": result_str[:4000],
+                }
+            )
 
     return ToolLoopResult(resp, iteration, reflection_rounds, "max_iterations")

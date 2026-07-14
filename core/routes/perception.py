@@ -60,8 +60,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """接收最新摄像头/屏幕帧 → 存入 DesktopPerceptionStore（不立即调模型）。"""
         try:
             from core.perception.desktop_perception_store import get_desktop_perception_store
+
             get_desktop_perception_store().update_frame(
-                frame.image_base64, mime=frame.mime, source=frame.source, screen=frame.screen,
+                frame.image_base64,
+                mime=frame.mime,
+                source=frame.source,
+                screen=frame.screen,
             )
             return {"success": True, "stored": "frame"}
         except Exception as exc:  # noqa: BLE001
@@ -73,6 +77,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """接收最新麦克风音频片段 → 存入 DesktopPerceptionStore。"""
         try:
             from core.perception.desktop_perception_store import get_desktop_perception_store
+
             get_desktop_perception_store().update_audio(audio.audio_base64, mime=audio.mime)
             return {"success": True, "stored": "audio"}
         except Exception as exc:  # noqa: BLE001
@@ -84,6 +89,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """返回桌面感知存储的新鲜度/计数诊断。"""
         try:
             from core.perception.desktop_perception_store import get_desktop_perception_store
+
             return {"success": True, "store": get_desktop_perception_store().status()}
         except Exception as exc:  # noqa: BLE001
             return {"success": False, "error": str(exc)}
@@ -102,6 +108,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         if not image_b64:
             try:
                 from core.perception.desktop_perception_store import get_desktop_perception_store
+
                 _b64, _mime, _src = get_desktop_perception_store().latest_frame_snapshot()
                 if _b64:
                     image_b64, mime, source = _b64, _mime, _src
@@ -154,6 +161,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         if not audio_b64:
             try:
                 from core.perception.desktop_perception_store import get_desktop_perception_store
+
                 _store = get_desktop_perception_store()
                 with _store._lock:  # noqa: SLF001 — 读快照
                     audio_b64 = _store._audio_b64 or ""
@@ -164,8 +172,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             return {"success": False, "error": "no_audio_available"}
         try:
             from core.audio_pipeline import get_audio_pipeline
+
             result = await get_audio_pipeline().understand(
-                audio_b64, mime=mime, prompt=req.prompt or "",
+                audio_b64,
+                mime=mime,
+                prompt=req.prompt or "",
             )
             return result
         except Exception as exc:  # noqa: BLE001

@@ -37,10 +37,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Minimal stub types
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class _FakeProviderConfig:
@@ -63,6 +63,7 @@ class _FakeRoutingDecision:
 # Helpers — build a minimal MultiLLMRouter stub
 # ---------------------------------------------------------------------------
 
+
 def _make_router(providers: Dict[str, _FakeProviderConfig]):
     """Create a MultiLLMRouter-like stub for unit testing route_multimodal_first."""
     from core.multi_llm_router import (
@@ -79,11 +80,7 @@ def _make_router(providers: Dict[str, _FakeProviderConfig]):
         cfg = object.__new__(ProviderConfig)
         cfg.name = name
         cfg.multimodal = fake.multimodal
-        cfg.status = (
-            ProviderStatus.HEALTHY
-            if fake.status != "down"
-            else ProviderStatus.DOWN
-        )
+        cfg.status = ProviderStatus.HEALTHY if fake.status != "down" else ProviderStatus.DOWN
         cfg.default_model = fake.default_model
         cfg.env_key = fake.env_key
         cfg.api_key = ""
@@ -109,14 +106,17 @@ def _make_router(providers: Dict[str, _FakeProviderConfig]):
 # 1. route_multimodal_first — native MM provider available → tier-1
 # ---------------------------------------------------------------------------
 
+
 class TestRouteMultimodalFirstTier1:
     def test_native_mm_provider_selected(self) -> None:
         from core.multi_llm_router import TaskType
 
-        router = _make_router({
-            "openai": _FakeProviderConfig("openai", multimodal=True),
-            "deepseek": _FakeProviderConfig("deepseek", multimodal=False),
-        })
+        router = _make_router(
+            {
+                "openai": _FakeProviderConfig("openai", multimodal=True),
+                "deepseek": _FakeProviderConfig("deepseek", multimodal=False),
+            }
+        )
         decision = router.route_multimodal_first(
             active_modalities=["image"],
             task_type=TaskType.GENERAL,
@@ -127,9 +127,11 @@ class TestRouteMultimodalFirstTier1:
     def test_reason_contains_modalities(self) -> None:
         from core.multi_llm_router import TaskType
 
-        router = _make_router({
-            "anthropic": _FakeProviderConfig("anthropic", multimodal=True),
-        })
+        router = _make_router(
+            {
+                "anthropic": _FakeProviderConfig("anthropic", multimodal=True),
+            }
+        )
         decision = router.route_multimodal_first(
             active_modalities=["image", "audio"],
             task_type=TaskType.GENERAL,
@@ -139,9 +141,11 @@ class TestRouteMultimodalFirstTier1:
     def test_is_native_multimodal_flag_implied(self) -> None:
         from core.multi_llm_router import TaskType
 
-        router = _make_router({
-            "google": _FakeProviderConfig("google", multimodal=True),
-        })
+        router = _make_router(
+            {
+                "google": _FakeProviderConfig("google", multimodal=True),
+            }
+        )
         decision = router.route_multimodal_first(
             active_modalities=["video_frame"],
             task_type=TaskType.GENERAL,
@@ -153,10 +157,12 @@ class TestRouteMultimodalFirstTier1:
         """A DOWN native MM provider must be skipped; fall back to tier-2."""
         from core.multi_llm_router import TaskType
 
-        router = _make_router({
-            "openai": _FakeProviderConfig("openai", multimodal=True, status="down"),
-            "deepseek": _FakeProviderConfig("deepseek", multimodal=False),
-        })
+        router = _make_router(
+            {
+                "openai": _FakeProviderConfig("openai", multimodal=True, status="down"),
+                "deepseek": _FakeProviderConfig("deepseek", multimodal=False),
+            }
+        )
         decision = router.route_multimodal_first(
             active_modalities=["image"],
             task_type=TaskType.GENERAL,
@@ -169,13 +175,16 @@ class TestRouteMultimodalFirstTier1:
 # 2. route_multimodal_first — no native MM provider → tier-2 downgrade
 # ---------------------------------------------------------------------------
 
+
 class TestRouteMultimodalFirstTier2:
     def test_falls_back_to_text_provider(self) -> None:
         from core.multi_llm_router import TaskType
 
-        router = _make_router({
-            "deepseek": _FakeProviderConfig("deepseek", multimodal=False),
-        })
+        router = _make_router(
+            {
+                "deepseek": _FakeProviderConfig("deepseek", multimodal=False),
+            }
+        )
         decision = router.route_multimodal_first(
             active_modalities=["image"],
             task_type=TaskType.GENERAL,
@@ -186,9 +195,11 @@ class TestRouteMultimodalFirstTier2:
     def test_fallback_reason_signals_degradation(self) -> None:
         from core.multi_llm_router import TaskType
 
-        router = _make_router({
-            "ollama": _FakeProviderConfig("ollama", multimodal=False),
-        })
+        router = _make_router(
+            {
+                "ollama": _FakeProviderConfig("ollama", multimodal=False),
+            }
+        )
         decision = router.route_multimodal_first(
             active_modalities=["audio"],
             task_type=TaskType.GENERAL,
@@ -200,6 +211,7 @@ class TestRouteMultimodalFirstTier2:
 # ---------------------------------------------------------------------------
 # 3. route_multimodal_first — no providers → tier-3 advisory
 # ---------------------------------------------------------------------------
+
 
 class TestRouteMultimodalFirstTier4:
     def test_returns_advisory_no_op(self) -> None:
@@ -216,10 +228,12 @@ class TestRouteMultimodalFirstTier4:
     def test_all_providers_down_returns_advisory(self) -> None:
         from core.multi_llm_router import TaskType
 
-        router = _make_router({
-            "openai": _FakeProviderConfig("openai", multimodal=True, status="down"),
-            "deepseek": _FakeProviderConfig("deepseek", multimodal=False, status="down"),
-        })
+        router = _make_router(
+            {
+                "openai": _FakeProviderConfig("openai", multimodal=True, status="down"),
+                "deepseek": _FakeProviderConfig("deepseek", multimodal=False, status="down"),
+            }
+        )
         decision = router.route_multimodal_first(
             active_modalities=["image"],
             task_type=TaskType.GENERAL,
@@ -231,13 +245,16 @@ class TestRouteMultimodalFirstTier4:
 # 4. route_multimodal_first — empty modalities does not crash
 # ---------------------------------------------------------------------------
 
+
 class TestRouteMultimodalFirstTextOnly:
     def test_no_modalities_routes_without_crash(self) -> None:
         from core.multi_llm_router import TaskType
 
-        router = _make_router({
-            "openai": _FakeProviderConfig("openai", multimodal=True),
-        })
+        router = _make_router(
+            {
+                "openai": _FakeProviderConfig("openai", multimodal=True),
+            }
+        )
         decision = router.route_multimodal_first(
             active_modalities=[],
             task_type=TaskType.GENERAL,
@@ -249,9 +266,11 @@ class TestRouteMultimodalFirstTextOnly:
     def test_none_modalities_routes_without_crash(self) -> None:
         from core.multi_llm_router import TaskType
 
-        router = _make_router({
-            "openai": _FakeProviderConfig("openai", multimodal=True),
-        })
+        router = _make_router(
+            {
+                "openai": _FakeProviderConfig("openai", multimodal=True),
+            }
+        )
         decision = router.route_multimodal_first(
             active_modalities=None,
             task_type=TaskType.GENERAL,
@@ -262,6 +281,7 @@ class TestRouteMultimodalFirstTextOnly:
 # ---------------------------------------------------------------------------
 # 5-9.  _select_multimodal_route  (OpenClawd method)
 # ---------------------------------------------------------------------------
+
 
 def _make_openclawd_stub(router=None):
     """Return a minimal OpenClawd instance with _get_router stubbed."""
@@ -278,9 +298,11 @@ class TestSelectMultimodalRouteNative:
     """5. perception requires native MM + provider available → native_multimodal."""
 
     def test_native_multimodal_route_type(self) -> None:
-        router = _make_router({
-            "openai": _FakeProviderConfig("openai", multimodal=True),
-        })
+        router = _make_router(
+            {
+                "openai": _FakeProviderConfig("openai", multimodal=True),
+            }
+        )
         oc = _make_openclawd_stub(router=router)
         perception = {
             "requires_native_multimodal": True,
@@ -293,9 +315,11 @@ class TestSelectMultimodalRouteNative:
         assert result["fallback_reason"] == ""
 
     def test_route_reason_non_empty(self) -> None:
-        router = _make_router({
-            "anthropic": _FakeProviderConfig("anthropic", multimodal=True),
-        })
+        router = _make_router(
+            {
+                "anthropic": _FakeProviderConfig("anthropic", multimodal=True),
+            }
+        )
         oc = _make_openclawd_stub(router=router)
         perception = {
             "requires_native_multimodal": True,
@@ -310,9 +334,11 @@ class TestSelectMultimodalRoutePartial:
     """6. perception requires native MM + no native provider → partial_multimodal."""
 
     def test_partial_multimodal_route_type(self) -> None:
-        router = _make_router({
-            "deepseek": _FakeProviderConfig("deepseek", multimodal=False),
-        })
+        router = _make_router(
+            {
+                "deepseek": _FakeProviderConfig("deepseek", multimodal=False),
+            }
+        )
         oc = _make_openclawd_stub(router=router)
         perception = {
             "requires_native_multimodal": True,
@@ -325,9 +351,11 @@ class TestSelectMultimodalRoutePartial:
         assert len(result["fallback_reason"]) > 0
 
     def test_fallback_reason_mentions_native_unavailable(self) -> None:
-        router = _make_router({
-            "deepseek": _FakeProviderConfig("deepseek", multimodal=False),
-        })
+        router = _make_router(
+            {
+                "deepseek": _FakeProviderConfig("deepseek", multimodal=False),
+            }
+        )
         oc = _make_openclawd_stub(router=router)
         perception = {
             "requires_native_multimodal": True,
@@ -341,9 +369,11 @@ class TestSelectMultimodalRouteTextOnly:
     """7. text-only perception → text_only route_type."""
 
     def test_text_only_perception_returns_text_only(self) -> None:
-        router = _make_router({
-            "openai": _FakeProviderConfig("openai", multimodal=True),
-        })
+        router = _make_router(
+            {
+                "openai": _FakeProviderConfig("openai", multimodal=True),
+            }
+        )
         oc = _make_openclawd_stub(router=router)
         perception = {
             "requires_native_multimodal": False,
@@ -354,9 +384,11 @@ class TestSelectMultimodalRouteTextOnly:
         assert result["is_native_multimodal"] is False
 
     def test_none_perception_returns_text_only(self) -> None:
-        router = _make_router({
-            "openai": _FakeProviderConfig("openai", multimodal=True),
-        })
+        router = _make_router(
+            {
+                "openai": _FakeProviderConfig("openai", multimodal=True),
+            }
+        )
         oc = _make_openclawd_stub(router=router)
         result = oc._select_multimodal_route(canonical_perception=None)
         assert result["route_type"] == "text_only"
@@ -403,6 +435,7 @@ class TestSelectMultimodalRouteAdvisory:
 # 10. _build_unified_control_plan — is_native_multimodal propagated
 # ---------------------------------------------------------------------------
 
+
 class TestBuildUnifiedControlPlanNativeMultimodal:
     def test_is_native_multimodal_true_propagated(self) -> None:
         from core.openclawd import OpenClawd
@@ -444,6 +477,7 @@ class TestBuildUnifiedControlPlanNativeMultimodal:
 # 11-13. process() metadata shape
 # ---------------------------------------------------------------------------
 
+
 class TestProcessMetadataMultimodalRouteDecision:
     """11. process() always includes multimodal_route_decision in metadata."""
 
@@ -475,9 +509,12 @@ class TestProcessMetadataMultimodalRouteDecision:
     def test_result_is_json_serialisable(self) -> None:
         """14. route_reason and fallback_reason are non-empty strings."""
         import json
-        router = _make_router({
-            "openai": _FakeProviderConfig("openai", multimodal=True),
-        })
+
+        router = _make_router(
+            {
+                "openai": _FakeProviderConfig("openai", multimodal=True),
+            }
+        )
         oc = _make_openclawd_stub(router=router)
         perception = {
             "requires_native_multimodal": True,
@@ -492,9 +529,11 @@ class TestProcessMetadataMultimodalRouteDecision:
         assert isinstance(restored["fallback_reason"], str)
 
     def test_route_decision_has_all_required_keys(self) -> None:
-        router = _make_router({
-            "anthropic": _FakeProviderConfig("anthropic", multimodal=True),
-        })
+        router = _make_router(
+            {
+                "anthropic": _FakeProviderConfig("anthropic", multimodal=True),
+            }
+        )
         oc = _make_openclawd_stub(router=router)
         perception = {
             "requires_native_multimodal": True,
@@ -502,8 +541,13 @@ class TestProcessMetadataMultimodalRouteDecision:
         }
         result = oc._select_multimodal_route(canonical_perception=perception)
         required_keys = {
-            "route_type", "is_native_multimodal", "provider",
-            "model", "route_reason", "fallback_reason", "active_modalities",
+            "route_type",
+            "is_native_multimodal",
+            "provider",
+            "model",
+            "route_reason",
+            "fallback_reason",
+            "active_modalities",
         }
         assert required_keys <= set(result.keys())
 
@@ -512,13 +556,16 @@ class TestProcessMetadataMultimodalRouteDecision:
 # 14. route_reason / fallback_reason string quality
 # ---------------------------------------------------------------------------
 
+
 class TestRouteReasonExplicitness:
     def test_tier1_reason_mentions_native_multimodal_first(self) -> None:
         from core.multi_llm_router import TaskType
 
-        router = _make_router({
-            "openai": _FakeProviderConfig("openai", multimodal=True),
-        })
+        router = _make_router(
+            {
+                "openai": _FakeProviderConfig("openai", multimodal=True),
+            }
+        )
         decision = router.route_multimodal_first(
             active_modalities=["image"],
             task_type=TaskType.GENERAL,
@@ -528,9 +575,11 @@ class TestRouteReasonExplicitness:
     def test_tier2_reason_mentions_native_multimodal_first(self) -> None:
         from core.multi_llm_router import TaskType
 
-        router = _make_router({
-            "deepseek": _FakeProviderConfig("deepseek", multimodal=False),
-        })
+        router = _make_router(
+            {
+                "deepseek": _FakeProviderConfig("deepseek", multimodal=False),
+            }
+        )
         decision = router.route_multimodal_first(
             active_modalities=["image"],
             task_type=TaskType.GENERAL,
@@ -552,15 +601,18 @@ class TestRouteReasonExplicitness:
 # 15. Backward compatibility — existing text flows
 # ---------------------------------------------------------------------------
 
+
 class TestBackwardCompatibility:
     def test_text_only_select_route_no_crash(self) -> None:
         """Text-only callers must not be affected by the routing change."""
         from core.multi_llm_router import TaskType
 
-        router = _make_router({
-            "openai": _FakeProviderConfig("openai", multimodal=True),
-            "deepseek": _FakeProviderConfig("deepseek", multimodal=False),
-        })
+        router = _make_router(
+            {
+                "openai": _FakeProviderConfig("openai", multimodal=True),
+                "deepseek": _FakeProviderConfig("deepseek", multimodal=False),
+            }
+        )
         oc = _make_openclawd_stub(router=router)
         # No perception state at all
         result = oc._select_multimodal_route(canonical_perception=None)
@@ -570,10 +622,12 @@ class TestBackwardCompatibility:
         """The existing .route() method must continue to work normally."""
         from core.multi_llm_router import TaskType
 
-        router = _make_router({
-            "openai": _FakeProviderConfig("openai", multimodal=True),
-            "deepseek": _FakeProviderConfig("deepseek", multimodal=False),
-        })
+        router = _make_router(
+            {
+                "openai": _FakeProviderConfig("openai", multimodal=True),
+                "deepseek": _FakeProviderConfig("deepseek", multimodal=False),
+            }
+        )
         # Use the original route() method — must not raise
         decision = router.route(task_type=TaskType.GENERAL)
         assert decision is not None
@@ -581,9 +635,11 @@ class TestBackwardCompatibility:
 
     def test_select_route_empty_perception_fields(self) -> None:
         """Partially empty perception dict must not crash."""
-        router = _make_router({
-            "openai": _FakeProviderConfig("openai", multimodal=True),
-        })
+        router = _make_router(
+            {
+                "openai": _FakeProviderConfig("openai", multimodal=True),
+            }
+        )
         oc = _make_openclawd_stub(router=router)
         result = oc._select_multimodal_route(canonical_perception={})
         # requires_native_multimodal defaults to False → text_only

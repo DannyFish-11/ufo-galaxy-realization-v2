@@ -42,17 +42,20 @@ class TestMCPHotReload:
     @pytest.mark.asyncio
     async def test_reload_mcp_success_with_valid_tools(self):
         """reload_mcp 在工具合法时应返回 loaded=True, validated=True。"""
-        from core.mcp_skill_reload import reload_mcp, _load_status
+        from core.mcp_skill_reload import _load_status, reload_mcp
 
         mock_loader = MagicMock()
-        mock_loader.list_tools = AsyncMock(return_value=[
-            _make_mock_tool("search", "搜索工具"),
-            _make_mock_tool("read_file", "读取文件"),
-        ])
+        mock_loader.list_tools = AsyncMock(
+            return_value=[
+                _make_mock_tool("search", "搜索工具"),
+                _make_mock_tool("read_file", "读取文件"),
+            ]
+        )
 
         with patch("core.mcp_skill_reload.reload_mcp", wraps=None) as _unused:
             # 直接测试 _validate_mcp_server
             from core.mcp_skill_reload import _validate_mcp_server
+
             result = await _validate_mcp_server("test_server", mock_loader)
 
         assert result["valid"] is True
@@ -65,10 +68,12 @@ class TestMCPHotReload:
         from core.mcp_skill_reload import _validate_mcp_server
 
         mock_loader = MagicMock()
-        mock_loader.list_tools = AsyncMock(return_value=[
-            {"name": "", "description": "无名工具"},        # 空 name
-            {"description": "完全缺少 name"},               # 缺少 name
-        ])
+        mock_loader.list_tools = AsyncMock(
+            return_value=[
+                {"name": "", "description": "无名工具"},  # 空 name
+                {"description": "完全缺少 name"},  # 缺少 name
+            ]
+        )
 
         result = await _validate_mcp_server("bad_server", mock_loader)
         assert result["valid"] is False
@@ -81,9 +86,11 @@ class TestMCPHotReload:
         from core.mcp_skill_reload import _validate_mcp_server
 
         mock_loader = MagicMock()
-        mock_loader.list_tools = AsyncMock(return_value=[
-            {"name": "bad_tool", "description": "错误 schema", "input_schema": "not_a_dict"},
-        ])
+        mock_loader.list_tools = AsyncMock(
+            return_value=[
+                {"name": "bad_tool", "description": "错误 schema", "input_schema": "not_a_dict"},
+            ]
+        )
 
         result = await _validate_mcp_server("server", mock_loader)
         assert result["valid"] is False
@@ -128,19 +135,19 @@ class TestMCPHotReload:
         reg = CapabilityRegistry.get_instance()
 
         # CapabilityRegistry 必须提供 refresh() 方法
-        assert callable(getattr(reg, "refresh", None)), (
-            "CapabilityRegistry 实例必须提供可调用的 refresh() 方法"
-        )
+        assert callable(getattr(reg, "refresh", None)), "CapabilityRegistry 实例必须提供可调用的 refresh() 方法"
 
         # refresh() 必须是协程函数（可被 await）
         import asyncio
         import inspect
-        assert inspect.iscoroutinefunction(reg.refresh), (
-            "CapabilityRegistry.refresh() 必须是异步方法（coroutine function）"
-        )
+
+        assert inspect.iscoroutinefunction(
+            reg.refresh
+        ), "CapabilityRegistry.refresh() 必须是异步方法（coroutine function）"
 
         # 验证 force=True 参数支持（用于热重载后强制刷新）
         import asyncio as _asyncio
+
         # 调用 refresh(force=True) 不应抛出异常（即便没有真实的 MCP/Skill）
         try:
             await _asyncio.wait_for(reg.refresh(force=True), timeout=3.0)
@@ -221,7 +228,7 @@ class TestSkillHotReload:
             "name": "VersionBug",
             "description": "版本号错误",
             "handler": lambda: {},
-            "version": 123,           # 应为字符串
+            "version": 123,  # 应为字符串
         }
         result = _validate_skill(skill)
         assert result["valid"] is False
@@ -251,13 +258,14 @@ class TestLoadStatus:
     def test_get_load_status_returns_mcp_and_skills_keys(self):
         """返回值必须包含 'mcp' 和 'skills' 顶层键。"""
         from core.mcp_skill_reload import get_load_status
+
         status = get_load_status()
         assert "mcp" in status
         assert "skills" in status
 
     def test_get_load_status_entry_schema(self):
         """已记录的条目必须包含 loaded, validated, tool_count, error, last_updated 字段。"""
-        from core.mcp_skill_reload import get_load_status, _set_status
+        from core.mcp_skill_reload import _set_status, get_load_status
 
         _set_status("mcp:test_srv", loaded=True, tool_count=3, validated=True, error="")
         _set_status("skill:test_skill", loaded=False, tool_count=0, validated=False, error="加载失败")
@@ -310,18 +318,14 @@ class TestReloadAll:
     @pytest.mark.asyncio
     async def test_reload_all_aggregates_errors(self):
         """total_errors 应等于验证失败的 MCP/Skill 数量。"""
-        from core.mcp_skill_reload import reload_all, _load_status
-
         # 手动预置状态
-        from core.mcp_skill_reload import _set_status
+        from core.mcp_skill_reload import _load_status, _set_status, reload_all
+
         _set_status("mcp:srv1", loaded=True, validated=False, error="bad schema")
         _set_status("mcp:srv2", loaded=True, validated=True)
 
         # 直接验证 _load_status 计数逻辑
-        failures = sum(
-            1 for k, v in _load_status.items()
-            if k.startswith("mcp:") and not v.get("validated", False)
-        )
+        failures = sum(1 for k, v in _load_status.items() if k.startswith("mcp:") and not v.get("validated", False))
         assert failures >= 1  # srv1 未验证通过
 
 
@@ -335,8 +339,8 @@ class TestDeviceRegistrationCapabilitySync:
 
     def test_sync_device_registers_capabilities_to_registry(self):
         """_sync_device_to_capability_registry 应为每个能力创建 gateway 条目。"""
-        from core.routes.devices import _sync_device_to_capability_registry
         from core.agent.capability_registry import CapabilityRegistry, get_capability_registry
+        from core.routes.devices import _sync_device_to_capability_registry
 
         # 重置注册表
         reg = get_capability_registry()
@@ -382,8 +386,8 @@ class TestDeviceRegistrationCapabilitySync:
 
     def test_sync_device_capability_metadata(self):
         """同步的能力条目应包含 device_name 和 device_type 元数据。"""
-        from core.routes.devices import _sync_device_to_capability_registry
         from core.agent.capability_registry import get_capability_registry
+        from core.routes.devices import _sync_device_to_capability_registry
 
         reg = get_capability_registry()
         device_info = {
@@ -404,9 +408,8 @@ class TestDeviceRegistrationCapabilitySync:
 
     def test_openclawd_sync_device_capabilities_uses_capability_registry(self):
         """OpenClawd.sync_device_capabilities 应将设备能力注册到 CapabilityRegistry。"""
+        from core.agent.capability_registry import CapabilityItem, get_capability_registry
         from core.openclawd import OpenClawd
-        from core.agent.capability_registry import get_capability_registry
-        from core.agent.capability_registry import CapabilityItem
 
         # 构造包含 capabilities 列表的设备 mock
         mock_device = MagicMock()
@@ -425,8 +428,8 @@ class TestDeviceRegistrationCapabilitySync:
 
     def test_new_device_immediately_callable_after_registration(self):
         """注册设备后其能力应立即可通过 CapabilityRegistry.get() 获取。"""
-        from core.routes.devices import _sync_device_to_capability_registry
         from core.agent.capability_registry import get_capability_registry
+        from core.routes.devices import _sync_device_to_capability_registry
 
         reg = get_capability_registry()
 
@@ -464,18 +467,20 @@ class TestCapabilityRegistryMandatoryUsage:
     @pytest.mark.asyncio
     async def test_execution_planner_injects_tool_schema_into_context(self):
         """ExecutionPlanner 应在执行前将工具 schema 注入到 plan.context。"""
-        from core.agent.execution_planner import ExecutionPlanner, ExecutionPlan
+        from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
+        from core.agent.execution_planner import ExecutionPlan, ExecutionPlanner
         from core.agent.intent_router import IntentResult
-        from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
 
         # 预注册一个测试能力
         reg = CapabilityRegistry.get_instance()
-        reg.register(CapabilityItem(
-            name="test__capability_planner_check",
-            description="规划器能力注入测试工具",
-            source="mcp",
-            source_id="test_server",
-        ))
+        reg.register(
+            CapabilityItem(
+                name="test__capability_planner_check",
+                description="规划器能力注入测试工具",
+                source="mcp",
+                source_id="test_server",
+            )
+        )
 
         plan = ExecutionPlan(
             message="测试任务",
@@ -488,17 +493,22 @@ class TestCapabilityRegistryMandatoryUsage:
             refresh_called.append(True)
 
         with patch.object(reg, "refresh", side_effect=_mock_refresh):
-            with patch.object(reg, "list_tools", return_value=[
-                CapabilityItem(
-                    name="tool_x",
-                    description="测试工具",
-                    source="mcp",
-                    source_id="srv",
-                )
-            ]):
+            with patch.object(
+                reg,
+                "list_tools",
+                return_value=[
+                    CapabilityItem(
+                        name="tool_x",
+                        description="测试工具",
+                        source="mcp",
+                        source_id="srv",
+                    )
+                ],
+            ):
                 # 让 _dispatch 不真正执行，只测试前置逻辑
                 async def _mock_dispatch(p, s, steps, tc):
                     from core.agent.execution_planner import ExecutionResult
+
                     return ExecutionResult(success=True, reply="mock", mode=s)
 
                 planner = ExecutionPlanner()
@@ -509,10 +519,7 @@ class TestCapabilityRegistryMandatoryUsage:
         assert refresh_called, "ExecutionPlanner 必须调用 CapabilityRegistry.refresh()"
 
         # plan.context 必须包含工具提示
-        capability_hints = [
-            c for c in plan.context
-            if "[CapabilityRegistry]" in c.get("content", "")
-        ]
+        capability_hints = [c for c in plan.context if "[CapabilityRegistry]" in c.get("content", "")]
         assert capability_hints, "ExecutionPlanner 必须将工具提示注入到 plan.context"
 
         # 清理
@@ -521,9 +528,9 @@ class TestCapabilityRegistryMandatoryUsage:
     @pytest.mark.asyncio
     async def test_execution_planner_capability_hint_not_duplicated(self):
         """同一 plan 被多次处理时，能力提示不应重复注入。"""
-        from core.agent.execution_planner import ExecutionPlanner, ExecutionPlan
+        from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
+        from core.agent.execution_planner import ExecutionPlan, ExecutionPlanner
         from core.agent.intent_router import IntentResult
-        from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
 
         reg = CapabilityRegistry.get_instance()
 
@@ -535,15 +542,20 @@ class TestCapabilityRegistryMandatoryUsage:
 
         async def _mock_dispatch(p, s, steps, tc):
             from core.agent.execution_planner import ExecutionResult
+
             return ExecutionResult(success=True, reply="ok", mode=s)
 
         async def _mock_refresh(force=False):
             pass
 
         with patch.object(reg, "refresh", side_effect=_mock_refresh):
-            with patch.object(reg, "list_tools", return_value=[
-                CapabilityItem(name="existing_tool", description="已有工具", source="mcp", source_id="s")
-            ]):
+            with patch.object(
+                reg,
+                "list_tools",
+                return_value=[
+                    CapabilityItem(name="existing_tool", description="已有工具", source="mcp", source_id="s")
+                ],
+            ):
                 planner = ExecutionPlanner()
                 with patch.object(planner, "_dispatch", side_effect=_mock_dispatch):
                     await planner.execute(plan)
@@ -562,35 +574,33 @@ class TestCapabilityRegistryMandatoryUsage:
         src = Path("core/agent/execution_planner.py").read_text(encoding="utf-8")
 
         # 必须引用 CapabilityRegistry
-        assert "capability_registry" in src, (
-            "ExecutionPlanner 必须导入/使用 capability_registry 模块"
-        )
-        assert "get_capability_registry" in src or "CapabilityRegistry" in src, (
-            "ExecutionPlanner 必须调用 CapabilityRegistry API"
-        )
+        assert "capability_registry" in src, "ExecutionPlanner 必须导入/使用 capability_registry 模块"
+        assert (
+            "get_capability_registry" in src or "CapabilityRegistry" in src
+        ), "ExecutionPlanner 必须调用 CapabilityRegistry API"
 
         # 必须有 refresh() 调用（强制刷新能力列表）
-        assert "registry.refresh" in src or "reg.refresh" in src, (
-            "ExecutionPlanner 必须在执行前调用 CapabilityRegistry.refresh()"
-        )
+        assert (
+            "registry.refresh" in src or "reg.refresh" in src
+        ), "ExecutionPlanner 必须在执行前调用 CapabilityRegistry.refresh()"
 
         # 必须有 list_tools() 调用（获取工具列表）
-        assert "list_tools" in src, (
-            "ExecutionPlanner 必须通过 CapabilityRegistry.list_tools() 获取工具列表"
-        )
+        assert "list_tools" in src, "ExecutionPlanner 必须通过 CapabilityRegistry.list_tools() 获取工具列表"
 
     def test_capability_registry_to_tool_schemas_format(self):
         """to_tool_schemas 输出必须符合 OpenAI function calling 格式。"""
-        from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
+        from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
 
         reg = CapabilityRegistry.get_instance()
-        reg.register(CapabilityItem(
-            name="schema_format_test",
-            description="格式测试工具",
-            source="mcp",
-            source_id="test",
-            parameters={"type": "object", "properties": {"q": {"type": "string"}}},
-        ))
+        reg.register(
+            CapabilityItem(
+                name="schema_format_test",
+                description="格式测试工具",
+                source="mcp",
+                source_id="test",
+                parameters={"type": "object", "properties": {"q": {"type": "string"}}},
+            )
+        )
 
         schemas = reg.to_tool_schemas()
         test_schema = next((s for s in schemas if s["function"]["name"] == "schema_format_test"), None)
@@ -615,51 +625,45 @@ class TestProtocolRouteEndpoints:
     def test_reload_mcp_endpoint_defined(self):
         """protocols.py 应包含 MCP 热重载端点定义。"""
         from pathlib import Path
+
         src = Path("core/routes/protocols.py").read_text(encoding="utf-8")
         assert "/reload" in src, "protocols.py 应包含 /reload 端点"
-        assert "reload_mcp" in src or "reload_mcp_server" in src, (
-            "protocols.py 应定义 MCP 热重载端点"
-        )
+        assert "reload_mcp" in src or "reload_mcp_server" in src, "protocols.py 应定义 MCP 热重载端点"
 
     def test_reload_skill_endpoint_defined(self):
         """protocols.py 应包含 Skill 热重载端点定义。"""
         from pathlib import Path
+
         src = Path("core/routes/protocols.py").read_text(encoding="utf-8")
-        assert "reload_skill" in src or "reload_skill_handler" in src, (
-            "protocols.py 应定义 Skill 热重载端点"
-        )
+        assert "reload_skill" in src or "reload_skill_handler" in src, "protocols.py 应定义 Skill 热重载端点"
 
     def test_reload_all_endpoint_defined(self):
         """protocols.py 应包含 reload-all 端点定义。"""
         from pathlib import Path
+
         src = Path("core/routes/protocols.py").read_text(encoding="utf-8")
-        assert "reload-all" in src or "reload_all" in src, (
-            "protocols.py 应定义 reload-all 端点"
-        )
+        assert "reload-all" in src or "reload_all" in src, "protocols.py 应定义 reload-all 端点"
 
     def test_load_status_endpoint_defined(self):
         """protocols.py 应包含 load-status 端点定义。"""
         from pathlib import Path
+
         src = Path("core/routes/protocols.py").read_text(encoding="utf-8")
-        assert "load-status" in src or "load_status" in src, (
-            "protocols.py 应定义 load-status 端点"
-        )
+        assert "load-status" in src or "load_status" in src, "protocols.py 应定义 load-status 端点"
 
     def test_device_sync_helper_in_devices_route(self):
         """core/routes/devices.py 应包含 CapabilityRegistry 同步辅助函数。"""
         from pathlib import Path
+
         src = Path("core/routes/devices.py").read_text(encoding="utf-8")
-        assert "_sync_device_to_capability_registry" in src, (
-            "devices.py 应实现 _sync_device_to_capability_registry"
-        )
-        assert "CapabilityRegistry" in src, (
-            "devices.py 应引用 CapabilityRegistry"
-        )
+        assert "_sync_device_to_capability_registry" in src, "devices.py 应实现 _sync_device_to_capability_registry"
+        assert "CapabilityRegistry" in src, "devices.py 应引用 CapabilityRegistry"
 
     def test_device_registration_calls_sync(self):
         """devices.py 的 register_device 端点应调用能力同步函数。"""
         from pathlib import Path
+
         src = Path("core/routes/devices.py").read_text(encoding="utf-8")
-        assert "_sync_device_to_capability_registry" in src, (
-            "devices.py 的注册端点应调用 _sync_device_to_capability_registry"
-        )
+        assert (
+            "_sync_device_to_capability_registry" in src
+        ), "devices.py 的注册端点应调用 _sync_device_to_capability_registry"

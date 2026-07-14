@@ -204,8 +204,7 @@ HYBRID_TRANSPORT_HANDLES_ARE_EPHEMERAL_POLICY: str = (
 )
 
 HYBRID_ORCHESTRATION_CONTINUITY_PR59_SENTINEL: str = (
-    "HYBRID_ORCHESTRATION_CONTINUITY_PR59::"
-    "hybrid-orchestration-lifecycle-durability-recovery-closure-pr59-v1"
+    "HYBRID_ORCHESTRATION_CONTINUITY_PR59::" "hybrid-orchestration-lifecycle-durability-recovery-closure-pr59-v1"
 )
 
 # ---------------------------------------------------------------------------
@@ -241,8 +240,7 @@ HYBRID_CONTINUITY_PERSISTENCE_IS_DURABLE_POLICY: str = (
 )
 
 HYBRID_CONTINUITY_PR6_SENTINEL: str = (
-    "HYBRID_CONTINUITY_PR6::"
-    "hybrid-execution-continuity-interruption-restart-partial-result-closure-pr6-v1"
+    "HYBRID_CONTINUITY_PR6::" "hybrid-execution-continuity-interruption-restart-partial-result-closure-pr6-v1"
 )
 
 
@@ -467,9 +465,7 @@ class HybridOrchestrationRecord:
     session_id: str = ""
     task_id: str = ""
     mode: str = "sequential_degrade"
-    lifecycle_state: HybridOrchestrationLifecycleState = field(
-        default=HybridOrchestrationLifecycleState.created
-    )
+    lifecycle_state: HybridOrchestrationLifecycleState = field(default=HybridOrchestrationLifecycleState.created)
     started_at: Optional[float] = None
     updated_at: float = field(default_factory=time.time)
     completed_at: Optional[float] = None
@@ -521,8 +517,7 @@ class HybridOrchestrationRecord:
 
         if not _is_valid_transition(self.lifecycle_state, target_state):
             logger.warning(
-                "HybridOrchestrationRecord: invalid transition %s→%s for "
-                "execution_id=%s",
+                "HybridOrchestrationRecord: invalid transition %s→%s for " "execution_id=%s",
                 self.lifecycle_state.value,
                 target_state.value,
                 self.execution_id,
@@ -583,8 +578,7 @@ class HybridOrchestrationRecord:
         """
         if self.lifecycle_state.is_terminal:
             logger.debug(
-                "HybridOrchestrationRecord: set_partial_result ignored for "
-                "terminal execution_id=%s",
+                "HybridOrchestrationRecord: set_partial_result ignored for " "terminal execution_id=%s",
                 self.execution_id,
             )
             return
@@ -620,10 +614,7 @@ class HybridOrchestrationRecord:
         Raises ``ValueError`` if *data* is not a dict.
         """
         if not isinstance(data, dict):
-            raise ValueError(
-                f"HybridOrchestrationRecord.from_dict expects a dict, "
-                f"got {type(data).__name__!r}"
-            )
+            raise ValueError(f"HybridOrchestrationRecord.from_dict expects a dict, " f"got {type(data).__name__!r}")
         raw_state = data.get("lifecycle_state", "created")
         try:
             state = HybridOrchestrationLifecycleState(raw_state)
@@ -686,8 +677,7 @@ class HybridOrchestrationContinuityRegistry:
         """
         self._records[record.execution_id] = record
         logger.debug(
-            "HybridOrchestrationContinuityRegistry: registered execution_id=%s "
-            "state=%s",
+            "HybridOrchestrationContinuityRegistry: registered execution_id=%s " "state=%s",
             record.execution_id,
             record.lifecycle_state.value,
         )
@@ -757,8 +747,7 @@ class HybridOrchestrationContinuityRegistry:
         record = self._records.get(execution_id)
         if record is None:
             logger.warning(
-                "HybridOrchestrationContinuityRegistry: transition requested "
-                "for unknown execution_id=%s",
+                "HybridOrchestrationContinuityRegistry: transition requested " "for unknown execution_id=%s",
                 execution_id,
             )
             return False
@@ -786,18 +775,13 @@ class HybridOrchestrationContinuityRegistry:
 
     def list_interrupted(self) -> List[HybridOrchestrationRecord]:
         """Return all records in the ``interrupted`` state."""
-        return [
-            r for r in self._records.values()
-            if r.lifecycle_state == HybridOrchestrationLifecycleState.interrupted
-        ]
+        return [r for r in self._records.values() if r.lifecycle_state == HybridOrchestrationLifecycleState.interrupted]
 
     # ------------------------------------------------------------------
     # Recovery operations
     # ------------------------------------------------------------------
 
-    def mark_all_running_as_interrupted(
-        self, reason: str = "process_restart"
-    ) -> int:
+    def mark_all_running_as_interrupted(self, reason: str = "process_restart") -> int:
         """Mark all non-terminal, non-interrupted records as ``interrupted``.
 
         Called by the restart/recovery coordinator at process startup to
@@ -843,8 +827,7 @@ class HybridOrchestrationContinuityRegistry:
                     count += 1
 
         logger.info(
-            "HybridOrchestrationContinuityRegistry: marked %d executions as "
-            "interrupted/cancelled (reason=%r)",
+            "HybridOrchestrationContinuityRegistry: marked %d executions as " "interrupted/cancelled (reason=%r)",
             count,
             reason,
         )
@@ -858,9 +841,7 @@ class HybridOrchestrationContinuityRegistry:
         int
             Number of records removed.
         """
-        terminal_ids = [
-            eid for eid, r in self._records.items() if r.is_terminal
-        ]
+        terminal_ids = [eid for eid, r in self._records.items() if r.is_terminal]
         for eid in terminal_ids:
             del self._records[eid]
         logger.debug(
@@ -903,16 +884,12 @@ class HybridOrchestrationContinuityRegistry:
             if (
                 record.partial_result_snapshot is not None
                 and record.partial_result_origin == "remote"
-                and record.partial_result_disposition
-                != HybridPartialResultDisposition.invalidated.value
+                and record.partial_result_disposition != HybridPartialResultDisposition.invalidated.value
             ):
-                record.partial_result_disposition = (
-                    HybridPartialResultDisposition.invalidated.value
-                )
+                record.partial_result_disposition = HybridPartialResultDisposition.invalidated.value
                 count += 1
         logger.info(
-            "HybridOrchestrationContinuityRegistry: invalidated %d remote "
-            "partial results",
+            "HybridOrchestrationContinuityRegistry: invalidated %d remote " "partial results",
             count,
         )
         return count
@@ -955,8 +932,7 @@ class HybridOrchestrationContinuityRegistry:
             self._records[record.execution_id] = record
             count += 1
         logger.info(
-            "HybridOrchestrationContinuityRegistry: restored %d records "
-            "from persistence store (skip_terminal=%s)",
+            "HybridOrchestrationContinuityRegistry: restored %d records " "from persistence store (skip_terminal=%s)",
             count,
             skip_terminal,
         )
@@ -1051,9 +1027,7 @@ class HybridContinuityPersistenceStore:
             ``True`` on success; ``False`` if the write failed.
         """
         if not record.execution_id:
-            logger.warning(
-                "HybridContinuityPersistenceStore: save skipped — empty execution_id"
-            )
+            logger.warning("HybridContinuityPersistenceStore: save skipped — empty execution_id")
             return False
         try:
             data = record.to_dict()
@@ -1064,16 +1038,14 @@ class HybridContinuityPersistenceStore:
                     json.dump(data, fh, indent=2, default=str)
                 os.replace(tmp_path, path)
             logger.debug(
-                "HybridContinuityPersistenceStore: saved execution_id=%s "
-                "state=%s",
+                "HybridContinuityPersistenceStore: saved execution_id=%s " "state=%s",
                 record.execution_id,
                 record.lifecycle_state.value,
             )
             return True
         except Exception as exc:
             logger.warning(
-                "HybridContinuityPersistenceStore: save failed "
-                "execution_id=%s: %s",
+                "HybridContinuityPersistenceStore: save failed " "execution_id=%s: %s",
                 record.execution_id,
                 exc,
             )
@@ -1098,8 +1070,7 @@ class HybridContinuityPersistenceStore:
                 return HybridOrchestrationRecord.from_dict(data)
             except Exception as exc:
                 logger.warning(
-                    "HybridContinuityPersistenceStore: load failed "
-                    "execution_id=%s: %s",
+                    "HybridContinuityPersistenceStore: load failed " "execution_id=%s: %s",
                     execution_id,
                     exc,
                 )
@@ -1129,8 +1100,7 @@ class HybridContinuityPersistenceStore:
                         records.append(HybridOrchestrationRecord.from_dict(data))
                     except Exception as exc:
                         logger.warning(
-                            "HybridContinuityPersistenceStore: skipping "
-                            "corrupt file %s: %s",
+                            "HybridContinuityPersistenceStore: skipping " "corrupt file %s: %s",
                             fname,
                             exc,
                         )
@@ -1159,8 +1129,7 @@ class HybridContinuityPersistenceStore:
                 return True
             except OSError as exc:
                 logger.warning(
-                    "HybridContinuityPersistenceStore: delete failed "
-                    "execution_id=%s: %s",
+                    "HybridContinuityPersistenceStore: delete failed " "execution_id=%s: %s",
                     execution_id,
                     exc,
                 )
@@ -1175,8 +1144,7 @@ class HybridContinuityPersistenceStore:
             os.makedirs(self._store_dir, exist_ok=True)
         except OSError as exc:
             logger.warning(
-                "HybridContinuityPersistenceStore: could not create "
-                "store_dir=%s: %s",
+                "HybridContinuityPersistenceStore: could not create " "store_dir=%s: %s",
                 self._store_dir,
                 exc,
             )
@@ -1200,9 +1168,7 @@ def get_hybrid_persistence_store(
     global _persistence_store_instance
     with _persistence_store_lock:
         if _persistence_store_instance is None:
-            _persistence_store_instance = HybridContinuityPersistenceStore(
-                store_dir=store_dir
-            )
+            _persistence_store_instance = HybridContinuityPersistenceStore(store_dir=store_dir)
     return _persistence_store_instance
 
 
@@ -1310,8 +1276,7 @@ def recover_hybrid_executions(
                 effective_store.save(record)
             except Exception as exc:
                 logger.warning(
-                    "recover_hybrid_executions: failed to persist restart-normalized "
-                    "record execution_id=%s: %s",
+                    "recover_hybrid_executions: failed to persist restart-normalized " "record execution_id=%s: %s",
                     record.execution_id,
                     exc,
                 )

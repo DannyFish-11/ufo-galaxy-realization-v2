@@ -47,6 +47,7 @@ def get_system_metrics() -> Dict[str, Any]:
     # 直接采集分支，而不是现算一次昂贵的完整负载。
     try:
         from core.system_load_monitor import get_monitor
+
         monitor = get_monitor()
         load = monitor.get_cached_load()
         if load is None:
@@ -76,6 +77,7 @@ def get_system_metrics() -> Dict[str, Any]:
     # 回退: 直接采集
     try:
         import psutil
+
         mem = psutil.virtual_memory()
         metrics["memory"] = {
             "total_mb": round(mem.total / 1024 / 1024, 1),
@@ -158,10 +160,7 @@ class HealthChecker:
         # 检查核心服务
         if self.service_manager:
             services = self.service_manager.get_status()
-            core_running = sum(
-                1 for s in services.values()
-                if s.get("status") == "running" and s.get("type") == "core"
-            )
+            core_running = sum(1 for s in services.values() if s.get("status") == "running" and s.get("type") == "core")
             checks["core_services"] = {
                 "ready": core_running > 0,
                 "running": core_running,
@@ -172,12 +171,14 @@ class HealthChecker:
 
         # 检查 LLM API 可用性
         if self.config:
-            has_api = any([
-                os.environ.get("OPENAI_API_KEY"),
-                os.environ.get("GEMINI_API_KEY"),
-                os.environ.get("OPENROUTER_API_KEY"),
-                os.environ.get("XAI_API_KEY"),
-            ])
+            has_api = any(
+                [
+                    os.environ.get("OPENAI_API_KEY"),
+                    os.environ.get("GEMINI_API_KEY"),
+                    os.environ.get("OPENROUTER_API_KEY"),
+                    os.environ.get("XAI_API_KEY"),
+                ]
+            )
             checks["llm_api"] = {"available": has_api}
 
         # 运行自定义检查

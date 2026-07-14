@@ -44,6 +44,7 @@ Usage::
     snap = policy.snapshot(registry)
     import json; json.dumps(snap.to_dict())  # safe — no binary payloads
 """
+
 from __future__ import annotations
 
 import logging
@@ -282,12 +283,8 @@ class SourceRecoverySnapshot:
         return {
             "snapshot_id": self.snapshot_id,
             "snapshot_at": self.snapshot_at,
-            "recent_recovery_events": [
-                e.to_dict() for e in self.recent_recovery_events
-            ],
-            "recent_switch_events": [
-                e.to_dict() for e in self.recent_switch_events
-            ],
+            "recent_recovery_events": [e.to_dict() for e in self.recent_recovery_events],
+            "recent_switch_events": [e.to_dict() for e in self.recent_switch_events],
             "current_primary_audio_id": self.current_primary_audio_id,
             "current_primary_video_id": self.current_primary_video_id,
             "recoverable_source_count": self.recoverable_source_count,
@@ -302,14 +299,8 @@ class SourceRecoverySnapshot:
         return cls(
             snapshot_id=data.get("snapshot_id", str(uuid.uuid4())),
             snapshot_at=data.get("snapshot_at", time.time()),
-            recent_recovery_events=[
-                SourceRecoveryEvent.from_dict(e)
-                for e in data.get("recent_recovery_events", [])
-            ],
-            recent_switch_events=[
-                PrimarySourceSwitchEvent.from_dict(e)
-                for e in data.get("recent_switch_events", [])
-            ],
+            recent_recovery_events=[SourceRecoveryEvent.from_dict(e) for e in data.get("recent_recovery_events", [])],
+            recent_switch_events=[PrimarySourceSwitchEvent.from_dict(e) for e in data.get("recent_switch_events", [])],
             current_primary_audio_id=data.get("current_primary_audio_id"),
             current_primary_video_id=data.get("current_primary_video_id"),
             recoverable_source_count=data.get("recoverable_source_count", 0),
@@ -401,11 +392,7 @@ class SourceRecoveryPolicy:
             return SourceFreshness.FRESH
         if record.last_seen_at is None:
             return SourceFreshness.UNKNOWN
-        threshold = (
-            stale_threshold_s
-            if stale_threshold_s is not None
-            else self.stale_threshold_s
-        )
+        threshold = stale_threshold_s if stale_threshold_s is not None else self.stale_threshold_s
         age = time.time() - record.last_seen_at
         return SourceFreshness.STALE if age > threshold else SourceFreshness.FRESH
 
@@ -505,11 +492,7 @@ class SourceRecoveryPolicy:
         """
         from core.multimodal.perception_source_registry import SourceHealthStatus
 
-        threshold = (
-            stale_threshold_s
-            if stale_threshold_s is not None
-            else self.stale_threshold_s
-        )
+        threshold = stale_threshold_s if stale_threshold_s is not None else self.stale_threshold_s
         now = time.time()
         evicted: List[str] = []
 
@@ -570,9 +553,7 @@ class SourceRecoveryPolicy:
             SourceHealthStatus.UNAVAILABLE: 3,
         }
 
-        eligible = [
-            c for c in candidates if c.health != SourceHealthStatus.UNAVAILABLE
-        ]
+        eligible = [c for c in candidates if c.health != SourceHealthStatus.UNAVAILABLE]
         if not eligible:
             return None
 
@@ -626,8 +607,7 @@ class SourceRecoveryPolicy:
                 )
             )
             logger.debug(
-                "SourceRecoveryPolicy: re-elected primary audio source_id=%s "
-                "(was %s) reason=%s",
+                "SourceRecoveryPolicy: re-elected primary audio source_id=%s " "(was %s) reason=%s",
                 best.source_id,
                 prev_primary_id,
                 reason.value,
@@ -676,8 +656,7 @@ class SourceRecoveryPolicy:
                 )
             )
             logger.debug(
-                "SourceRecoveryPolicy: re-elected primary video source_id=%s "
-                "(was %s) reason=%s",
+                "SourceRecoveryPolicy: re-elected primary video source_id=%s " "(was %s) reason=%s",
                 best.source_id,
                 prev_primary_id,
                 reason.value,
@@ -726,8 +705,7 @@ class SourceRecoveryPolicy:
         primary_audio = registry.primary_audio()
         if primary_audio is not None:
             is_unhealthy = (
-                primary_audio.health
-                in (SourceHealthStatus.UNAVAILABLE, SourceHealthStatus.DEGRADED)
+                primary_audio.health in (SourceHealthStatus.UNAVAILABLE, SourceHealthStatus.DEGRADED)
                 or not primary_audio.is_active
             )
             if is_unhealthy:
@@ -746,8 +724,7 @@ class SourceRecoveryPolicy:
                         )
                     )
                     logger.debug(
-                        "SourceRecoveryPolicy: flap smoothing primary audio "
-                        "source_id=%s (flap_count=%d)",
+                        "SourceRecoveryPolicy: flap smoothing primary audio " "source_id=%s (flap_count=%d)",
                         primary_audio.source_id,
                         flap_count,
                     )
@@ -762,17 +739,14 @@ class SourceRecoveryPolicy:
         elif registry.primary_audio_id is None:
             # No primary — fill vacancy if any audio candidate exists
             if registry.sources_by_modality(SourceModality.AUDIO):
-                new_id = self.reelect_primary_audio(
-                    registry, PrimarySourceSwitchReason.NO_PRIMARY
-                )
+                new_id = self.reelect_primary_audio(registry, PrimarySourceSwitchReason.NO_PRIMARY)
                 audio_reelected = new_id is not None
 
         # ---- check primary video ----
         primary_video = registry.primary_video()
         if primary_video is not None:
             is_unhealthy = (
-                primary_video.health
-                in (SourceHealthStatus.UNAVAILABLE, SourceHealthStatus.DEGRADED)
+                primary_video.health in (SourceHealthStatus.UNAVAILABLE, SourceHealthStatus.DEGRADED)
                 or not primary_video.is_active
             )
             if is_unhealthy:
@@ -790,8 +764,7 @@ class SourceRecoveryPolicy:
                         )
                     )
                     logger.debug(
-                        "SourceRecoveryPolicy: flap smoothing primary video "
-                        "source_id=%s (flap_count=%d)",
+                        "SourceRecoveryPolicy: flap smoothing primary video " "source_id=%s (flap_count=%d)",
                         primary_video.source_id,
                         flap_count,
                     )
@@ -806,9 +779,7 @@ class SourceRecoveryPolicy:
         elif registry.primary_video_id is None:
             # No primary — fill vacancy if any video candidate exists
             if registry.sources_by_modality(SourceModality.VIDEO):
-                new_id = self.reelect_primary_video(
-                    registry, PrimarySourceSwitchReason.NO_PRIMARY
-                )
+                new_id = self.reelect_primary_video(registry, PrimarySourceSwitchReason.NO_PRIMARY)
                 video_reelected = new_id is not None
 
         return {

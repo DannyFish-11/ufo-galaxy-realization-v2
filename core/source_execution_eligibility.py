@@ -375,9 +375,7 @@ def check_source_eligibility_with_coordination_role(
     posture = resolve_posture_for_eligibility(posture_hint)
 
     # Normalise the coordination_role string so we do a clean comparison.
-    role: Optional[str] = (
-        str(coordination_role).strip().lower() if coordination_role else None
-    )
+    role: Optional[str] = str(coordination_role).strip().lower() if coordination_role else None
 
     # Rule 1: observer_only → always ineligible.
     if role == _ROLE_OBSERVER_ONLY:
@@ -411,10 +409,7 @@ def check_source_eligibility_with_coordination_role(
         return SourceExecutionEligibility(
             eligible=base.eligible,
             posture=base.posture,
-            reason=(
-                f"coordination_role=source_controller: eligibility deferred "
-                f"to posture.  {base.reason}"
-            ),
+            reason=(f"coordination_role=source_controller: eligibility deferred " f"to posture.  {base.reason}"),
         )
 
     # Rule 4: target_only_executor → eligible (pure execution device).

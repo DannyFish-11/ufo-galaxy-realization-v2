@@ -26,9 +26,7 @@ from core.realtime_streaming_backbone import build_realtime_streaming_backbone_c
 MULTIMODAL_RUNTIME_PROFILE_IS_AUTHORITY = (
     "MULTIMODAL_RUNTIME_PROFILE::CONFIG_LAYERING_CLASSIFICATION_IS_AUTHORITY_PR10_V1"
 )
-MULTIMODAL_RUNTIME_PROFILE_PR10_SENTINEL = (
-    "MULTIMODAL_RUNTIME_PROFILE::SAFE_DEFAULT_FULL_DEPLOYMENT_DEBUG_ENHANCED_V1"
-)
+MULTIMODAL_RUNTIME_PROFILE_PR10_SENTINEL = "MULTIMODAL_RUNTIME_PROFILE::SAFE_DEFAULT_FULL_DEPLOYMENT_DEBUG_ENHANCED_V1"
 _STREAMING_BACKBONE_CONTRACT: Optional[Dict[str, Any]] = None
 
 
@@ -61,9 +59,7 @@ class MultimodalRuntimeProfileSnapshot:
 
     def to_dict(self) -> Dict[str, Any]:
         switch_policy = _get_streaming_backbone_contract().get("switch_and_degradation_policy", {})
-        streaming_mainline_state = (
-            "enabled" if self.enable_webrtc_session_manager else "discrete_fallback"
-        )
+        streaming_mainline_state = "enabled" if self.enable_webrtc_session_manager else "discrete_fallback"
         return {
             "authority": MULTIMODAL_RUNTIME_PROFILE_IS_AUTHORITY,
             "pr_sentinel": MULTIMODAL_RUNTIME_PROFILE_PR10_SENTINEL,
@@ -79,9 +75,7 @@ class MultimodalRuntimeProfileSnapshot:
             "streaming_mainline_state": streaming_mainline_state,
             "streaming_switch_policy": switch_policy.get("switches", {}),
             "streaming_degradation_states": switch_policy.get("degradation_states", []),
-            "streaming_discrete_fallback_rule": switch_policy.get(
-                "discrete_fallback_rule", ""
-            ),
+            "streaming_discrete_fallback_rule": switch_policy.get("discrete_fallback_rule", ""),
             "rationale": self.rationale,
         }
 
@@ -139,9 +133,7 @@ def resolve_multimodal_runtime_profile(
     resolved_env: Mapping[str, str] = env if env is not None else os.environ
     resolved_config: Mapping[str, Any] = config if config is not None else _load_root_config_defaults()
 
-    explicit_profile = str(
-        resolved_env.get("GALAXY_MULTIMODAL_RUNTIME_PROFILE", "")
-    ).strip().lower() or None
+    explicit_profile = str(resolved_env.get("GALAXY_MULTIMODAL_RUNTIME_PROFILE", "")).strip().lower() or None
 
     enable_multimodal_ingest = _resolve_flag(
         resolved_config,

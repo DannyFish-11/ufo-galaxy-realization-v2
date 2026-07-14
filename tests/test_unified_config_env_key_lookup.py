@@ -82,8 +82,7 @@ def test_full_get_key_style_fallback_chain_resolves(tmp_path):
     if not val:
         val = cfg.get(f"api_keys.{key_name}", "")
     assert val == "sk-real-deepseek-key", (
-        "重启后 unified_config 必须能从 .env 取回已保存的 Key，"
-        "否则用户会误以为「保存失败」"
+        "重启后 unified_config 必须能从 .env 取回已保存的 Key，" "否则用户会误以为「保存失败」"
     )
 
 
@@ -96,9 +95,7 @@ def test_unrelated_placeholder_key_not_found(tmp_path):
 def test_multiple_provider_keys_all_resolve_after_flat_load(tmp_path):
     """不止 DeepSeek——OpenAI/Anthropic/Gemini 等所有走同一模式的 Key 都要修好。"""
     cfg = _make_cfg(
-        "OPENAI_API_KEY=sk-openai-x\n"
-        "ANTHROPIC_API_KEY=sk-ant-x\n"
-        "GEMINI_API_KEY=sk-gemini-x\n",
+        "OPENAI_API_KEY=sk-openai-x\n" "ANTHROPIC_API_KEY=sk-ant-x\n" "GEMINI_API_KEY=sk-gemini-x\n",
         tmp_path,
     )
     for key_name, expected in [

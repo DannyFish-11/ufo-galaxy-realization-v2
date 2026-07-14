@@ -232,6 +232,7 @@ class SchedulingTruthHarness:
             return self._task_graph_runtime
         try:
             from core.task_graph_runtime import get_task_graph_runtime
+
             self._task_graph_runtime = get_task_graph_runtime()
             return self._task_graph_runtime
         except Exception as exc:
@@ -245,6 +246,7 @@ class SchedulingTruthHarness:
             from core.capability_network_runtime_policy import (
                 get_capability_network_runtime_policy,
             )
+
             self._capability_policy = get_capability_network_runtime_policy()
             return self._capability_policy
         except Exception as exc:
@@ -258,6 +260,7 @@ class SchedulingTruthHarness:
             from core.canonical_capability_scheduling_basis import (
                 CanonicalCapabilitySchedulingBasis,
             )
+
             self._scheduling_basis = CanonicalCapabilitySchedulingBasis()
             return self._scheduling_basis
         except Exception as exc:
@@ -314,9 +317,7 @@ class SchedulingTruthHarness:
             try:
                 existing = tgr.get_task(task_id)
                 if existing is not None:
-                    logger.debug(
-                        "ensure_task_registered: task %s already registered", task_id
-                    )
+                    logger.debug("ensure_task_registered: task %s already registered", task_id)
                     return True
             except Exception as exc:
                 logger.warning("Exception suppressed: %s", exc)
@@ -445,9 +446,7 @@ class SchedulingTruthHarness:
                 notes.append(f"TaskGraphRuntime.get_task() error: {exc}")
 
         # 2. Check routable-executor query
-        routable_ids = self.query_routable_executors(
-            canonical_task, candidate_device_ids=candidate_device_ids
-        )
+        routable_ids = self.query_routable_executors(canonical_task, candidate_device_ids=candidate_device_ids)
         executors_consulted = self._get_capability_policy() is not None
         if not executors_consulted:
             notes.append("CapabilityNetworkRuntimePolicy unavailable — executor query skipped")
@@ -559,9 +558,7 @@ def query_routable_executors_for_task(
     List[str]
     """
     _harness = harness or get_scheduling_truth_harness()
-    return _harness.query_routable_executors(
-        canonical_task, candidate_device_ids=candidate_device_ids
-    )
+    return _harness.query_routable_executors(canonical_task, candidate_device_ids=candidate_device_ids)
 
 
 def assert_scheduling_truth_convergence(
@@ -586,6 +583,4 @@ def assert_scheduling_truth_convergence(
     ConvergenceAssertionResult
     """
     _harness = harness or get_scheduling_truth_harness()
-    return _harness.assert_convergence(
-        canonical_task, candidate_device_ids=candidate_device_ids
-    )
+    return _harness.assert_convergence(canonical_task, candidate_device_ids=candidate_device_ids)

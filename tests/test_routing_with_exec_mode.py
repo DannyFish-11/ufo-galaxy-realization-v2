@@ -18,9 +18,9 @@ from contextlib import contextmanager
 from typing import Any, Dict, List, Optional
 from unittest.mock import patch
 
+from core.device_types import DeviceType
 from galaxy_gateway.capability_registry import GatewayCapabilityRegistry
 from galaxy_gateway.device_router import Device, DeviceRouter
-from core.device_types import DeviceType
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Test helpers

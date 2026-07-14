@@ -25,9 +25,9 @@ import asyncio
 import logging
 import time
 import uuid
-from typing import TYPE_CHECKING, Dict, Any, Optional, Callable, Awaitable, List
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List, Optional
 
 if TYPE_CHECKING:
     from core.schemas.task_envelope import TaskEnvelope
@@ -56,14 +56,15 @@ class RelayStatus(str, Enum):
 @dataclass
 class RelayRequest:
     """设备间转发请求"""
+
     relay_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     source_device: str = ""
     target_device: str = ""
-    payload_type: str = ""       # task / command / agent_deploy / chat / custom
+    payload_type: str = ""  # task / command / agent_deploy / chat / custom
     payload: Dict[str, Any] = field(default_factory=dict)
     expect_reply: bool = False
     timeout_seconds: float = 30.0
-    priority: int = 5            # 1=highest, 10=lowest
+    priority: int = 5  # 1=highest, 10=lowest
     created_at: float = field(default_factory=time.time)
     chain: List[str] = field(default_factory=list)  # 链式转发目标
 
@@ -85,6 +86,7 @@ class RelayRequest:
 @dataclass
 class RelayResult:
     """转发结果"""
+
     relay_id: str
     status: RelayStatus
     source_device: str = ""
@@ -167,6 +169,7 @@ class ProxyRelay:
         if not request.expect_reply and not request.chain:
             try:
                 from core.mesh_coordinator import get_mesh_coordinator
+
                 mesh = get_mesh_coordinator()
                 if mesh.is_peer_direct(request.target_device):
                     result = await mesh.send(
@@ -278,7 +281,7 @@ class ProxyRelay:
         current_payload = request.payload
 
         for i, target in enumerate(chain):
-            is_last = (i == len(chain) - 1)
+            is_last = i == len(chain) - 1
             step_req = RelayRequest(
                 relay_id=f"{request.relay_id}_step{i}",
                 source_device=request.source_device if i == 0 else chain[i - 1],
@@ -310,9 +313,7 @@ class ProxyRelay:
             latency_ms=(time.time() - start) * 1000,
         )
 
-    async def relay_broadcast(
-        self, source_device: str, payload_type: str, payload: Dict
-    ) -> Dict[str, RelayResult]:
+    async def relay_broadcast(self, source_device: str, payload_type: str, payload: Dict) -> Dict[str, RelayResult]:
         """广播转发 — 从 source 发送到所有其他在线设备"""
         results = {}
         online = self._get_online() if self._get_online else []
@@ -330,11 +331,10 @@ class ProxyRelay:
 
         return results
 
-    async def relay_agent_manifest(
-        self, source_device: str, target_device: str, manifest_dict: Dict
-    ) -> RelayResult:
+    async def relay_agent_manifest(self, source_device: str, target_device: str, manifest_dict: Dict) -> RelayResult:
         """Agent Manifest 中继 — 从一台设备迁移 Agent 到另一台"""
         from core.agent_manifest import AgentManifest
+
         manifest = AgentManifest.from_dict(manifest_dict)
 
         req = RelayRequest(
@@ -363,9 +363,7 @@ class ProxyRelay:
         else:
             logger.warning(f"Relay reply for unknown/completed relay: {relay_id[:8]}")
 
-    async def handle_relay_request_from_device(
-        self, source_device: str, data: Dict
-    ) -> RelayResult:
+    async def handle_relay_request_from_device(self, source_device: str, data: Dict) -> RelayResult:
         """
         处理来自设备 A 的 relay_request WS 消息
 
@@ -450,8 +448,11 @@ class ProxyRelay:
         )
         logger.info(
             "ProxyRelay.relay_envelope | trace_id=%s task_id=%s %s → %s [%s]",
-            envelope.trace_id, envelope.task_id,
-            envelope.source, target, envelope.tool_name,
+            envelope.trace_id,
+            envelope.task_id,
+            envelope.source,
+            target,
+            envelope.tool_name,
         )
         return await self.relay(relay_req)
 

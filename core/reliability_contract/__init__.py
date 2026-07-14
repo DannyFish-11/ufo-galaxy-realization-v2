@@ -106,58 +106,58 @@ core/agent_governance/ — PR-18 agent governance (sibling package).
 
 from __future__ import annotations
 
+from .ack_policy import (
+    ACCEPTED_ACK_POLICY,
+    ACK_STAGE_DESCRIPTIONS,
+    COMPLETED_ACK_POLICY,
+    NO_ACK_POLICY,
+    AckPolicy,
+    AckStage,
+    ack_stage_description,
+)
 from .delivery_mode import (
-    DeliveryMode,
     DELIVERY_MODE_DESCRIPTIONS,
+    DeliveryMode,
     delivery_mode_description,
 )
-from .ack_policy import (
-    AckStage,
-    ACK_STAGE_DESCRIPTIONS,
-    ack_stage_description,
-    AckPolicy,
-    NO_ACK_POLICY,
-    ACCEPTED_ACK_POLICY,
-    COMPLETED_ACK_POLICY,
-)
-from .idempotency import (
-    DeduplicationKey,
-    NO_DEDUP_KEY,
-    TASK_ENVELOPE_DEDUP_KEY,
-    NATS_TASK_DEDUP_KEY,
-    HANDOFF_DEDUP_KEY,
-    COMMAND_ROUTER_DEDUP_KEY,
-    DEVICE_WEBSOCKET_DEDUP_KEY,
-    ANDROID_UPLINK_RESULT_DEDUP_KEY,
-    ANDROID_UPLINK_RECONCILIATION_DEDUP_KEY,
-    ANDROID_UPLINK_REPLAY_DEDUP_KEY,
-)
-from .retry_policy import (
-    RetryPolicy,
-    NO_RETRY_POLICY,
-    TRANSPORT_RETRY_POLICY,
-    RUNTIME_RETRY_POLICY,
-    COORDINATOR_RETRY_POLICY,
-)
-from .timeout_owner import (
-    TimeoutOwner,
-    TIMEOUT_OWNER_DESCRIPTIONS,
-    timeout_owner_description,
-)
 from .fallback_owner import (
-    FallbackOwner,
     FALLBACK_OWNER_DESCRIPTIONS,
+    FallbackOwner,
     fallback_owner_description,
 )
+from .idempotency import (
+    ANDROID_UPLINK_RECONCILIATION_DEDUP_KEY,
+    ANDROID_UPLINK_REPLAY_DEDUP_KEY,
+    ANDROID_UPLINK_RESULT_DEDUP_KEY,
+    COMMAND_ROUTER_DEDUP_KEY,
+    DEVICE_WEBSOCKET_DEDUP_KEY,
+    HANDOFF_DEDUP_KEY,
+    NATS_TASK_DEDUP_KEY,
+    NO_DEDUP_KEY,
+    TASK_ENVELOPE_DEDUP_KEY,
+    DeduplicationKey,
+)
 from .reliability_summary import (
-    ReliabilitySummary,
-    UNKNOWN_RELIABILITY_SUMMARY,
     RELIABILITY_PATH_REGISTRY,
+    UNKNOWN_RELIABILITY_SUMMARY,
+    ReliabilitySummary,
+    attach_reliability_to_projection,
     get_reliability_registry_snapshot,
     get_summary_for_path,
     list_known_paths,
-    attach_reliability_to_projection,
     make_reliability_summary,
+)
+from .retry_policy import (
+    COORDINATOR_RETRY_POLICY,
+    NO_RETRY_POLICY,
+    RUNTIME_RETRY_POLICY,
+    TRANSPORT_RETRY_POLICY,
+    RetryPolicy,
+)
+from .timeout_owner import (
+    TIMEOUT_OWNER_DESCRIPTIONS,
+    TimeoutOwner,
+    timeout_owner_description,
 )
 
 __all__ = [

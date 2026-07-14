@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-
 DOC_PATH = Path("audit/FORMAL_DUAL_REPO_COGNITIVE_BASELINE_CN_2026.md")
 
 

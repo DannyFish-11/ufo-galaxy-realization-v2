@@ -77,16 +77,16 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Optional
 
-from .formation_group import DeviceFormationGroup, EMPTY_FORMATION_GROUP
+from .formation_group import EMPTY_FORMATION_GROUP, DeviceFormationGroup
 from .formation_rebalance_engine import (
-    FormationHealthSignal,
     DeviceHealthMap,
+    FormationHealthSignal,
     apply_rebalance,
 )
 from .formation_runtime_coordinator import (
+    FormationParticipantState,
     FormationRuntimeCoordinator,
     FormationRuntimeDecision,
-    FormationParticipantState,
     RecoveryActionType,
 )
 
@@ -238,18 +238,12 @@ class FormationRebuildResult:
         result: Dict[str, Any] = {
             "original_formation_id": self.original_formation_id,
             "reshaped": self.reshaped,
-            "new_group": (
-                self.new_group.to_dict()
-                if hasattr(self.new_group, "to_dict")
-                else {}
-            ),
+            "new_group": (self.new_group.to_dict() if hasattr(self.new_group, "to_dict") else {}),
             "reason": self.reason,
         }
         if self.coordinator_decision is not None:
             result["coordinator_decision"] = (
-                self.coordinator_decision.to_dict()
-                if hasattr(self.coordinator_decision, "to_dict")
-                else {}
+                self.coordinator_decision.to_dict() if hasattr(self.coordinator_decision, "to_dict") else {}
             )
         return result
 
@@ -348,9 +342,7 @@ def trigger_rebalance_if_needed(
             reason_prefix="trigger_rebalance_if_needed",
         )
     except Exception as exc:  # pragma: no cover
-        logger.warning(
-            "trigger_rebalance_if_needed: error: %s", exc
-        )
+        logger.warning("trigger_rebalance_if_needed: error: %s", exc)
         return FormationRebuildResult(
             original_formation_id=getattr(group, "formation_id", ""),
             reshaped=False,
@@ -371,7 +363,7 @@ def _on_runtime_event_inner(
     health_map: DeviceHealthMap,
 ) -> FormationRebuildResult:
     """Route event to coordinator and apply rebalance when recommended."""
-    formation_id = getattr(group, "formation_id", "")
+    getattr(group, "formation_id", "")
     evt = event.event_type
 
     # Route to the appropriate coordinator trigger.
@@ -422,8 +414,7 @@ def _on_runtime_event_inner(
 
     else:
         logger.debug(
-            "on_runtime_event: unrecognised event type %r, "
-            "falling through to evaluate_continuation",
+            "on_runtime_event: unrecognised event type %r, " "falling through to evaluate_continuation",
             evt,
         )
         decision = coordinator.evaluate_continuation()
@@ -486,9 +477,7 @@ def _apply_decision(
             reason=reason,
         )
     except Exception as exc:  # pragma: no cover
-        logger.warning(
-            "formation_rebalance_trigger: rebalance engine error: %s", exc
-        )
+        logger.warning("formation_rebalance_trigger: rebalance engine error: %s", exc)
         return FormationRebuildResult(
             original_formation_id=formation_id,
             reshaped=False,

@@ -28,7 +28,6 @@ from check_repo_hygiene import (  # noqa: E402
     scan_repository,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -333,7 +332,6 @@ class TestActualRepository:
         if not nodes_dir.is_dir():
             pytest.skip("nodes/ directory not found")
         report = scan_repository(str(REPO_ROOT), subtree="nodes")
-        assert report.ok, (
-            f"nodes/ has hygiene violations — fix them before merging:\n"
-            + "\n".join(f"  {v.rel_path}  [{v.category}]  {v.reason}" for v in report.violations)
+        assert report.ok, f"nodes/ has hygiene violations — fix them before merging:\n" + "\n".join(
+            f"  {v.rel_path}  [{v.category}]  {v.reason}" for v in report.violations
         )

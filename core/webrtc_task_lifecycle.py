@@ -216,14 +216,14 @@ SESSION_BINDING_RECORD_IS_IMMUTABLE_POLICY: str = (
 )
 
 WEBRTC_TASK_LIFECYCLE_PR6_SENTINEL: str = (
-    "WEBRTC_TASK_LIFECYCLE_PR6::webrtc-task-lifecycle-integration-"
-    "center-side-canonical-pr6-v1"
+    "WEBRTC_TASK_LIFECYCLE_PR6::webrtc-task-lifecycle-integration-" "center-side-canonical-pr6-v1"
 )
 
 
 # ---------------------------------------------------------------------------
 # PR-AIPV3-WEBRTC: AIP v3 message emission for WebRTC control plane
 # ---------------------------------------------------------------------------
+
 
 def _emit_aip_v3_webrtc_bind(binding: "WebRTCTaskBinding") -> None:
     """Emit WEBRTC_BIND AIP v3 message when a session is bound to a task.
@@ -232,8 +232,9 @@ def _emit_aip_v3_webrtc_bind(binding: "WebRTCTaskBinding") -> None:
     """
     try:
         import asyncio
-        from core.schemas.aip_v3 import WebRTCBindMsg  # noqa: PLC0415
+
         from core.nats_bus import get_nats_bus  # noqa: PLC0415
+        from core.schemas.aip_v3 import WebRTCBindMsg  # noqa: PLC0415
 
         msg = WebRTCBindMsg(
             device_id=binding.device_id,
@@ -259,14 +260,19 @@ def _emit_aip_v3_webrtc_transport_state(
     """
     try:
         import asyncio
-        from core.schemas.aip_v3 import WebRTCTransportStateMsg  # noqa: PLC0415
+
         from core.nats_bus import get_nats_bus  # noqa: PLC0415
+        from core.schemas.aip_v3 import WebRTCTransportStateMsg  # noqa: PLC0415
 
         msg = WebRTCTransportStateMsg(
             device_id=binding.device_id,
             webrtc_session_id=binding.webrtc_session_id,
             transport_state=transport_state.value if hasattr(transport_state, "value") else str(transport_state),
-            previous_state=binding.transport_state.value if hasattr(binding.transport_state, "value") else str(binding.transport_state),
+            previous_state=(
+                binding.transport_state.value
+                if hasattr(binding.transport_state, "value")
+                else str(binding.transport_state)
+            ),
         )
         nats = get_nats_bus()
         if nats.is_connected():
@@ -284,8 +290,9 @@ def _emit_aip_v3_webrtc_unbind(binding: "WebRTCTaskBinding") -> None:
     """
     try:
         import asyncio
-        from core.schemas.aip_v3 import WebRTCUnbindMsg  # noqa: PLC0415
+
         from core.nats_bus import get_nats_bus  # noqa: PLC0415
+        from core.schemas.aip_v3 import WebRTCUnbindMsg  # noqa: PLC0415
 
         msg = WebRTCUnbindMsg(
             device_id=binding.device_id,
@@ -347,9 +354,7 @@ class WebRTCTransportState(str, Enum):
     unknown = "unknown"
 
     @classmethod
-    def from_string(
-        cls, value: str, default: "WebRTCTransportState" = None
-    ) -> "WebRTCTransportState":
+    def from_string(cls, value: str, default: "WebRTCTransportState" = None) -> "WebRTCTransportState":
         """Parse *value* into a :class:`WebRTCTransportState`.
 
         Returns *default* (or ``unknown``) for unrecognised values.
@@ -466,9 +471,11 @@ class WebRTCTaskBinding:
             "task_id": self.task_id,
             "webrtc_session_id": self.webrtc_session_id,
             "device_id": self.device_id,
-            "transport_state": self.transport_state.value
-            if isinstance(self.transport_state, WebRTCTransportState)
-            else str(self.transport_state),
+            "transport_state": (
+                self.transport_state.value
+                if isinstance(self.transport_state, WebRTCTransportState)
+                else str(self.transport_state)
+            ),
             "task_lifecycle": self.task_lifecycle,
             "is_torn_down": self.is_torn_down,
             "bound_at": self.bound_at,
@@ -488,13 +495,9 @@ class WebRTCTaskBinding:
         Raises ``ValueError`` if *data* is not a dict.
         """
         if not isinstance(data, dict):
-            raise ValueError(
-                f"WebRTCTaskBinding.from_dict expects a dict, got {type(data).__name__!r}"
-            )
+            raise ValueError(f"WebRTCTaskBinding.from_dict expects a dict, got {type(data).__name__!r}")
         transport_state_raw = data.get("transport_state", "unknown")
-        transport_state = WebRTCTransportState.from_string(
-            transport_state_raw, default=WebRTCTransportState.unknown
-        )
+        transport_state = WebRTCTransportState.from_string(transport_state_raw, default=WebRTCTransportState.unknown)
         return cls(
             binding_id=data.get("binding_id", f"wbind_{uuid.uuid4().hex[:16]}"),
             task_id=data.get("task_id", ""),
@@ -577,9 +580,11 @@ class WebRTCTaskSessionRegistry:
             "WebRTCTaskSessionRegistry.push | task_id=%s session_id=%s transport=%s",
             binding.task_id,
             binding.webrtc_session_id,
-            binding.transport_state.value
-            if isinstance(binding.transport_state, WebRTCTransportState)
-            else binding.transport_state,
+            (
+                binding.transport_state.value
+                if isinstance(binding.transport_state, WebRTCTransportState)
+                else binding.transport_state
+            ),
         )
 
     def replace_latest_for_task(self, binding: WebRTCTaskBinding) -> None:
@@ -880,20 +885,15 @@ def apply_transport_state_to_task_lifecycle(
                     )
             elif action == WebRTCTaskLifecycleAction.recover:
                 # Recover: attempt to advance back to RUNNING
-                updated_task = runtime.update_lifecycle(
-                    binding.task_id, TaskLifecycle.RUNNING
-                )
+                updated_task = runtime.update_lifecycle(binding.task_id, TaskLifecycle.RUNNING)
                 if updated_task is not None:
                     new_task_lifecycle = updated_task.lifecycle.value
                     logger.info(
-                        "WebRTC transport recovered, task resumed running | "
-                        "task_id=%s",
+                        "WebRTC transport recovered, task resumed running | " "task_id=%s",
                         binding.task_id,
                     )
         except Exception as exc:
-            logger.debug(
-                "WebRTC task lifecycle update skipped (runtime error): %s", exc
-            )
+            logger.debug("WebRTC task lifecycle update skipped (runtime error): %s", exc)
 
     # Build updated binding (immutable record pattern)
     updated_binding = _replace(
@@ -955,11 +955,7 @@ def teardown_binding_on_task_terminal(
         )
         return False
 
-    lc_str = (
-        lifecycle_state.value
-        if hasattr(lifecycle_state, "value")
-        else str(lifecycle_state)
-    )
+    lc_str = lifecycle_state.value if hasattr(lifecycle_state, "value") else str(lifecycle_state)
     torn_down_binding = _replace(
         binding,
         is_torn_down=True,
@@ -1018,9 +1014,7 @@ def build_webrtc_task_binding_snapshot(
     by_state: Dict[str, int] = {}
     for b in all_bindings:
         state_val = (
-            b.transport_state.value
-            if isinstance(b.transport_state, WebRTCTransportState)
-            else str(b.transport_state)
+            b.transport_state.value if isinstance(b.transport_state, WebRTCTransportState) else str(b.transport_state)
         )
         by_state[state_val] = by_state.get(state_val, 0) + 1
 

@@ -80,7 +80,6 @@ from core.capability_assimilation import (
     reset_capability_assimilation_layer,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -90,6 +89,7 @@ from core.capability_assimilation import (
 def _reset():
     reset_capability_assimilation_layer()
     from core.network_graph_runtime import reset_network_graph_runtime
+
     reset_network_graph_runtime()
     yield
     reset_capability_assimilation_layer()

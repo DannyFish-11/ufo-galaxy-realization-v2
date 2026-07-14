@@ -59,8 +59,7 @@ __all__ = [
 # ---------------------------------------------------------------------------
 
 CROSS_DEVICE_CANDIDATES_AUTHORITY = (
-    "core.cross_device_candidates"
-    " — canonical cross-device execution candidate resolution layer (PR-12)"
+    "core.cross_device_candidates" " — canonical cross-device execution candidate resolution layer (PR-12)"
 )
 
 # ---------------------------------------------------------------------------
@@ -230,10 +229,7 @@ def _check_capabilities(
         result = device_matches_capabilities(device_id, required_capabilities)
         extra_reasons: List[str] = []
         if not result.matched:
-            extra_reasons.append(
-                f"capability mismatch for {device_id!r} — "
-                f"missing: {result.missing_capabilities}"
-            )
+            extra_reasons.append(f"capability mismatch for {device_id!r} — " f"missing: {result.missing_capabilities}")
         return result.matched, result.sources, result.reasons + extra_reasons
     except Exception as exc:
         logger.debug("Fallback triggered: %s", exc)
@@ -334,9 +330,7 @@ def _resolve_candidates_inner(
         ready, readiness_reasons = _check_readiness(device_id)
         candidate.ready = ready
         if not ready:
-            candidate.reasons.append(
-                "excluded: not cross-device ready"
-            )
+            candidate.reasons.append("excluded: not cross-device ready")
             candidate.reasons.extend(readiness_reasons)
             logger.info(
                 "cross_device_candidates | EXCLUDED | device_id=%s | reason=not_ready",
@@ -350,13 +344,10 @@ def _resolve_candidates_inner(
             eligible, participation_reasons = _check_orchestration_eligible(device_id)
             candidate.orchestration_eligible = eligible
             if not eligible:
-                candidate.reasons.append(
-                    "excluded: not orchestration-eligible"
-                )
+                candidate.reasons.append("excluded: not orchestration-eligible")
                 candidate.reasons.extend(participation_reasons)
                 logger.info(
-                    "cross_device_candidates | EXCLUDED | device_id=%s "
-                    "| reason=not_orchestration_eligible",
+                    "cross_device_candidates | EXCLUDED | device_id=%s " "| reason=not_orchestration_eligible",
                     device_id,
                 )
                 resolution.candidates.append(candidate)
@@ -366,16 +357,13 @@ def _resolve_candidates_inner(
             candidate.orchestration_eligible = True
 
         # ── Gate 3: Capability matching ───────────────────────────────────
-        cap_matched, cap_sources, cap_reasons = _check_capabilities(
-            device_id, caps
-        )
+        cap_matched, cap_sources, cap_reasons = _check_capabilities(device_id, caps)
         candidate.capability_match = cap_matched
         candidate.sources.update(cap_sources)
         if not cap_matched:
             candidate.reasons.extend(cap_reasons)
             logger.info(
-                "cross_device_candidates | EXCLUDED | device_id=%s "
-                "| reason=capability_mismatch | missing=%s",
+                "cross_device_candidates | EXCLUDED | device_id=%s " "| reason=capability_mismatch | missing=%s",
                 device_id,
                 cap_reasons,
             )
@@ -397,9 +385,7 @@ def _resolve_candidates_inner(
     if requested_target_device:
         if requested_target_device in eligible_ids:
             # Requested target is valid — put it first.
-            ordered = [requested_target_device] + [
-                d for d in eligible_ids if d != requested_target_device
-            ]
+            ordered = [requested_target_device] + [d for d in eligible_ids if d != requested_target_device]
             resolution.selected_device_ids = ordered
         else:
             # Requested target was excluded — surface clear reasons.
@@ -412,12 +398,10 @@ def _resolve_candidates_inner(
             else:
                 excl_reasons = ["not evaluated — unknown device"]
             resolution.reasons.append(
-                f"requested_target_device {requested_target_device!r} was excluded: "
-                + "; ".join(excl_reasons)
+                f"requested_target_device {requested_target_device!r} was excluded: " + "; ".join(excl_reasons)
             )
             logger.info(
-                "cross_device_candidates | requested_target EXCLUDED | "
-                "device_id=%s | reasons=%s",
+                "cross_device_candidates | requested_target EXCLUDED | " "device_id=%s | reasons=%s",
                 requested_target_device,
                 excl_reasons,
             )
@@ -427,8 +411,7 @@ def _resolve_candidates_inner(
         resolution.selected_device_ids = list(eligible_ids)
 
     logger.debug(
-        "cross_device_candidates | resolution complete | "
-        "selected=%s eligible=%s total_evaluated=%s",
+        "cross_device_candidates | resolution complete | " "selected=%s eligible=%s total_evaluated=%s",
         resolution.selected_device_ids,
         resolution.eligible_device_ids,
         len(resolution.candidates),

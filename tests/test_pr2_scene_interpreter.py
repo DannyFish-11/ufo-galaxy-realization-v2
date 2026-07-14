@@ -27,18 +27,22 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # InteractionMode enum tests
 # ---------------------------------------------------------------------------
+
 
 class TestInteractionModeEnum:
     def test_all_expected_values_exist(self):
         from core.interaction.interaction_types import InteractionMode
 
         expected = {
-            "chat", "deep_thinking", "control_console",
-            "field_assistant", "ambient_companion", "execution_bridge",
+            "chat",
+            "deep_thinking",
+            "control_console",
+            "field_assistant",
+            "ambient_companion",
+            "execution_bridge",
         }
         actual = {m.value for m in InteractionMode}
         assert expected == actual
@@ -60,14 +64,20 @@ class TestInteractionModeEnum:
 # InteractionDecision serialisation tests
 # ---------------------------------------------------------------------------
 
+
 class TestInteractionDecisionSerialisation:
     def test_to_dict_keys(self):
         from core.interaction.interaction_types import InteractionDecision, InteractionMode
 
         d = InteractionDecision(mode=InteractionMode.CHAT, rationale="test").to_dict()
         assert set(d.keys()) == {
-            "mode", "relationship_mode", "ui_surface",
-            "voice_mode", "avatar_mode", "confidence", "rationale",
+            "mode",
+            "relationship_mode",
+            "ui_surface",
+            "voice_mode",
+            "avatar_mode",
+            "confidence",
+            "rationale",
         }
 
     def test_to_dict_mode_is_string(self):
@@ -107,6 +117,7 @@ class TestInteractionDecisionSerialisation:
 # ---------------------------------------------------------------------------
 # ModeSelector tests
 # ---------------------------------------------------------------------------
+
 
 class TestModeSelector:
     def test_build_decision_returns_correct_mode(self):
@@ -170,11 +181,13 @@ class TestModeSelector:
 # SceneInterpreter rule-engine tests
 # ---------------------------------------------------------------------------
 
+
 class TestSceneInterpreterRules:
     """Each test validates one rule branch of SceneInterpreter."""
 
     def _interp(self):
         from core.interaction.scene_interpreter import SceneInterpreter
+
         return SceneInterpreter()
 
     # ── CONTROL_CONSOLE ───────────────────────────────────────────────────
@@ -334,6 +347,7 @@ class TestSceneInterpreterRules:
 # EventBus integration
 # ---------------------------------------------------------------------------
 
+
 class TestSceneInterpreterEventBus:
     def test_event_emitted_on_interpret(self):
         """SceneInterpreter._emit_event should be called once per interpret() call."""
@@ -356,6 +370,7 @@ class TestSceneInterpreterEventBus:
 # ---------------------------------------------------------------------------
 # OpenClawd integration tests
 # ---------------------------------------------------------------------------
+
 
 class TestOpenClawdInteractionIntegration:
     """Verify OpenClawd.process() correctly attaches ``interaction`` to the payload."""
@@ -402,13 +417,11 @@ class TestOpenClawdInteractionIntegration:
     @pytest.mark.asyncio
     async def test_process_multimodal_attaches_interaction(self):
         """When multimodal_context is provided the result must include interaction info."""
-        from core.schemas.multimodal import MultiModalContext, MultiModalImage
         from core.openclawd import OpenClawd
+        from core.schemas.multimodal import MultiModalContext, MultiModalImage
 
         oc = OpenClawd()
-        ctx = MultiModalContext(
-            images=[MultiModalImage(mime="image/jpeg", data="X", source="webcam")]
-        )
+        ctx = MultiModalContext(images=[MultiModalImage(mime="image/jpeg", data="X", source="webcam")])
 
         async def _mock_chat(message, intent=None, device_id=None, session_id=None, trace_id=None):
             return {"success": True, "response": "I see an image", "metadata": {}}

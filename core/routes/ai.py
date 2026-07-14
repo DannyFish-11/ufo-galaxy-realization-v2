@@ -23,8 +23,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from core.routes._shared import registered_devices, task_queue
 from core.routes._models import AIIntentRequest, ConversationRequest
+from core.routes._shared import registered_devices, task_queue
 
 logger = logging.getLogger("Galaxy.API")
 
@@ -34,7 +34,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     router = APIRouter()
 
     from core.ai_intent import (
-        get_intent_parser, get_conversation_memory, get_smart_recommender,
+        get_conversation_memory,
+        get_intent_parser,
+        get_smart_recommender,
     )
 
     intent_parser = get_intent_parser()
@@ -60,10 +62,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 {"success": False, "error": "Intent parse failed"},
                 status_code=422,
             )
-        return JSONResponse({
-            "success": True,
-            **parsed.to_dict(),
-        })
+        return JSONResponse(
+            {
+                "success": True,
+                **parsed.to_dict(),
+            }
+        )
 
     @router.post("/api/v1/ai/conversation")
     async def manage_conversation(req: ConversationRequest):
@@ -74,22 +78,26 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             content=req.content,
             metadata=req.metadata,
         )
-        return JSONResponse({
-            "success": True,
-            "session_id": req.session_id,
-            "turns": len(await conversation_memory.get_context(req.session_id, max_turns=100)),
-        })
+        return JSONResponse(
+            {
+                "success": True,
+                "session_id": req.session_id,
+                "turns": len(await conversation_memory.get_context(req.session_id, max_turns=100)),
+            }
+        )
 
     @router.get("/api/v1/ai/conversation/{session_id}")
     async def get_conversation_context(session_id: str, max_turns: int = 10):
         """获取对话上下文"""
         context = await conversation_memory.get_context(session_id, max_turns)
         summary = await conversation_memory.get_summary(session_id)
-        return JSONResponse({
-            "session_id": session_id,
-            "context": context,
-            "summary": summary,
-        })
+        return JSONResponse(
+            {
+                "session_id": session_id,
+                "context": context,
+                "summary": summary,
+            }
+        )
 
     @router.get("/api/v1/ai/recommendations/{session_id}")
     async def get_recommendations(session_id: str):
@@ -99,10 +107,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             "tasks": {k: v.get("status") for k, v in task_queue.items()},
         }
         recs = await smart_recommender.get_recommendations(session_id, current_context)
-        return JSONResponse({
-            "session_id": session_id,
-            "recommendations": recs,
-        })
+        return JSONResponse(
+            {
+                "session_id": session_id,
+                "recommendations": recs,
+            }
+        )
 
     @router.delete("/api/v1/ai/conversation/{session_id}")
     async def clear_conversation(session_id: str):
@@ -130,8 +140,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     async def create_twin_command(req: TwinCreateRequest):
         """孪生指挥创建 — 使用 SPECIALIZED 策略让多个 LLM 协作完成任务"""
         try:
-            from core.agent_team import TeamManager, TeamStrategy
             from core.agent_factory import get_agent_factory
+            from core.agent_team import TeamManager, TeamStrategy
             from core.llm.route_authority import get_llm_route_authority
 
             strategy_map = {
@@ -144,7 +154,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             llm_router = get_llm_route_authority().execution_router
             factory = get_agent_factory(llm_router)
             team_manager = TeamManager(
-                agent_factory=factory, llm_router=llm_router,
+                agent_factory=factory,
+                llm_router=llm_router,
             )
 
             result = await team_manager.execute_team_task(
@@ -154,32 +165,33 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 providers=req.providers if req.providers else None,
             )
 
-            return JSONResponse({
-                "success": True,
-                "strategy": req.strategy,
-                "member_count": req.member_count,
-                "result": result if isinstance(result, dict) else {"response": str(result)},
-            })
+            return JSONResponse(
+                {
+                    "success": True,
+                    "strategy": req.strategy,
+                    "member_count": req.member_count,
+                    "result": result if isinstance(result, dict) else {"response": str(result)},
+                }
+            )
         except ImportError:
             raise HTTPException(status_code=501, detail="agent_team 模块不可用")
         except Exception as e:
             logger.error(f"孪生指挥创建失败: {e}")
-            return JSONResponse(
-                {"success": False, "error": str(e)}, status_code=500
-            )
+            return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
     @router.post("/api/v1/agents/swarm")
     async def create_agent_swarm(req: SwarmCreateRequest):
         """Agent Swarm 创建 — 批量同类 Agent 并行执行，投票/合并结果"""
         try:
-            from core.agent_team import TeamManager, TeamStrategy
             from core.agent_factory import get_agent_factory
+            from core.agent_team import TeamManager, TeamStrategy
             from core.llm.route_authority import get_llm_route_authority
 
             llm_router = get_llm_route_authority().execution_router
             factory = get_agent_factory(llm_router)
             team_manager = TeamManager(
-                agent_factory=factory, llm_router=llm_router,
+                agent_factory=factory,
+                llm_router=llm_router,
             )
 
             result = await team_manager.execute_team_task(
@@ -188,20 +200,20 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 member_count=req.agent_count,
             )
 
-            return JSONResponse({
-                "success": True,
-                "strategy": "SWARM",
-                "agent_count": req.agent_count,
-                "template": req.template,
-                "result": result if isinstance(result, dict) else {"response": str(result)},
-            })
+            return JSONResponse(
+                {
+                    "success": True,
+                    "strategy": "SWARM",
+                    "agent_count": req.agent_count,
+                    "template": req.template,
+                    "result": result if isinstance(result, dict) else {"response": str(result)},
+                }
+            )
         except ImportError:
             raise HTTPException(status_code=501, detail="agent_team 模块不可用")
         except Exception as e:
             logger.error(f"Agent Swarm 创建失败: {e}")
-            return JSONResponse(
-                {"success": False, "error": str(e)}, status_code=500
-            )
+            return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
     @router.get("/api/v1/agents/{agent_id}/children")
     async def get_agent_children(agent_id: str):
@@ -214,25 +226,27 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             for aid, agent in factory._agents.items():
                 parent = getattr(agent, "parent_id", None)
                 if parent == agent_id:
-                    children.append({
-                        "agent_id": aid,
-                        "name": getattr(agent, "name", aid),
-                        "status": getattr(agent, "status", "unknown"),
-                        "template": getattr(agent, "template_name", ""),
-                    })
+                    children.append(
+                        {
+                            "agent_id": aid,
+                            "name": getattr(agent, "name", aid),
+                            "status": getattr(agent, "status", "unknown"),
+                            "template": getattr(agent, "template_name", ""),
+                        }
+                    )
 
-            return JSONResponse({
-                "agent_id": agent_id,
-                "children": children,
-                "count": len(children),
-            })
+            return JSONResponse(
+                {
+                    "agent_id": agent_id,
+                    "children": children,
+                    "count": len(children),
+                }
+            )
         except ImportError:
             raise HTTPException(status_code=501, detail="agent_factory 模块不可用")
         except Exception as e:
             logger.error(f"获取 Agent 子树失败: {e}")
-            return JSONResponse(
-                {"success": False, "error": str(e)}, status_code=500
-            )
+            return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
     @router.post("/api/v1/agents/{agent_id}/split")
     async def split_agent(agent_id: str, req: AgentSplitRequest):
@@ -245,30 +259,32 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
             for subtask in req.subtasks:
                 child_id = f"{agent_id}-child-{uuid.uuid4().hex[:6]}"
-                child = await factory.create_agent(
+                await factory.create_agent(
                     name=f"Split-{child_id}",
                     task=subtask,
                     parent_id=agent_id,
                 )
-                child_agents.append({
-                    "agent_id": child_id,
-                    "task": subtask,
-                    "status": "created",
-                })
+                child_agents.append(
+                    {
+                        "agent_id": child_id,
+                        "task": subtask,
+                        "status": "created",
+                    }
+                )
 
-            return JSONResponse({
-                "success": True,
-                "parent_agent_id": agent_id,
-                "children": child_agents,
-                "split_count": len(child_agents),
-            })
+            return JSONResponse(
+                {
+                    "success": True,
+                    "parent_agent_id": agent_id,
+                    "children": child_agents,
+                    "split_count": len(child_agents),
+                }
+            )
         except ImportError:
             raise HTTPException(status_code=501, detail="agent_factory 模块不可用")
         except Exception as e:
             logger.error(f"Agent 分裂失败: {e}")
-            return JSONResponse(
-                {"success": False, "error": str(e)}, status_code=500
-            )
+            return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
     # ─────── Agent 辩论推理端点 ─────────
 
@@ -285,6 +301,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """多 Agent 辩论式推理 — 调用 Node_126_AgentSwarm 的锦标赛辩论引擎"""
         try:
             from core.port_config import get_service_port
+
             port = get_service_port("agent_swarm")
             async with httpx.AsyncClient(timeout=120.0) as client:
                 resp = await client.post(
@@ -308,8 +325,6 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             )
         except Exception as e:
             logger.error(f"Agent 辩论推理失败: {e}")
-            return JSONResponse(
-                {"success": False, "error": str(e)}, status_code=500
-            )
+            return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
     return router

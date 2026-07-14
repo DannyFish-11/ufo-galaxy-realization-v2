@@ -88,6 +88,7 @@ MESH_SESSION_COORDINATOR_LIVE_RUNTIME_ENGINE_PR_J_SENTINEL: str = (
 def _import_coordinator_contracts() -> Any:
     """Lazily import the coordinator contract module."""
     from contracts import mesh_session_coordinator as _mod
+
     return _mod
 
 
@@ -147,9 +148,7 @@ class MeshSessionCoordinator:
             mod = _import_coordinator_contracts()
             return mod.from_mesh_session(mesh_session, trace_id=trace_id)
         except Exception as exc:
-            _logger.warning(
-                "MeshSessionCoordinator.from_mesh_session: error: %s", exc
-            )
+            _logger.warning("MeshSessionCoordinator.from_mesh_session: error: %s", exc)
             try:
                 mod = _import_coordinator_contracts()
                 return mod.MeshSessionCoordinatorState()
@@ -177,13 +176,9 @@ class MeshSessionCoordinator:
         """
         try:
             mod = _import_coordinator_contracts()
-            return mod.update_coordinator_with_dispatch_result(
-                coordinator, dispatch_result
-            )
+            return mod.update_coordinator_with_dispatch_result(coordinator, dispatch_result)
         except Exception as exc:
-            _logger.warning(
-                "MeshSessionCoordinator.update_with_dispatch_result: error: %s", exc
-            )
+            _logger.warning("MeshSessionCoordinator.update_with_dispatch_result: error: %s", exc)
             return coordinator
 
     def update_with_takeover_result(
@@ -211,13 +206,9 @@ class MeshSessionCoordinator:
         """
         try:
             mod = _import_coordinator_contracts()
-            return mod.update_coordinator_with_takeover_result(
-                coordinator, takeover_result, device_id=device_id
-            )
+            return mod.update_coordinator_with_takeover_result(coordinator, takeover_result, device_id=device_id)
         except Exception as exc:
-            _logger.warning(
-                "MeshSessionCoordinator.update_with_takeover_result: error: %s", exc
-            )
+            _logger.warning("MeshSessionCoordinator.update_with_takeover_result: error: %s", exc)
             return coordinator
 
     def update_with_merged_result(
@@ -243,9 +234,7 @@ class MeshSessionCoordinator:
             mod = _import_coordinator_contracts()
             return mod.update_coordinator_with_merged_result(coordinator, merged_result)
         except Exception as exc:
-            _logger.warning(
-                "MeshSessionCoordinator.update_with_merged_result: error: %s", exc
-            )
+            _logger.warning("MeshSessionCoordinator.update_with_merged_result: error: %s", exc)
             return coordinator
 
     def get_summary(
@@ -268,9 +257,7 @@ class MeshSessionCoordinator:
             mod = _import_coordinator_contracts()
             return mod.build_coordinator_summary(coordinator=coordinator)
         except Exception as exc:
-            _logger.warning(
-                "MeshSessionCoordinator.get_summary: error: %s", exc
-            )
+            _logger.warning("MeshSessionCoordinator.get_summary: error: %s", exc)
             try:
                 mod = _import_coordinator_contracts()
                 return mod.MeshSessionCoordinatorSummary()
@@ -316,14 +303,10 @@ class MeshSessionCoordinator:
                 metadata=metadata or {},
             )
         except Exception as exc:
-            _logger.warning(
-                "MeshSessionCoordinator.build: error: %s", exc
-            )
+            _logger.warning("MeshSessionCoordinator.build: error: %s", exc)
             try:
                 mod = _import_coordinator_contracts()
-                return mod.MeshSessionCoordinatorState(
-                    session_id=session_id, mesh_id=mesh_id
-                )
+                return mod.MeshSessionCoordinatorState(session_id=session_id, mesh_id=mesh_id)
             except Exception:
                 return None
 
@@ -410,9 +393,7 @@ def coordinate_mesh_session(
 
         # Step 3: Apply takeover result
         if takeover_result is not None:
-            state = mod.update_coordinator_with_takeover_result(
-                state, takeover_result, device_id=takeover_device_id
-            )
+            state = mod.update_coordinator_with_takeover_result(state, takeover_result, device_id=takeover_device_id)
 
         # Step 4: Apply merged result
         if merged_result is not None:
@@ -427,9 +408,7 @@ def coordinate_mesh_session(
         )
         try:
             mod = _import_coordinator_contracts()
-            return mod.MeshSessionCoordinatorState(
-                session_id=session_id, mesh_id=mesh_id
-            )
+            return mod.MeshSessionCoordinatorState(session_id=session_id, mesh_id=mesh_id)
         except Exception:
             return None
 
@@ -498,6 +477,7 @@ def run_live_mesh_session(
     """
     try:
         from core.mesh.live_mesh_runtime_engine import run_live_mesh_session as _run
+
         return _run(
             coordinator_state,
             participant_results=participant_results,
@@ -509,6 +489,7 @@ def run_live_mesh_session(
         # Return a minimal failure result
         try:
             from core.mesh.live_mesh_runtime_engine import LiveMeshRunResult
+
             return LiveMeshRunResult(
                 session_id=getattr(coordinator_state, "session_id", None),
                 outcome="failed",
@@ -539,6 +520,7 @@ def register_participant(
     """
     try:
         from core.mesh.live_mesh_runtime_engine import register_participant as _reg
+
         return _reg(
             coordinator_state,
             device_id,
@@ -567,6 +549,7 @@ def update_participant_status(
     """
     try:
         from core.mesh.live_mesh_runtime_engine import update_participant_status as _upd
+
         return _upd(coordinator_state, device_id, status)
     except Exception as exc:
         _logger.warning("update_participant_status: error: %s", exc)
@@ -590,6 +573,7 @@ def drop_participant(
     """
     try:
         from core.mesh.live_mesh_runtime_engine import drop_participant as _drop
+
         return _drop(coordinator_state, device_id, reason=reason)
     except Exception as exc:
         _logger.warning("drop_participant: error: %s", exc)
@@ -601,12 +585,12 @@ def drop_participant(
 # ---------------------------------------------------------------------------
 
 from core.mesh.mesh_session_progression_driver import (  # noqa: E402
+    MERGE_TRIGGERED_WHEN_BARRIER_RELEASED_POLICY,
     MESH_SESSION_PROGRESSION_DRIVER_SENTINEL,
     SESSION_STATUS_DRIVEN_BY_COORDINATOR_POLICY,
     SUBTASK_ASSIGNMENT_STATUS_DRIVEN_BY_PARTICIPANT_POLICY,
-    MERGE_TRIGGERED_WHEN_BARRIER_RELEASED_POLICY,
-    MeshSessionProgressionFinalResult,
     MeshSessionProgressionDriver,
+    MeshSessionProgressionFinalResult,
     create_progression_driver,
 )
 

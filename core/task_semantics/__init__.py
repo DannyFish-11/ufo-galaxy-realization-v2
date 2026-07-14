@@ -130,36 +130,36 @@ core/task_graph.py — existing DAG engine (not modified).
 from __future__ import annotations
 
 from .step_kind import (
-    StepKind,
-    STEP_KIND_ORDER,
-    SIDE_EFFECTFUL_KINDS,
     READONLY_KINDS,
-    step_kind_description,
-    is_side_effectful_kind,
-    is_readonly_kind,
+    SIDE_EFFECTFUL_KINDS,
+    STEP_KIND_ORDER,
+    StepKind,
     coerce_step_kind,
+    is_readonly_kind,
+    is_side_effectful_kind,
+    step_kind_description,
 )
 from .step_policy import (
-    StepSemanticPolicy,
-    DEFAULT_SAFE_STEP_POLICY,
     DEFAULT_EXECUTE_STEP_POLICY,
+    DEFAULT_SAFE_STEP_POLICY,
+    StepSemanticPolicy,
     build_policy_for_kind,
 )
-from .task_semantic_summary import (
-    ClassifiedStep,
-    TaskSemanticSummary,
-    EMPTY_SEMANTIC_SUMMARY,
-    attach_semantic_summary_to_projection,
-    get_semantic_hints,
-)
 from .step_resolver import (
+    build_semantic_summary_from_dicts,
+    build_semantic_summary_from_envelopes,
+    build_semantic_summary_from_graph,
+    classify_task_envelope,
+    classify_task_node,
     resolve_step_kind,
     resolve_step_policy,
-    classify_task_node,
-    classify_task_envelope,
-    build_semantic_summary_from_graph,
-    build_semantic_summary_from_envelopes,
-    build_semantic_summary_from_dicts,
+)
+from .task_semantic_summary import (
+    EMPTY_SEMANTIC_SUMMARY,
+    ClassifiedStep,
+    TaskSemanticSummary,
+    attach_semantic_summary_to_projection,
+    get_semantic_hints,
 )
 
 __all__ = [

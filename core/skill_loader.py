@@ -29,12 +29,12 @@ import importlib
 import json
 import logging
 import sys
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Callable
-from pathlib import Path
 from enum import Enum
-import uuid
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.Skill")
 
@@ -43,8 +43,10 @@ logger = logging.getLogger("Galaxy.Skill")
 # 技能定义
 # ============================================================================
 
+
 class SkillStatus(str, Enum):
     """技能状态"""
+
     LOADED = "loaded"
     ERROR = "error"
     DISABLED = "disabled"
@@ -53,6 +55,7 @@ class SkillStatus(str, Enum):
 @dataclass
 class SkillParameter:
     """技能参数"""
+
     name: str
     type: str = "string"
     description: str = ""
@@ -73,6 +76,7 @@ class SkillParameter:
 @dataclass
 class SkillInstance:
     """技能实例"""
+
     id: str
     name: str
     description: str
@@ -123,6 +127,7 @@ class SkillInstance:
 # Skill 加载器
 # ============================================================================
 
+
 class SkillLoader:
     """
     标准 Skill 加载器
@@ -165,6 +170,7 @@ class SkillLoader:
         # 刷新能力总线
         try:
             from core.agent.capability_registry import get_capability_registry
+
             reg = get_capability_registry()
             await reg.refresh(force=True)
             logger.info("CapabilityRegistry 已刷新（Skill %s: %s）", skill_id, event)
@@ -173,7 +179,8 @@ class SkillLoader:
 
         # 广播能力更新事件（最佳努力，事件总线不可用时静默降级）
         try:
-            from integration.event_bus import event_bus, EventType
+            from integration.event_bus import EventType, event_bus
+
             event_bus.publish_sync(
                 EventType.CAPABILITY_UPDATED,
                 "skill_loader",
@@ -184,8 +191,10 @@ class SkillLoader:
 
         # PR4: 推送 skill_update + capability_update 到 /ws/status 和 /api/v1/stream 订阅者
         try:
-            from core.routes._shared import broadcast_event
             import asyncio as _aio
+
+            from core.routes._shared import broadcast_event
+
             loop = None
             try:
                 loop = _aio.get_running_loop()
@@ -244,9 +253,10 @@ class SkillLoader:
             # 验证 skill.json 符合 SkillPackageContract（PR-005）
             try:
                 from core.skill_package_contract import (
-                    validate_skill_package_contract,
                     SkillPackageContractError,
+                    validate_skill_package_contract,
                 )
+
                 validate_skill_package_contract(skill_def)
             except SkillPackageContractError as contract_exc:
                 logger.error(
@@ -309,15 +319,15 @@ class SkillLoader:
                 self._inject_skill_to_registry(skill_id)
                 # 最佳努力刷新 CapabilityRegistry 并广播事件（fire-and-forget）
                 try:
-                    asyncio.ensure_future(
-                        self._refresh_capability_registry(skill_id, "load")
-                    )
+                    asyncio.ensure_future(self._refresh_capability_registry(skill_id, "load"))
                 except Exception as exc:
                     logger.warning("Exception suppressed: %s", exc)
             else:
                 logger.warning(
                     "技能 %s (%s) 状态为 ERROR（%s），跳过注入能力总线",
-                    skill.name, skill_id, skill.error,
+                    skill.name,
+                    skill_id,
+                    skill.error,
                 )
 
             return {
@@ -384,6 +394,7 @@ class SkillLoader:
         # 从能力总线移除
         try:
             from core.agent.capability_registry import CapabilityRegistry
+
             CapabilityRegistry.get_instance().eject(f"skill__{skill_id}")
         except Exception as exc:
             logger.debug("Skill 从能力总线移除失败: %s", exc)
@@ -392,9 +403,7 @@ class SkillLoader:
 
         # 最佳努力刷新 CapabilityRegistry 并广播事件（fire-and-forget）
         try:
-            asyncio.ensure_future(
-                self._refresh_capability_registry(skill_id, "unload")
-            )
+            asyncio.ensure_future(self._refresh_capability_registry(skill_id, "unload"))
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
 
@@ -408,6 +417,7 @@ class SkillLoader:
         """将 Skill 注入能力总线（在加载成功后调用）。"""
         try:
             from core.agent.capability_registry import CapabilityRegistry
+
             reg = CapabilityRegistry.get_instance()
             mcp_schema = self.to_mcp_tool_schema(skill_id)
             params = mcp_schema.get("inputSchema", {}) if mcp_schema else {}
@@ -561,9 +571,11 @@ class SkillLoader:
         results = []
 
         for skill in self.skills.values():
-            if (query in skill.name.lower() or
-                query in skill.description.lower() or
-                any(query in tag.lower() for tag in skill.tags)):
+            if (
+                query in skill.name.lower()
+                or query in skill.description.lower()
+                or any(query in tag.lower() for tag in skill.tags)
+            ):
                 results.append(skill.to_dict())
 
         return results

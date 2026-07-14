@@ -347,18 +347,10 @@ class DualRepoCenteredSystemAuditReport:
     # Section 8: 结论
     overall_system_description_zh: str = ""
     current_completion_stage: str = "mid_stage_consolidation"
-    pr_993_fulfillment: DefinitionFulfillmentStatus = (
-        DefinitionFulfillmentStatus.PARTIALLY_FULFILLED
-    )
-    pr_1041_fulfillment: DefinitionFulfillmentStatus = (
-        DefinitionFulfillmentStatus.PARTIALLY_FULFILLED
-    )
-    pr_1042_fulfillment: DefinitionFulfillmentStatus = (
-        DefinitionFulfillmentStatus.FULFILLED
-    )
-    pr_1043_fulfillment: DefinitionFulfillmentStatus = (
-        DefinitionFulfillmentStatus.PARTIALLY_FULFILLED
-    )
+    pr_993_fulfillment: DefinitionFulfillmentStatus = DefinitionFulfillmentStatus.PARTIALLY_FULFILLED
+    pr_1041_fulfillment: DefinitionFulfillmentStatus = DefinitionFulfillmentStatus.PARTIALLY_FULFILLED
+    pr_1042_fulfillment: DefinitionFulfillmentStatus = DefinitionFulfillmentStatus.FULFILLED
+    pr_1043_fulfillment: DefinitionFulfillmentStatus = DefinitionFulfillmentStatus.PARTIALLY_FULFILLED
     claims_backed_by_real_code: List[str] = field(default_factory=list)
     claims_structural_or_v2_only: List[str] = field(default_factory=list)
     top_combined_system_gaps: List[str] = field(default_factory=list)
@@ -370,9 +362,7 @@ class DualRepoCenteredSystemAuditReport:
             "baseline_prs": self.baseline_prs,
             "system_nature_verdict": self.system_nature_verdict.value,
             "system_nature_description": self.system_nature_description,
-            "definition_area_audits": [
-                d.to_dict() for d in self.definition_area_audits
-            ],
+            "definition_area_audits": [d.to_dict() for d in self.definition_area_audits],
             "canonical_path_traces": [p.to_dict() for p in self.canonical_path_traces],
             "combined_issues": [i.to_dict() for i in self.combined_issues],
             "e2e_classifications": [e.to_dict() for e in self.e2e_classifications],
@@ -460,7 +450,9 @@ def _build_definition_area_audits() -> List[DefinitionAreaAudit]:
             v2_anchors=[
                 DualRepoCodeAnchor("v2", "galaxy_gateway/android/handlers/registration.py", "设备注册"),
                 DualRepoCodeAnchor("v2", "galaxy_gateway/android/handlers/goal_execution.py", "目标执行信号"),
-                DualRepoCodeAnchor("v2", "galaxy_gateway/android/handlers/takeover_response.py", "接管响应（PR-11-V2）"),
+                DualRepoCodeAnchor(
+                    "v2", "galaxy_gateway/android/handlers/takeover_response.py", "接管响应（PR-11-V2）"
+                ),
                 DualRepoCodeAnchor("v2", "core/android_delegated_runtime_lifecycle_coordinator.py", "生命周期协调器"),
             ],
             android_anchors=[
@@ -500,7 +492,9 @@ def _build_definition_area_audits() -> List[DefinitionAreaAudit]:
                 DualRepoCodeAnchor("v2", "core/unified_execution_governance.py", "get_execution_runtime_snapshot()"),
                 DualRepoCodeAnchor("v2", "core/unified_governance_semantics.py", "build_unified_governance_state()"),
                 DualRepoCodeAnchor("v2", "core/unified_panel_aggregation.py", "panel mesh_runtime_state 对齐"),
-                DualRepoCodeAnchor("v2", "core/android_delegated_runtime_lifecycle_coordinator.py", "lifecycle coordinator facade"),
+                DualRepoCodeAnchor(
+                    "v2", "core/android_delegated_runtime_lifecycle_coordinator.py", "lifecycle coordinator facade"
+                ),
             ],
             android_anchors=[
                 DualRepoCodeAnchor("android", "GalaxyWebSocketClient", "执行信号上报传输"),
@@ -570,8 +564,12 @@ def _build_definition_area_audits() -> List[DefinitionAreaAudit]:
             proof_quality=ProofQualityLevel.MAINLINE_PATH_EXISTS,
             fulfillment_status=DefinitionFulfillmentStatus.PARTIALLY_FULFILLED,
             v2_anchors=[
-                DualRepoCodeAnchor("v2", "galaxy_gateway/android/handlers/takeover_response.py", "接管响应 handler（PR-11-V2）"),
-                DualRepoCodeAnchor("v2", "core/android_delegated_runtime_lifecycle_coordinator.py", "on_takeover_response()"),
+                DualRepoCodeAnchor(
+                    "v2", "galaxy_gateway/android/handlers/takeover_response.py", "接管响应 handler（PR-11-V2）"
+                ),
+                DualRepoCodeAnchor(
+                    "v2", "core/android_delegated_runtime_lifecycle_coordinator.py", "on_takeover_response()"
+                ),
                 DualRepoCodeAnchor("v2", "core/attached_runtime_session_registry.py", "lookup_session_by_device()"),
                 DualRepoCodeAnchor("v2", "core/attached_runtime_recovery_readiness.py", "恢复就绪性评估"),
             ],
@@ -608,7 +606,9 @@ def _build_definition_area_audits() -> List[DefinitionAreaAudit]:
                 DualRepoCodeAnchor("v2", "core/android_v2_continuity_contract.py", "V2-Android 连续性契约"),
                 DualRepoCodeAnchor("v2", "core/attached_runtime_session_registry.py", "session 注册表"),
                 DualRepoCodeAnchor("v2", "tests/test_pr6_hybrid_continuity_closure.py", "hybrid continuity 回归测试"),
-                DualRepoCodeAnchor("v2", "tests/integration/test_v2_android_protocol_regression.py", "协议回归测试（mock）"),
+                DualRepoCodeAnchor(
+                    "v2", "tests/integration/test_v2_android_protocol_regression.py", "协议回归测试（mock）"
+                ),
             ],
             android_anchors=[
                 DualRepoCodeAnchor("android", "OfflineTaskQueue", "离线队列"),
@@ -642,7 +642,9 @@ def _build_definition_area_audits() -> List[DefinitionAreaAudit]:
                 DualRepoCodeAnchor("v2", "core/routes/operator.py", "/api/v1/operator/action"),
                 DualRepoCodeAnchor("v2", "core/routes/panel.py", "/api/v1/panel/unified"),
                 DualRepoCodeAnchor("v2", "core/execution_governance_audit_authority.py", "治理审计权威（PR-14-V2）"),
-                DualRepoCodeAnchor("v2", "core/unified_governance_semantics.py", "classify_canonical_proof_input_diagnosis()"),
+                DualRepoCodeAnchor(
+                    "v2", "core/unified_governance_semantics.py", "classify_canonical_proof_input_diagnosis()"
+                ),
                 DualRepoCodeAnchor("v2", "galaxy_gateway/android/handlers/diagnostics.py", "Android 诊断信号接收"),
             ],
             android_anchors=[],
@@ -696,7 +698,9 @@ def _build_canonical_path_traces() -> List[CanonicalPathTrace]:
             path_name="能力生产与消费路径",
             segments=[
                 CrossRepoPathSegment("android", "GalaxyConnectionService + GalaxyWebSocketClient", "连接建立与维护"),
-                CrossRepoPathSegment("android", "AccessibilityScreenshotProvider / LlamaCppPlannerService", "本地能力执行"),
+                CrossRepoPathSegment(
+                    "android", "AccessibilityScreenshotProvider / LlamaCppPlannerService", "本地能力执行"
+                ),
                 CrossRepoPathSegment("v2", "galaxy_gateway/android/handlers/capability_report.py", "能力汇报接收"),
                 CrossRepoPathSegment("v2", "core/canonical_capability_status.py", "canonical 能力状态维护"),
                 CrossRepoPathSegment("v2", "core/android_participant_evidence_ingress.py", "参与者证据入口"),
@@ -710,14 +714,20 @@ def _build_canonical_path_traces() -> List[CanonicalPathTrace]:
             path_name="执行生命周期与治理绑定路径",
             segments=[
                 CrossRepoPathSegment("v2", "core/openclawd.py", "意图 → 决策"),
-                CrossRepoPathSegment("v2", "core/unified_execution_governance.py evaluate_execution_governance()", "统一执行治理判定"),
+                CrossRepoPathSegment(
+                    "v2", "core/unified_execution_governance.py evaluate_execution_governance()", "统一执行治理判定"
+                ),
                 CrossRepoPathSegment("v2", "core/command_router.py", "唯一路由权威"),
                 CrossRepoPathSegment("v2", "galaxy_gateway/device_router.py", "WebSocket 传输到 Android"),
                 CrossRepoPathSegment("android", "CommandDispatcher", "命令分发到本地 executor"),
                 CrossRepoPathSegment("android", "AccessibilityActionExecutor + LoopController", "GUI 执行 + step 循环"),
                 CrossRepoPathSegment("android", "GalaxyWebSocketClient", "执行结果上报"),
                 CrossRepoPathSegment("v2", "galaxy_gateway/android/handlers/goal_execution.py", "执行信号接收"),
-                CrossRepoPathSegment("v2", "core/android_delegated_runtime_lifecycle_coordinator.py on_execution_signal()", "lifecycle coordinator 处理"),
+                CrossRepoPathSegment(
+                    "v2",
+                    "core/android_delegated_runtime_lifecycle_coordinator.py on_execution_signal()",
+                    "lifecycle coordinator 处理",
+                ),
                 CrossRepoPathSegment("v2", "core/unified_execution_governance.py", "runtime 状态更新"),
             ],
             proof_quality=ProofQualityLevel.MAINLINE_PATH_EXISTS,
@@ -727,13 +737,21 @@ def _build_canonical_path_traces() -> List[CanonicalPathTrace]:
             path_id="PATH-03",
             path_name="接管 / Ownership Transfer 路径",
             segments=[
-                CrossRepoPathSegment("v2", "core/unified_execution_governance.py", "takeover_request 决策（最高优先级）"),
+                CrossRepoPathSegment(
+                    "v2", "core/unified_execution_governance.py", "takeover_request 决策（最高优先级）"
+                ),
                 CrossRepoPathSegment("v2", "core/command_router.py → galaxy_gateway/device_router.py", "下发接管命令"),
                 CrossRepoPathSegment("android", "CommandDispatcher", "接收 takeover_request"),
                 CrossRepoPathSegment("android", "AppSettings 门控", "本地接受/拒绝判断"),
                 CrossRepoPathSegment("android", "GalaxyWebSocketClient", "发回 takeover_response"),
-                CrossRepoPathSegment("v2", "galaxy_gateway/android/handlers/takeover_response.py", "接管响应 handler（PR-11-V2）"),
-                CrossRepoPathSegment("v2", "core/android_delegated_runtime_lifecycle_coordinator.py on_takeover_response()", "lifecycle coordinator 统一处理"),
+                CrossRepoPathSegment(
+                    "v2", "galaxy_gateway/android/handlers/takeover_response.py", "接管响应 handler（PR-11-V2）"
+                ),
+                CrossRepoPathSegment(
+                    "v2",
+                    "core/android_delegated_runtime_lifecycle_coordinator.py on_takeover_response()",
+                    "lifecycle coordinator 统一处理",
+                ),
                 CrossRepoPathSegment("v2", "core/takeover_tracking.py", "接管状态跟踪"),
                 CrossRepoPathSegment("v2", "core/android_runtime_transition_reducer.py", "状态转换"),
                 CrossRepoPathSegment("v2", "core/audit_event_semantics.py", "审计事件记录"),
@@ -748,7 +766,9 @@ def _build_canonical_path_traces() -> List[CanonicalPathTrace]:
                 CrossRepoPathSegment("android", "GalaxyWebSocketClient 断连检测", "连接断开"),
                 CrossRepoPathSegment("android", "OfflineTaskQueue", "离线任务入队"),
                 CrossRepoPathSegment("android", "GalaxyWebSocketClient 重连", "重连触发"),
-                CrossRepoPathSegment("v2", "core/attached_runtime_session_registry.py lookup_session_by_device()", "session 查找"),
+                CrossRepoPathSegment(
+                    "v2", "core/attached_runtime_session_registry.py lookup_session_by_device()", "session 查找"
+                ),
                 CrossRepoPathSegment("v2", "core/attached_runtime_reuse_binding.py", "runtime 复用绑定"),
                 CrossRepoPathSegment("v2", "core/attached_runtime_recovery_readiness.py", "恢复就绪性评估"),
                 CrossRepoPathSegment("v2", "core/android_v2_continuity_contract.py", "连续性契约"),
@@ -765,9 +785,19 @@ def _build_canonical_path_traces() -> List[CanonicalPathTrace]:
                 CrossRepoPathSegment("v2", "galaxy_gateway/android/handlers/mesh_topology.py", "mesh 拓扑信号接收"),
                 CrossRepoPathSegment("v2", "core/mesh/body_mesh_registry.py", "mesh 角色注册"),
                 CrossRepoPathSegment("v2", "core/mesh/mesh_session_coordinator.py", "mesh 会话协调"),
-                CrossRepoPathSegment("v2", "core/mesh/mesh_runtime_center_state.py evaluate_center_runtime_status()", "中心 mesh 状态机评估"),
-                CrossRepoPathSegment("v2", "core/unified_governance_semantics.py build_mesh_runtime_state()", "proof quality 输出"),
-                CrossRepoPathSegment("v2", "core/unified_governance_semantics.py resolve_governance_path_decision()", "治理路径决策（proof_quality 影响 multimodal）"),
+                CrossRepoPathSegment(
+                    "v2",
+                    "core/mesh/mesh_runtime_center_state.py evaluate_center_runtime_status()",
+                    "中心 mesh 状态机评估",
+                ),
+                CrossRepoPathSegment(
+                    "v2", "core/unified_governance_semantics.py build_mesh_runtime_state()", "proof quality 输出"
+                ),
+                CrossRepoPathSegment(
+                    "v2",
+                    "core/unified_governance_semantics.py resolve_governance_path_decision()",
+                    "治理路径决策（proof_quality 影响 multimodal）",
+                ),
             ],
             proof_quality=ProofQualityLevel.V2_REGRESSION_EXISTS,
             notes="V2 中心 mesh 状态机 + 116 测试。runtime_closed 从未通过真实 Android 参与触发。",
@@ -817,7 +847,9 @@ def _build_combined_issues() -> List[DualRepoIssue]:
             severity="high",
             impact="Android 本地执行进度（LoopController step 状态）与 V2 规范执行真相可能不一致，无 conflict resolution 协议",
             v2_anchors=[
-                DualRepoCodeAnchor("v2", "core/unified_execution_governance.py get_uplink_truth_state()", "V2 规范执行真相"),
+                DualRepoCodeAnchor(
+                    "v2", "core/unified_execution_governance.py get_uplink_truth_state()", "V2 规范执行真相"
+                ),
             ],
             android_anchors=[
                 DualRepoCodeAnchor("android", "LoopController", "本地执行状态"),
@@ -847,10 +879,16 @@ def _build_combined_issues() -> List[DualRepoIssue]:
             severity="high",
             impact="当前'E2E'测试实际为 V2 单侧 mock/stub，无法证明真实 Android → V2 完整执行链",
             v2_anchors=[
-                DualRepoCodeAnchor("v2", "tests/integration/test_v2_android_protocol_regression.py", "跨仓 mock 协议回归（非真实双进程）"),
+                DualRepoCodeAnchor(
+                    "v2",
+                    "tests/integration/test_v2_android_protocol_regression.py",
+                    "跨仓 mock 协议回归（非真实双进程）",
+                ),
             ],
             android_anchors=[
-                DualRepoCodeAnchor("android", "Pr8AndroidMeshParticipationContractTest.kt", "Android 本地测试（非跨仓）"),
+                DualRepoCodeAnchor(
+                    "android", "Pr8AndroidMeshParticipationContractTest.kt", "Android 本地测试（非跨仓）"
+                ),
             ],
             root_cause_ownership=DualRepoOwnership.DUAL_REPO,
             resolution_scope=DualRepoOwnership.DUAL_REPO,
@@ -879,7 +917,11 @@ def _build_combined_issues() -> List[DualRepoIssue]:
             severity="medium",
             impact="Android 接受接管后断连重连时，重连后 ownership 状态是否正确恢复无跨仓回归证据",
             v2_anchors=[
-                DualRepoCodeAnchor("v2", "galaxy_gateway/android/handlers/takeover_response.py", "_resolve_session_id_for_takeover_response()"),
+                DualRepoCodeAnchor(
+                    "v2",
+                    "galaxy_gateway/android/handlers/takeover_response.py",
+                    "_resolve_session_id_for_takeover_response()",
+                ),
                 DualRepoCodeAnchor("v2", "core/attached_runtime_recovery_readiness.py", "恢复就绪性"),
             ],
             android_anchors=[
@@ -1153,7 +1195,10 @@ def _build_roadmap() -> List[DualRepoPRRoadmapItem]:
             title="Resumed Ownership Transfer 完整回归闭合",
             repo_scope=DualRepoOwnership.DUAL_REPO,
             targeted_problems=["P7（Resumed ownership transfer proof 弱）"],
-            key_landing_zones_v2=["core/attached_runtime_recovery_readiness.py", "core/android_v2_continuity_contract.py"],
+            key_landing_zones_v2=[
+                "core/attached_runtime_recovery_readiness.py",
+                "core/android_v2_continuity_contract.py",
+            ],
             key_landing_zones_android=["断连重连后 ownership 状态恢复逻辑"],
             dependencies=["PR-ROADMAP-05"],
             acceptance_criteria=[

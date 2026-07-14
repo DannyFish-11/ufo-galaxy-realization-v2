@@ -10,6 +10,7 @@
   C. 高性能事件循环 —— GALAXY_FAST_LOOP=0 跳过、缺包安全退回默认、
      子进程探针在默认策略下可用。
 """
+
 from __future__ import annotations
 
 import sys
@@ -26,6 +27,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 # A. Ollama 延迟默认值
 # ---------------------------------------------------------------------------
 
+
 class TestOllamaServeEnvDefaults:
     @pytest.mark.asyncio
     async def test_serve_spawned_with_latency_env_defaults(self, monkeypatch):
@@ -39,6 +41,7 @@ class TestOllamaServeEnvDefaults:
 
             class _P:
                 pid = 12345
+
             return _P()
 
         monkeypatch.setattr(lbm.shutil, "which", lambda name: "/usr/bin/ollama")
@@ -51,7 +54,7 @@ class TestOllamaServeEnvDefaults:
         ok = await mgr._start_ollama()
         assert ok is True
         env = captured["kwargs"]["env"]
-        assert env["OLLAMA_KEEP_ALIVE"] == "-1"      # 模型常驻不卸载(冷启动根治)
+        assert env["OLLAMA_KEEP_ALIVE"] == "-1"  # 模型常驻不卸载(冷启动根治)
         assert env["OLLAMA_FLASH_ATTENTION"] == "1"
         assert env["OLLAMA_KV_CACHE_TYPE"] == "q8_0"
 
@@ -66,6 +69,7 @@ class TestOllamaServeEnvDefaults:
 
             class _P:
                 pid = 1
+
             return _P()
 
         monkeypatch.setattr(lbm.shutil, "which", lambda name: "/usr/bin/ollama")
@@ -83,9 +87,9 @@ class TestOllamaAdapterKeepAlive:
         from core.multi_llm_router import OllamaAdapter, ProviderConfig
 
         monkeypatch.delenv("GALAXY_OLLAMA_KEEP_ALIVE", raising=False)
-        cfg = ProviderConfig(name="ollama", api_key="",
-                             base_url="http://localhost:11434",
-                             models=["m"], default_model="m")
+        cfg = ProviderConfig(
+            name="ollama", api_key="", base_url="http://localhost:11434", models=["m"], default_model="m"
+        )
         ad = OllamaAdapter(cfg)
         captured = {}
 
@@ -94,13 +98,13 @@ class TestOllamaAdapterKeepAlive:
 
             class _R:
                 def json(self):
-                    return {"message": {"content": "ok"},
-                            "prompt_eval_count": 1, "eval_count": 1}
+                    return {"message": {"content": "ok"}, "prompt_eval_count": 1, "eval_count": 1}
+
             return _R()
 
         ad._post_with_retry = _fake_post
         await ad.chat([{"role": "user", "content": "hi"}], "m")
-        assert captured["body"]["keep_alive"] == -1          # JSON number
+        assert captured["body"]["keep_alive"] == -1  # JSON number
         assert isinstance(captured["body"]["keep_alive"], int)
 
     @pytest.mark.asyncio
@@ -108,9 +112,9 @@ class TestOllamaAdapterKeepAlive:
         from core.multi_llm_router import OllamaAdapter, ProviderConfig
 
         monkeypatch.setenv("GALAXY_OLLAMA_KEEP_ALIVE", "30m")
-        cfg = ProviderConfig(name="ollama", api_key="",
-                             base_url="http://localhost:11434",
-                             models=["m"], default_model="m")
+        cfg = ProviderConfig(
+            name="ollama", api_key="", base_url="http://localhost:11434", models=["m"], default_model="m"
+        )
         ad = OllamaAdapter(cfg)
         captured = {}
 
@@ -120,6 +124,7 @@ class TestOllamaAdapterKeepAlive:
             class _R:
                 def json(self):
                     return {"message": {"content": "ok"}}
+
             return _R()
 
         ad._post_with_retry = _fake_post
@@ -131,10 +136,13 @@ class TestOllamaAdapterKeepAlive:
 # C. 高性能事件循环
 # ---------------------------------------------------------------------------
 
+
 class TestFastLoop:
     def test_disabled_by_env(self, monkeypatch):
         import importlib
+
         import core.fast_loop as fl
+
         importlib.reload(fl)
         monkeypatch.setenv("GALAXY_FAST_LOOP", "0")
         assert fl.install_fast_loop() == "default"
@@ -142,7 +150,9 @@ class TestFastLoop:
 
     def test_missing_package_falls_back_to_default(self, monkeypatch):
         import importlib
+
         import core.fast_loop as fl
+
         importlib.reload(fl)
         monkeypatch.setenv("GALAXY_FAST_LOOP", "1")
         # 令 uvloop/winloop 导入失败(不真正换策略,避免污染测试进程)
@@ -158,6 +168,7 @@ class TestFastLoop:
 
     def test_subprocess_probe_passes_on_default_policy(self):
         from core.fast_loop import _probe_subprocess_support
+
         assert _probe_subprocess_support() is True
 
 
@@ -165,22 +176,26 @@ class TestFastLoop:
 # B. Kokoro 离线引擎
 # ---------------------------------------------------------------------------
 
+
 class TestKokoroEngine:
     def test_unavailable_without_model_files(self, monkeypatch, tmp_path):
         monkeypatch.setenv("GALAXY_KOKORO_DIR", str(tmp_path / "nope"))
         monkeypatch.setenv("GALAXY_KOKORO_AUTOFETCH", "0")  # 测试不触网
         from core.tts import kokoro_engine as ke
+
         assert ke.model_files_present() is False
         eng = ke.KokoroTTSEngine()
         assert eng.available() is False  # 缺包或缺文件都不可用,且不抛
 
     def test_has_cjk(self):
         from core.tts.kokoro_engine import _has_cjk
+
         assert _has_cjk("今天天气不错") is True
         assert _has_cjk("hello world 3.14") is False
 
     def test_pick_voice_prefers_chinese_for_cjk_text(self):
         from core.tts.kokoro_engine import KokoroTTSEngine
+
         eng = KokoroTTSEngine()
         eng._voices = ["af_sarah", "am_adam", "zf_xiaoxiao", "zm_yunxi"]
         assert eng._pick_voice("你好呀") == "zf_xiaoxiao"
@@ -188,6 +203,7 @@ class TestKokoroEngine:
 
     def test_pick_voice_env_override(self, monkeypatch):
         from core.tts.kokoro_engine import KokoroTTSEngine
+
         monkeypatch.setenv("GALAXY_KOKORO_VOICE", "zm_yunxi")
         eng = KokoroTTSEngine()
         eng._voices = ["af_sarah", "zm_yunxi"]
@@ -196,6 +212,7 @@ class TestKokoroEngine:
     def test_inherits_playback_from_edge_engine(self):
         from core.tts.edge_tts_engine import EdgeTTSEngine
         from core.tts.kokoro_engine import KokoroTTSEngine
+
         assert issubclass(KokoroTTSEngine, EdgeTTSEngine)
         assert "_play_audio" not in KokoroTTSEngine.__dict__
         assert "synthesize" in KokoroTTSEngine.__dict__
@@ -205,6 +222,7 @@ class TestKokoroChainIntegration:
     @pytest.fixture(autouse=True)
     def _reset(self):
         import core.speech_output as so
+
         so._engine = None
         so._engine_failed = False
         so._failed_engine_types.clear()
@@ -215,6 +233,7 @@ class TestKokoroChainIntegration:
 
     def test_explicit_kokoro_choice_degrades_gracefully(self, monkeypatch, tmp_path):
         import core.speech_output as so
+
         monkeypatch.setenv("GALAXY_TTS_ENGINE", "kokoro")
         monkeypatch.setenv("GALAXY_KOKORO_DIR", str(tmp_path / "nope"))
         monkeypatch.setenv("GALAXY_KOKORO_AUTOFETCH", "0")
@@ -225,6 +244,7 @@ class TestKokoroChainIntegration:
 
     def test_blacklisted_kokoro_skipped(self, monkeypatch):
         import core.speech_output as so
+
         so._failed_engine_types.add("KokoroTTSEngine")
         monkeypatch.setenv("GALAXY_TTS_ENGINE", "kokoro")
         eng = so._get_engine()

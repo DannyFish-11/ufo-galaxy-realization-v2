@@ -50,11 +50,11 @@ Validates:
 
 from __future__ import annotations
 
-import sys
 import os
+import sys
 import unittest
 import warnings
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -64,19 +64,23 @@ class TestExecutionSpineAuthority(unittest.TestCase):
 
     def test_01_authority_importable(self):
         from core.execution_spine import EXECUTION_SPINE_AUTHORITY
+
         self.assertIsNotNone(EXECUTION_SPINE_AUTHORITY)
 
     def test_02_authority_contains_execution_spine(self):
         from core.execution_spine import EXECUTION_SPINE_AUTHORITY
+
         self.assertIn("EXECUTION_SPINE", EXECUTION_SPINE_AUTHORITY)
 
     def test_03_ingress_policy_non_empty(self):
         from core.execution_spine import EXECUTION_SPINE_INGRESS_POLICY
+
         self.assertIsInstance(EXECUTION_SPINE_INGRESS_POLICY, str)
         self.assertTrue(len(EXECUTION_SPINE_INGRESS_POLICY) > 0)
 
     def test_04_ingress_policy_mentions_command_router(self):
         from core.execution_spine import EXECUTION_SPINE_INGRESS_POLICY
+
         self.assertIn("CommandRouter", EXECUTION_SPINE_INGRESS_POLICY)
 
 
@@ -85,30 +89,37 @@ class TestExecutionIngressSource(unittest.TestCase):
 
     def test_05_source_importable(self):
         from core.execution_spine import ExecutionIngressSource
+
         self.assertIsNotNone(ExecutionIngressSource)
 
     def test_06_scheduler_value(self):
         from core.execution_spine import ExecutionIngressSource
+
         self.assertEqual(ExecutionIngressSource.SCHEDULER.value, "scheduler")
 
     def test_07_bridge_value(self):
         from core.execution_spine import ExecutionIngressSource
+
         self.assertEqual(ExecutionIngressSource.BRIDGE.value, "bridge")
 
     def test_08_galaxy_orchestrator_value(self):
         from core.execution_spine import ExecutionIngressSource
+
         self.assertEqual(ExecutionIngressSource.GALAXY_ORCHESTRATOR.value, "galaxy_orchestrator")
 
     def test_09_device_orchestrator_value(self):
         from core.execution_spine import ExecutionIngressSource
+
         self.assertEqual(ExecutionIngressSource.DEVICE_ORCHESTRATOR.value, "device_orchestrator")
 
     def test_10_unified_orchestrator_value(self):
         from core.execution_spine import ExecutionIngressSource
+
         self.assertEqual(ExecutionIngressSource.UNIFIED_ORCHESTRATOR.value, "unified_orchestrator")
 
     def test_11_canonical_value(self):
         from core.execution_spine import ExecutionIngressSource
+
         self.assertEqual(ExecutionIngressSource.CANONICAL.value, "canonical")
 
 
@@ -117,10 +128,12 @@ class TestIngressRecord(unittest.TestCase):
 
     def test_12_ingress_record_importable(self):
         from core.execution_spine import IngressRecord
+
         self.assertIsNotNone(IngressRecord)
 
     def test_13_to_dict_has_expected_keys(self):
         from core.execution_spine import IngressRecord
+
         rec = IngressRecord()
         d = rec.to_dict()
         self.assertIn("record_id", d)
@@ -138,22 +151,27 @@ class TestExecutionSpineImports(unittest.TestCase):
 
     def test_14_normalize_ingress_importable(self):
         from core.execution_spine import normalize_ingress_to_envelope
+
         self.assertTrue(callable(normalize_ingress_to_envelope))
 
     def test_15_route_via_spine_importable(self):
         from core.execution_spine import route_via_spine
+
         self.assertTrue(callable(route_via_spine))
 
     def test_16_record_legacy_ingress_importable(self):
         from core.execution_spine import record_legacy_ingress
+
         self.assertTrue(callable(record_legacy_ingress))
 
     def test_17_get_ingress_log_importable(self):
         from core.execution_spine import get_ingress_log
+
         self.assertTrue(callable(get_ingress_log))
 
     def test_18_reset_ingress_log_importable(self):
         from core.execution_spine import reset_ingress_log
+
         self.assertTrue(callable(reset_ingress_log))
 
 
@@ -162,14 +180,16 @@ class TestIngressLog(unittest.TestCase):
 
     def setUp(self):
         from core.execution_spine import reset_ingress_log
+
         reset_ingress_log()
 
     def test_19_record_legacy_ingress_appends(self):
         from core.execution_spine import (
             ExecutionIngressSource,
-            record_legacy_ingress,
             get_ingress_log,
+            record_legacy_ingress,
         )
+
         record_legacy_ingress(ExecutionIngressSource.SCHEDULER, {}, reason="test")
         log = get_ingress_log()
         self.assertEqual(len(log), 1)
@@ -177,41 +197,48 @@ class TestIngressLog(unittest.TestCase):
     def test_20_reset_clears_log(self):
         from core.execution_spine import (
             ExecutionIngressSource,
-            record_legacy_ingress,
             get_ingress_log,
+            record_legacy_ingress,
             reset_ingress_log,
         )
+
         record_legacy_ingress(ExecutionIngressSource.SCHEDULER, {}, reason="test")
         reset_ingress_log()
         self.assertEqual(len(get_ingress_log()), 0)
 
     def test_21_get_ingress_log_returns_list(self):
         from core.execution_spine import get_ingress_log
+
         log = get_ingress_log()
         self.assertIsInstance(log, list)
 
     def test_22_ingress_record_default_source_unknown(self):
-        from core.execution_spine import IngressRecord, ExecutionIngressSource
+        from core.execution_spine import ExecutionIngressSource, IngressRecord
+
         rec = IngressRecord()
         self.assertEqual(rec.source, ExecutionIngressSource.UNKNOWN)
 
     def test_23_ingress_record_default_was_normalized_false(self):
         from core.execution_spine import IngressRecord
+
         rec = IngressRecord()
         self.assertFalse(rec.was_normalized)
 
     def test_24_record_legacy_ingress_returns_record(self):
-        from core.execution_spine import ExecutionIngressSource, record_legacy_ingress, IngressRecord
+        from core.execution_spine import ExecutionIngressSource, IngressRecord, record_legacy_ingress
+
         rec = record_legacy_ingress(ExecutionIngressSource.BRIDGE, {}, reason="test-reason")
         self.assertIsInstance(rec, IngressRecord)
 
     def test_25_record_legacy_ingress_was_normalized_true(self):
         from core.execution_spine import ExecutionIngressSource, record_legacy_ingress
+
         rec = record_legacy_ingress(ExecutionIngressSource.SCHEDULER, {}, reason="r")
         self.assertTrue(rec.was_normalized)
 
     def test_26_record_legacy_ingress_preserves_reason(self):
         from core.execution_spine import ExecutionIngressSource, record_legacy_ingress
+
         rec = record_legacy_ingress(ExecutionIngressSource.DEVICE_ORCHESTRATOR, {}, reason="custom-reason")
         self.assertIn("custom-reason", rec.legacy_reason)
 
@@ -221,18 +248,21 @@ class TestNormalizeIngressToEnvelope(unittest.TestCase):
 
     def setUp(self):
         from core.execution_spine import reset_ingress_log
+
         reset_ingress_log()
 
     def test_27_normalize_dict_produces_result(self):
         from core.execution_spine import ExecutionIngressSource, normalize_ingress_to_envelope
+
         payload = {"task_type": "screenshot", "device_id": "dev_001"}
         result = normalize_ingress_to_envelope(payload, source=ExecutionIngressSource.SCHEDULER)
         self.assertIsNotNone(result)
 
     def test_28_normalize_task_envelope_fast_path(self):
         try:
-            from core.schemas.task_envelope import TaskEnvelope
             from core.execution_spine import ExecutionIngressSource, normalize_ingress_to_envelope
+            from core.schemas.task_envelope import TaskEnvelope
+
             env = TaskEnvelope(task_id="t1", trace_id="tr1", source="test", tool_name="foo")
             result = normalize_ingress_to_envelope(env, source=ExecutionIngressSource.CANONICAL)
             self.assertIs(result, env)
@@ -241,6 +271,7 @@ class TestNormalizeIngressToEnvelope(unittest.TestCase):
 
     def test_29_normalize_produces_task_id(self):
         from core.execution_spine import ExecutionIngressSource, normalize_ingress_to_envelope
+
         payload = {"task_type": "screenshot", "device_id": "dev_001"}
         result = normalize_ingress_to_envelope(payload, source=ExecutionIngressSource.SCHEDULER)
         self.assertTrue(hasattr(result, "task_id"))
@@ -248,6 +279,7 @@ class TestNormalizeIngressToEnvelope(unittest.TestCase):
 
     def test_30_normalize_produces_trace_id(self):
         from core.execution_spine import ExecutionIngressSource, normalize_ingress_to_envelope
+
         payload = {"task_type": "screenshot", "device_id": "dev_001"}
         result = normalize_ingress_to_envelope(payload, source=ExecutionIngressSource.SCHEDULER)
         self.assertTrue(hasattr(result, "trace_id"))
@@ -259,19 +291,23 @@ class TestCommandRouterLegacyIngressPolicy(unittest.TestCase):
 
     def test_31_policy_importable(self):
         from core.command_router import COMMAND_ROUTER_LEGACY_INGRESS_POLICY
+
         self.assertIsNotNone(COMMAND_ROUTER_LEGACY_INGRESS_POLICY)
 
     def test_32_policy_mentions_normalize(self):
         from core.command_router import COMMAND_ROUTER_LEGACY_INGRESS_POLICY
+
         self.assertIn("normalize", COMMAND_ROUTER_LEGACY_INGRESS_POLICY.lower())
 
     def test_33_command_router_has_normalize_legacy_ingress(self):
         from core.command_router import CommandRouter
+
         self.assertTrue(hasattr(CommandRouter, "normalize_legacy_ingress"))
         self.assertTrue(callable(CommandRouter.normalize_legacy_ingress))
 
     def test_34_normalize_legacy_ingress_does_not_raise(self):
         from core.command_router import CommandRouter
+
         router = CommandRouter.__new__(CommandRouter)
         # Minimal stub — bypass __init__
         result = router.normalize_legacy_ingress(
@@ -287,10 +323,12 @@ class TestOrchestratorFacadeAuthority(unittest.TestCase):
 
     def test_35_device_orchestrator_facade_importable(self):
         from core.device_orchestrator import DEVICE_ORCHESTRATOR_FACADE_AUTHORITY
+
         self.assertIsNotNone(DEVICE_ORCHESTRATOR_FACADE_AUTHORITY)
 
     def test_36_device_orchestrator_facade_contains_facade(self):
         from core.device_orchestrator import DEVICE_ORCHESTRATOR_FACADE_AUTHORITY
+
         self.assertIn("FACADE", DEVICE_ORCHESTRATOR_FACADE_AUTHORITY)
 
     def test_37_galaxy_orchestrator_facade_importable(self):
@@ -337,6 +375,7 @@ class TestCompatBypassFencing(unittest.TestCase):
 
     def test_42_route_command_emits_legacy_guardrail(self):
         import asyncio
+
         from core.command_router import CommandRouter
 
         router = CommandRouter.__new__(CommandRouter)

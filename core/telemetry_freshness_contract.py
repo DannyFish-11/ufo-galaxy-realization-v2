@@ -456,9 +456,7 @@ _CLASS_RANK: Dict[str, int] = {
 }
 
 
-def _worse_or_equal(
-    a: TelemetryFreshnessClass, b: TelemetryFreshnessClass
-) -> bool:
+def _worse_or_equal(a: TelemetryFreshnessClass, b: TelemetryFreshnessClass) -> bool:
     """Return True if class *a* is worse than or equal to class *b*."""
     return _CLASS_RANK[a.value] <= _CLASS_RANK[b.value]
 
@@ -609,24 +607,14 @@ class TelemetryFreshnessEvidence:
         except ValueError:
             path_kind = ObservationPathKind.unknown
         return cls(
-            realtime_channel_confirmed=bool(
-                data.get("realtime_channel_confirmed", False)
-            ),
-            all_required_channels_active=bool(
-                data.get("all_required_channels_active", False)
-            ),
-            freshness_within_window=bool(
-                data.get("freshness_within_window", False)
-            ),
-            delivery_path_authoritative=bool(
-                data.get("delivery_path_authoritative", False)
-            ),
+            realtime_channel_confirmed=bool(data.get("realtime_channel_confirmed", False)),
+            all_required_channels_active=bool(data.get("all_required_channels_active", False)),
+            freshness_within_window=bool(data.get("freshness_within_window", False)),
+            delivery_path_authoritative=bool(data.get("delivery_path_authoritative", False)),
             no_delivery_gaps=bool(data.get("no_delivery_gaps", False)),
             no_sampling_loss=bool(data.get("no_sampling_loss", False)),
             evidence_lag_known=bool(data.get("evidence_lag_known", False)),
-            post_hoc_evidence_only=bool(
-                data.get("post_hoc_evidence_only", False)
-            ),
+            post_hoc_evidence_only=bool(data.get("post_hoc_evidence_only", False)),
             explicit_unreliable=bool(data.get("explicit_unreliable", False)),
             observation_path_kind=path_kind,
             participant_id=data.get("participant_id"),
@@ -717,9 +705,7 @@ class TelemetryFreshnessVerdict:
         }
 
     @classmethod
-    def from_dict(
-        cls, data: Dict[str, Any]
-    ) -> "TelemetryFreshnessVerdict":
+    def from_dict(cls, data: Dict[str, Any]) -> "TelemetryFreshnessVerdict":
         """Construct from a dict (round-trip complement of ``to_dict``)."""
         class_raw = data.get("freshness_class", "telemetry_unreliable")
         try:
@@ -730,9 +716,7 @@ class TelemetryFreshnessVerdict:
             freshness_class=f_class,
             rationale=data.get("rationale", ""),
             downgrade_reasons=list(data.get("downgrade_reasons", [])),
-            is_realtime_authoritative=bool(
-                data.get("is_realtime_authoritative", False)
-            ),
+            is_realtime_authoritative=bool(data.get("is_realtime_authoritative", False)),
             is_fresh=bool(data.get("is_fresh", False)),
             is_delayed=bool(data.get("is_delayed", False)),
             is_partial=bool(data.get("is_partial", False)),
@@ -793,8 +777,7 @@ def classify_telemetry_freshness(
         return _classify(evidence)
     except Exception as exc:
         logger.warning(
-            "classify_telemetry_freshness raised unexpectedly: %r — "
-            "defaulting to telemetry_unreliable",
+            "classify_telemetry_freshness raised unexpectedly: %r — " "defaulting to telemetry_unreliable",
             exc,
         )
         return TelemetryFreshnessVerdict(
@@ -879,19 +862,14 @@ def _classify(
     # ------------------------------------------------------------------
     if not evidence.realtime_channel_confirmed:
         downgrade_reasons.append(
-            "realtime_channel_confirmed=False: "
-            "SIGNAL_PRESENCE_MUST_NOT_CLAIM_REALTIME_AUTHORITATIVE_POLICY applied."
+            "realtime_channel_confirmed=False: " "SIGNAL_PRESENCE_MUST_NOT_CLAIM_REALTIME_AUTHORITATIVE_POLICY applied."
         )
     if not evidence.delivery_path_authoritative:
         downgrade_reasons.append(
-            "delivery_path_authoritative=False: delivery path is not confirmed "
-            "as authoritative."
+            "delivery_path_authoritative=False: delivery path is not confirmed " "as authoritative."
         )
     if not evidence.no_delivery_gaps:
-        downgrade_reasons.append(
-            "no_delivery_gaps=False: "
-            "DELIVERY_GAP_MUST_DOWNGRADE_FROM_REALTIME_POLICY applied."
-        )
+        downgrade_reasons.append("no_delivery_gaps=False: " "DELIVERY_GAP_MUST_DOWNGRADE_FROM_REALTIME_POLICY applied.")
     if not evidence.no_sampling_loss:
         downgrade_reasons.append(
             "no_sampling_loss=False: sampling loss detected; "
@@ -899,18 +877,15 @@ def _classify(
         )
     if evidence.post_hoc_evidence_only:
         downgrade_reasons.append(
-            "post_hoc_evidence_only=True: "
-            "POST_HOC_EVIDENCE_MUST_NOT_CLAIM_REALTIME_AUTHORITATIVE_POLICY applied."
+            "post_hoc_evidence_only=True: " "POST_HOC_EVIDENCE_MUST_NOT_CLAIM_REALTIME_AUTHORITATIVE_POLICY applied."
         )
     if not evidence.freshness_within_window:
         downgrade_reasons.append(
-            "freshness_within_window=False: "
-            "STALE_TELEMETRY_MUST_DOWNGRADE_CLASS_POLICY applied."
+            "freshness_within_window=False: " "STALE_TELEMETRY_MUST_DOWNGRADE_CLASS_POLICY applied."
         )
     if not evidence.all_required_channels_active:
         downgrade_reasons.append(
-            "all_required_channels_active=False: "
-            "PARTIAL_CHANNELS_BLOCK_REALTIME_AUTHORITATIVE_POLICY applied."
+            "all_required_channels_active=False: " "PARTIAL_CHANNELS_BLOCK_REALTIME_AUTHORITATIVE_POLICY applied."
         )
 
     # ------------------------------------------------------------------
@@ -948,13 +923,15 @@ def _classify(
     # Rule 4: post-hoc evidence only → delayed_observable
     #         OR stale but all channels active and lag is known
     # ------------------------------------------------------------------
-    _any_evidence = any([
-        evidence.realtime_channel_confirmed,
-        evidence.all_required_channels_active,
-        evidence.freshness_within_window,
-        evidence.evidence_lag_known,
-        evidence.post_hoc_evidence_only,
-    ])
+    _any_evidence = any(
+        [
+            evidence.realtime_channel_confirmed,
+            evidence.all_required_channels_active,
+            evidence.freshness_within_window,
+            evidence.evidence_lag_known,
+            evidence.post_hoc_evidence_only,
+        ]
+    )
 
     if evidence.post_hoc_evidence_only and _any_evidence:
         return TelemetryFreshnessVerdict(
@@ -1010,11 +987,13 @@ def _classify(
     # ------------------------------------------------------------------
     # Rule 5: partially_observable — some channels active but not all
     # ------------------------------------------------------------------
-    _some_active_evidence = any([
-        evidence.realtime_channel_confirmed,
-        evidence.freshness_within_window,
-        evidence.evidence_lag_known,
-    ])
+    _some_active_evidence = any(
+        [
+            evidence.realtime_channel_confirmed,
+            evidence.freshness_within_window,
+            evidence.evidence_lag_known,
+        ]
+    )
 
     if not evidence.all_required_channels_active and _some_active_evidence:
         return TelemetryFreshnessVerdict(
@@ -1042,8 +1021,7 @@ def _classify(
     # ------------------------------------------------------------------
     if not downgrade_reasons:
         downgrade_reasons.append(
-            "No positive telemetry evidence; "
-            "TELEMETRY_ABSENCE_DEFAULTS_TO_UNRELIABLE_POLICY applied."
+            "No positive telemetry evidence; " "TELEMETRY_ABSENCE_DEFAULTS_TO_UNRELIABLE_POLICY applied."
         )
     return TelemetryFreshnessVerdict(
         freshness_class=TelemetryFreshnessClass.telemetry_unreliable,

@@ -48,15 +48,14 @@ from core.center_distributed_agent_system_review import (
     HONEST_GAP_PRESERVATION_POLICY,
     SIX_MATURITY_LAYER_ASSESSMENT_POLICY,
     AndroidLocalCapabilityProfile,
-    CenterDistributedAgentSystemReviewReport,
     CenterDistributedAgentSystemReviewer,
+    CenterDistributedAgentSystemReviewReport,
     LayerMaturityStatus,
     MaturityLayer,
     build_center_distributed_agent_system_review,
     get_center_distributed_agent_system_review,
     reset_center_distributed_agent_system_review,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -112,23 +111,23 @@ class TestModuleAndSentinels:
     def test_system_identity_sentinel_contains_center_distributed(self):
         """Sentinel must mention center-distributed architecture."""
         sentinel = CENTER_DISTRIBUTED_AGENT_SYSTEM_IDENTITY_SENTINEL.lower()
-        assert "center" in sentinel or "distributed" in sentinel, (
-            "System identity sentinel must contain 'center' or 'distributed'."
-        )
+        assert (
+            "center" in sentinel or "distributed" in sentinel
+        ), "System identity sentinel must contain 'center' or 'distributed'."
 
     def test_android_policy_mentions_distributed_runtime_node(self):
         """Android policy must mention 'distributed runtime node'."""
         policy = ANDROID_IS_DISTRIBUTED_RUNTIME_NODE_POLICY.lower()
-        assert "distributed runtime node" in policy or "distributed" in policy, (
-            "Android policy must describe Android as a distributed runtime node."
-        )
+        assert (
+            "distributed runtime node" in policy or "distributed" in policy
+        ), "Android policy must describe Android as a distributed runtime node."
 
     def test_delegated_path_policy_mentions_one_path(self):
         """Delegated path policy must assert it is ONE path, not the whole system."""
         policy = DELEGATED_PATH_IS_ONE_PATH_NOT_WHOLE_SYSTEM_POLICY.lower()
-        assert "one" in policy or "multiple" in policy or "path" in policy, (
-            "Delegated path policy must mention 'one path' or 'multiple paths'."
-        )
+        assert (
+            "one" in policy or "multiple" in policy or "path" in policy
+        ), "Delegated path policy must mention 'one path' or 'multiple paths'."
 
 
 # ---------------------------------------------------------------------------
@@ -149,17 +148,16 @@ class TestSystemIdentityInvariants:
         identity = report.system_identity.upper()
         # Must contain center or distributed
         assert "CENTER" in identity or "DISTRIBUTED" in identity, (
-            "System identity must mention 'center' or 'distributed'. "
-            f"Got: {report.system_identity[:100]}"
+            "System identity must mention 'center' or 'distributed'. " f"Got: {report.system_identity[:100]}"
         )
 
     def test_system_is_center_distributed_agent_flag(self, report):
         """The review must set system_is_center_distributed_agent based on code evidence."""
         # This flag is determined by whether architecture modules are importable.
         # It should be True when core governance modules are importable.
-        assert isinstance(report.system_is_center_distributed_agent, bool), (
-            "system_is_center_distributed_agent must be a boolean."
-        )
+        assert isinstance(
+            report.system_is_center_distributed_agent, bool
+        ), "system_is_center_distributed_agent must be a boolean."
         # Given that the V2 codebase is present, this should be True
         assert report.system_is_center_distributed_agent, (
             "system_is_center_distributed_agent must be True in a running V2 environment. "
@@ -210,9 +208,9 @@ class TestAndroidLocalCapabilityCoverage:
 
     def test_android_is_distributed_runtime_node_evaluated(self, report):
         """The review must evaluate whether Android qualifies as a distributed runtime node."""
-        assert isinstance(report.android_is_distributed_runtime_node, bool), (
-            "android_is_distributed_runtime_node must be a boolean."
-        )
+        assert isinstance(
+            report.android_is_distributed_runtime_node, bool
+        ), "android_is_distributed_runtime_node must be a boolean."
 
     def test_android_local_intelligence_architecture_covered(self, report):
         """The review must cover Android's local inference architecture.
@@ -224,8 +222,7 @@ class TestAndroidLocalCapabilityCoverage:
         # The profile should document whether local inference code exists
         # (even if not default-active)
         assert hasattr(profile, "local_inference_capability_code_exists"), (
-            "AndroidLocalCapabilityProfile must have "
-            "local_inference_capability_code_exists field."
+            "AndroidLocalCapabilityProfile must have " "local_inference_capability_code_exists field."
         )
 
     def test_android_local_inference_architecture_is_real(self, report):
@@ -248,16 +245,16 @@ class TestAndroidLocalCapabilityCoverage:
     def test_android_local_networking_capability_covered(self, report):
         """The review must cover Android's local networking capability."""
         profile = report.android_capability_profile
-        assert hasattr(profile, "local_networking_capability"), (
-            "AndroidLocalCapabilityProfile must have local_networking_capability field."
-        )
+        assert hasattr(
+            profile, "local_networking_capability"
+        ), "AndroidLocalCapabilityProfile must have local_networking_capability field."
 
     def test_android_gui_interaction_capability_covered(self, report):
         """The review must cover Android's GUI interaction capability."""
         profile = report.android_capability_profile
-        assert hasattr(profile, "local_gui_interaction_capability"), (
-            "AndroidLocalCapabilityProfile must have local_gui_interaction_capability."
-        )
+        assert hasattr(
+            profile, "local_gui_interaction_capability"
+        ), "AndroidLocalCapabilityProfile must have local_gui_interaction_capability."
 
     def test_android_acceptance_evaluation_covered(self, report):
         """The review must cover Android's local acceptance evaluation capability."""
@@ -320,8 +317,7 @@ class TestSixLayerAssessmentCompleteness:
         """All six MaturityLayer values must be present in layer_assessments."""
         for layer in MaturityLayer.all_layers():
             assert layer.value in report.layer_assessments, (
-                f"MaturityLayer.{layer.value} is missing from layer_assessments. "
-                "All six layers must be assessed."
+                f"MaturityLayer.{layer.value} is missing from layer_assessments. " "All six layers must be assessed."
             )
 
     def test_each_layer_has_a_status(self, report):
@@ -329,9 +325,9 @@ class TestSixLayerAssessmentCompleteness:
         for layer in MaturityLayer.all_layers():
             if layer.value in report.layer_assessments:
                 assessment = report.layer_assessments[layer.value]
-                assert isinstance(assessment.status, LayerMaturityStatus), (
-                    f"Layer {layer.value} must have a LayerMaturityStatus."
-                )
+                assert isinstance(
+                    assessment.status, LayerMaturityStatus
+                ), f"Layer {layer.value} must have a LayerMaturityStatus."
 
     def test_architecture_layer_is_substantially_closed_or_better(self, report):
         """The architecture_system_model layer must be substantially closed or better
@@ -377,9 +373,7 @@ class TestSixLayerAssessmentCompleteness:
         for layer in MaturityLayer.all_layers():
             if layer.value in report.layer_assessments:
                 assessment = report.layer_assessments[layer.value]
-                assert assessment.layer == layer, (
-                    f"Assessment for {layer.value} has wrong layer reference."
-                )
+                assert assessment.layer == layer, f"Assessment for {layer.value} has wrong layer reference."
 
 
 # ---------------------------------------------------------------------------
@@ -435,7 +429,9 @@ class TestGapAndDeferredPreservation:
             layer = report.layer_assessments[layer_key]
             # At minimum, gaps or deferred_items should mention non-default
             combined = " ".join(layer.gap_items + layer.deferred_items).lower()
-            assert "non-default" in combined or "non_default" in combined or "noop" in combined or "inactive" in combined, (
+            assert (
+                "non-default" in combined or "non_default" in combined or "noop" in combined or "inactive" in combined
+            ), (
                 "android_local_intelligence_runtime_host must document that "
                 "local AI (MobileVlmPlanner) is non-default. "
                 "NoOpPlannerService is the default — this must be honest."
@@ -453,9 +449,7 @@ class TestGapAndDeferredPreservation:
                 if assessment.gap_items:
                     # A layer with gaps CAN still have evidence
                     # (gaps and evidence coexist — both are valid)
-                    assert isinstance(assessment.gap_items, list), (
-                        "gap_items must be a list."
-                    )
+                    assert isinstance(assessment.gap_items, list), "gap_items must be a list."
 
 
 # ---------------------------------------------------------------------------
@@ -506,9 +500,7 @@ class TestReportSerialization:
         parsed = json.loads(report.to_json())
         assessments = parsed["layer_assessments"]
         for layer in MaturityLayer.all_layers():
-            assert layer.value in assessments, (
-                f"Layer {layer.value} missing from JSON output."
-            )
+            assert layer.value in assessments, f"Layer {layer.value} missing from JSON output."
 
     def test_android_profile_to_dict(self, report):
         profile_dict = report.android_capability_profile.to_dict()

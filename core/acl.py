@@ -46,7 +46,7 @@ _MAX_PAYLOAD_SIZE = 10_485_760
 def _try_emit_event(event_type_name: str, data: dict) -> None:
     """Best-effort emit to EventBus.  Never raises."""
     try:
-        from integration.event_bus import event_bus, EventType
+        from integration.event_bus import EventType, event_bus
 
         et = getattr(EventType, event_type_name, None)
         if et is not None:
@@ -95,9 +95,7 @@ class AntiCorruptionLayer:
 
     # ── Core validation pipeline ────────────────────────────────────────────
 
-    async def _validate(
-        self, raw: dict, model_cls: Type[T], label: str
-    ) -> dict:
+    async def _validate(self, raw: dict, model_cls: Type[T], label: str) -> dict:
         """Generic validation pipeline.
 
         Steps:
@@ -147,22 +145,25 @@ class AntiCorruptionLayer:
         try:
             model = model_cls.model_validate(extracted)
             logger.info(f"ACL: {label} fallback succeeded with {len(extracted)} fields")
-            _try_emit_event("ACL_NORMALIZATION_APPLIED", {
-                "label": label,
-                "original_fields": len(raw),
-                "extracted_fields": len(extracted),
-            })
+            _try_emit_event(
+                "ACL_NORMALIZATION_APPLIED",
+                {
+                    "label": label,
+                    "original_fields": len(raw),
+                    "extracted_fields": len(extracted),
+                },
+            )
             return {"success": True, "data": model}
         except ValidationError as exc:
-            error_details = [
-                {"loc": list(e["loc"]), "msg": e["msg"], "type": e["type"]}
-                for e in exc.errors()
-            ]
-            _try_emit_event("ACL_VALIDATION_FAILED", {
-                "label": label,
-                "errors": error_details,
-                "raw_keys": list(raw.keys()),
-            })
+            error_details = [{"loc": list(e["loc"]), "msg": e["msg"], "type": e["type"]} for e in exc.errors()]
+            _try_emit_event(
+                "ACL_VALIDATION_FAILED",
+                {
+                    "label": label,
+                    "errors": error_details,
+                    "raw_keys": list(raw.keys()),
+                },
+            )
             return self._fail(label, "ACL validation failed", raw, error_details)
 
     # ── Normalization helpers ───────────────────────────────────────────────
@@ -184,9 +185,17 @@ class AntiCorruptionLayer:
         # Status normalization
         if "status" in out and isinstance(out["status"], (int, float)):
             _status_map = {
-                0: "unspecified", 1: "pending", 2: "queued", 3: "dispatched",
-                4: "running", 5: "lsp_failed", 6: "success", 7: "failed",
-                8: "timeout", 9: "cancelled", 10: "retrying",
+                0: "unspecified",
+                1: "pending",
+                2: "queued",
+                3: "dispatched",
+                4: "running",
+                5: "lsp_failed",
+                6: "success",
+                7: "failed",
+                8: "timeout",
+                9: "cancelled",
+                10: "retrying",
             }
             out["status"] = _status_map.get(int(out["status"]), "unspecified")
 
@@ -211,15 +220,22 @@ class AntiCorruptionLayer:
         errors = []
 
         # Negative durations
-        for key in ("timeout_ms", "duration_ms", "cpu_limit_ms", "check_duration_ms",
-                     "wall_time_ms", "cpu_time_ms", "queue_wait_ms", "drain_timeout_s"):
+        for key in (
+            "timeout_ms",
+            "duration_ms",
+            "cpu_limit_ms",
+            "check_duration_ms",
+            "wall_time_ms",
+            "cpu_time_ms",
+            "queue_wait_ms",
+            "drain_timeout_s",
+        ):
             val = data.get(key)
             if val is not None and isinstance(val, (int, float)) and val < 0:
                 errors.append(f"{key} cannot be negative: {val}")
 
         # Negative memory
-        for key in ("memory_limit_mb", "disk_limit_mb", "memory_peak_bytes",
-                     "memory_total_mb", "disk_free_mb"):
+        for key in ("memory_limit_mb", "disk_limit_mb", "memory_peak_bytes", "memory_total_mb", "disk_free_mb"):
             val = data.get(key)
             if val is not None and isinstance(val, (int, float)) and val < 0:
                 errors.append(f"{key} cannot be negative: {val}")

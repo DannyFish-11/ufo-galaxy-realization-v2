@@ -62,6 +62,7 @@ Environment variable override::
 
     GALAXY_ENABLE_WEBRTC_DATA_CHANNEL=true
 """
+
 from __future__ import annotations
 
 import logging
@@ -71,8 +72,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 import numpy as np
 
-from .video_features import VideoFeatureExtractor, VideoState
 from .signal_quality import SignalQuality
+from .video_features import VideoFeatureExtractor, VideoState
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +125,7 @@ def _is_webrtc_data_channel_enabled() -> bool:
 
 
 class WebRTCIngressBridge:
-    """ Bridges Android video frames from Node_95 into the MultimodalIngressBus.
+    """Bridges Android video frames from Node_95 into the MultimodalIngressBus.
 
     Lifecycle
     ---------
@@ -158,13 +159,11 @@ class WebRTCIngressBridge:
 
         if self._enabled:
             logger.info(
-                "WebRTCIngressBridge enabled — Android video frames will be "
-                "bridged into the cognition pipeline"
+                "WebRTCIngressBridge enabled — Android video frames will be " "bridged into the cognition pipeline"
             )
         else:
             logger.debug(
-                "WebRTCIngressBridge disabled (enable_webrtc_data_channel=false) — "
-                "push_frame calls will be no-ops"
+                "WebRTCIngressBridge disabled (enable_webrtc_data_channel=false) — " "push_frame calls will be no-ops"
             )
 
     # ------------------------------------------------------------------
@@ -255,9 +254,7 @@ class WebRTCIngressBridge:
             # 3. Update device tracking
             now = time.monotonic()
             self._device_last_frame_ts[device_id] = now
-            self._device_frame_counts[device_id] = (
-                self._device_frame_counts.get(device_id, 0) + 1
-            )
+            self._device_frame_counts[device_id] = self._device_frame_counts.get(device_id, 0) + 1
 
             # 4. Forward to MultimodalIngressBus if available
             bus = self._resolve_ingress_bus()
@@ -271,13 +268,10 @@ class WebRTCIngressBridge:
                         self._inject_system_signals(bus, device_id, metadata, quality)
 
                 except Exception as exc:
-                    logger.debug(
-                        "WebRTCIngressBridge: ingress_bus.update_video failed: %s", exc
-                    )
+                    logger.debug("WebRTCIngressBridge: ingress_bus.update_video failed: %s", exc)
             else:
                 logger.debug(
-                    "WebRTCIngressBridge: no ingress bus available — frame dropped "
-                    "(device_id=%s)",
+                    "WebRTCIngressBridge: no ingress bus available — frame dropped " "(device_id=%s)",
                     device_id,
                 )
 

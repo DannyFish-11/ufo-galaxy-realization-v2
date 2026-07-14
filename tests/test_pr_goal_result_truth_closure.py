@@ -80,7 +80,6 @@ from unittest.mock import MagicMock, call
 
 import pytest
 
-
 # ===========================================================================
 # Shared helpers
 # ===========================================================================
@@ -261,11 +260,11 @@ class TestGoalResultCompatTruthChain:
 
     def test_C03_import_failure_handled_gracefully(self):
         """If truth-chain module unavailable, handler must not raise."""
+
         def _invoke_safe(message: Dict[str, Any], task_id: str, mapped: str) -> None:
             try:
-                from core.task_result_canonical_truth_chain import (
-                    run_task_result_truth_chain as _run_ttc,
-                )
+                from core.task_result_canonical_truth_chain import run_task_result_truth_chain as _run_ttc
+
                 _run_ttc(message, task_id=task_id, result_status=mapped)
             except ImportError:
                 pass
@@ -371,9 +370,10 @@ def test_goal_execution_handler_importable():
     """Smoke: goal_execution.py is importable and exposes the handler."""
     try:
         from galaxy_gateway.android.handlers.goal_execution import (
-            handle_goal_execution_result,
             _normalize_android_goal_status,
+            handle_goal_execution_result,
         )
+
         assert callable(handle_goal_execution_result)
         assert callable(_normalize_android_goal_status)
     except ImportError:
@@ -391,6 +391,7 @@ def test_normalize_android_goal_status_from_module():
         from galaxy_gateway.android.handlers.goal_execution import (
             _normalize_android_goal_status,
         )
+
         assert _normalize_android_goal_status("success") == "completed"
         assert _normalize_android_goal_status("error") == "failed"
         assert _normalize_android_goal_status("cancelled") == "cancelled"
@@ -403,9 +404,10 @@ def test_api_routes_goal_result_branch_present():
     try:
         import ast
         import pathlib
+
         src = pathlib.Path("core/api_routes.py").read_text()
-        assert '"goal_result"' in src or "'goal_result'" in src, (
-            "goal_result handler branch not found in core/api_routes.py"
-        )
+        assert (
+            '"goal_result"' in src or "'goal_result'" in src
+        ), "goal_result handler branch not found in core/api_routes.py"
     except Exception:
         pytest.skip("Could not read core/api_routes.py")

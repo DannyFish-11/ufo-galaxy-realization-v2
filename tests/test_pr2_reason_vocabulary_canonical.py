@@ -36,8 +36,8 @@ Validates that:
 from __future__ import annotations
 
 import inspect
-import sys
 import os
+import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -48,30 +48,37 @@ class TestReasonVocabularyImports(unittest.TestCase):
 
     def test_01_reason_not_registered_importable(self):
         from core.message_interop import REASON_NOT_REGISTERED
+
         self.assertIsNotNone(REASON_NOT_REGISTERED)
 
     def test_02_reason_not_ready_importable(self):
         from core.message_interop import REASON_NOT_READY
+
         self.assertIsNotNone(REASON_NOT_READY)
 
     def test_03_reason_no_route_importable(self):
         from core.message_interop import REASON_NO_ROUTE
+
         self.assertIsNotNone(REASON_NO_ROUTE)
 
     def test_04_reason_not_eligible_importable(self):
         from core.message_interop import REASON_NOT_ELIGIBLE
+
         self.assertIsNotNone(REASON_NOT_ELIGIBLE)
 
     def test_05_reason_capability_mismatch_importable(self):
         from core.message_interop import REASON_CAPABILITY_MISMATCH
+
         self.assertIsNotNone(REASON_CAPABILITY_MISMATCH)
 
     def test_06_reason_readiness_unavailable_importable(self):
         from core.message_interop import REASON_READINESS_UNAVAILABLE
+
         self.assertIsNotNone(REASON_READINESS_UNAVAILABLE)
 
     def test_07_reason_participation_unavailable_importable(self):
         from core.message_interop import REASON_PARTICIPATION_UNAVAILABLE
+
         self.assertIsNotNone(REASON_PARTICIPATION_UNAVAILABLE)
 
 
@@ -80,30 +87,37 @@ class TestReasonVocabularyValues(unittest.TestCase):
 
     def test_08_not_registered_value(self):
         from core.message_interop import REASON_NOT_REGISTERED
+
         self.assertEqual(REASON_NOT_REGISTERED, "not-registered")
 
     def test_09_not_ready_value(self):
         from core.message_interop import REASON_NOT_READY
+
         self.assertEqual(REASON_NOT_READY, "not-ready")
 
     def test_10_no_route_value(self):
         from core.message_interop import REASON_NO_ROUTE
+
         self.assertEqual(REASON_NO_ROUTE, "no-route")
 
     def test_11_not_eligible_value(self):
         from core.message_interop import REASON_NOT_ELIGIBLE
+
         self.assertEqual(REASON_NOT_ELIGIBLE, "not-eligible")
 
     def test_12_capability_mismatch_value(self):
         from core.message_interop import REASON_CAPABILITY_MISMATCH
+
         self.assertEqual(REASON_CAPABILITY_MISMATCH, "capability-mismatch")
 
     def test_13_readiness_unavailable_value(self):
         from core.message_interop import REASON_READINESS_UNAVAILABLE
+
         self.assertEqual(REASON_READINESS_UNAVAILABLE, "readiness-unavailable")
 
     def test_14_participation_unavailable_value(self):
         from core.message_interop import REASON_PARTICIPATION_UNAVAILABLE
+
         self.assertEqual(REASON_PARTICIPATION_UNAVAILABLE, "participation-unavailable")
 
 
@@ -113,24 +127,23 @@ class TestReasonVocabularyConsistency(unittest.TestCase):
     def test_15_reasons_identical_to_admissibility_chain(self):
         """message_interop reason values match admissibility_chain."""
         try:
-            from core.admissibility_chain import (
-                REASON_NOT_REGISTERED as AC_NR,
-                REASON_NOT_READY as AC_NRY,
-                REASON_NO_ROUTE as AC_NO,
-                REASON_NOT_ELIGIBLE as AC_NE,
-                REASON_CAPABILITY_MISMATCH as AC_CM,
-                REASON_READINESS_UNAVAILABLE as AC_RU,
-                REASON_PARTICIPATION_UNAVAILABLE as AC_PU,
-            )
+            from core.admissibility_chain import REASON_CAPABILITY_MISMATCH as AC_CM
+            from core.admissibility_chain import REASON_NO_ROUTE as AC_NO
+            from core.admissibility_chain import REASON_NOT_ELIGIBLE as AC_NE
+            from core.admissibility_chain import REASON_NOT_READY as AC_NRY
+            from core.admissibility_chain import REASON_NOT_REGISTERED as AC_NR
+            from core.admissibility_chain import REASON_PARTICIPATION_UNAVAILABLE as AC_PU
+            from core.admissibility_chain import REASON_READINESS_UNAVAILABLE as AC_RU
             from core.message_interop import (
-                REASON_NOT_REGISTERED,
-                REASON_NOT_READY,
+                REASON_CAPABILITY_MISMATCH,
                 REASON_NO_ROUTE,
                 REASON_NOT_ELIGIBLE,
-                REASON_CAPABILITY_MISMATCH,
-                REASON_READINESS_UNAVAILABLE,
+                REASON_NOT_READY,
+                REASON_NOT_REGISTERED,
                 REASON_PARTICIPATION_UNAVAILABLE,
+                REASON_READINESS_UNAVAILABLE,
             )
+
             self.assertEqual(REASON_NOT_REGISTERED, AC_NR)
             self.assertEqual(REASON_NOT_READY, AC_NRY)
             self.assertEqual(REASON_NO_ROUTE, AC_NO)
@@ -144,11 +157,22 @@ class TestReasonVocabularyConsistency(unittest.TestCase):
     def test_23_no_legacy_orchestration_not_eligible_in_validator(self):
         """target_device_validator must not produce 'orchestration-not-eligible'."""
         import core.target_device_validator as m
+
         src = inspect.getsource(m)
         self.assertNotIn("orchestration-not-eligible", src)
 
     def test_24_all_canonical_reasons_are_hyphenated_non_empty(self):
         from core.message_interop import (
+            REASON_CAPABILITY_MISMATCH,
+            REASON_NO_ROUTE,
+            REASON_NOT_ELIGIBLE,
+            REASON_NOT_READY,
+            REASON_NOT_REGISTERED,
+            REASON_PARTICIPATION_UNAVAILABLE,
+            REASON_READINESS_UNAVAILABLE,
+        )
+
+        for r in [
             REASON_NOT_REGISTERED,
             REASON_NOT_READY,
             REASON_NO_ROUTE,
@@ -156,11 +180,6 @@ class TestReasonVocabularyConsistency(unittest.TestCase):
             REASON_CAPABILITY_MISMATCH,
             REASON_READINESS_UNAVAILABLE,
             REASON_PARTICIPATION_UNAVAILABLE,
-        )
-        for r in [
-            REASON_NOT_REGISTERED, REASON_NOT_READY, REASON_NO_ROUTE,
-            REASON_NOT_ELIGIBLE, REASON_CAPABILITY_MISMATCH,
-            REASON_READINESS_UNAVAILABLE, REASON_PARTICIPATION_UNAVAILABLE,
         ]:
             self.assertTrue(len(r) > 0, f"empty reason: {r!r}")
             # Canonical format uses hyphens (not underscores as primary separator)
@@ -172,11 +191,16 @@ class TestReasonVocabularyConsistency(unittest.TestCase):
 
     def test_25_reasons_in_all(self):
         import core.message_interop as m
+
         all_exports = m.__all__
         for name in [
-            "REASON_NOT_REGISTERED", "REASON_NOT_READY", "REASON_NO_ROUTE",
-            "REASON_NOT_ELIGIBLE", "REASON_CAPABILITY_MISMATCH",
-            "REASON_READINESS_UNAVAILABLE", "REASON_PARTICIPATION_UNAVAILABLE",
+            "REASON_NOT_REGISTERED",
+            "REASON_NOT_READY",
+            "REASON_NO_ROUTE",
+            "REASON_NOT_ELIGIBLE",
+            "REASON_CAPABILITY_MISMATCH",
+            "REASON_READINESS_UNAVAILABLE",
+            "REASON_PARTICIPATION_UNAVAILABLE",
         ]:
             self.assertIn(name, all_exports, f"{name} not in __all__")
 
@@ -186,7 +210,8 @@ class TestConsumerReasonUsage(unittest.TestCase):
 
     def _run_validator(self, device_id, readiness_kwargs=None, cap_kwargs=None, orch_kwargs=None):
         """Run validate_target_device with mocked subsystems."""
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import MagicMock, patch
+
         from core.target_device_validator import validate_target_device
 
         mock_rs = MagicMock()
@@ -242,18 +267,21 @@ class TestConsumerReasonUsage(unittest.TestCase):
     def test_20_participation_not_registered_in_source(self):
         """device_participation source contains 'not-registered' reason string."""
         import core.device_participation as m
+
         src = inspect.getsource(m)
         self.assertIn('"not-registered"', src)
 
     def test_21_participation_no_route_in_source(self):
         """device_participation source contains 'no-route' reason string."""
         import core.device_participation as m
+
         src = inspect.getsource(m)
         self.assertIn('"no-route"', src)
 
     def test_22_participation_readiness_unavailable_in_source(self):
         """device_participation source contains 'readiness-unavailable'."""
         import core.device_participation as m
+
         src = inspect.getsource(m)
         self.assertIn('"readiness-unavailable"', src)
 

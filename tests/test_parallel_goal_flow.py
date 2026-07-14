@@ -28,10 +28,10 @@ from core.openclawd import (
     _SubtaskStatus,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_entry(group_id: str, idx: int, device_id: str = "dev1") -> _SubtaskEntry:
     return _SubtaskEntry(
@@ -46,6 +46,7 @@ def _make_entry(group_id: str, idx: int, device_id: str = "dev1") -> _SubtaskEnt
 # ---------------------------------------------------------------------------
 # 1. State tracking
 # ---------------------------------------------------------------------------
+
 
 class TestParallelGroupTrackerStateTracking:
     def test_initial_status_pending(self):
@@ -107,6 +108,7 @@ class TestParallelGroupTrackerStateTracking:
 # ---------------------------------------------------------------------------
 # 2. Aggregation on success
 # ---------------------------------------------------------------------------
+
 
 class TestParallelGroupTrackerAggregation:
     def test_aggregate_all_success(self):
@@ -186,6 +188,7 @@ class TestParallelGroupTrackerAggregation:
 # 3. Retry on single failure (retry succeeds)
 # ---------------------------------------------------------------------------
 
+
 class TestParallelGroupTrackerRetry:
     def test_needs_retry_after_failure(self):
         tracker = ParallelGroupTracker()
@@ -227,7 +230,7 @@ class TestParallelGroupTrackerRetry:
         tracker.mark_done(gid, e.task_id, {"success": False, "response": "err"}, success=False)
         delay0 = tracker.backoff_delay(gid, e.task_id)
         assert delay0 == min(
-            ParallelGroupTracker._BACKOFF_BASE ** 1,
+            ParallelGroupTracker._BACKOFF_BASE**1,
             ParallelGroupTracker._BACKOFF_CAP,
         )
 
@@ -260,6 +263,7 @@ class TestParallelGroupTrackerRetry:
 # ---------------------------------------------------------------------------
 # 4. Timeout path
 # ---------------------------------------------------------------------------
+
 
 class TestParallelGroupTrackerTimeout:
     def test_needs_retry_after_timeout(self):
@@ -301,6 +305,7 @@ class TestParallelGroupTrackerTimeout:
 # ---------------------------------------------------------------------------
 # 5. No-autonomous-device fallback message
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_dispatch_parallel_goal_no_autonomous_device_returns_fallback_message():
@@ -416,6 +421,7 @@ async def test_dispatch_parallel_goal_retry_on_first_failure():
 # ---------------------------------------------------------------------------
 # 6. Cancel / Abort support (PR10)
 # ---------------------------------------------------------------------------
+
 
 class TestParallelGroupTrackerCancel:
     def test_mark_cancelled_sets_status(self):
@@ -544,6 +550,7 @@ class TestOpenClawdCancelRegistry:
 # 7. Timeout handling in parallel_subtask dispatch (PR10)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_parallel_subtask_timeout_marks_timeout_in_tracker():
     """When a send_gateway_command call times out, mark_timeout is called
@@ -598,6 +605,7 @@ async def test_parallel_subtask_cancel_before_dispatch():
 # ---------------------------------------------------------------------------
 # 8. Goal execution timeout (PR10)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_goal_execution_timeout_returns_standardized_payload():

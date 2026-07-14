@@ -36,9 +36,9 @@ Scenario coverage
 from __future__ import annotations
 
 import asyncio
-import sys
-import os
 import json
+import os
+import sys
 import uuid
 from typing import Any, Dict, List, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -53,6 +53,7 @@ if _PROJECT_ROOT not in sys.path:
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_trace() -> str:
     return f"trace_{uuid.uuid4().hex[:8]}"
@@ -80,9 +81,10 @@ class TestScenario1LocalExecution:
 
     def test_local_plan_has_correct_step_type(self):
         from core.schemas.execution_plan import (
-            build_execution_plan,
             ExecutionStepType,
+            build_execution_plan,
         )
+
         plan = build_execution_plan(
             execution_path="local",
             delegation_point="local",
@@ -97,6 +99,7 @@ class TestScenario1LocalExecution:
 
     def test_local_plan_device_id_propagated(self):
         from core.schemas.execution_plan import build_execution_plan
+
         plan = build_execution_plan(
             execution_path="local",
             delegation_point="local",
@@ -106,6 +109,7 @@ class TestScenario1LocalExecution:
 
     def test_local_plan_serialisable(self):
         from core.schemas.execution_plan import build_execution_plan
+
         plan = build_execution_plan(execution_path="local", delegation_point="local")
         d = plan.to_dict()
         json.dumps(d)  # must not raise
@@ -114,8 +118,9 @@ class TestScenario1LocalExecution:
         assert d["execution_path"] == "local"
 
     def test_local_plan_lifecycle_state_is_planned(self):
-        from core.schemas.execution_plan import build_execution_plan
         from core.schemas.execution_lifecycle import ExecutionLifecycleState
+        from core.schemas.execution_plan import build_execution_plan
+
         plan = build_execution_plan(execution_path="local", delegation_point="local")
         d = plan.to_dict()
         # Lifecycle state is attached during build
@@ -127,6 +132,7 @@ class TestScenario1LocalExecution:
             CANONICAL_AUTHORITY_CHAIN,
             ExecutionLayerRole,
         )
+
         roles = [role for role, _mod, _cls in CANONICAL_AUTHORITY_CHAIN]
         # At minimum these four roles must appear in order
         expected = [
@@ -144,6 +150,7 @@ class TestScenario1LocalExecution:
             ExecutionLayerRole,
             build_authority_metadata,
         )
+
         meta = build_authority_metadata(
             ExecutionLayerRole.RUNTIME_SHELL_AUTHORITY,
             canonical_module="core.desktop_presence_runtime",
@@ -164,15 +171,9 @@ class TestScenario1LocalExecution:
                     "canonical_module": "core.desktop_presence_runtime",
                 }
             },
-            "subject_core": {
-                "metadata": {"authority_role": "subject_decision_authority"}
-            },
-            "cognition_layer": {
-                "authority_role": "cognition_planning_layer"
-            },
-            "execution_substrate": {
-                "execution_substrate_role": "execution_substrate"
-            },
+            "subject_core": {"metadata": {"authority_role": "subject_decision_authority"}},
+            "cognition_layer": {"authority_role": "cognition_planning_layer"},
+            "execution_substrate": {"execution_substrate_role": "execution_substrate"},
         }
         report = run_architecture_diagnostics(snapshot)
         assert report.overall_valid, (
@@ -209,6 +210,7 @@ class TestScenario1LocalExecution:
             advance_lifecycle,
             is_terminal,
         )
+
         state = ExecutionLifecycleState.PLANNED
         assert not is_terminal(state)
         next_state = advance_lifecycle(state, success=True)
@@ -217,12 +219,14 @@ class TestScenario1LocalExecution:
 
     def test_lifecycle_succeeded_is_terminal(self):
         from core.schemas.execution_lifecycle import ExecutionLifecycleState, is_terminal
+
         assert is_terminal(ExecutionLifecycleState.SUCCEEDED)
         assert is_terminal(ExecutionLifecycleState.FAILED)
         assert not is_terminal(ExecutionLifecycleState.RUNNING)
 
     def test_lifecycle_summary_keys(self):
-        from core.schemas.execution_lifecycle import lifecycle_summary, ExecutionLifecycleState
+        from core.schemas.execution_lifecycle import ExecutionLifecycleState, lifecycle_summary
+
         summary = lifecycle_summary(ExecutionLifecycleState.SUCCEEDED)
         required = {"lifecycle_state", "is_terminal"}
         assert required.issubset(summary.keys()), f"Missing keys: {required - summary.keys()}"
@@ -246,7 +250,8 @@ class TestScenario2RemoteCommandOnly:
     """
 
     def test_remote_command_plan_step_type(self):
-        from core.schemas.execution_plan import build_execution_plan, ExecutionStepType
+        from core.schemas.execution_plan import ExecutionStepType, build_execution_plan
+
         plan = build_execution_plan(
             execution_path="cross_device",
             delegation_point="single_remote",
@@ -263,6 +268,7 @@ class TestScenario2RemoteCommandOnly:
 
     def test_remote_command_plan_device_propagated(self):
         from core.schemas.execution_plan import build_execution_plan
+
         plan = build_execution_plan(
             execution_path="cross_device",
             delegation_point="single_remote",
@@ -273,9 +279,10 @@ class TestScenario2RemoteCommandOnly:
 
     def test_route_envelope_stamps_command_only_mode(self):
         """CommandRouter.route_envelope propagates remote_execution_mode=command_only."""
-        from core.schemas.task_envelope import TaskEnvelope
-        from core.command_router import CommandRouter
         from unittest.mock import AsyncMock
+
+        from core.command_router import CommandRouter
+        from core.schemas.task_envelope import TaskEnvelope
 
         router = CommandRouter.__new__(CommandRouter)
         router._config = {}
@@ -310,8 +317,8 @@ class TestScenario2RemoteCommandOnly:
 
     def test_command_only_resolver_for_thin_device(self):
         """Thin-profile device resolves to command_only with a clear resolution source."""
-        from core.remote_execution_mode_resolver import resolve_mode
         from core.device_execution_profile import build_thin_profile
+        from core.remote_execution_mode_resolver import resolve_mode
 
         profile = build_thin_profile(device_id="thin_device_01")
         result = resolve_mode(profile=profile)
@@ -321,10 +328,12 @@ class TestScenario2RemoteCommandOnly:
 
     def test_command_only_mode_is_stable_string(self):
         from core.schemas.remote_execution import RemoteExecutionMode
+
         assert RemoteExecutionMode.command_only.value == "command_only"
 
     def test_remote_command_plan_serialisable(self):
         from core.schemas.execution_plan import build_execution_plan
+
         plan = build_execution_plan(
             execution_path="cross_device",
             delegation_point="single_remote",
@@ -355,7 +364,8 @@ class TestScenario3RemoteAgentRuntime:
     """
 
     def test_remote_agent_plan_step_type(self):
-        from core.schemas.execution_plan import build_execution_plan, ExecutionStepType
+        from core.schemas.execution_plan import ExecutionStepType, build_execution_plan
+
         plan = build_execution_plan(
             execution_path="cross_device",
             delegation_point="single_remote",
@@ -371,8 +381,8 @@ class TestScenario3RemoteAgentRuntime:
 
     def test_agent_runtime_resolver_for_rich_device(self):
         """Rich-profile device resolves to agent_runtime."""
-        from core.remote_execution_mode_resolver import resolve_mode
         from core.device_execution_profile import build_rich_profile
+        from core.remote_execution_mode_resolver import resolve_mode
 
         profile = build_rich_profile(device_id="rich_device_01")
         result = resolve_mode(profile=profile)
@@ -382,9 +392,10 @@ class TestScenario3RemoteAgentRuntime:
 
     def test_route_envelope_stamps_agent_runtime_mode(self):
         """CommandRouter.route_envelope propagates remote_execution_mode=agent_runtime."""
-        from core.schemas.task_envelope import TaskEnvelope
-        from core.command_router import CommandRouter
         from unittest.mock import AsyncMock
+
+        from core.command_router import CommandRouter
+        from core.schemas.task_envelope import TaskEnvelope
 
         router = CommandRouter.__new__(CommandRouter)
         router._config = {}
@@ -421,9 +432,10 @@ class TestScenario3RemoteAgentRuntime:
         Both command_only and agent_runtime envelopes are processed by
         CommandRouter.route_envelope — the single substrate root.
         """
+        from unittest.mock import AsyncMock
+
         from core.command_router import CommandRouter
         from core.schemas.task_envelope import TaskEnvelope
-        from unittest.mock import AsyncMock
 
         call_log: list = []
 
@@ -461,14 +473,16 @@ class TestScenario3RemoteAgentRuntime:
                 result = asyncio.run(router.route_envelope(env))
                 call_log.append(result.get("remote_execution_mode"))
 
-        assert call_log == ["command_only", "agent_runtime"], (
-            "Both modes must produce the correct remote_execution_mode in the result"
-        )
+        assert call_log == [
+            "command_only",
+            "agent_runtime",
+        ], "Both modes must produce the correct remote_execution_mode in the result"
 
     def test_agent_dispatch_result_carries_mode_metadata(self):
         """dispatch_agent_remote result carries remote_execution_mode=agent_runtime."""
-        from core.command_router import CommandRouter
         from unittest.mock import AsyncMock
+
+        from core.command_router import CommandRouter
 
         router = CommandRouter.__new__(CommandRouter)
         router._config = {}
@@ -494,27 +508,31 @@ class TestScenario3RemoteAgentRuntime:
             with patch.dict("sys.modules", {"core.unified.device_manager": MagicMock()}):
                 with patch.dict("sys.modules", {"core.device_policy": MagicMock()}):
                     import sys as _sys
+
                     dm = _sys.modules["core.unified.device_manager"]
                     dm.get_unified_device_manager.return_value.get_device_type.return_value = "cloud"
 
                     dp = _sys.modules["core.device_policy"]
                     dp.requires_agent_deploy.return_value = False
 
-                    result = asyncio.run(router.dispatch_agent_remote(
-                        device_id="rich_dev_01",
-                        agent_id="agent_a",
-                        agent_template="analyst",
-                        task="summarise logs",
-                        session_id=_make_session(),
-                        trace_id=_make_trace(),
-                        task_id=uuid.uuid4().hex,
-                    ))
+                    result = asyncio.run(
+                        router.dispatch_agent_remote(
+                            device_id="rich_dev_01",
+                            agent_id="agent_a",
+                            agent_template="analyst",
+                            task="summarise logs",
+                            session_id=_make_session(),
+                            trace_id=_make_trace(),
+                            task_id=uuid.uuid4().hex,
+                        )
+                    )
 
         assert result.get("remote_execution_mode") == "agent_runtime"
         assert result.get("success") is True
 
     def test_agent_runtime_mode_is_stable_string(self):
         from core.schemas.remote_execution import RemoteExecutionMode
+
         assert RemoteExecutionMode.agent_runtime.value == "agent_runtime"
 
     def test_agent_runtime_plan_authority_metadata(self):
@@ -523,6 +541,7 @@ class TestScenario3RemoteAgentRuntime:
             ExecutionLayerRole,
             build_authority_metadata,
         )
+
         meta = build_authority_metadata(
             ExecutionLayerRole.SUBJECT_DECISION_AUTHORITY,
             canonical_module="core.openclawd",
@@ -551,9 +570,10 @@ class TestScenario4MultiDeviceOrchestration:
     def test_orchestration_plan_from_decisions(self):
         """plan_from_orchestration_decisions builds a plan from multiple decisions."""
         from core.schemas.execution_plan import (
-            plan_from_orchestration_decisions,
             ExecutionStepType,
+            plan_from_orchestration_decisions,
         )
+
         decisions = [
             {"target_device_id": "dev_a", "resolved_execution_mode": "agent_runtime", "agent_id": "ag1"},
             {"target_device_id": "dev_b", "resolved_execution_mode": "command_only", "agent_id": "ag2"},
@@ -577,10 +597,8 @@ class TestScenario4MultiDeviceOrchestration:
 
     def test_orchestration_plan_ids_unique(self):
         from core.schemas.execution_plan import plan_from_orchestration_decisions
-        plans = [
-            plan_from_orchestration_decisions(decisions=[], task=f"t{i}")
-            for i in range(5)
-        ]
+
+        plans = [plan_from_orchestration_decisions(decisions=[], task=f"t{i}") for i in range(5)]
         ids = [p.plan_id for p in plans]
         assert len(ids) == len(set(ids)), "plan_id must be unique per plan"
 
@@ -590,6 +608,7 @@ class TestScenario4MultiDeviceOrchestration:
             OrchestrationDecision,
             build_orchestration_plan,
         )
+
         decisions = [
             OrchestrationDecision(
                 agent_id="ag1",
@@ -627,6 +646,7 @@ class TestScenario4MultiDeviceOrchestration:
             OrchestrationDecision,
             build_orchestration_plan,
         )
+
         # Build planning phase (no substrate call needed to produce the plan)
         d = OrchestrationDecision(
             agent_id="ag1",
@@ -646,12 +666,16 @@ class TestScenario4MultiDeviceOrchestration:
             build_orchestration_plan,
             build_orchestration_result,
         )
-        d1 = OrchestrationDecision(agent_id="ag1", target_device_id="dev_a",
-                                   resolved_execution_mode="agent_runtime", score=0.9)
-        d2 = OrchestrationDecision(agent_id="ag2", target_device_id="dev_b",
-                                   resolved_execution_mode="command_only", score=0.7)
-        d3 = OrchestrationDecision(agent_id="ag3", target_device_id="dev_c",
-                                   resolved_execution_mode="agent_runtime", score=0.5)
+
+        d1 = OrchestrationDecision(
+            agent_id="ag1", target_device_id="dev_a", resolved_execution_mode="agent_runtime", score=0.9
+        )
+        d2 = OrchestrationDecision(
+            agent_id="ag2", target_device_id="dev_b", resolved_execution_mode="command_only", score=0.7
+        )
+        d3 = OrchestrationDecision(
+            agent_id="ag3", target_device_id="dev_c", resolved_execution_mode="agent_runtime", score=0.5
+        )
         plan = build_orchestration_plan(
             task="parallel analysis",
             decisions=[d1, d2, d3],
@@ -675,8 +699,8 @@ class TestScenario4MultiDeviceOrchestration:
             build_orchestration_plan,
             build_orchestration_result,
         )
-        d1 = OrchestrationDecision(agent_id="ag1", target_device_id="dev_a",
-                                   resolved_execution_mode="agent_runtime")
+
+        d1 = OrchestrationDecision(agent_id="ag1", target_device_id="dev_a", resolved_execution_mode="agent_runtime")
         plan = build_orchestration_plan(task="t", decisions=[d1])
         mr = OrchestrationMemberResult(agent_id="ag1", decision=d1, success=True, output="done")
         result = build_orchestration_result(plan=plan, member_results=[mr])
@@ -690,6 +714,7 @@ class TestScenario4MultiDeviceOrchestration:
     def test_empty_decisions_produce_plan(self):
         """Even zero decisions produce a coherent orchestration plan."""
         from core.schemas.execution_plan import plan_from_orchestration_decisions
+
         plan = plan_from_orchestration_decisions(decisions=[], task="empty")
         assert plan.plan_id is not None
         assert isinstance(plan.steps, list)
@@ -711,8 +736,8 @@ class TestScenario5Fallback:
 
     def test_device_unavailable_creates_retryable_failure(self):
         """DEVICE_NOT_FOUND failure is retryable and suggests remote→local fallback."""
-        from core.schemas.execution_failure import build_failure_record, failure_record_summary
         from core.failure_domains import FailureDomain
+        from core.schemas.execution_failure import build_failure_record, failure_record_summary
 
         rec = build_failure_record(error_code="DEVICE_NOT_FOUND")
         assert rec.failure_domain == FailureDomain.REMOTE_DEVICE_UNAVAILABLE.value
@@ -725,16 +750,16 @@ class TestScenario5Fallback:
         assert summary["fallback_allow_remote_to_local"] is True
 
     def test_device_offline_failure_has_fallback_hint(self):
-        from core.schemas.execution_failure import build_failure_record
         from core.failure_domains import FailureDomain
+        from core.schemas.execution_failure import build_failure_record
 
         rec = build_failure_record(error_code="DEVICE_OFFLINE")
         assert rec.failure_domain == FailureDomain.REMOTE_DEVICE_UNAVAILABLE.value
         assert rec.downgrade_hint == "remote_to_local"
 
     def test_timeout_failure_is_retryable_with_no_mode_downgrade(self):
-        from core.schemas.execution_failure import build_failure_record
         from core.failure_domains import FailureDomain
+        from core.schemas.execution_failure import build_failure_record
 
         rec = build_failure_record(error_code="COMMAND_TIMEOUT")
         assert rec.failure_domain == FailureDomain.TIMEOUT_FAILURE.value
@@ -743,8 +768,8 @@ class TestScenario5Fallback:
         assert rec.downgrade_hint is None
 
     def test_gateway_transport_fallback_to_local(self):
-        from core.schemas.execution_failure import build_failure_record
         from core.failure_domains import FailureDomain
+        from core.schemas.execution_failure import build_failure_record
 
         rec = build_failure_record(error_code="DISCONNECT")
         assert rec.failure_domain == FailureDomain.GATEWAY_TRANSPORT_FAILURE.value
@@ -753,8 +778,8 @@ class TestScenario5Fallback:
 
     def test_resolver_falls_back_to_command_only_for_unsupported_mode(self):
         """Resolver falls back to command_only when agent_runtime is not supported."""
-        from core.remote_execution_mode_resolver import resolve_mode
         from core.device_execution_profile import build_thin_profile
+        from core.remote_execution_mode_resolver import resolve_mode
 
         # A thin profile explicitly does not support agent_runtime
         profile = build_thin_profile(device_id="thin_fallback_dev")
@@ -766,8 +791,8 @@ class TestScenario5Fallback:
 
     def test_resolver_forced_downgrade_is_visible(self):
         """Forced command_only on a rich device is visible in the result."""
-        from core.remote_execution_mode_resolver import resolve_mode
         from core.device_execution_profile import build_rich_profile
+        from core.remote_execution_mode_resolver import resolve_mode
 
         profile = build_rich_profile(device_id="rich_forced_down")
         result = resolve_mode(profile=profile, forced_mode="command_only")
@@ -777,6 +802,7 @@ class TestScenario5Fallback:
 
     def test_failure_record_summary_is_json_safe(self):
         from core.schemas.execution_failure import build_failure_record, failure_record_summary
+
         for code in ("DEVICE_NOT_FOUND", "COMMAND_TIMEOUT", "DISCONNECT", "ACL_DENIED"):
             rec = build_failure_record(error_code=code)
             summary = failure_record_summary(rec)
@@ -784,17 +810,20 @@ class TestScenario5Fallback:
 
     def test_failure_record_full_dict_is_json_safe(self):
         from core.schemas.execution_failure import build_failure_record
+
         rec = build_failure_record(error_code="DEVICE_NOT_FOUND")
         json.dumps(rec.to_dict())
 
     def test_exception_fallback_classifies_timeout(self):
         """TimeoutError exception produces a TIMEOUT_FAILURE record."""
-        from core.failure_domains import classify_from_exception, FailureDomain
+        from core.failure_domains import FailureDomain, classify_from_exception
+
         c = classify_from_exception(TimeoutError("deadline exceeded"))
         assert c.domain == FailureDomain.TIMEOUT_FAILURE
 
     def test_exception_fallback_classifies_connection_error(self):
-        from core.failure_domains import classify_from_exception, FailureDomain
+        from core.failure_domains import FailureDomain, classify_from_exception
+
         c = classify_from_exception(ConnectionError("lost connection"))
         assert c.domain == FailureDomain.GATEWAY_TRANSPORT_FAILURE
 
@@ -816,19 +845,21 @@ class TestScenario6CapabilityMismatch:
 
     def test_capability_mismatch_failure_domain(self):
         from core.failure_domains import FailureDomain, classify_from_error_code
+
         c = classify_from_error_code("CAPABILITY_MISMATCH")
         # CAPABILITY_MISMATCH is not a standard error code — falls to UNKNOWN
         # so we test via the expected domain directly
-        from core.schemas.execution_failure import build_failure_record
         from core.failure_domains import FailureDomain
+        from core.schemas.execution_failure import build_failure_record
+
         # Build via domain directly using the classification path
         rec = build_failure_record(error_code="INVALID_ENVELOPE")
         assert rec.failure_domain == FailureDomain.SUBSTRATE_DISPATCH_FAILURE.value
 
     def test_thin_device_cannot_resolve_agent_runtime(self):
         """Thin device resolves to command_only, not agent_runtime."""
+        from core.device_execution_profile import DeviceProfileClass, build_thin_profile
         from core.remote_execution_mode_resolver import resolve_mode
-        from core.device_execution_profile import build_thin_profile, DeviceProfileClass
 
         profile = build_thin_profile(device_id="thin_mismatch")
         assert profile.profile_class == DeviceProfileClass.thin
@@ -839,9 +870,9 @@ class TestScenario6CapabilityMismatch:
 
     def test_resolver_failure_record_on_mismatch(self):
         """resolver produces a failure record for remote_capability_mismatch."""
-        from core.remote_execution_mode_resolver import resolve_mode
         from core.device_execution_profile import build_thin_profile
         from core.failure_domains import FailureDomain
+        from core.remote_execution_mode_resolver import resolve_mode
 
         profile = build_thin_profile(device_id="thin_dev")
         result = resolve_mode(profile=profile, task_intent="agent_execute")
@@ -853,7 +884,8 @@ class TestScenario6CapabilityMismatch:
 
     def test_mismatch_failure_domain_retryable_with_alternate(self):
         """REMOTE_CAPABILITY_MISMATCH is retryable when allow_alternate_target=True."""
-        from core.failure_domains import is_retryable_by_domain, FailureDomain
+        from core.failure_domains import FailureDomain, is_retryable_by_domain
+
         assert is_retryable_by_domain(
             FailureDomain.REMOTE_CAPABILITY_MISMATCH,
             allow_alternate_target=True,
@@ -861,7 +893,8 @@ class TestScenario6CapabilityMismatch:
 
     def test_mismatch_failure_domain_not_retryable_same_target(self):
         """REMOTE_CAPABILITY_MISMATCH is NOT retryable on the same target."""
-        from core.failure_domains import is_retryable_by_domain, FailureDomain
+        from core.failure_domains import FailureDomain, is_retryable_by_domain
+
         assert not is_retryable_by_domain(
             FailureDomain.REMOTE_CAPABILITY_MISMATCH,
             allow_alternate_target=False,
@@ -869,7 +902,8 @@ class TestScenario6CapabilityMismatch:
 
     def test_mismatch_downgrade_hint(self):
         """REMOTE_CAPABILITY_MISMATCH hints agent_runtime_to_command_only downgrade."""
-        from core.failure_domains import downgrade_hint_for_domain, FailureDomain
+        from core.failure_domains import FailureDomain, downgrade_hint_for_domain
+
         hint = downgrade_hint_for_domain(FailureDomain.REMOTE_CAPABILITY_MISMATCH)
         assert hint == "agent_runtime_to_command_only"
 
@@ -927,19 +961,14 @@ class TestScenario7DiagnosticsValidator:
                 "canonical_module": "core.desktop_presence_runtime",
             }
         },
-        "subject_core": {
-            "metadata": {"authority_role": "subject_decision_authority"}
-        },
-        "cognition_layer": {
-            "authority_role": "cognition_planning_layer"
-        },
-        "execution_substrate": {
-            "execution_substrate_role": "execution_substrate"
-        },
+        "subject_core": {"metadata": {"authority_role": "subject_decision_authority"}},
+        "cognition_layer": {"authority_role": "cognition_planning_layer"},
+        "execution_substrate": {"execution_substrate_role": "execution_substrate"},
     }
 
     def test_valid_snapshot_passes(self):
         from core.architecture_diagnostics import run_architecture_diagnostics
+
         report = run_architecture_diagnostics(self._VALID_SNAPSHOT)
         assert report.overall_valid, (
             f"Expected valid; errors: "
@@ -949,6 +978,7 @@ class TestScenario7DiagnosticsValidator:
     def test_empty_snapshot_produces_warnings(self):
         """An empty snapshot produces warning findings (missing layers)."""
         from core.architecture_diagnostics import run_architecture_diagnostics
+
         report = run_architecture_diagnostics({})
         # The diagnostics system is permissive: missing layers are warnings, not errors
         assert report.warning_count > 0
@@ -956,6 +986,7 @@ class TestScenario7DiagnosticsValidator:
     def test_missing_runtime_shell_produces_warnings(self):
         """Removing runtime_shell from the snapshot produces at least one warning."""
         from core.architecture_diagnostics import run_architecture_diagnostics
+
         snapshot = dict(self._VALID_SNAPSHOT)
         snapshot.pop("runtime_shell", None)
         report = run_architecture_diagnostics(snapshot)
@@ -965,6 +996,7 @@ class TestScenario7DiagnosticsValidator:
     def test_missing_subject_core_produces_warnings(self):
         """Removing subject_core from the snapshot produces at least one warning."""
         from core.architecture_diagnostics import run_architecture_diagnostics
+
         snapshot = dict(self._VALID_SNAPSHOT)
         snapshot.pop("subject_core", None)
         report = run_architecture_diagnostics(snapshot)
@@ -972,19 +1004,20 @@ class TestScenario7DiagnosticsValidator:
 
     def test_entry_surface_claiming_authority_fails(self):
         """Entry surface claiming a runtime authority role causes overall_valid=False."""
-        from core.architecture_diagnostics import run_architecture_diagnostics
         import copy
+
+        from core.architecture_diagnostics import run_architecture_diagnostics
+
         snapshot = copy.deepcopy(self._VALID_SNAPSHOT)
         # entry_surface layer must never claim a runtime authority role
-        snapshot["entry_surface"] = {
-            "authority_metadata": {"layer_role": "runtime_shell_authority"}
-        }
+        snapshot["entry_surface"] = {"authority_metadata": {"layer_role": "runtime_shell_authority"}}
         report = run_architecture_diagnostics(snapshot)
         assert not report.overall_valid
         assert report.error_count > 0
 
     def test_validate_authority_chain_order(self):
         from core.architecture_diagnostics import validate_authority_chain
+
         # Correct order produces no error findings
         report = validate_authority_chain(self._VALID_SNAPSHOT)
         errors = [f for f in report.findings if f.severity in ("error", "critical")]
@@ -994,8 +1027,10 @@ class TestScenario7DiagnosticsValidator:
         """
         runtime_shell layer claiming wrong role is flagged with a warning or error.
         """
-        from core.architecture_diagnostics import validate_authority_chain
         import copy
+
+        from core.architecture_diagnostics import validate_authority_chain
+
         snapshot = copy.deepcopy(self._VALID_SNAPSHOT)
         # runtime_shell claiming wrong role (entry_surface instead of runtime_shell_authority)
         snapshot["runtime_shell"]["authority_metadata"]["layer_role"] = "entry_surface"
@@ -1006,12 +1041,14 @@ class TestScenario7DiagnosticsValidator:
 
     def test_diagnostics_report_is_serialisable(self):
         from core.architecture_diagnostics import run_architecture_diagnostics
+
         report = run_architecture_diagnostics(self._VALID_SNAPSHOT)
         d = report.model_dump()
         json.dumps(d)
 
     def test_diagnostics_findings_have_severity_and_message(self):
         from core.architecture_diagnostics import run_architecture_diagnostics
+
         report = run_architecture_diagnostics(self._VALID_SNAPSHOT)
         for finding in report.findings:
             assert hasattr(finding, "severity")
@@ -1023,6 +1060,7 @@ class TestScenario7DiagnosticsValidator:
 
     def test_validate_layer_boundaries_valid_flow(self):
         from core.architecture_diagnostics import validate_layer_boundaries
+
         report = validate_layer_boundaries(self._VALID_SNAPSHOT)
         errors = [f for f in report.findings if f.severity in ("error", "critical")]
         assert len(errors) == 0
@@ -1033,6 +1071,7 @@ class TestScenario7DiagnosticsValidator:
             build_diagnostics_snapshot_from_layers,
             run_architecture_diagnostics,
         )
+
         # Each positional arg must carry an "arch_layer_id" key (set by PR-10 hooks)
         snapshot = build_diagnostics_snapshot_from_layers(
             {

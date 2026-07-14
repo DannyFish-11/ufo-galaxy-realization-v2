@@ -41,12 +41,12 @@ device_score_input_from_canonical(entry, …) → DeviceScoreInput
 from __future__ import annotations
 
 from .canonical_device_selector import (
-    DeviceParticipationStatus,
     CanonicalDeviceSelectionEntry,
+    DeviceParticipationStatus,
     assess_device_participation,
+    device_score_input_from_canonical,
     select_cross_device_candidates,
     select_orchestration_candidates,
-    device_score_input_from_canonical,
 )
 
 __all__ = [

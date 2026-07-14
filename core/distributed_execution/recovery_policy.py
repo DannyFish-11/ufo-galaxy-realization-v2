@@ -92,9 +92,7 @@ class RecoveryPosture(str, Enum):
 # ---------------------------------------------------------------------------
 
 POSTURE_DESCRIPTIONS: Dict[str, str] = {
-    RecoveryPosture.NO_RECOVERY_NEEDED.value: (
-        "Task completed successfully.  No recovery action is required."
-    ),
+    RecoveryPosture.NO_RECOVERY_NEEDED.value: ("Task completed successfully.  No recovery action is required."),
     RecoveryPosture.RETRY_SAME_DEVICE.value: (
         "Re-attempt execution on the same device or executor.  Suitable for "
         "transient failures such as network blips, temporary resource "
@@ -186,9 +184,7 @@ class RecoveryRecommendation:
         return cls(
             posture=RecoveryPosture(data.get("posture", RecoveryPosture.ABORT_TASK.value)),
             reason=data.get("reason", ""),
-            merge_status_trigger=MergeStatus(
-                data.get("merge_status_trigger", MergeStatus.FAILED.value)
-            ),
+            merge_status_trigger=MergeStatus(data.get("merge_status_trigger", MergeStatus.FAILED.value)),
             failed_count=int(data.get("failed_count", 0)),
             timed_out_count=int(data.get("timed_out_count", 0)),
             is_optional_branch_available=bool(data.get("is_optional_branch_available", False)),
@@ -209,6 +205,7 @@ class RecoveryRecommendation:
 # ---------------------------------------------------------------------------
 # Recommendation logic
 # ---------------------------------------------------------------------------
+
 
 def recommend_recovery(
     merge_status: MergeStatus,
@@ -272,10 +269,7 @@ def recommend_recovery(
     if merge_status == MergeStatus.DEGRADED_SUCCESS:
         return RecoveryRecommendation(
             posture=RecoveryPosture.NO_RECOVERY_NEEDED,
-            reason=(
-                "Task completed with degraded fidelity.  "
-                "Result is usable; no recovery action required."
-            ),
+            reason=("Task completed with degraded fidelity.  " "Result is usable; no recovery action required."),
             merge_status_trigger=merge_status,
             failed_count=failed_count,
             timed_out_count=timed_out_count,
@@ -289,8 +283,7 @@ def recommend_recovery(
         return RecoveryRecommendation(
             posture=RecoveryPosture.SKIP_OPTIONAL_BRANCH,
             reason=(
-                "Core intent achieved; failed branch is optional and can be "
-                "skipped without loss of overall goal."
+                "Core intent achieved; failed branch is optional and can be " "skipped without loss of overall goal."
             ),
             merge_status_trigger=merge_status,
             failed_count=failed_count,
@@ -319,10 +312,7 @@ def recommend_recovery(
         if reroute_available and retry_attempted:
             return RecoveryRecommendation(
                 posture=RecoveryPosture.REROUTE_DEVICE,
-                reason=(
-                    "Partial success after retry; routing to an alternative "
-                    "device or path for remaining work."
-                ),
+                reason=("Partial success after retry; routing to an alternative " "device or path for remaining work."),
                 merge_status_trigger=merge_status,
                 failed_count=failed_count,
                 timed_out_count=timed_out_count,
@@ -332,9 +322,7 @@ def recommend_recovery(
             )
         return RecoveryRecommendation(
             posture=RecoveryPosture.RETRY_SAME_DEVICE,
-            reason=(
-                "Partial success; retrying on same device for failed branches."
-            ),
+            reason=("Partial success; retrying on same device for failed branches."),
             merge_status_trigger=merge_status,
             failed_count=failed_count,
             timed_out_count=timed_out_count,
@@ -348,8 +336,7 @@ def recommend_recovery(
         return RecoveryRecommendation(
             posture=RecoveryPosture.REQUIRE_CONFIRMATION,
             reason=(
-                "Confirmation required before automatic recovery proceeds "
-                f"(merge status: {merge_status.value})."
+                "Confirmation required before automatic recovery proceeds " f"(merge status: {merge_status.value})."
             ),
             merge_status_trigger=merge_status,
             failed_count=failed_count,
@@ -365,10 +352,7 @@ def recommend_recovery(
         if reroute_available:
             return RecoveryRecommendation(
                 posture=RecoveryPosture.REROUTE_DEVICE,
-                reason=(
-                    "Execution timed out; rerouting to an available alternative "
-                    "device or path."
-                ),
+                reason=("Execution timed out; rerouting to an available alternative " "device or path."),
                 merge_status_trigger=merge_status,
                 failed_count=failed_count,
                 timed_out_count=timed_out_count,
@@ -378,10 +362,7 @@ def recommend_recovery(
             )
         return RecoveryRecommendation(
             posture=RecoveryPosture.RETRY_SAME_DEVICE,
-            reason=(
-                "Execution timed out; retrying on same device (no alternative "
-                "route available)."
-            ),
+            reason=("Execution timed out; retrying on same device (no alternative " "route available)."),
             merge_status_trigger=merge_status,
             failed_count=failed_count,
             timed_out_count=timed_out_count,
@@ -406,10 +387,7 @@ def recommend_recovery(
     if reroute_available:
         return RecoveryRecommendation(
             posture=RecoveryPosture.REROUTE_DEVICE,
-            reason=(
-                "Task failed after retry; rerouting to an alternative device "
-                "or execution path."
-            ),
+            reason=("Task failed after retry; rerouting to an alternative device " "or execution path."),
             merge_status_trigger=merge_status,
             failed_count=failed_count,
             timed_out_count=timed_out_count,
@@ -421,10 +399,7 @@ def recommend_recovery(
     if is_optional_branch_available:
         return RecoveryRecommendation(
             posture=RecoveryPosture.SKIP_OPTIONAL_BRANCH,
-            reason=(
-                "Task failed after retry; failed branch is optional and can "
-                "be skipped."
-            ),
+            reason=("Task failed after retry; failed branch is optional and can " "be skipped."),
             merge_status_trigger=merge_status,
             failed_count=failed_count,
             timed_out_count=timed_out_count,
@@ -435,10 +410,7 @@ def recommend_recovery(
 
     return RecoveryRecommendation(
         posture=RecoveryPosture.ABORT_TASK,
-        reason=(
-            "Task failed after retry; no reroute or optional-branch skip "
-            "available.  Aborting task."
-        ),
+        reason=("Task failed after retry; no reroute or optional-branch skip " "available.  Aborting task."),
         merge_status_trigger=merge_status,
         failed_count=failed_count,
         timed_out_count=timed_out_count,

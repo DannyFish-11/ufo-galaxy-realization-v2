@@ -97,15 +97,15 @@ from pathlib import Path
 from typing import Any, Dict
 from unittest.mock import MagicMock, patch
 
-
 # ===========================================================================
 # Helpers
 # ===========================================================================
 
+
 def _tmp_service(config_data: Dict[str, Any] = None, secrets_data: str = ""):
     """Return a ConfigService wired to temporary files."""
-    from core.config_store import ConfigStore
     from core.config_service import ConfigService
+    from core.config_store import ConfigStore
 
     d = tempfile.mkdtemp()
     config_path = Path(d) / "config.json"
@@ -132,10 +132,15 @@ def _make_prov_entry(
     """Make a minimal ProviderInventoryEntry for testing."""
     from core.model_topology.provider_inventory import ProviderInventoryEntry
     from core.model_topology.topology_types import (
-        AvailabilityStatus, ModalityCapability, ModelIdentity,
-        NormalizedTopologyEntry, ProviderCategory, ProviderIdentity,
+        AvailabilityStatus,
+        ModalityCapability,
+        ModelIdentity,
+        NormalizedTopologyEntry,
+        ProviderCategory,
+        ProviderIdentity,
         ScoringProfile,
     )
+
     normalized = NormalizedTopologyEntry(
         provider=ProviderIdentity(provider_id=provider_id),
         model=ModelIdentity(model_id=f"{provider_id}-model", provider_id=provider_id),
@@ -154,12 +159,14 @@ def _make_prov_entry(
 
 def _make_inventory_with(*entries):
     from core.model_topology.provider_inventory import ProviderInventory
+
     return ProviderInventory(entries=list(entries))
 
 
 # ===========================================================================
 # 1-12: ProviderInventoryEntry config fields
 # ===========================================================================
+
 
 class TestProviderInventoryEntryConfigFields(unittest.TestCase):
     """Tests 1-12: PR-4 config fields on ProviderInventoryEntry."""
@@ -233,6 +240,7 @@ class TestProviderInventoryEntryConfigFields(unittest.TestCase):
 # 13-25: ProviderInventory filtering methods
 # ===========================================================================
 
+
 class TestProviderInventoryFiltering(unittest.TestCase):
     """Tests 13-25: New filtering methods on ProviderInventory."""
 
@@ -240,10 +248,8 @@ class TestProviderInventoryFiltering(unittest.TestCase):
         """Build an inventory with 4 entries covering all cases."""
         e_eligible = _make_prov_entry("openai", config_enabled=True, config_has_key=True)
         e_disabled = _make_prov_entry("anthropic", config_enabled=False, config_has_key=False)
-        e_unconfigured = _make_prov_entry("gemini", available=False,
-                                          config_enabled=True, config_has_key=False)
-        e_disabled_no_key = _make_prov_entry("deepseek", available=False,
-                                             config_enabled=False, config_has_key=False)
+        e_unconfigured = _make_prov_entry("gemini", available=False, config_enabled=True, config_has_key=False)
+        e_disabled_no_key = _make_prov_entry("deepseek", available=False, config_enabled=False, config_has_key=False)
         return _make_inventory_with(e_eligible, e_disabled, e_unconfigured, e_disabled_no_key)
 
     def test_13_candidate_pool_entries_returns_eligible_only(self):
@@ -322,8 +328,7 @@ class TestProviderInventoryFiltering(unittest.TestCase):
 
     def test_24_available_entries_still_works(self):
         """Backward compat: available_entries() still filters by is_available."""
-        e_avail = _make_prov_entry("openai", available=True,
-                                   config_enabled=False, config_has_key=False)
+        e_avail = _make_prov_entry("openai", available=True, config_enabled=False, config_has_key=False)
         e_unavail = _make_prov_entry("anthropic", available=False)
         inv = _make_inventory_with(e_avail, e_unavail)
         avail = inv.available_entries()
@@ -343,17 +348,20 @@ class TestProviderInventoryFiltering(unittest.TestCase):
 # 26-50: inventory_from_config — build_inventory_from_config_authority
 # ===========================================================================
 
+
 class TestBuildInventoryFromConfigAuthority(unittest.TestCase):
     """Tests 26-50: build_inventory_from_config_authority()."""
 
     def test_26_authority_sentinel_non_empty(self):
         from core.model_topology.inventory_from_config import INVENTORY_CONFIG_AUTHORITY
+
         self.assertIsInstance(INVENTORY_CONFIG_AUTHORITY, str)
         self.assertTrue(len(INVENTORY_CONFIG_AUTHORITY) > 0)
 
     def test_27_build_returns_provider_inventory(self):
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
         from core.model_topology.provider_inventory import ProviderInventory
+
         svc = _tmp_service()
         result = build_inventory_from_config_authority(config_service=svc)
         self.assertIsInstance(result, ProviderInventory)
@@ -361,6 +369,7 @@ class TestBuildInventoryFromConfigAuthority(unittest.TestCase):
     def test_28_all_valid_providers_present(self):
         from core.config_schema import VALID_PROVIDERS
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         svc = _tmp_service()
         inv = build_inventory_from_config_authority(config_service=svc)
         inventory_ids = {e.provider_id for e in inv.all_entries()}
@@ -369,6 +378,7 @@ class TestBuildInventoryFromConfigAuthority(unittest.TestCase):
 
     def test_29_enabled_provider_with_key_is_candidate_eligible(self):
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         cfg = {"providers": {"openai": {"enabled": True}}}
         svc = _tmp_service(config_data=cfg, secrets_data="OPENAI_API_KEY=sk-test\n")
         inv = build_inventory_from_config_authority(config_service=svc)
@@ -377,6 +387,7 @@ class TestBuildInventoryFromConfigAuthority(unittest.TestCase):
 
     def test_30_disabled_provider_not_candidate_eligible(self):
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         cfg = {"providers": {"openai": {"enabled": False}}}
         svc = _tmp_service(config_data=cfg, secrets_data="OPENAI_API_KEY=sk-test\n")
         inv = build_inventory_from_config_authority(config_service=svc)
@@ -385,6 +396,7 @@ class TestBuildInventoryFromConfigAuthority(unittest.TestCase):
 
     def test_31_enabled_without_key_not_candidate_eligible(self):
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         cfg = {"providers": {"openai": {"enabled": True}}}
         svc = _tmp_service(config_data=cfg, secrets_data="")
         inv = build_inventory_from_config_authority(config_service=svc)
@@ -394,6 +406,7 @@ class TestBuildInventoryFromConfigAuthority(unittest.TestCase):
 
     def test_32_disabled_without_key_not_candidate_eligible(self):
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         cfg = {"providers": {"anthropic": {"enabled": False}}}
         svc = _tmp_service(config_data=cfg, secrets_data="")
         inv = build_inventory_from_config_authority(config_service=svc)
@@ -402,14 +415,17 @@ class TestBuildInventoryFromConfigAuthority(unittest.TestCase):
 
     def test_33_config_source_set_to_config_authority(self):
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         svc = _tmp_service()
         inv = build_inventory_from_config_authority(config_service=svc)
         for e in inv.all_entries():
-            self.assertEqual(e.config_source, "config_authority",
-                             f"Expected config_source=config_authority for {e.provider_id}")
+            self.assertEqual(
+                e.config_source, "config_authority", f"Expected config_source=config_authority for {e.provider_id}"
+            )
 
     def test_34_oneapi_absent_config_enabled_false(self):
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         svc = _tmp_service()  # oneapi absent by default
         inv = build_inventory_from_config_authority(config_service=svc)
         entry = inv.get("oneapi")
@@ -418,6 +434,7 @@ class TestBuildInventoryFromConfigAuthority(unittest.TestCase):
 
     def test_35_oneapi_absent_config_has_key_false(self):
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         svc = _tmp_service()
         inv = build_inventory_from_config_authority(config_service=svc)
         entry = inv.get("oneapi")
@@ -425,6 +442,7 @@ class TestBuildInventoryFromConfigAuthority(unittest.TestCase):
 
     def test_36_oneapi_absent_not_in_candidate_pool(self):
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         svc = _tmp_service()
         inv = build_inventory_from_config_authority(config_service=svc)
         pool_ids = [e.provider_id for e in inv.candidate_pool_entries()]
@@ -432,6 +450,7 @@ class TestBuildInventoryFromConfigAuthority(unittest.TestCase):
 
     def test_37_oneapi_absent_still_in_all_entries_diagnostic(self):
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         svc = _tmp_service()
         inv = build_inventory_from_config_authority(config_service=svc)
         all_ids = [e.provider_id for e in inv.all_entries()]
@@ -439,6 +458,7 @@ class TestBuildInventoryFromConfigAuthority(unittest.TestCase):
 
     def test_38_oneapi_configured_config_enabled_true(self):
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         cfg = {"providers": {"oneapi": {"enabled": True, "base_url": "http://oneapi.test"}}}
         svc = _tmp_service(config_data=cfg, secrets_data="ONEAPI_API_KEY=test-key\n")
         inv = build_inventory_from_config_authority(config_service=svc)
@@ -448,6 +468,7 @@ class TestBuildInventoryFromConfigAuthority(unittest.TestCase):
 
     def test_39_oneapi_configured_config_has_key_true(self):
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         cfg = {"providers": {"oneapi": {"enabled": True, "base_url": "http://oneapi.test"}}}
         svc = _tmp_service(config_data=cfg, secrets_data="ONEAPI_API_KEY=test-key\n")
         inv = build_inventory_from_config_authority(config_service=svc)
@@ -456,6 +477,7 @@ class TestBuildInventoryFromConfigAuthority(unittest.TestCase):
 
     def test_40_oneapi_configured_in_candidate_pool(self):
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         cfg = {"providers": {"oneapi": {"enabled": True, "base_url": "http://oneapi.test"}}}
         svc = _tmp_service(config_data=cfg, secrets_data="ONEAPI_API_KEY=test-key\n")
         inv = build_inventory_from_config_authority(config_service=svc)
@@ -464,6 +486,7 @@ class TestBuildInventoryFromConfigAuthority(unittest.TestCase):
 
     def test_41_oneapi_partial_config_enabled_true(self):
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         cfg = {"providers": {"oneapi": {"enabled": True, "base_url": "http://oneapi.test"}}}
         svc = _tmp_service(config_data=cfg, secrets_data="")  # no key → partial
         inv = build_inventory_from_config_authority(config_service=svc)
@@ -472,6 +495,7 @@ class TestBuildInventoryFromConfigAuthority(unittest.TestCase):
 
     def test_42_oneapi_partial_config_has_key_false(self):
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         cfg = {"providers": {"oneapi": {"enabled": True, "base_url": "http://oneapi.test"}}}
         svc = _tmp_service(config_data=cfg, secrets_data="")  # no key → partial
         inv = build_inventory_from_config_authority(config_service=svc)
@@ -480,6 +504,7 @@ class TestBuildInventoryFromConfigAuthority(unittest.TestCase):
 
     def test_43_oneapi_partial_not_in_candidate_pool(self):
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         cfg = {"providers": {"oneapi": {"enabled": True, "base_url": "http://oneapi.test"}}}
         svc = _tmp_service(config_data=cfg, secrets_data="")
         inv = build_inventory_from_config_authority(config_service=svc)
@@ -488,6 +513,7 @@ class TestBuildInventoryFromConfigAuthority(unittest.TestCase):
 
     def test_44_oneapi_partial_in_unconfigured_entries(self):
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         cfg = {"providers": {"oneapi": {"enabled": True, "base_url": "http://oneapi.test"}}}
         svc = _tmp_service(config_data=cfg, secrets_data="")
         inv = build_inventory_from_config_authority(config_service=svc)
@@ -498,6 +524,7 @@ class TestBuildInventoryFromConfigAuthority(unittest.TestCase):
         """Should not raise when called without explicit service."""
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
         from core.model_topology.provider_inventory import ProviderInventory
+
         # Just verify it returns a ProviderInventory without crash
         result = build_inventory_from_config_authority()
         self.assertIsInstance(result, ProviderInventory)
@@ -505,10 +532,11 @@ class TestBuildInventoryFromConfigAuthority(unittest.TestCase):
     def test_46_custom_service_accepted_no_side_effects(self):
         """Passing a custom service does not affect the global singleton."""
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
-        svc1 = _tmp_service(config_data={"providers": {"openai": {"enabled": True}}},
-                            secrets_data="OPENAI_API_KEY=key1\n")
-        svc2 = _tmp_service(config_data={"providers": {"openai": {"enabled": False}}},
-                            secrets_data="")
+
+        svc1 = _tmp_service(
+            config_data={"providers": {"openai": {"enabled": True}}}, secrets_data="OPENAI_API_KEY=key1\n"
+        )
+        svc2 = _tmp_service(config_data={"providers": {"openai": {"enabled": False}}}, secrets_data="")
         inv1 = build_inventory_from_config_authority(config_service=svc1)
         inv2 = build_inventory_from_config_authority(config_service=svc2)
         # inv1 should have openai as eligible, inv2 should not
@@ -519,6 +547,7 @@ class TestBuildInventoryFromConfigAuthority(unittest.TestCase):
 
     def test_47_all_entries_have_config_source_config_authority(self):
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         svc = _tmp_service()
         inv = build_inventory_from_config_authority(config_service=svc)
         for e in inv.all_entries():
@@ -526,6 +555,7 @@ class TestBuildInventoryFromConfigAuthority(unittest.TestCase):
 
     def test_48_disabled_entries_non_empty_when_provider_disabled(self):
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         cfg = {"providers": {"anthropic": {"enabled": False}}}
         svc = _tmp_service(config_data=cfg)
         inv = build_inventory_from_config_authority(config_service=svc)
@@ -534,6 +564,7 @@ class TestBuildInventoryFromConfigAuthority(unittest.TestCase):
 
     def test_49_unconfigured_entries_non_empty_when_key_missing(self):
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         cfg = {"providers": {"openai": {"enabled": True}}}
         svc = _tmp_service(config_data=cfg, secrets_data="")
         inv = build_inventory_from_config_authority(config_service=svc)
@@ -542,11 +573,12 @@ class TestBuildInventoryFromConfigAuthority(unittest.TestCase):
 
     def test_50_candidate_pool_excludes_disabled_and_missing_key(self):
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         cfg = {
             "providers": {
-                "openai": {"enabled": True},    # enabled but no key
-                "anthropic": {"enabled": False}, # disabled
-                "gemini": {"enabled": True},     # enabled with key
+                "openai": {"enabled": True},  # enabled but no key
+                "anthropic": {"enabled": False},  # disabled
+                "gemini": {"enabled": True},  # enabled with key
             }
         }
         svc = _tmp_service(config_data=cfg, secrets_data="GEMINI_API_KEY=gemini-key\n")
@@ -561,11 +593,13 @@ class TestBuildInventoryFromConfigAuthority(unittest.TestCase):
 # 51-58: merge_config_authority_into_inventory
 # ===========================================================================
 
+
 class TestMergeConfigAuthority(unittest.TestCase):
     """Tests 51-58: merge_config_authority_into_inventory()."""
 
     def test_51_returns_same_inventory_object(self):
         from core.model_topology.inventory_from_config import merge_config_authority_into_inventory
+
         e = _make_prov_entry("openai")
         inv = _make_inventory_with(e)
         result = merge_config_authority_into_inventory(inv, config_service=_tmp_service())
@@ -573,6 +607,7 @@ class TestMergeConfigAuthority(unittest.TestCase):
 
     def test_52_updates_config_enabled_in_place(self):
         from core.model_topology.inventory_from_config import merge_config_authority_into_inventory
+
         # Start with config_enabled=True; service has openai disabled
         e = _make_prov_entry("openai", config_enabled=True, config_source="unknown")
         inv = _make_inventory_with(e)
@@ -583,6 +618,7 @@ class TestMergeConfigAuthority(unittest.TestCase):
 
     def test_53_updates_config_has_key_in_place(self):
         from core.model_topology.inventory_from_config import merge_config_authority_into_inventory
+
         e = _make_prov_entry("openai", config_has_key=True, config_source="unknown")
         inv = _make_inventory_with(e)
         # No key in service
@@ -593,6 +629,7 @@ class TestMergeConfigAuthority(unittest.TestCase):
 
     def test_54_updates_config_source_in_place(self):
         from core.model_topology.inventory_from_config import merge_config_authority_into_inventory
+
         e = _make_prov_entry("openai", config_source="unknown")
         inv = _make_inventory_with(e)
         svc = _tmp_service()
@@ -601,6 +638,7 @@ class TestMergeConfigAuthority(unittest.TestCase):
 
     def test_55_oneapi_absent_sets_both_false(self):
         from core.model_topology.inventory_from_config import merge_config_authority_into_inventory
+
         e = _make_prov_entry("oneapi", config_enabled=True, config_has_key=True, config_source="unknown")
         inv = _make_inventory_with(e)
         svc = _tmp_service()  # oneapi absent by default
@@ -611,6 +649,7 @@ class TestMergeConfigAuthority(unittest.TestCase):
 
     def test_56_oneapi_configured_sets_both_true(self):
         from core.model_topology.inventory_from_config import merge_config_authority_into_inventory
+
         e = _make_prov_entry("oneapi", config_enabled=False, config_has_key=False)
         inv = _make_inventory_with(e)
         cfg = {"providers": {"oneapi": {"enabled": True, "base_url": "http://oneapi.test"}}}
@@ -622,6 +661,7 @@ class TestMergeConfigAuthority(unittest.TestCase):
 
     def test_57_oneapi_partial_sets_key_false(self):
         from core.model_topology.inventory_from_config import merge_config_authority_into_inventory
+
         e = _make_prov_entry("oneapi", config_enabled=False, config_has_key=False)
         inv = _make_inventory_with(e)
         cfg = {"providers": {"oneapi": {"enabled": True, "base_url": "http://oneapi.test"}}}
@@ -633,9 +673,9 @@ class TestMergeConfigAuthority(unittest.TestCase):
 
     def test_58_unknown_provider_left_unchanged(self):
         from core.model_topology.inventory_from_config import merge_config_authority_into_inventory
+
         # A provider_id not in VALID_PROVIDERS
-        e = _make_prov_entry("custom_llm", config_enabled=True, config_has_key=True,
-                             config_source="env")
+        e = _make_prov_entry("custom_llm", config_enabled=True, config_has_key=True, config_source="env")
         inv = _make_inventory_with(e)
         svc = _tmp_service()
         merge_config_authority_into_inventory(inv, config_service=svc)
@@ -647,11 +687,13 @@ class TestMergeConfigAuthority(unittest.TestCase):
 # 59-63: Convenience helpers
 # ===========================================================================
 
+
 class TestConvenienceHelpers(unittest.TestCase):
     """Tests 59-63: build_candidate_pool and get_oneapi_candidate_state."""
 
     def test_59_build_candidate_pool_delegates(self):
         from core.model_topology.inventory_from_config import build_candidate_pool
+
         e1 = _make_prov_entry("openai", config_enabled=True, config_has_key=True)
         e2 = _make_prov_entry("anthropic", config_enabled=False, config_has_key=False)
         inv = _make_inventory_with(e1, e2)
@@ -661,18 +703,21 @@ class TestConvenienceHelpers(unittest.TestCase):
 
     def test_60_build_candidate_pool_returns_list(self):
         from core.model_topology.inventory_from_config import build_candidate_pool
+
         inv = _make_inventory_with()
         result = build_candidate_pool(inv)
         self.assertIsInstance(result, list)
 
     def test_61_get_oneapi_candidate_state_absent_by_default(self):
         from core.model_topology.inventory_from_config import get_oneapi_candidate_state
+
         svc = _tmp_service()  # default: oneapi disabled
         state = get_oneapi_candidate_state(config_service=svc)
         self.assertEqual(state, "absent")
 
     def test_62_get_oneapi_candidate_state_configured(self):
         from core.model_topology.inventory_from_config import get_oneapi_candidate_state
+
         cfg = {"providers": {"oneapi": {"enabled": True, "base_url": "http://oneapi.test"}}}
         svc = _tmp_service(config_data=cfg, secrets_data="ONEAPI_API_KEY=key\n")
         state = get_oneapi_candidate_state(config_service=svc)
@@ -680,6 +725,7 @@ class TestConvenienceHelpers(unittest.TestCase):
 
     def test_63_get_oneapi_candidate_state_partial(self):
         from core.model_topology.inventory_from_config import get_oneapi_candidate_state
+
         cfg = {"providers": {"oneapi": {"enabled": True, "base_url": "http://oneapi.test"}}}
         svc = _tmp_service(config_data=cfg, secrets_data="")
         state = get_oneapi_candidate_state(config_service=svc)
@@ -690,22 +736,26 @@ class TestConvenienceHelpers(unittest.TestCase):
 # 64-69: Inventory entry metadata
 # ===========================================================================
 
+
 class TestInventoryEntryMetadata(unittest.TestCase):
     """Tests 64-69: NormalizedTopologyEntry metadata in built inventory."""
 
     def _inv(self, cfg=None, secrets=""):
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         svc = _tmp_service(config_data=cfg, secrets_data=secrets)
         return build_inventory_from_config_authority(config_service=svc)
 
     def test_64_direct_provider_has_direct_category(self):
         from core.model_topology.topology_types import ProviderCategory
+
         inv = self._inv()
         entry = inv.get("openai")
         self.assertEqual(entry.entry.category, ProviderCategory.DIRECT)
 
     def test_65_oneapi_entry_has_oneapi_category(self):
         from core.model_topology.topology_types import ProviderCategory
+
         inv = self._inv()
         entry = inv.get("oneapi")
         self.assertEqual(entry.entry.category, ProviderCategory.ONEAPI)
@@ -717,12 +767,14 @@ class TestInventoryEntryMetadata(unittest.TestCase):
 
     def test_67_groq_has_execution_role_hint(self):
         from core.model_topology.topology_types import TopologyRole
+
         inv = self._inv()
         entry = inv.get("groq")
         self.assertIn(TopologyRole.EXECUTION, entry.entry.role_hints)
 
     def test_68_openai_has_multimodal_core_role_hint(self):
         from core.model_topology.topology_types import TopologyRole
+
         inv = self._inv()
         entry = inv.get("openai")
         self.assertIn(TopologyRole.MULTIMODAL_CORE, entry.entry.role_hints)
@@ -737,12 +789,14 @@ class TestInventoryEntryMetadata(unittest.TestCase):
 # 70-75: Acceptance criteria
 # ===========================================================================
 
+
 class TestAcceptanceCriteria(unittest.TestCase):
     """Tests 70-75: High-level acceptance criteria for PR-4."""
 
     def test_70_enabled_key_provider_in_candidate_pool(self):
         """AC: enabled+key provider appears in candidate pool."""
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         cfg = {"providers": {"openai": {"enabled": True}}}
         svc = _tmp_service(config_data=cfg, secrets_data="OPENAI_API_KEY=sk-test\n")
         inv = build_inventory_from_config_authority(config_service=svc)
@@ -752,6 +806,7 @@ class TestAcceptanceCriteria(unittest.TestCase):
     def test_71_disabled_provider_absent_from_candidate_pool(self):
         """AC: disabled provider absent from candidate pool."""
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         cfg = {"providers": {"anthropic": {"enabled": False}}}
         svc = _tmp_service(config_data=cfg, secrets_data="ANTHROPIC_API_KEY=sk-ant\n")
         inv = build_inventory_from_config_authority(config_service=svc)
@@ -761,6 +816,7 @@ class TestAcceptanceCriteria(unittest.TestCase):
     def test_72_missing_key_provider_absent_from_candidate_pool(self):
         """AC: missing-key provider absent from candidate pool."""
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         cfg = {"providers": {"gemini": {"enabled": True}}}
         svc = _tmp_service(config_data=cfg, secrets_data="")  # no gemini key
         inv = build_inventory_from_config_authority(config_service=svc)
@@ -770,6 +826,7 @@ class TestAcceptanceCriteria(unittest.TestCase):
     def test_73_oneapi_absent_not_in_candidate_pool(self):
         """AC: unconfigured OneAPI is treated as absent from candidate pool."""
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         svc = _tmp_service()  # no oneapi config
         inv = build_inventory_from_config_authority(config_service=svc)
         pool_ids = [e.provider_id for e in inv.candidate_pool_entries()]
@@ -778,6 +835,7 @@ class TestAcceptanceCriteria(unittest.TestCase):
     def test_74_oneapi_configured_in_candidate_pool(self):
         """AC: configured OneAPI can participate (lower-horizon semantics)."""
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         cfg = {"providers": {"oneapi": {"enabled": True, "base_url": "http://oneapi"}}}
         svc = _tmp_service(config_data=cfg, secrets_data="ONEAPI_API_KEY=key\n")
         inv = build_inventory_from_config_authority(config_service=svc)
@@ -788,6 +846,7 @@ class TestAcceptanceCriteria(unittest.TestCase):
         """AC: diagnostic views (all_entries) include all providers regardless of eligibility."""
         from core.config_schema import VALID_PROVIDERS
         from core.model_topology.inventory_from_config import build_inventory_from_config_authority
+
         # All providers disabled, no keys
         cfg = {"providers": {p: {"enabled": False} for p in VALID_PROVIDERS}}
         svc = _tmp_service(config_data=cfg, secrets_data="")

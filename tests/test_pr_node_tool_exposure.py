@@ -26,26 +26,29 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _reset() -> None:
     """Reset all relevant singletons between tests."""
     try:
         from core.nodes.node_fabric_registry import reset_node_fabric_registry
+
         reset_node_fabric_registry()
     except ImportError:
         pass
     try:
         from core.agent.capability_registry import CapabilityRegistry
+
         CapabilityRegistry._instance = None
     except ImportError:
         pass
     try:
-        from core.unified.capability_resolver import _resolver_instance
         import core.unified.capability_resolver as _mod
+        from core.unified.capability_resolver import _resolver_instance
+
         _mod._resolver_instance = None
     except (ImportError, AttributeError):
         pass
@@ -59,12 +62,13 @@ def _make_node(
 ):
     """Build a NodeInfo instance for testing."""
     from core.nodes.node_fabric_registry import (
+        NodeArchitecturalClass,
+        NodeCapability,
         NodeInfo,
         NodeRole,
         NodeStatus,
-        NodeCapability,
-        NodeArchitecturalClass,
     )
+
     caps = [NodeCapability(name=c, description=f"Test capability {c}") for c in (capabilities or [])]
     ac = architectural_class if architectural_class is not None else NodeArchitecturalClass.CAPABILITY_NODE
     node = NodeInfo(
@@ -95,6 +99,7 @@ def _make_tool_schema(name: str) -> Dict[str, Any]:
 # 1. Canonical node path: sync + resolver collects NODE tools
 # ===========================================================================
 
+
 class TestCanonicalNodePathCollectsTools:
     """sync_capabilities_to_registry() is invoked and NODE tools reach _collect_tools()."""
 
@@ -103,11 +108,11 @@ class TestCanonicalNodePathCollectsTools:
 
     def test_capability_node_tools_appear_in_output(self) -> None:
         """CAPABILITY_NODE entries injected via sync appear in _collect_tools()."""
+        from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
         from core.nodes.node_fabric_registry import (
-            NodeFabricRegistry,
             NodeArchitecturalClass,
+            NodeFabricRegistry,
         )
-        from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
 
         # Register a CAPABILITY_NODE with two capabilities
         fabric = NodeFabricRegistry()
@@ -127,11 +132,11 @@ class TestCanonicalNodePathCollectsTools:
     def test_canonical_resolver_returns_node_tools_after_sync(self) -> None:
         """CapabilityResolver.collect_tool_schemas(NODE) returns synced node tools."""
         from core.nodes.node_fabric_registry import (
-            NodeFabricRegistry,
             NodeArchitecturalClass,
+            NodeFabricRegistry,
         )
-        from core.unified.capability_resolver import CapabilityResolver
         from core.unified.capability_contract import CapabilitySource
+        from core.unified.capability_resolver import CapabilityResolver
 
         fabric = NodeFabricRegistry()
         fabric.register(_make_node("n-res-1", NodeArchitecturalClass.CAPABILITY_NODE, ["execute"]))
@@ -145,16 +150,14 @@ class TestCanonicalNodePathCollectsTools:
     def test_node_tool_naming_convention(self) -> None:
         """Node tools use node__<node_id>__<action> naming contract."""
         from core.nodes.node_fabric_registry import (
-            NodeFabricRegistry,
             NodeArchitecturalClass,
+            NodeFabricRegistry,
         )
-        from core.unified.capability_resolver import CapabilityResolver
         from core.unified.capability_contract import CapabilitySource
+        from core.unified.capability_resolver import CapabilityResolver
 
         fabric = NodeFabricRegistry()
-        fabric.register(
-            _make_node("my-node-42", NodeArchitecturalClass.CAPABILITY_NODE, ["infer", "embed"])
-        )
+        fabric.register(_make_node("my-node-42", NodeArchitecturalClass.CAPABILITY_NODE, ["infer", "embed"]))
         fabric.sync_capabilities_to_registry()
 
         resolver = CapabilityResolver(cache_ttl_seconds=0)
@@ -173,6 +176,7 @@ class TestCanonicalNodePathCollectsTools:
 # 2. Architectural filtering: only CAPABILITY_NODE is surfaced
 # ===========================================================================
 
+
 class TestArchitecturalFilteringInCanonicalPath:
     """Non-CAPABILITY_NODE nodes must not reach the canonical tool list."""
 
@@ -183,8 +187,8 @@ class TestArchitecturalFilteringInCanonicalPath:
         from core.nodes.node_fabric_registry import (
             NodeFabricRegistry,
         )
-        from core.unified.capability_resolver import CapabilityResolver
         from core.unified.capability_contract import CapabilitySource
+        from core.unified.capability_resolver import CapabilityResolver
 
         fabric = NodeFabricRegistry()
         node_id = f"n-{architectural_class.value}-test"
@@ -197,57 +201,54 @@ class TestArchitecturalFilteringInCanonicalPath:
 
     def test_service_node_excluded(self) -> None:
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         names = self._sync_and_get_node_names(NodeArchitecturalClass.SERVICE_NODE)
         assert not any("service_node" in n for n in names)
         assert not any("n-service_node" in n for n in names)
 
     def test_legacy_orchestrator_node_excluded(self) -> None:
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         names = self._sync_and_get_node_names(NodeArchitecturalClass.LEGACY_ORCHESTRATOR_NODE)
         assert not any("legacy_orchestrator_node" in n for n in names)
 
     def test_experimental_node_excluded(self) -> None:
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         names = self._sync_and_get_node_names(NodeArchitecturalClass.EXPERIMENTAL_NODE)
         assert not any("experimental_node" in n for n in names)
 
     def test_archived_node_excluded(self) -> None:
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         names = self._sync_and_get_node_names(NodeArchitecturalClass.ARCHIVED_NODE)
         assert not any("archived_node" in n for n in names)
 
     def test_unhealthy_capability_node_excluded(self) -> None:
         """Unhealthy CAPABILITY_NODE nodes must not be synced."""
         from core.nodes.node_fabric_registry import (
-            NodeFabricRegistry,
             NodeArchitecturalClass,
+            NodeFabricRegistry,
         )
+
         fabric = NodeFabricRegistry()
-        fabric.register(
-            _make_node("n-stale", NodeArchitecturalClass.CAPABILITY_NODE, ["act"], healthy=False)
-        )
+        fabric.register(_make_node("n-stale", NodeArchitecturalClass.CAPABILITY_NODE, ["act"], healthy=False))
         count = fabric.sync_capabilities_to_registry()
         assert count == 0  # stale node must not produce any synced items
 
     def test_mixed_nodes_only_capability_node_surfaces(self) -> None:
         """With mixed architectural classes, only CAPABILITY_NODE items appear."""
         from core.nodes.node_fabric_registry import (
-            NodeFabricRegistry,
             NodeArchitecturalClass,
+            NodeFabricRegistry,
         )
-        from core.unified.capability_resolver import CapabilityResolver
         from core.unified.capability_contract import CapabilitySource
+        from core.unified.capability_resolver import CapabilityResolver
 
         fabric = NodeFabricRegistry()
-        fabric.register(
-            _make_node("cap-good", NodeArchitecturalClass.CAPABILITY_NODE, ["run"])
-        )
-        fabric.register(
-            _make_node("svc-bad", NodeArchitecturalClass.SERVICE_NODE, ["ocr"])
-        )
-        fabric.register(
-            _make_node("leg-bad", NodeArchitecturalClass.LEGACY_ORCHESTRATOR_NODE, ["dispatch"])
-        )
+        fabric.register(_make_node("cap-good", NodeArchitecturalClass.CAPABILITY_NODE, ["run"]))
+        fabric.register(_make_node("svc-bad", NodeArchitecturalClass.SERVICE_NODE, ["ocr"]))
+        fabric.register(_make_node("leg-bad", NodeArchitecturalClass.LEGACY_ORCHESTRATOR_NODE, ["dispatch"]))
         count = fabric.sync_capabilities_to_registry()
         assert count == 1  # only cap-good__run
 
@@ -263,6 +264,7 @@ class TestArchitecturalFilteringInCanonicalPath:
 # 3. Deduplication: legacy scan does not re-add canonical path tools
 # ===========================================================================
 
+
 class TestLegacyScanDeduplication:
     """Legacy direct-scan path skips tools already collected via canonical path."""
 
@@ -271,16 +273,14 @@ class TestLegacyScanDeduplication:
 
     def test_canonical_tool_names_initialise_registered_set(self) -> None:
         """_node_catalog_tool_names pre-seeds the legacy scan's dedup set."""
-        from core.nodes.node_fabric_registry import (
-            NodeFabricRegistry,
-            NodeArchitecturalClass,
-        )
         from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
+        from core.nodes.node_fabric_registry import (
+            NodeArchitecturalClass,
+            NodeFabricRegistry,
+        )
 
         fabric = NodeFabricRegistry()
-        fabric.register(
-            _make_node("canon-node", NodeArchitecturalClass.CAPABILITY_NODE, ["fetch"])
-        )
+        fabric.register(_make_node("canon-node", NodeArchitecturalClass.CAPABILITY_NODE, ["fetch"]))
         fabric.sync_capabilities_to_registry()
 
         # Verify the registry has the item
@@ -291,16 +291,14 @@ class TestLegacyScanDeduplication:
     def test_no_duplicate_node_tools_in_collect_tools(self) -> None:
         """_collect_tools() output must not contain duplicate tool names."""
         from core.nodes.node_fabric_registry import (
-            NodeFabricRegistry,
             NodeArchitecturalClass,
+            NodeFabricRegistry,
         )
-        from core.unified.capability_resolver import CapabilityResolver
         from core.unified.capability_contract import CapabilitySource
+        from core.unified.capability_resolver import CapabilityResolver
 
         fabric = NodeFabricRegistry()
-        fabric.register(
-            _make_node("dedup-node", NodeArchitecturalClass.CAPABILITY_NODE, ["act"])
-        )
+        fabric.register(_make_node("dedup-node", NodeArchitecturalClass.CAPABILITY_NODE, ["act"]))
         fabric.sync_capabilities_to_registry()
 
         resolver = CapabilityResolver(cache_ttl_seconds=0)
@@ -315,6 +313,7 @@ class TestLegacyScanDeduplication:
 # 4. Backward compatibility: MCP/Skill collection is unchanged
 # ===========================================================================
 
+
 class TestMCPSkillBackwardCompatibility:
     """Existing MCP/Skill tool collection remains intact after the node path addition."""
 
@@ -324,8 +323,8 @@ class TestMCPSkillBackwardCompatibility:
     def test_mcp_tools_still_collected_via_resolver(self) -> None:
         """CapabilityResolver with MCP source still works correctly."""
         from core.agent.capability_registry import CapabilityRegistry
-        from core.unified.capability_resolver import CapabilityResolver
         from core.unified.capability_contract import CapabilitySource
+        from core.unified.capability_resolver import CapabilityResolver
 
         reg = CapabilityRegistry.get_instance()
         reg.inject_mcp_tool(
@@ -343,8 +342,8 @@ class TestMCPSkillBackwardCompatibility:
     def test_skill_tools_still_collected_via_resolver(self) -> None:
         """CapabilityResolver with SKILL source still works correctly."""
         from core.agent.capability_registry import CapabilityRegistry
-        from core.unified.capability_resolver import CapabilityResolver
         from core.unified.capability_contract import CapabilitySource
+        from core.unified.capability_resolver import CapabilityResolver
 
         reg = CapabilityRegistry.get_instance()
         reg.inject_skill(
@@ -361,19 +360,17 @@ class TestMCPSkillBackwardCompatibility:
 
     def test_node_and_mcp_tools_coexist(self) -> None:
         """Node tools and MCP tools can be collected together without conflict."""
-        from core.nodes.node_fabric_registry import (
-            NodeFabricRegistry,
-            NodeArchitecturalClass,
-        )
         from core.agent.capability_registry import CapabilityRegistry
-        from core.unified.capability_resolver import CapabilityResolver
+        from core.nodes.node_fabric_registry import (
+            NodeArchitecturalClass,
+            NodeFabricRegistry,
+        )
         from core.unified.capability_contract import CapabilitySource
+        from core.unified.capability_resolver import CapabilityResolver
 
         # Register a CAPABILITY_NODE
         fabric = NodeFabricRegistry()
-        fabric.register(
-            _make_node("coexist-node", NodeArchitecturalClass.CAPABILITY_NODE, ["process"])
-        )
+        fabric.register(_make_node("coexist-node", NodeArchitecturalClass.CAPABILITY_NODE, ["process"]))
         fabric.sync_capabilities_to_registry()
 
         # Also inject an MCP tool
@@ -405,6 +402,7 @@ class TestMCPSkillBackwardCompatibility:
 # 5. Graceful degradation: canonical path skipped when registry unavailable
 # ===========================================================================
 
+
 class TestCanonicalPathGracefulDegradation:
     """Canonical node path is safely skipped when NodeFabricRegistry is unavailable."""
 
@@ -414,8 +412,8 @@ class TestCanonicalPathGracefulDegradation:
     def test_import_error_does_not_raise(self) -> None:
         """ImportError from NodeFabricRegistry is caught and logged, not raised."""
         from core.nodes.node_fabric_registry import NodeFabricRegistry
-        from core.unified.capability_resolver import CapabilityResolver
         from core.unified.capability_contract import CapabilitySource
+        from core.unified.capability_resolver import CapabilityResolver
 
         # If sync returns 0 (no nodes registered), collect_tool_schemas returns []
         fabric = NodeFabricRegistry()
@@ -429,8 +427,8 @@ class TestCanonicalPathGracefulDegradation:
     def test_empty_fabric_registry_returns_no_node_tools(self) -> None:
         """An empty NodeFabricRegistry produces no node tools."""
         from core.nodes.node_fabric_registry import NodeFabricRegistry
-        from core.unified.capability_resolver import CapabilityResolver
         from core.unified.capability_contract import CapabilitySource
+        from core.unified.capability_resolver import CapabilityResolver
 
         fabric = NodeFabricRegistry()
         assert fabric.sync_capabilities_to_registry() == 0
@@ -444,6 +442,7 @@ class TestCanonicalPathGracefulDegradation:
 # 6. Node tools collected via canonical path appear alongside MCP/Skill
 # ===========================================================================
 
+
 class TestNodeToolsAppearsInDefaultCollection:
     """At least a representative CAPABILITY_NODE can be discovered as a tool."""
 
@@ -453,11 +452,11 @@ class TestNodeToolsAppearsInDefaultCollection:
     def test_representative_capability_node_is_discoverable(self) -> None:
         """A representative CAPABILITY_NODE with capabilities is discoverable as tools."""
         from core.nodes.node_fabric_registry import (
-            NodeFabricRegistry,
             NodeArchitecturalClass,
+            NodeFabricRegistry,
         )
-        from core.unified.capability_resolver import CapabilityResolver
         from core.unified.capability_contract import CapabilitySource
+        from core.unified.capability_resolver import CapabilityResolver
 
         fabric = NodeFabricRegistry()
         fabric.register(
@@ -481,19 +480,15 @@ class TestNodeToolsAppearsInDefaultCollection:
     def test_multiple_capability_nodes_all_discoverable(self) -> None:
         """Multiple CAPABILITY_NODEs are all discoverable as tools."""
         from core.nodes.node_fabric_registry import (
-            NodeFabricRegistry,
             NodeArchitecturalClass,
+            NodeFabricRegistry,
         )
-        from core.unified.capability_resolver import CapabilityResolver
         from core.unified.capability_contract import CapabilitySource
+        from core.unified.capability_resolver import CapabilityResolver
 
         fabric = NodeFabricRegistry()
-        fabric.register(
-            _make_node("node-a", NodeArchitecturalClass.CAPABILITY_NODE, ["action_x"])
-        )
-        fabric.register(
-            _make_node("node-b", NodeArchitecturalClass.CAPABILITY_NODE, ["action_y"])
-        )
+        fabric.register(_make_node("node-a", NodeArchitecturalClass.CAPABILITY_NODE, ["action_x"]))
+        fabric.register(_make_node("node-b", NodeArchitecturalClass.CAPABILITY_NODE, ["action_y"]))
         synced = fabric.sync_capabilities_to_registry()
         assert synced == 2
 
@@ -507,16 +502,14 @@ class TestNodeToolsAppearsInDefaultCollection:
     def test_tool_schema_has_correct_structure(self) -> None:
         """Node tool schemas conform to OpenAI function-calling format."""
         from core.nodes.node_fabric_registry import (
-            NodeFabricRegistry,
             NodeArchitecturalClass,
+            NodeFabricRegistry,
         )
-        from core.unified.capability_resolver import CapabilityResolver
         from core.unified.capability_contract import CapabilitySource
+        from core.unified.capability_resolver import CapabilityResolver
 
         fabric = NodeFabricRegistry()
-        fabric.register(
-            _make_node("schema-node", NodeArchitecturalClass.CAPABILITY_NODE, ["run"])
-        )
+        fabric.register(_make_node("schema-node", NodeArchitecturalClass.CAPABILITY_NODE, ["run"]))
         fabric.sync_capabilities_to_registry()
 
         resolver = CapabilityResolver(cache_ttl_seconds=0)

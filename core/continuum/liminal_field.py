@@ -41,9 +41,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional
 
-from core.continuum.config import ContinuumConfig, DEFAULT_CONTINUUM_CONFIG
+from core.continuum.config import DEFAULT_CONTINUUM_CONFIG, ContinuumConfig
 from core.continuum.types import ContinuumPhase, UnifiedState
-
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -104,9 +103,7 @@ class LiminalFieldEngine:
             :data:`~core.continuum.config.DEFAULT_CONTINUUM_CONFIG`.
     """
 
-    def __init__(
-        self, config: ContinuumConfig = DEFAULT_CONTINUUM_CONFIG
-    ) -> None:
+    def __init__(self, config: ContinuumConfig = DEFAULT_CONTINUUM_CONFIG) -> None:
         self._cfg = config
 
     # ------------------------------------------------------------------
@@ -133,9 +130,7 @@ class LiminalFieldEngine:
         coherence = self._compute_coherence(state, history)
         ambiguity = self._compute_ambiguity(state, coherence)
         collapse_tendency = self._compute_collapse_tendency(state, coherence)
-        intervention_window = self._compute_intervention_window(
-            state, coherence, collapse_tendency
-        )
+        intervention_window = self._compute_intervention_window(state, coherence, collapse_tendency)
 
         return LiminalMetrics(
             coherence=_clamp(coherence),
@@ -166,8 +161,7 @@ class LiminalFieldEngine:
             Updated :class:`UnifiedState` (new object; *state* is unchanged).
         """
         if (
-            metrics.collapse_tendency
-            >= self._cfg.hysteresis.manifest_enter
+            metrics.collapse_tendency >= self._cfg.hysteresis.manifest_enter
             and state.phase_candidate != ContinuumPhase.MANIFEST
         ):
             return state.model_copy(
@@ -176,9 +170,7 @@ class LiminalFieldEngine:
                     "candidate_confidence": metrics.collapse_tendency,
                 }
             )
-        return state.model_copy(
-            update={"candidate_confidence": metrics.coherence}
-        )
+        return state.model_copy(update={"candidate_confidence": metrics.coherence})
 
     # ------------------------------------------------------------------
     # Metric computation helpers
@@ -205,12 +197,7 @@ class LiminalFieldEngine:
         context_align = _clamp(core * state.context_utility)
         certainty = 1.0 - state.uncertainty
 
-        coherence = _clamp(
-            0.40 * core
-            + 0.30 * context_align
-            + 0.20 * certainty
-            + 0.10 * _clamp(h.focus_level)
-        )
+        coherence = _clamp(0.40 * core + 0.30 * context_align + 0.20 * certainty + 0.10 * _clamp(h.focus_level))
 
         # Temporal stability bonus: rising intent trend → small coherence lift.
         if history and len(history) >= 2:
@@ -220,9 +207,7 @@ class LiminalFieldEngine:
 
         return coherence
 
-    def _compute_ambiguity(
-        self, state: UnifiedState, coherence: float
-    ) -> float:
+    def _compute_ambiguity(self, state: UnifiedState, coherence: float) -> float:
         """Ambiguity = unresolved uncertainty and signal conflict.
 
         Pure complement is ``1 − coherence``.  A conflict term is added
@@ -235,20 +220,14 @@ class LiminalFieldEngine:
         conflict = _clamp(h.intent_probability * state.action_risk)
         return _clamp(0.70 * base_ambiguity + 0.30 * conflict)
 
-    def _compute_collapse_tendency(
-        self, state: UnifiedState, coherence: float
-    ) -> float:
+    def _compute_collapse_tendency(self, state: UnifiedState, coherence: float) -> float:
         """Collapse tendency = readiness to commit to the manifest phase.
 
         Requires high coherence, low interruption sensitivity, and low
         action risk.  Urgency provides a supplemental boost.
         """
         h = state.human
-        readiness = (
-            coherence
-            * (1.0 - h.interruption_sensitivity)
-            * (1.0 - state.action_risk)
-        )
+        readiness = coherence * (1.0 - h.interruption_sensitivity) * (1.0 - state.action_risk)
         urgency_boost = _clamp(state.urgency * 0.30)
         return _clamp(readiness + urgency_boost)
 
@@ -274,10 +253,7 @@ class LiminalFieldEngine:
         sensitivity_penalty = h.interruption_sensitivity * 0.40
 
         base = _clamp(
-            0.40 * h.intent_probability
-            + 0.30 * coherence
-            + 0.20 * (1.0 - h.fatigue)
-            + 0.10 * collapse_tendency
+            0.40 * h.intent_probability + 0.30 * coherence + 0.20 * (1.0 - h.fatigue) + 0.10 * collapse_tendency
         )
 
         return _clamp(base - speaking_penalty - sensitivity_penalty)
@@ -286,9 +262,7 @@ class LiminalFieldEngine:
     # History helpers
     # ------------------------------------------------------------------
 
-    def _intent_trend(
-        self, history: List[UnifiedState], window: int = 5
-    ) -> float:
+    def _intent_trend(self, history: List[UnifiedState], window: int = 5) -> float:
         """Normalised upward trend in ``intent_probability`` over history.
 
         Returns a value in ``[0, 1]``.  Negative trends are treated as
@@ -306,10 +280,7 @@ class LiminalFieldEngine:
         if len(recent) < 2:
             return 0.0
 
-        delta = (
-            recent[-1].human.intent_probability
-            - recent[0].human.intent_probability
-        )
+        delta = recent[-1].human.intent_probability - recent[0].human.intent_probability
         if delta <= 0.0:
             return 0.0
         # A delta of 0.5 across the window = full trend signal.

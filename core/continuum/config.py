@@ -16,9 +16,7 @@ All values can be overridden at runtime by passing a populated
 
 from __future__ import annotations
 
-
 from pydantic import BaseModel, Field
-
 
 # ---------------------------------------------------------------------------
 # Sub-config models
@@ -141,10 +139,7 @@ class FeatureFlags(BaseModel):
     )
     debug: bool = Field(
         default=False,
-        description=(
-            "When True, emit verbose phase-transition and decision-gate "
-            "events to the application log."
-        ),
+        description=("When True, emit verbose phase-transition and decision-gate " "events to the application log."),
     )
     allow_emergency_jump: bool = Field(
         default=False,
@@ -167,10 +162,7 @@ class FeatureFlags(BaseModel):
     )
     enable_human_field: bool = Field(
         default=True,
-        description=(
-            "When False, HumanFieldInferrer is skipped and a default "
-            "HumanFieldState is substituted."
-        ),
+        description=("When False, HumanFieldInferrer is skipped and a default " "HumanFieldState is substituted."),
     )
     enable_liminal_field: bool = Field(
         default=True,
@@ -182,8 +174,7 @@ class FeatureFlags(BaseModel):
     enable_decision_gate: bool = Field(
         default=True,
         description=(
-            "When False, DecisionGate is skipped and a default DecisionState "
-            "(action_level=OBSERVE) is attached."
+            "When False, DecisionGate is skipped and a default DecisionState " "(action_level=OBSERVE) is attached."
         ),
     )
 
@@ -263,8 +254,7 @@ class ContinuumConfig(BaseModel):
         gt=0.0,
         le=1.0,
         description=(
-            "Maximum allowed change in presence_intensity per tick. "
-            "Acts as a rate-limiter on top of EMA smoothing."
+            "Maximum allowed change in presence_intensity per tick. " "Acts as a rate-limiter on top of EMA smoothing."
         ),
     )
     hysteresis: HysteresisConfig = Field(
@@ -283,8 +273,7 @@ class ContinuumConfig(BaseModel):
         default=5000,
         ge=0,
         description=(
-            "Milliseconds of inactivity after which the system initiates "
-            "a forced receding transition from manifest."
+            "Milliseconds of inactivity after which the system initiates " "a forced receding transition from manifest."
         ),
     )
     min_presence_formless: float = Field(

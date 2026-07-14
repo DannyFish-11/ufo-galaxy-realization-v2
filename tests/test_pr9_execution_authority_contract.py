@@ -56,8 +56,8 @@ Test classes:
 from __future__ import annotations
 
 import asyncio
-import sys
 import os
+import sys
 from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -78,44 +78,54 @@ class TestExecutionLayerRole:
 
     def test_entry_surface_value(self):
         from core.schemas.execution_authority import ExecutionLayerRole
+
         assert ExecutionLayerRole.ENTRY_SURFACE.value == "entry_surface"
 
     def test_runtime_shell_authority_value(self):
         from core.schemas.execution_authority import ExecutionLayerRole
+
         assert ExecutionLayerRole.RUNTIME_SHELL_AUTHORITY.value == "runtime_shell_authority"
 
     def test_subject_decision_authority_value(self):
         from core.schemas.execution_authority import ExecutionLayerRole
+
         assert ExecutionLayerRole.SUBJECT_DECISION_AUTHORITY.value == "subject_decision_authority"
 
     def test_cognition_planning_layer_value(self):
         from core.schemas.execution_authority import ExecutionLayerRole
+
         assert ExecutionLayerRole.COGNITION_PLANNING_LAYER.value == "cognition_planning_layer"
 
     def test_execution_substrate_value(self):
         from core.schemas.execution_authority import ExecutionLayerRole
+
         assert ExecutionLayerRole.EXECUTION_SUBSTRATE.value == "execution_substrate"
 
     def test_orchestration_layer_value(self):
         from core.schemas.execution_authority import ExecutionLayerRole
+
         assert ExecutionLayerRole.ORCHESTRATION_LAYER.value == "orchestration_layer"
 
     def test_compatibility_adapter_value(self):
         from core.schemas.execution_authority import ExecutionLayerRole
+
         assert ExecutionLayerRole.COMPATIBILITY_ADAPTER.value == "compatibility_adapter"
 
     def test_unknown_value(self):
         from core.schemas.execution_authority import ExecutionLayerRole
+
         assert ExecutionLayerRole.UNKNOWN.value == "unknown"
 
     def test_all_values_are_strings(self):
         from core.schemas.execution_authority import ExecutionLayerRole
+
         for role in ExecutionLayerRole:
             assert isinstance(role.value, str) and role.value
 
     def test_string_enum(self):
         """ExecutionLayerRole instances compare equal to their string values."""
         from core.schemas.execution_authority import ExecutionLayerRole
+
         assert ExecutionLayerRole.EXECUTION_SUBSTRATE == "execution_substrate"
 
 
@@ -132,6 +142,7 @@ class TestExecutionAuthorityMetadata:
             ExecutionAuthorityMetadata,
             ExecutionLayerRole,
         )
+
         meta = ExecutionAuthorityMetadata(
             layer_role=ExecutionLayerRole.RUNTIME_SHELL_AUTHORITY,
             canonical_module="core.desktop_presence_runtime",
@@ -143,6 +154,7 @@ class TestExecutionAuthorityMetadata:
             ExecutionAuthorityMetadata,
             ExecutionLayerRole,
         )
+
         meta = ExecutionAuthorityMetadata(
             layer_role=ExecutionLayerRole.EXECUTION_SUBSTRATE,
             canonical_module="core.command_router",
@@ -157,6 +169,7 @@ class TestExecutionAuthorityMetadata:
             ExecutionAuthorityMetadata,
             ExecutionLayerRole,
         )
+
         meta = ExecutionAuthorityMetadata(
             layer_role=ExecutionLayerRole.RUNTIME_SHELL_AUTHORITY,
             canonical_module="core.desktop_presence_runtime",
@@ -174,6 +187,7 @@ class TestExecutionAuthorityMetadata:
             ExecutionAuthorityMetadata,
             ExecutionLayerRole,
         )
+
         meta = ExecutionAuthorityMetadata(
             layer_role=ExecutionLayerRole.EXECUTION_SUBSTRATE,
             canonical_module="core.command_router",
@@ -189,6 +203,7 @@ class TestExecutionAuthorityMetadata:
             ExecutionAuthorityMetadata,
             ExecutionLayerRole,
         )
+
         meta = ExecutionAuthorityMetadata(
             layer_role=ExecutionLayerRole.COGNITION_PLANNING_LAYER,
             canonical_module="core.agent.kernel",
@@ -202,6 +217,7 @@ class TestExecutionAuthorityMetadata:
             ExecutionAuthorityMetadata,
             ExecutionLayerRole,
         )
+
         meta = ExecutionAuthorityMetadata(
             layer_role=ExecutionLayerRole.ENTRY_SURFACE,
             canonical_module="core.routes.chat",
@@ -212,10 +228,12 @@ class TestExecutionAuthorityMetadata:
 
     def test_to_dict_is_json_serialisable(self):
         import json
+
         from core.schemas.execution_authority import (
             ExecutionAuthorityMetadata,
             ExecutionLayerRole,
         )
+
         meta = ExecutionAuthorityMetadata(
             layer_role=ExecutionLayerRole.ORCHESTRATION_LAYER,
             canonical_module="core.swarm_coordinator",
@@ -236,6 +254,7 @@ class TestCanonicalAuthorityChain:
 
     def test_chain_is_list(self):
         from core.schemas.execution_authority import CANONICAL_AUTHORITY_CHAIN
+
         assert isinstance(CANONICAL_AUTHORITY_CHAIN, list)
         assert len(CANONICAL_AUTHORITY_CHAIN) >= 5
 
@@ -244,6 +263,7 @@ class TestCanonicalAuthorityChain:
             CANONICAL_AUTHORITY_CHAIN,
             ExecutionLayerRole,
         )
+
         for entry in CANONICAL_AUTHORITY_CHAIN:
             assert len(entry) == 3
             role, module, cls = entry
@@ -256,6 +276,7 @@ class TestCanonicalAuthorityChain:
             CANONICAL_AUTHORITY_CHAIN,
             ExecutionLayerRole,
         )
+
         roles = [r for r, _, _ in CANONICAL_AUTHORITY_CHAIN]
         assert ExecutionLayerRole.ENTRY_SURFACE in roles
 
@@ -264,6 +285,7 @@ class TestCanonicalAuthorityChain:
             CANONICAL_AUTHORITY_CHAIN,
             ExecutionLayerRole,
         )
+
         roles = [r for r, _, _ in CANONICAL_AUTHORITY_CHAIN]
         assert ExecutionLayerRole.RUNTIME_SHELL_AUTHORITY in roles
 
@@ -272,6 +294,7 @@ class TestCanonicalAuthorityChain:
             CANONICAL_AUTHORITY_CHAIN,
             ExecutionLayerRole,
         )
+
         roles = [r for r, _, _ in CANONICAL_AUTHORITY_CHAIN]
         assert ExecutionLayerRole.SUBJECT_DECISION_AUTHORITY in roles
 
@@ -280,6 +303,7 @@ class TestCanonicalAuthorityChain:
             CANONICAL_AUTHORITY_CHAIN,
             ExecutionLayerRole,
         )
+
         roles = [r for r, _, _ in CANONICAL_AUTHORITY_CHAIN]
         assert ExecutionLayerRole.COGNITION_PLANNING_LAYER in roles
 
@@ -288,6 +312,7 @@ class TestCanonicalAuthorityChain:
             CANONICAL_AUTHORITY_CHAIN,
             ExecutionLayerRole,
         )
+
         roles = [r for r, _, _ in CANONICAL_AUTHORITY_CHAIN]
         assert ExecutionLayerRole.EXECUTION_SUBSTRATE in roles
 
@@ -297,6 +322,7 @@ class TestCanonicalAuthorityChain:
             CANONICAL_AUTHORITY_CHAIN,
             ExecutionLayerRole,
         )
+
         roles = [r for r, _, _ in CANONICAL_AUTHORITY_CHAIN]
         assert roles.index(ExecutionLayerRole.RUNTIME_SHELL_AUTHORITY) < roles.index(
             ExecutionLayerRole.SUBJECT_DECISION_AUTHORITY
@@ -308,6 +334,7 @@ class TestCanonicalAuthorityChain:
             CANONICAL_AUTHORITY_CHAIN,
             ExecutionLayerRole,
         )
+
         roles = [r for r, _, _ in CANONICAL_AUTHORITY_CHAIN]
         assert roles.index(ExecutionLayerRole.SUBJECT_DECISION_AUTHORITY) < roles.index(
             ExecutionLayerRole.COGNITION_PLANNING_LAYER
@@ -318,10 +345,9 @@ class TestCanonicalAuthorityChain:
             CANONICAL_AUTHORITY_CHAIN,
             ExecutionLayerRole,
         )
+
         shell_entries = [
-            (r, m, c)
-            for r, m, c in CANONICAL_AUTHORITY_CHAIN
-            if r == ExecutionLayerRole.RUNTIME_SHELL_AUTHORITY
+            (r, m, c) for r, m, c in CANONICAL_AUTHORITY_CHAIN if r == ExecutionLayerRole.RUNTIME_SHELL_AUTHORITY
         ]
         assert len(shell_entries) == 1
         _, module, cls = shell_entries[0]
@@ -333,10 +359,9 @@ class TestCanonicalAuthorityChain:
             CANONICAL_AUTHORITY_CHAIN,
             ExecutionLayerRole,
         )
+
         entries = [
-            (r, m, c)
-            for r, m, c in CANONICAL_AUTHORITY_CHAIN
-            if r == ExecutionLayerRole.SUBJECT_DECISION_AUTHORITY
+            (r, m, c) for r, m, c in CANONICAL_AUTHORITY_CHAIN if r == ExecutionLayerRole.SUBJECT_DECISION_AUTHORITY
         ]
         assert len(entries) == 1
         _, module, cls = entries[0]
@@ -348,10 +373,9 @@ class TestCanonicalAuthorityChain:
             CANONICAL_AUTHORITY_CHAIN,
             ExecutionLayerRole,
         )
+
         entries = [
-            (r, m, c)
-            for r, m, c in CANONICAL_AUTHORITY_CHAIN
-            if r == ExecutionLayerRole.COGNITION_PLANNING_LAYER
+            (r, m, c) for r, m, c in CANONICAL_AUTHORITY_CHAIN if r == ExecutionLayerRole.COGNITION_PLANNING_LAYER
         ]
         assert len(entries) == 1
         _, module, cls = entries[0]
@@ -363,11 +387,8 @@ class TestCanonicalAuthorityChain:
             CANONICAL_AUTHORITY_CHAIN,
             ExecutionLayerRole,
         )
-        entries = [
-            (r, m, c)
-            for r, m, c in CANONICAL_AUTHORITY_CHAIN
-            if r == ExecutionLayerRole.EXECUTION_SUBSTRATE
-        ]
+
+        entries = [(r, m, c) for r, m, c in CANONICAL_AUTHORITY_CHAIN if r == ExecutionLayerRole.EXECUTION_SUBSTRATE]
         assert len(entries) == 1
         _, module, cls = entries[0]
         assert module == "core.command_router"
@@ -387,6 +408,7 @@ class TestGetLayerAuthority:
             ExecutionLayerRole,
             get_layer_authority,
         )
+
         assert get_layer_authority("core.routes.chat") == ExecutionLayerRole.ENTRY_SURFACE
 
     def test_desktop_presence_runtime_is_runtime_shell(self):
@@ -394,66 +416,55 @@ class TestGetLayerAuthority:
             ExecutionLayerRole,
             get_layer_authority,
         )
-        assert (
-            get_layer_authority("core.desktop_presence_runtime")
-            == ExecutionLayerRole.RUNTIME_SHELL_AUTHORITY
-        )
+
+        assert get_layer_authority("core.desktop_presence_runtime") == ExecutionLayerRole.RUNTIME_SHELL_AUTHORITY
 
     def test_openclawd_is_subject_decision(self):
         from core.schemas.execution_authority import (
             ExecutionLayerRole,
             get_layer_authority,
         )
-        assert (
-            get_layer_authority("core.openclawd")
-            == ExecutionLayerRole.SUBJECT_DECISION_AUTHORITY
-        )
+
+        assert get_layer_authority("core.openclawd") == ExecutionLayerRole.SUBJECT_DECISION_AUTHORITY
 
     def test_agent_kernel_is_cognition(self):
         from core.schemas.execution_authority import (
             ExecutionLayerRole,
             get_layer_authority,
         )
-        assert (
-            get_layer_authority("core.agent.kernel")
-            == ExecutionLayerRole.COGNITION_PLANNING_LAYER
-        )
+
+        assert get_layer_authority("core.agent.kernel") == ExecutionLayerRole.COGNITION_PLANNING_LAYER
 
     def test_command_router_is_substrate(self):
         from core.schemas.execution_authority import (
             ExecutionLayerRole,
             get_layer_authority,
         )
-        assert (
-            get_layer_authority("core.command_router")
-            == ExecutionLayerRole.EXECUTION_SUBSTRATE
-        )
+
+        assert get_layer_authority("core.command_router") == ExecutionLayerRole.EXECUTION_SUBSTRATE
 
     def test_swarm_coordinator_is_orchestration(self):
         from core.schemas.execution_authority import (
             ExecutionLayerRole,
             get_layer_authority,
         )
-        assert (
-            get_layer_authority("core.swarm_coordinator")
-            == ExecutionLayerRole.ORCHESTRATION_LAYER
-        )
+
+        assert get_layer_authority("core.swarm_coordinator") == ExecutionLayerRole.ORCHESTRATION_LAYER
 
     def test_e2e_orchestrator_is_orchestration(self):
         from core.schemas.execution_authority import (
             ExecutionLayerRole,
             get_layer_authority,
         )
-        assert (
-            get_layer_authority("core.e2e_orchestrator")
-            == ExecutionLayerRole.ORCHESTRATION_LAYER
-        )
+
+        assert get_layer_authority("core.e2e_orchestrator") == ExecutionLayerRole.ORCHESTRATION_LAYER
 
     def test_submodule_inherits_parent_role(self):
         from core.schemas.execution_authority import (
             ExecutionLayerRole,
             get_layer_authority,
         )
+
         assert (
             get_layer_authority("core.desktop_presence_runtime.DesktopPresenceRuntime")
             == ExecutionLayerRole.RUNTIME_SHELL_AUTHORITY
@@ -464,6 +475,7 @@ class TestGetLayerAuthority:
             ExecutionLayerRole,
             get_layer_authority,
         )
+
         assert get_layer_authority("some.random.module") == ExecutionLayerRole.UNKNOWN
 
     def test_empty_string_returns_unknown(self):
@@ -471,6 +483,7 @@ class TestGetLayerAuthority:
             ExecutionLayerRole,
             get_layer_authority,
         )
+
         assert get_layer_authority("") == ExecutionLayerRole.UNKNOWN
 
     def test_prefix_matching_requires_dot_separator(self):
@@ -479,6 +492,7 @@ class TestGetLayerAuthority:
             ExecutionLayerRole,
             get_layer_authority,
         )
+
         role = get_layer_authority("core.openclawd_extra")
         assert role == ExecutionLayerRole.UNKNOWN
 
@@ -497,6 +511,7 @@ class TestBuildAuthorityMetadata:
             ExecutionLayerRole,
             build_authority_metadata,
         )
+
         meta = build_authority_metadata(
             ExecutionLayerRole.RUNTIME_SHELL_AUTHORITY,
             "core.desktop_presence_runtime",
@@ -508,6 +523,7 @@ class TestBuildAuthorityMetadata:
             ExecutionLayerRole,
             build_authority_metadata,
         )
+
         meta = build_authority_metadata(
             ExecutionLayerRole.COGNITION_PLANNING_LAYER,
             "core.agent.kernel",
@@ -522,6 +538,7 @@ class TestBuildAuthorityMetadata:
             ExecutionLayerRole,
             build_authority_metadata,
         )
+
         meta = build_authority_metadata(
             ExecutionLayerRole.ENTRY_SURFACE,
             "core.routes.chat",
@@ -550,15 +567,26 @@ class TestDesktopPresenceRuntimeAuthority:
         runtime.created_at = 0.0
 
         # Stub out the internal dispatch so it returns immediately
-        async def _fake_dispatch(msg, source, device_id, session_id, user_id,
-                                  context, required_capabilities, multimodal_context,
-                                  use_constellation, entry_mode, **kwargs):
+        async def _fake_dispatch(
+            msg,
+            source,
+            device_id,
+            session_id,
+            user_id,
+            context,
+            required_capabilities,
+            multimodal_context,
+            use_constellation,
+            entry_mode,
+            **kwargs,
+        ):
             return {"success": True, "response": "ok"}
 
         runtime._dispatch = _fake_dispatch
 
         # Stub RuntimeSession creation
         from unittest.mock import MagicMock
+
         from core.desktop_presence_runtime import TriState
 
         mock_session = MagicMock()
@@ -574,11 +602,8 @@ class TestDesktopPresenceRuntimeAuthority:
         runtime._log_request_start = MagicMock()
         runtime._log_request_end = MagicMock()
 
-        with patch("core.desktop_presence_runtime.DesktopPresenceRuntime._create_session",
-                   return_value=mock_session):
-            result = self._run(
-                runtime.handle_request("hello", source="test")
-            )
+        with patch("core.desktop_presence_runtime.DesktopPresenceRuntime._create_session", return_value=mock_session):
+            result = self._run(runtime.handle_request("hello", source="test"))
 
         assert "authority_metadata" in result
         assert result["authority_metadata"]["layer_role"] == "runtime_shell_authority"
@@ -595,10 +620,13 @@ class TestDesktopPresenceRuntimeAuthority:
             "canonical_module": "core.openclawd",
         }
         result = {"success": True, "authority_metadata": inner_meta}
-        result.setdefault("authority_metadata", {
-            "layer_role": "runtime_shell_authority",
-            "canonical_module": "core.desktop_presence_runtime",
-        })
+        result.setdefault(
+            "authority_metadata",
+            {
+                "layer_role": "runtime_shell_authority",
+                "canonical_module": "core.desktop_presence_runtime",
+            },
+        )
         # setdefault: inner layer stamp is preserved (not overwritten)
         assert result["authority_metadata"]["layer_role"] == "subject_decision_authority"
 
@@ -634,16 +662,15 @@ class TestOpenClawdSubjectDecisionAuthority:
         source of the declared field in the response-building code.
         """
         import inspect
+
         from core.openclawd import OpenClawd
 
         source = inspect.getsource(OpenClawd.process)
         # The authority_role annotation must be present in the process() method
-        assert "authority_role" in source, (
-            "OpenClawd.process() must stamp 'authority_role' in response metadata"
-        )
-        assert "subject_decision_authority" in source, (
-            "OpenClawd.process() must declare 'subject_decision_authority' role"
-        )
+        assert "authority_role" in source, "OpenClawd.process() must stamp 'authority_role' in response metadata"
+        assert (
+            "subject_decision_authority" in source
+        ), "OpenClawd.process() must declare 'subject_decision_authority' role"
 
 
 # ===========================================================================
@@ -706,19 +733,19 @@ class TestCommandRouterSubstrate:
         We verify this by inspecting the source of the declared setdefault call.
         """
         import inspect
+
         from core.command_router import CommandRouter
 
         source = inspect.getsource(CommandRouter.route_envelope)
-        assert "execution_substrate_role" in source, (
-            "CommandRouter.route_envelope() must stamp 'execution_substrate_role' in result"
-        )
-        assert "execution_substrate" in source, (
-            "CommandRouter.route_envelope() must declare 'execution_substrate' role"
-        )
+        assert (
+            "execution_substrate_role" in source
+        ), "CommandRouter.route_envelope() must stamp 'execution_substrate_role' in result"
+        assert "execution_substrate" in source, "CommandRouter.route_envelope() must declare 'execution_substrate' role"
 
     def test_execution_substrate_role_value(self):
         """execution_substrate_role is always 'execution_substrate'."""
         from core.schemas.execution_authority import ExecutionLayerRole
+
         assert ExecutionLayerRole.EXECUTION_SUBSTRATE.value == "execution_substrate"
 
 
@@ -733,6 +760,7 @@ class TestChatRouteEntrySurface:
     def _get_chat_endpoint(self):
         """Return (router, endpoint_func) from the chat route module."""
         from core.routes.chat import router as chat_router
+
         endpoint = None
         for route in chat_router.routes:
             if hasattr(route, "path") and route.path in ("/api/v1/chat", ""):
@@ -754,6 +782,7 @@ class TestChatRouteEntrySurface:
             pytest.skip("Chat router not importable in this environment")
 
         from unittest.mock import AsyncMock, MagicMock, patch
+
         from fastapi import Request
 
         mock_request = MagicMock(spec=Request)
@@ -776,11 +805,10 @@ class TestChatRouteEntrySurface:
         }
 
         with patch("core.routes.chat.get_desktop_presence_runtime") as mock_rt:
-            mock_rt.return_value.handle_request = AsyncMock(
-                return_value=fake_runtime_result
-            )
+            mock_rt.return_value.handle_request = AsyncMock(return_value=fake_runtime_result)
             try:
                 import asyncio
+
                 loop = asyncio.new_event_loop()
                 resp = loop.run_until_complete(endpoint(mock_request, mock_body))
                 loop.close()
@@ -806,6 +834,7 @@ class TestChatRouteEntrySurface:
             pytest.skip("Chat router not importable in this environment")
 
         from unittest.mock import AsyncMock, MagicMock, patch
+
         from fastapi import Request
 
         mock_request = MagicMock(spec=Request)
@@ -828,11 +857,10 @@ class TestChatRouteEntrySurface:
         }
 
         with patch("core.routes.chat.get_desktop_presence_runtime") as mock_rt:
-            mock_rt.return_value.handle_request = AsyncMock(
-                return_value=fake_runtime_result
-            )
+            mock_rt.return_value.handle_request = AsyncMock(return_value=fake_runtime_result)
             try:
                 import asyncio
+
                 loop = asyncio.new_event_loop()
                 resp = loop.run_until_complete(endpoint(mock_request, mock_body))
                 loop.close()
@@ -863,6 +891,7 @@ class TestAuthorityChainContract:
             ExecutionLayerRole,
             build_authority_metadata,
         )
+
         meta = build_authority_metadata(
             ExecutionLayerRole.ENTRY_SURFACE,
             "core.routes.chat",
@@ -876,6 +905,7 @@ class TestAuthorityChainContract:
             ExecutionLayerRole,
             build_authority_metadata,
         )
+
         meta = build_authority_metadata(
             ExecutionLayerRole.RUNTIME_SHELL_AUTHORITY,
             "core.desktop_presence_runtime",
@@ -888,6 +918,7 @@ class TestAuthorityChainContract:
             ExecutionLayerRole,
             build_authority_metadata,
         )
+
         meta = build_authority_metadata(
             ExecutionLayerRole.SUBJECT_DECISION_AUTHORITY,
             "core.openclawd",
@@ -907,6 +938,7 @@ class TestAuthorityChainContract:
         from core.schemas.execution_authority import (
             CANONICAL_AUTHORITY_CHAIN,
         )
+
         seen = set()
         for role, module, cls in CANONICAL_AUTHORITY_CHAIN:
             # Values must be non-empty strings
@@ -946,9 +978,9 @@ class TestAuthorityChainContract:
             CANONICAL_AUTHORITY_CHAIN,
             get_layer_authority,
         )
+
         for role, module, _ in CANONICAL_AUTHORITY_CHAIN:
             resolved = get_layer_authority(module)
             assert resolved == role, (
-                f"get_layer_authority({module!r}) → {resolved.value!r}, "
-                f"expected {role.value!r}"
+                f"get_layer_authority({module!r}) → {resolved.value!r}, " f"expected {role.value!r}"
             )

@@ -50,12 +50,10 @@ Usage
 
 from __future__ import annotations
 
-from typing import List  # auto: missing import
-
-
 import asyncio
 import logging
 from datetime import date
+from typing import List  # auto: missing import
 from typing import Dict, Optional
 
 from .policy_schema import BudgetPolicy, ModelPolicy, OnBudgetExceed
@@ -66,6 +64,7 @@ logger = logging.getLogger("Galaxy.Governance.BudgetEnforcer")
 # ---------------------------------------------------------------------------
 # Exceptions
 # ---------------------------------------------------------------------------
+
 
 class BudgetExceededError(Exception):
     """Raised when a budget is exceeded and the policy action is ``deny``."""
@@ -91,6 +90,7 @@ class BudgetExceededError(Exception):
 # Internal counters
 # ---------------------------------------------------------------------------
 
+
 class _Counter:
     """Simple monotonic cost counter that can be reset."""
 
@@ -111,14 +111,23 @@ class _Counter:
 # BudgetStatus
 # ---------------------------------------------------------------------------
 
+
 class BudgetStatus:
     """Snapshot of budget utilisation for a given scope."""
 
     __slots__ = (
-        "session_id", "tenant_id", "date_utc",
-        "session_spent_usd", "session_limit_usd", "session_pct",
-        "daily_spent_usd", "daily_limit_usd", "daily_pct",
-        "tenant_daily_spent_usd", "tenant_daily_limit_usd", "tenant_daily_pct",
+        "session_id",
+        "tenant_id",
+        "date_utc",
+        "session_spent_usd",
+        "session_limit_usd",
+        "session_pct",
+        "daily_spent_usd",
+        "daily_limit_usd",
+        "daily_pct",
+        "tenant_daily_spent_usd",
+        "tenant_daily_limit_usd",
+        "tenant_daily_pct",
         "warning",
     )
 
@@ -180,6 +189,7 @@ class BudgetStatus:
 # ---------------------------------------------------------------------------
 # BudgetEnforcer
 # ---------------------------------------------------------------------------
+
 
 class BudgetEnforcer:
     """Thread-safe (asyncio) budget tracker and enforcement engine.
@@ -285,7 +295,12 @@ class BudgetEnforcer:
                     logger.warning(
                         "Budget overrun [%s] session=%s tenant=%s: "
                         "limit=%.4f spent=%.4f requested=%.4f — downgrading model",
-                        scope, session_id, tenant_id, limit, spent, estimated_cost_usd,
+                        scope,
+                        session_id,
+                        tenant_id,
+                        limit,
+                        spent,
+                        estimated_cost_usd,
                     )
                     return self._fallback_model()
 
@@ -300,7 +315,8 @@ class BudgetEnforcer:
                 if limit_val > 0 and (spent_val + estimated_cost_usd) / limit_val >= threshold:
                     logger.warning(
                         "Budget warning [%s] session=%s: %.0f%% of %.4f USD used",
-                        label, session_id,
+                        label,
+                        session_id,
                         100 * (spent_val + estimated_cost_usd) / limit_val,
                         limit_val,
                     )
@@ -324,7 +340,11 @@ class BudgetEnforcer:
 
         logger.debug(
             "Usage recorded: session=%s tenant=%s model=%s tokens=%d cost=%.6f USD",
-            session_id, tenant_id, model, tokens_used, cost_usd,
+            session_id,
+            tenant_id,
+            model,
+            tokens_used,
+            cost_usd,
         )
 
     async def get_status(self, session_id: str, tenant_id: str) -> BudgetStatus:

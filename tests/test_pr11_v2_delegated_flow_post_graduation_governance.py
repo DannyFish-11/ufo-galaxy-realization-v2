@@ -62,8 +62,8 @@ AV. DelegatedFlowGovernanceReport.to_dict() includes acceptance_report_id.
 from __future__ import annotations
 
 import json
-import sys
 import os
+import sys
 from typing import Any, Dict
 
 import pytest
@@ -74,27 +74,26 @@ if _PROJECT_ROOT not in sys.path:
 
 import core.delegated_flow_post_graduation_governance as _gov_mod
 from core.delegated_flow_post_graduation_governance import (
+    ACCEPTANCE_GRADUATION_IS_PREREQUISITE_FOR_GOVERNANCE_POLICY,
+    ALL_FIVE_DIMENSIONS_REQUIRED_FOR_COMPLIANCE_POLICY,
     DELEGATED_FLOW_POST_GRADUATION_GOVERNANCE_AUTHORITY,
     DELEGATED_FLOW_POST_GRADUATION_GOVERNANCE_PR11V2_SENTINEL,
-    GOVERNANCE_EVALUATOR_IS_UNIFIED_COMPLIANCE_ENTRY_POINT_POLICY,
-    GOVERNANCE_EVALUATOR_IS_PROJECTION_ONLY_POLICY,
     GOVERNANCE_EVALUATOR_FAIL_CONSERVATIVE_ON_MISSING_SIGNAL_POLICY,
-    GOVERNANCE_VIOLATION_MUST_BE_OPERATOR_VISIBLE_POLICY,
-    GOVERNANCE_VERDICT_IS_STABLE_ARTIFACT_POLICY,
-    ALL_FIVE_DIMENSIONS_REQUIRED_FOR_COMPLIANCE_POLICY,
-    ACCEPTANCE_GRADUATION_IS_PREREQUISITE_FOR_GOVERNANCE_POLICY,
+    GOVERNANCE_EVALUATOR_IS_PROJECTION_ONLY_POLICY,
+    GOVERNANCE_EVALUATOR_IS_UNIFIED_COMPLIANCE_ENTRY_POINT_POLICY,
     GOVERNANCE_VERDICT_FEEDS_ENFORCEMENT_AND_RELEASE_TIGHTENING_POLICY,
-    GovernanceDimension,
-    DimensionGovernanceStatus,
-    GovernanceVerdict,
-    DimensionGovernanceResult,
-    DelegatedFlowGovernanceReport,
+    GOVERNANCE_VERDICT_IS_STABLE_ARTIFACT_POLICY,
+    GOVERNANCE_VIOLATION_MUST_BE_OPERATOR_VISIBLE_POLICY,
     DelegatedFlowGovernanceEvaluator,
+    DelegatedFlowGovernanceReport,
+    DimensionGovernanceResult,
+    DimensionGovernanceStatus,
+    GovernanceDimension,
+    GovernanceVerdict,
     evaluate_delegated_flow_governance,
     get_governance_evaluator,
     reset_governance_evaluator,
 )
-
 
 # ===========================================================================
 # Fixtures
@@ -120,24 +119,17 @@ class TestModuleSentinels:
 
     def test_authority_sentinel_non_empty(self):
         assert DELEGATED_FLOW_POST_GRADUATION_GOVERNANCE_AUTHORITY
-        assert isinstance(
-            DELEGATED_FLOW_POST_GRADUATION_GOVERNANCE_AUTHORITY, str
-        )
+        assert isinstance(DELEGATED_FLOW_POST_GRADUATION_GOVERNANCE_AUTHORITY, str)
 
     def test_authority_sentinel_contains_pr11v2(self):
         assert "PR11V2" in DELEGATED_FLOW_POST_GRADUATION_GOVERNANCE_AUTHORITY
 
     def test_pr11v2_sentinel_non_empty(self):
         assert DELEGATED_FLOW_POST_GRADUATION_GOVERNANCE_PR11V2_SENTINEL
-        assert isinstance(
-            DELEGATED_FLOW_POST_GRADUATION_GOVERNANCE_PR11V2_SENTINEL, str
-        )
+        assert isinstance(DELEGATED_FLOW_POST_GRADUATION_GOVERNANCE_PR11V2_SENTINEL, str)
 
     def test_pr11v2_sentinel_contains_pr11v2(self):
-        assert (
-            "PR11V2"
-            in DELEGATED_FLOW_POST_GRADUATION_GOVERNANCE_PR11V2_SENTINEL
-        )
+        assert "PR11V2" in DELEGATED_FLOW_POST_GRADUATION_GOVERNANCE_PR11V2_SENTINEL
 
 
 # ===========================================================================
@@ -294,9 +286,7 @@ class TestGovernanceVerdict:
         assert "governance_compliant" in values
         assert "governance_violation_due_to_truth_regression" in values
         assert "governance_violation_due_to_result_regression" in values
-        assert (
-            "governance_violation_due_to_operator_visibility_regression" in values
-        )
+        assert "governance_violation_due_to_operator_visibility_regression" in values
         assert "governance_violation_due_to_compat_bypass" in values
         assert "governance_unknown_due_to_missing_monitoring_signal" in values
 
@@ -359,10 +349,7 @@ class TestGovernanceVerdictIsViolation:
         assert GovernanceVerdict.governance_compliant.is_violation is False
 
     def test_false_for_unknown(self):
-        assert (
-            GovernanceVerdict.governance_unknown_due_to_missing_monitoring_signal.is_violation
-            is False
-        )
+        assert GovernanceVerdict.governance_unknown_due_to_missing_monitoring_signal.is_violation is False
 
 
 # ===========================================================================
@@ -372,10 +359,7 @@ class TestGovernanceVerdictIsViolation:
 
 class TestGovernanceVerdictIsUnknown:
     def test_true_only_for_missing_monitoring_signal(self):
-        assert (
-            GovernanceVerdict.governance_unknown_due_to_missing_monitoring_signal.is_unknown
-            is True
-        )
+        assert GovernanceVerdict.governance_unknown_due_to_missing_monitoring_signal.is_unknown is True
 
     def test_false_for_compliant(self):
         assert GovernanceVerdict.governance_compliant.is_unknown is False
@@ -597,9 +581,7 @@ class TestDelegatedFlowGovernanceReportGetDimension:
             dimension=GovernanceDimension.compat_bypass,
             status=DimensionGovernanceStatus.compliant,
         )
-        rpt = DelegatedFlowGovernanceReport(
-            dimensions={GovernanceDimension.compat_bypass.value: dim_result}
-        )
+        rpt = DelegatedFlowGovernanceReport(dimensions={GovernanceDimension.compat_bypass.value: dim_result})
         assert rpt.get_dimension(GovernanceDimension.compat_bypass) is dim_result
 
     def test_returns_none_for_missing_dimension(self):
@@ -754,9 +736,7 @@ class TestEvaluateConvenienceWrapper:
 
 def _make_dims_all_compliant() -> Dict[str, DimensionGovernanceResult]:
     return {
-        dim.value: DimensionGovernanceResult(
-            dimension=dim, status=DimensionGovernanceStatus.compliant
-        )
+        dim.value: DimensionGovernanceResult(dimension=dim, status=DimensionGovernanceStatus.compliant)
         for dim in GovernanceDimension
     }
 
@@ -764,69 +744,54 @@ def _make_dims_all_compliant() -> Dict[str, DimensionGovernanceResult]:
 class TestComputeVerdictLogic:
     def test_unknown_dimension_yields_unknown_verdict(self):
         dims = _make_dims_all_compliant()
-        dims[GovernanceDimension.result_convergence.value] = (
-            DimensionGovernanceResult(
-                dimension=GovernanceDimension.result_convergence,
-                status=DimensionGovernanceStatus.unknown,
-            )
+        dims[GovernanceDimension.result_convergence.value] = DimensionGovernanceResult(
+            dimension=GovernanceDimension.result_convergence,
+            status=DimensionGovernanceStatus.unknown,
         )
         verdict = DelegatedFlowGovernanceEvaluator._compute_verdict(dims)
         assert verdict == GovernanceVerdict.governance_unknown_due_to_missing_monitoring_signal
 
     def test_truth_violation_yields_truth_regression(self):
         dims = _make_dims_all_compliant()
-        dims[GovernanceDimension.truth_alignment.value] = (
-            DimensionGovernanceResult(
-                dimension=GovernanceDimension.truth_alignment,
-                status=DimensionGovernanceStatus.violation,
-            )
+        dims[GovernanceDimension.truth_alignment.value] = DimensionGovernanceResult(
+            dimension=GovernanceDimension.truth_alignment,
+            status=DimensionGovernanceStatus.violation,
         )
         verdict = DelegatedFlowGovernanceEvaluator._compute_verdict(dims)
         assert verdict == GovernanceVerdict.governance_violation_due_to_truth_regression
 
     def test_result_convergence_violation_yields_result_regression(self):
         dims = _make_dims_all_compliant()
-        dims[GovernanceDimension.result_convergence.value] = (
-            DimensionGovernanceResult(
-                dimension=GovernanceDimension.result_convergence,
-                status=DimensionGovernanceStatus.violation,
-            )
+        dims[GovernanceDimension.result_convergence.value] = DimensionGovernanceResult(
+            dimension=GovernanceDimension.result_convergence,
+            status=DimensionGovernanceStatus.violation,
         )
         verdict = DelegatedFlowGovernanceEvaluator._compute_verdict(dims)
         assert verdict == GovernanceVerdict.governance_violation_due_to_result_regression
 
     def test_operator_visibility_violation_yields_visibility_regression(self):
         dims = _make_dims_all_compliant()
-        dims[GovernanceDimension.operator_visibility.value] = (
-            DimensionGovernanceResult(
-                dimension=GovernanceDimension.operator_visibility,
-                status=DimensionGovernanceStatus.violation,
-            )
+        dims[GovernanceDimension.operator_visibility.value] = DimensionGovernanceResult(
+            dimension=GovernanceDimension.operator_visibility,
+            status=DimensionGovernanceStatus.violation,
         )
         verdict = DelegatedFlowGovernanceEvaluator._compute_verdict(dims)
-        assert (
-            verdict
-            == GovernanceVerdict.governance_violation_due_to_operator_visibility_regression
-        )
+        assert verdict == GovernanceVerdict.governance_violation_due_to_operator_visibility_regression
 
     def test_compat_bypass_violation_yields_compat_bypass_verdict(self):
         dims = _make_dims_all_compliant()
-        dims[GovernanceDimension.compat_bypass.value] = (
-            DimensionGovernanceResult(
-                dimension=GovernanceDimension.compat_bypass,
-                status=DimensionGovernanceStatus.violation,
-            )
+        dims[GovernanceDimension.compat_bypass.value] = DimensionGovernanceResult(
+            dimension=GovernanceDimension.compat_bypass,
+            status=DimensionGovernanceStatus.violation,
         )
         verdict = DelegatedFlowGovernanceEvaluator._compute_verdict(dims)
         assert verdict == GovernanceVerdict.governance_violation_due_to_compat_bypass
 
     def test_continuity_replay_violation_yields_truth_regression(self):
         dims = _make_dims_all_compliant()
-        dims[GovernanceDimension.continuity_replay.value] = (
-            DimensionGovernanceResult(
-                dimension=GovernanceDimension.continuity_replay,
-                status=DimensionGovernanceStatus.violation,
-            )
+        dims[GovernanceDimension.continuity_replay.value] = DimensionGovernanceResult(
+            dimension=GovernanceDimension.continuity_replay,
+            status=DimensionGovernanceStatus.violation,
         )
         verdict = DelegatedFlowGovernanceEvaluator._compute_verdict(dims)
         assert verdict == GovernanceVerdict.governance_violation_due_to_truth_regression
@@ -850,12 +815,10 @@ class TestCollectViolations:
 
     def test_returns_entry_for_violation_dimension(self):
         dims = _make_dims_all_compliant()
-        dims[GovernanceDimension.compat_bypass.value] = (
-            DimensionGovernanceResult(
-                dimension=GovernanceDimension.compat_bypass,
-                status=DimensionGovernanceStatus.violation,
-                violation_description="bypass found",
-            )
+        dims[GovernanceDimension.compat_bypass.value] = DimensionGovernanceResult(
+            dimension=GovernanceDimension.compat_bypass,
+            status=DimensionGovernanceStatus.violation,
+            violation_description="bypass found",
         )
         violations = DelegatedFlowGovernanceEvaluator._collect_violations(dims)
         assert len(violations) == 1
@@ -864,12 +827,10 @@ class TestCollectViolations:
 
     def test_returns_entry_for_unknown_dimension(self):
         dims = _make_dims_all_compliant()
-        dims[GovernanceDimension.result_convergence.value] = (
-            DimensionGovernanceResult(
-                dimension=GovernanceDimension.result_convergence,
-                status=DimensionGovernanceStatus.unknown,
-                violation_description="signal absent",
-            )
+        dims[GovernanceDimension.result_convergence.value] = DimensionGovernanceResult(
+            dimension=GovernanceDimension.result_convergence,
+            status=DimensionGovernanceStatus.unknown,
+            violation_description="signal absent",
         )
         violations = DelegatedFlowGovernanceEvaluator._collect_violations(dims)
         assert len(violations) == 1
@@ -877,11 +838,9 @@ class TestCollectViolations:
 
     def test_does_not_include_compliant_dimensions(self):
         dims = _make_dims_all_compliant()
-        dims[GovernanceDimension.truth_alignment.value] = (
-            DimensionGovernanceResult(
-                dimension=GovernanceDimension.truth_alignment,
-                status=DimensionGovernanceStatus.violation,
-            )
+        dims[GovernanceDimension.truth_alignment.value] = DimensionGovernanceResult(
+            dimension=GovernanceDimension.truth_alignment,
+            status=DimensionGovernanceStatus.violation,
         )
         violations = DelegatedFlowGovernanceEvaluator._collect_violations(dims)
         dim_names = [v["dimension"] for v in violations]
@@ -896,16 +855,13 @@ class TestCollectViolations:
 
 class TestBuildSummary:
     def test_compliant_summary_contains_governance_compliant(self):
-        summary = DelegatedFlowGovernanceEvaluator._build_summary(
-            GovernanceVerdict.governance_compliant, []
-        )
+        summary = DelegatedFlowGovernanceEvaluator._build_summary(GovernanceVerdict.governance_compliant, [])
         assert "GOVERNANCE COMPLIANT" in summary
 
     def test_violation_summary_contains_governance_non_compliant(self):
         summary = DelegatedFlowGovernanceEvaluator._build_summary(
             GovernanceVerdict.governance_violation_due_to_truth_regression,
-            [{"dimension": "truth_alignment", "status": "violation",
-              "violation_description": "drift"}],
+            [{"dimension": "truth_alignment", "status": "violation", "violation_description": "drift"}],
         )
         assert "GOVERNANCE NON-COMPLIANT" in summary
 
@@ -974,9 +930,7 @@ class TestPolicySentinelCount:
         sentinels = [
             v
             for k, v in vars(_gov_mod).items()
-            if isinstance(v, str)
-            and ("POLICY" in v or "SENTINEL" in v)
-            and k.isupper()
+            if isinstance(v, str) and ("POLICY" in v or "SENTINEL" in v) and k.isupper()
         ]
         assert len(sentinels) >= 8
 

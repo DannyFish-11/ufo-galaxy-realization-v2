@@ -25,10 +25,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _udm_device(**kw: Any) -> MagicMock:
     """Mock ``core.unified.models.UnifiedDevice``."""
@@ -118,11 +118,13 @@ def _android_payload(**kw: Any) -> dict:
 # 1. UDM → RegisteredRuntimeDevice
 # ---------------------------------------------------------------------------
 
+
 class TestUdmProjection:
     """UDM device projects correctly into all six canonical information domains."""
 
     def test_identity_domain(self):
         from contracts.registered_runtime_device import from_udm_device
+
         m = _udm_device(device_id="udm_id_01", device_name="UDM Identity Phone")
         c = from_udm_device(m)
         # domain 1: identity
@@ -130,7 +132,8 @@ class TestUdmProjection:
         assert c.device_name == "UDM Identity Phone"
 
     def test_registration_domain(self):
-        from contracts.registered_runtime_device import from_udm_device, RuntimeDevicePlatform
+        from contracts.registered_runtime_device import RuntimeDevicePlatform, from_udm_device
+
         m = _udm_device(device_type="android")
         c = from_udm_device(m)
         # domain 2: registration
@@ -138,7 +141,8 @@ class TestUdmProjection:
         assert c.device_type == "android"
 
     def test_runtime_presence_domain_online(self):
-        from contracts.registered_runtime_device import from_udm_device, RuntimeDeviceStatus
+        from contracts.registered_runtime_device import RuntimeDeviceStatus, from_udm_device
+
         m = _udm_device(status="online")
         c = from_udm_device(m)
         # domain 3: runtime presence
@@ -147,12 +151,14 @@ class TestUdmProjection:
 
     def test_runtime_presence_domain_offline(self):
         from contracts.registered_runtime_device import from_udm_device
+
         m = _udm_device(status="offline")
         c = from_udm_device(m)
         assert c.online is False
 
     def test_runtime_presence_last_seen_from_datetime(self):
         from contracts.registered_runtime_device import from_udm_device
+
         lh = datetime(2026, 3, 21, 12, 0, 0, tzinfo=timezone.utc)
         m = _udm_device(last_heartbeat=lh)
         c = from_udm_device(m)
@@ -162,6 +168,7 @@ class TestUdmProjection:
 
     def test_capability_domain(self):
         from contracts.registered_runtime_device import from_udm_device
+
         m = _udm_device(capabilities=["screen", "camera", "gps"])
         c = from_udm_device(m)
         # domain 4: capability
@@ -170,6 +177,7 @@ class TestUdmProjection:
 
     def test_topology_hint_runtime_enabled_when_online(self):
         from contracts.registered_runtime_device import from_udm_device
+
         m = _udm_device(status="online")
         c = from_udm_device(m)
         # domain 6: topology / runtime hints
@@ -177,12 +185,14 @@ class TestUdmProjection:
 
     def test_metadata_preserved(self):
         from contracts.registered_runtime_device import from_udm_device
+
         m = _udm_device(metadata={"extra": "udm_meta"})
         c = from_udm_device(m)
         assert c.metadata.get("extra") == "udm_meta"
 
     def test_missing_optional_fields_graceful(self):
         from contracts.registered_runtime_device import from_udm_device
+
         m = MagicMock()
         m.device_id = "udm_sparse"
         m.device_name = None
@@ -196,7 +206,8 @@ class TestUdmProjection:
         assert isinstance(c.capabilities.capabilities, list)
 
     def test_produces_valid_contract_instance(self):
-        from contracts.registered_runtime_device import from_udm_device, RegisteredRuntimeDevice
+        from contracts.registered_runtime_device import RegisteredRuntimeDevice, from_udm_device
+
         c = from_udm_device(_udm_device())
         assert isinstance(c, RegisteredRuntimeDevice)
 
@@ -205,30 +216,35 @@ class TestUdmProjection:
 # 2. DeviceRegistry record → RegisteredRuntimeDevice
 # ---------------------------------------------------------------------------
 
+
 class TestDeviceRegistryProjection:
     """DeviceRegistry record projects correctly into the canonical contract."""
 
     def test_identity_domain(self):
         from contracts.registered_runtime_device import from_device_registry_record
+
         m = _registry_device(device_id="reg_id_01", name="Registry Server")
         c = from_device_registry_record(m)
         assert c.device_id == "reg_id_01"
         assert c.device_name == "Registry Server"
 
     def test_registration_domain(self):
-        from contracts.registered_runtime_device import from_device_registry_record, RuntimeDevicePlatform
+        from contracts.registered_runtime_device import RuntimeDevicePlatform, from_device_registry_record
+
         m = _registry_device(device_type="windows")
         c = from_device_registry_record(m)
         assert c.platform in (RuntimeDevicePlatform.WINDOWS, "windows")
 
     def test_runtime_presence_online(self):
         from contracts.registered_runtime_device import from_device_registry_record
+
         m = _registry_device(status="online")
         c = from_device_registry_record(m)
         assert c.online is True
 
     def test_capability_domain_from_objects(self):
         from contracts.registered_runtime_device import from_device_registry_record
+
         cap1 = MagicMock()
         cap1.name = "keyboard"
         cap2 = MagicMock()
@@ -240,6 +256,7 @@ class TestDeviceRegistryProjection:
 
     def test_participation_domain_groups_and_tags(self):
         from contracts.registered_runtime_device import from_device_registry_record
+
         m = _registry_device(groups=["team_a", "team_b"], tags=["production", "tier1"])
         c = from_device_registry_record(m)
         # domain 5: participation
@@ -248,6 +265,7 @@ class TestDeviceRegistryProjection:
 
     def test_last_seen_carried(self):
         from contracts.registered_runtime_device import from_device_registry_record
+
         ts = time.time()
         m = _registry_device(last_seen=ts)
         c = from_device_registry_record(m)
@@ -255,13 +273,15 @@ class TestDeviceRegistryProjection:
         assert abs(c.last_seen - ts) < 1.0
 
     def test_produces_valid_contract_instance(self):
-        from contracts.registered_runtime_device import from_device_registry_record, RegisteredRuntimeDevice
+        from contracts.registered_runtime_device import RegisteredRuntimeDevice, from_device_registry_record
+
         c = from_device_registry_record(_registry_device())
         assert isinstance(c, RegisteredRuntimeDevice)
 
     def test_string_status_not_enum(self):
         """Registry records with a plain string status are handled correctly."""
         from contracts.registered_runtime_device import from_device_registry_record
+
         m = MagicMock()
         m.device_id = "reg_str_status"
         m.name = "Plain Status Device"
@@ -282,27 +302,31 @@ class TestDeviceRegistryProjection:
 # 3. Android-originated state → RegisteredRuntimeDevice
 # ---------------------------------------------------------------------------
 
+
 class TestAndroidProjection:
     """Android registration payload projects correctly into the canonical contract."""
 
     def test_identity_domain(self):
         from contracts.registered_runtime_device import from_android_registration
+
         c = from_android_registration(_android_payload(device_id="a_01", name="Test Phone"))
         assert c.device_id == "a_01"
         assert c.device_name == "Test Phone"
 
     def test_registration_domain_android_phone(self):
         from contracts.registered_runtime_device import (
-            from_android_registration,
-            RuntimeDevicePlatform,
             RuntimeDeviceFormFactor,
+            RuntimeDevicePlatform,
+            from_android_registration,
         )
+
         c = from_android_registration(_android_payload())
         assert c.platform in (RuntimeDevicePlatform.ANDROID, "android")
         assert c.form_factor in (RuntimeDeviceFormFactor.PHONE, "phone")
 
     def test_runtime_presence_connected(self):
-        from contracts.registered_runtime_device import from_android_registration, RuntimeConnectionState
+        from contracts.registered_runtime_device import RuntimeConnectionState, from_android_registration
+
         c = from_android_registration(_android_payload())
         assert c.online is True
         assert c.connection.state in (RuntimeConnectionState.CONNECTED, "connected")
@@ -310,12 +334,14 @@ class TestAndroidProjection:
 
     def test_capability_domain_list(self):
         from contracts.registered_runtime_device import from_android_registration
+
         c = from_android_registration(_android_payload(capabilities=["screen", "gps", "camera"]))
         assert "screen" in c.capabilities.capabilities
         assert "gps" in c.capabilities.capabilities
 
     def test_capability_domain_bitmask_zero(self):
         from contracts.registered_runtime_device import from_android_registration
+
         data = _android_payload()
         data["capabilities"] = 0
         c = from_android_registration(data)
@@ -324,6 +350,7 @@ class TestAndroidProjection:
 
     def test_topology_hint_runtime_version(self):
         from contracts.registered_runtime_device import from_android_registration
+
         c = from_android_registration(_android_payload(app_version="3.2.0"))
         assert c.autonomy.runtime_version == "3.2.0"
         assert c.autonomy.supports_remote_handoff is True
@@ -331,17 +358,20 @@ class TestAndroidProjection:
 
     def test_metadata_carries_model_os(self):
         from contracts.registered_runtime_device import from_android_registration
+
         c = from_android_registration(_android_payload(model="Pixel 9", os_version="15"))
         assert c.metadata.get("model") == "Pixel 9"
         assert c.metadata.get("os_version") == "15"
 
     def test_missing_device_id_generates_one(self):
         from contracts.registered_runtime_device import from_android_registration
+
         c = from_android_registration({"name": "No ID Phone"})
         assert c.device_id.startswith("android_")
 
     def test_produces_valid_contract_instance(self):
-        from contracts.registered_runtime_device import from_android_registration, RegisteredRuntimeDevice
+        from contracts.registered_runtime_device import RegisteredRuntimeDevice, from_android_registration
+
         c = from_android_registration(_android_payload())
         assert isinstance(c, RegisteredRuntimeDevice)
 
@@ -350,25 +380,29 @@ class TestAndroidProjection:
 # 4. Router-derived runtime state → RegisteredRuntimeDevice
 # ---------------------------------------------------------------------------
 
+
 class TestRouterProjection:
     """Router device object projects correctly into the canonical contract."""
 
     def test_identity_domain(self):
         from contracts.registered_runtime_device import from_router_device
+
         m = _router_device(device_id="rt_01", device_name="Router Node")
         c = from_router_device(m)
         assert c.device_id == "rt_01"
         assert c.device_name == "Router Node"
 
     def test_runtime_presence_connected_has_websocket(self):
-        from contracts.registered_runtime_device import from_router_device, RuntimeConnectionState
+        from contracts.registered_runtime_device import RuntimeConnectionState, from_router_device
+
         m = _router_device(websocket=MagicMock())
         c = from_router_device(m)
         assert c.online is True
         assert c.connection.state in (RuntimeConnectionState.CONNECTED, "connected")
 
     def test_runtime_presence_disconnected_no_websocket(self):
-        from contracts.registered_runtime_device import from_router_device, RuntimeConnectionState
+        from contracts.registered_runtime_device import RuntimeConnectionState, from_router_device
+
         m = _router_device(websocket=None)
         c = from_router_device(m)
         assert c.online is False
@@ -376,12 +410,14 @@ class TestRouterProjection:
 
     def test_capability_domain_string_list(self):
         from contracts.registered_runtime_device import from_router_device
+
         m = _router_device(capabilities=["screen", "keyboard", "microphone"])
         c = from_router_device(m)
         assert "keyboard" in c.capabilities.capabilities
 
     def test_capability_domain_objects_with_name(self):
         from contracts.registered_runtime_device import from_router_device
+
         cap1 = MagicMock()
         cap1.name = "camera"
         m = _router_device(capabilities=[cap1])
@@ -389,7 +425,8 @@ class TestRouterProjection:
         assert "camera" in c.capabilities.capabilities
 
     def test_produces_valid_contract_instance(self):
-        from contracts.registered_runtime_device import from_router_device, RegisteredRuntimeDevice
+        from contracts.registered_runtime_device import RegisteredRuntimeDevice, from_router_device
+
         c = from_router_device(_router_device())
         assert isinstance(c, RegisteredRuntimeDevice)
 
@@ -398,11 +435,13 @@ class TestRouterProjection:
 # 5. Agent-backed / DeviceAgentManager → RegisteredRuntimeDevice
 # ---------------------------------------------------------------------------
 
+
 class TestAgentManagerProjection:
     """DeviceAgentManager DeviceInfo projects correctly into the canonical contract."""
 
     def test_identity_domain(self):
         from contracts.registered_runtime_device import from_device_agent_manager_record
+
         m = _agent_device_info(device_id="ag_01", device_name="Agent IoT")
         c = from_device_agent_manager_record(m)
         assert c.device_id == "ag_01"
@@ -410,18 +449,21 @@ class TestAgentManagerProjection:
 
     def test_registration_domain_device_type_enum(self):
         from contracts.registered_runtime_device import from_device_agent_manager_record
+
         m = _agent_device_info(device_type="iot")
         c = from_device_agent_manager_record(m)
         assert c.device_type == "iot"
 
     def test_runtime_presence_online(self):
         from contracts.registered_runtime_device import from_device_agent_manager_record
+
         m = _agent_device_info(status="online")
         c = from_device_agent_manager_record(m)
         assert c.online is True
 
     def test_runtime_presence_offline(self):
         from contracts.registered_runtime_device import from_device_agent_manager_record
+
         status_mock = MagicMock()
         status_mock.value = "offline"
         m = _agent_device_info(status="offline", status_obj=status_mock)
@@ -430,6 +472,7 @@ class TestAgentManagerProjection:
 
     def test_capability_domain_enum_value(self):
         from contracts.registered_runtime_device import from_device_agent_manager_record
+
         cap = MagicMock()
         cap.value = "gps"
         m = _agent_device_info(capabilities=[cap])
@@ -439,6 +482,7 @@ class TestAgentManagerProjection:
     def test_capability_domain_enum_name_fallback(self):
         """Capabilities with only .name (not .value) are also handled."""
         from contracts.registered_runtime_device import from_device_agent_manager_record
+
         cap = MagicMock(spec=["name"])
         cap.name = "accelerometer"
         m = _agent_device_info(capabilities=[cap])
@@ -447,6 +491,7 @@ class TestAgentManagerProjection:
 
     def test_capability_domain_string_caps(self):
         from contracts.registered_runtime_device import from_device_agent_manager_record
+
         m = _agent_device_info(capabilities=["screen", "microphone"])
         c = from_device_agent_manager_record(m)
         assert "screen" in c.capabilities.capabilities
@@ -454,6 +499,7 @@ class TestAgentManagerProjection:
 
     def test_last_heartbeat_datetime_to_float(self):
         from contracts.registered_runtime_device import from_device_agent_manager_record
+
         lh = datetime(2026, 3, 22, 10, 0, 0, tzinfo=timezone.utc)
         m = _agent_device_info(last_heartbeat=lh)
         c = from_device_agent_manager_record(m)
@@ -462,12 +508,14 @@ class TestAgentManagerProjection:
 
     def test_metadata_preserved(self):
         from contracts.registered_runtime_device import from_device_agent_manager_record
+
         m = _agent_device_info(metadata={"region": "eu-central"})
         c = from_device_agent_manager_record(m)
         assert c.metadata.get("region") == "eu-central"
 
     def test_registered_at_in_metadata(self):
         from contracts.registered_runtime_device import from_device_agent_manager_record
+
         reg_at = datetime(2026, 1, 15, 8, 0, 0, tzinfo=timezone.utc)
         m = _agent_device_info(registered_at=reg_at, metadata={})
         c = from_device_agent_manager_record(m)
@@ -475,18 +523,21 @@ class TestAgentManagerProjection:
 
     def test_registered_at_none_does_not_pollute_metadata(self):
         from contracts.registered_runtime_device import from_device_agent_manager_record
+
         m = _agent_device_info(registered_at=None, metadata={})
         c = from_device_agent_manager_record(m)
         assert "registered_at" not in c.metadata
 
     def test_topology_hint_runtime_enabled_when_online(self):
         from contracts.registered_runtime_device import from_device_agent_manager_record
+
         m = _agent_device_info(status="online")
         c = from_device_agent_manager_record(m)
         assert c.autonomy.runtime_enabled is True
 
     def test_missing_device_id_generates_one(self):
         from contracts.registered_runtime_device import from_device_agent_manager_record
+
         m = MagicMock()
         m.device_id = ""
         m.device_name = "Unnamed"
@@ -505,20 +556,23 @@ class TestAgentManagerProjection:
 
     def test_produces_valid_contract_instance(self):
         from contracts.registered_runtime_device import (
-            from_device_agent_manager_record,
             RegisteredRuntimeDevice,
+            from_device_agent_manager_record,
         )
+
         c = from_device_agent_manager_record(_agent_device_info())
         assert isinstance(c, RegisteredRuntimeDevice)
 
     def test_exception_in_projection_falls_back_to_minimal(self):
         """Even a completely broken object must return a minimal contract."""
         from contracts.registered_runtime_device import from_device_agent_manager_record
+
         # Pass an object that will raise on almost all attribute access
         class Broken:
             @property
             def device_id(self):
                 raise RuntimeError("broken")
+
         c = from_device_agent_manager_record(Broken())
         assert c.device_id.startswith("dev_")
 
@@ -527,11 +581,13 @@ class TestAgentManagerProjection:
 # 6. Serialisation stability and graceful partial-field handling
 # ---------------------------------------------------------------------------
 
+
 class TestSerialisationStability:
     """Contract serialises stably from every source."""
 
     def test_udm_to_json_and_back(self):
-        from contracts.registered_runtime_device import from_udm_device, RegisteredRuntimeDevice
+        from contracts.registered_runtime_device import RegisteredRuntimeDevice, from_udm_device
+
         c = from_udm_device(_udm_device())
         raw = c.to_json()
         assert json.loads(raw)["device_id"] == "udm_001"
@@ -540,14 +596,16 @@ class TestSerialisationStability:
         assert c2.device_id == c.device_id
 
     def test_registry_to_json_and_back(self):
-        from contracts.registered_runtime_device import from_device_registry_record, RegisteredRuntimeDevice
+        from contracts.registered_runtime_device import RegisteredRuntimeDevice, from_device_registry_record
+
         c = from_device_registry_record(_registry_device())
         d = c.to_dict()
         c2 = RegisteredRuntimeDevice.from_dict(d)
         assert c2.device_id == c.device_id
 
     def test_android_to_json_and_back(self):
-        from contracts.registered_runtime_device import from_android_registration, RegisteredRuntimeDevice
+        from contracts.registered_runtime_device import RegisteredRuntimeDevice, from_android_registration
+
         c = from_android_registration(_android_payload())
         raw = c.to_json()
         c2 = RegisteredRuntimeDevice.from_dict(json.loads(raw))
@@ -555,7 +613,8 @@ class TestSerialisationStability:
         assert c2.online == c.online
 
     def test_router_to_json_and_back(self):
-        from contracts.registered_runtime_device import from_router_device, RegisteredRuntimeDevice
+        from contracts.registered_runtime_device import RegisteredRuntimeDevice, from_router_device
+
         c = from_router_device(_router_device())
         d = c.to_dict()
         c2 = RegisteredRuntimeDevice.from_dict(d)
@@ -563,9 +622,10 @@ class TestSerialisationStability:
 
     def test_agent_manager_to_json_and_back(self):
         from contracts.registered_runtime_device import (
-            from_device_agent_manager_record,
             RegisteredRuntimeDevice,
+            from_device_agent_manager_record,
         )
+
         c = from_device_agent_manager_record(_agent_device_info())
         raw = c.to_json()
         c2 = RegisteredRuntimeDevice.from_dict(json.loads(raw))
@@ -574,18 +634,30 @@ class TestSerialisationStability:
     def test_all_required_top_level_keys_present(self):
         """to_dict() must always carry all six information-domain keys."""
         from contracts.registered_runtime_device import RegisteredRuntimeDevice
+
         d = RegisteredRuntimeDevice(device_id="stability_01").to_dict()
         required = {
-            "device_id", "device_name", "owner_id",
-            "platform", "form_factor", "device_type",
-            "status", "online", "last_seen",
-            "connection", "capabilities", "autonomy",
-            "session_presence", "participation_hints", "metadata",
+            "device_id",
+            "device_name",
+            "owner_id",
+            "platform",
+            "form_factor",
+            "device_type",
+            "status",
+            "online",
+            "last_seen",
+            "connection",
+            "capabilities",
+            "autonomy",
+            "session_presence",
+            "participation_hints",
+            "metadata",
         }
         assert required <= set(d.keys()), f"Missing keys: {required - set(d.keys())}"
 
     def test_partial_optional_fields_do_not_raise(self):
         from contracts.registered_runtime_device import build_registered_runtime_device
+
         c = build_registered_runtime_device(
             device_id="partial_01",
             capabilities=None,
@@ -600,12 +672,13 @@ class TestSerialisationStability:
     def test_all_sources_json_serialisable(self):
         """All source projections must produce JSON-serialisable output."""
         from contracts.registered_runtime_device import (
-            from_udm_device,
-            from_device_registry_record,
             from_android_registration,
-            from_router_device,
             from_device_agent_manager_record,
+            from_device_registry_record,
+            from_router_device,
+            from_udm_device,
         )
+
         contracts = [
             from_udm_device(_udm_device()),
             from_device_registry_record(_registry_device()),
@@ -623,36 +696,47 @@ class TestSerialisationStability:
 # 7. Canonical authority — new adapter exported from contracts and core.unified
 # ---------------------------------------------------------------------------
 
+
 class TestCanonicalAuthorityExports:
     """``from_device_agent_manager_record`` is accessible from every public import path."""
 
     def test_importable_from_contracts_module(self):
         from contracts.registered_runtime_device import from_device_agent_manager_record
+
         assert callable(from_device_agent_manager_record)
 
     def test_importable_from_contracts_package_root(self):
         from contracts import from_device_agent_manager_record
+
         assert callable(from_device_agent_manager_record)
 
     def test_importable_from_core_unified(self):
         from core.unified import from_device_agent_manager_record
+
         assert callable(from_device_agent_manager_record)
 
     def test_contracts_all_includes_new_adapter(self):
         import contracts as c_pkg
+
         assert "from_device_agent_manager_record" in c_pkg.__all__
 
     def test_existing_adapters_still_exported(self):
         """PR-5 must not break existing PR-29 exports."""
         from contracts import (
+            RegisteredRuntimeDevice,
+            from_android_registration,
+            from_device_registry_record,
+            from_router_device,
+            from_udm_device,
+        )
+
+        for sym in (
             from_udm_device,
             from_router_device,
             from_android_registration,
             from_device_registry_record,
             RegisteredRuntimeDevice,
-        )
-        for sym in (from_udm_device, from_router_device, from_android_registration,
-                    from_device_registry_record, RegisteredRuntimeDevice):
+        ):
             assert sym is not None
 
 
@@ -660,11 +744,13 @@ class TestCanonicalAuthorityExports:
 # 8. Six information domains — explicit coverage
 # ---------------------------------------------------------------------------
 
+
 class TestSixInformationDomains:
     """Each canonical information domain is populated from the builder."""
 
     def _full_contract(self):
         from contracts.registered_runtime_device import build_registered_runtime_device
+
         return build_registered_runtime_device(
             device_id="domain_test_01",
             device_name="Full Domain Device",

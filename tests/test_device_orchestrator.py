@@ -2,8 +2,9 @@
 DeviceOrchestrator 单元测试
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from core.device_orchestrator import DeviceOrchestrator, get_device_orchestrator
 
@@ -39,10 +40,9 @@ async def test_discover_devices_empty():
     """设备发现 — 无注册设备时返回空列表"""
     orch = DeviceOrchestrator()
 
-    with patch(
-        "core.device_orchestrator._get_device_registry", return_value=None
-    ), patch(
-        "core.device_orchestrator._get_node_registry", return_value=None
+    with (
+        patch("core.device_orchestrator._get_device_registry", return_value=None),
+        patch("core.device_orchestrator._get_node_registry", return_value=None),
     ):
         result = await orch.discover_devices()
         assert isinstance(result, list)
@@ -53,9 +53,7 @@ async def test_get_telemetry_missing_device():
     """遥测采集 — 设备不存在时应返回错误而非崩溃"""
     orch = DeviceOrchestrator()
 
-    with patch(
-        "core.device_orchestrator._get_device_registry", return_value=None
-    ):
+    with patch("core.device_orchestrator._get_device_registry", return_value=None):
         result = await orch.get_telemetry("nonexistent_device_999")
         assert isinstance(result, dict)
         # 应包含 error 或空遥测，不应抛出异常

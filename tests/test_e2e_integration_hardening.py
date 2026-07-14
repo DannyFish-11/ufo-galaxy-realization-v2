@@ -9,25 +9,28 @@ E2E 集成加固冒烟测试 — Phase 5
 import asyncio
 import json
 import time
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from dataclasses import dataclass
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # ============================================================================
 # 测试夹具
 # ============================================================================
 
+
 @pytest.fixture
 def openclawd():
     """创建 OpenClawd 实例"""
     from core.openclawd import OpenClawd
+
     return OpenClawd()
 
 
 @dataclass
 class FakeLLMResponse:
     """模拟 LLM 响应"""
+
     content: str = "test response"
     provider: str = "mock"
     model: str = "mock-model"
@@ -39,6 +42,7 @@ class FakeLLMResponse:
 # ============================================================================
 # Test 1: Node 工具收集 + 分发（真实路径）
 # ============================================================================
+
 
 class TestNodeIntegration:
     """验证 Node 工具总线第三层真正接入"""
@@ -64,30 +68,25 @@ class TestNodeIntegration:
 
     def test_dispatch_node_tool(self, openclawd):
         """node__120__list 可以实际执行"""
-        result = asyncio.run(
-            openclawd._dispatch_tool_call("node__120__list", {"params": {"path": "."}})
-        )
+        result = asyncio.run(openclawd._dispatch_tool_call("node__120__list", {"params": {"path": "."}}))
         assert result.get("success") is True, f"Node 执行失败: {result}"
 
     def test_dispatch_unknown_node_returns_error(self, openclawd):
         """不存在的节点返回错误而非崩溃"""
-        result = asyncio.run(
-            openclawd._dispatch_tool_call("node__999__action", {"params": {}})
-        )
+        result = asyncio.run(openclawd._dispatch_tool_call("node__999__action", {"params": {}}))
         assert result.get("success") is False
         assert "error" in result
 
     def test_dispatch_invalid_prefix_returns_error(self, openclawd):
         """未知工具前缀返回错误"""
-        result = asyncio.run(
-            openclawd._dispatch_tool_call("unknown__tool", {})
-        )
+        result = asyncio.run(openclawd._dispatch_tool_call("unknown__tool", {}))
         assert result.get("success") is False
 
 
 # ============================================================================
 # Test 2: Agent 任务结果判空
 # ============================================================================
+
 
 class TestAgentResultNullCheck:
     """验证 Agent 执行结果 None 时不崩溃"""
@@ -96,14 +95,15 @@ class TestAgentResultNullCheck:
         """factory.execute_agent_task 返回 None 时不抛 AttributeError"""
         # 我们只验证 result 判空逻辑存在
         import inspect
+
         source = inspect.getsource(openclawd.handle_agent_task)
-        assert "not result or not isinstance(result, dict)" in source, \
-            "handle_agent_task 缺少 result 判空防护"
+        assert "not result or not isinstance(result, dict)" in source, "handle_agent_task 缺少 result 判空防护"
 
 
 # ============================================================================
 # Test 3: JSON 解析容错
 # ============================================================================
+
 
 class TestJsonPoisonPayload:
     """验证 LLM 返回畸形 JSON 不崩溃"""
@@ -117,7 +117,7 @@ class TestJsonPoisonPayload:
         fake_resp = FakeLLMResponse(content="not valid json {{")
 
         async def run():
-            with patch.object(router, 'chat', new_callable=AsyncMock, return_value=fake_resp):
+            with patch.object(router, "chat", new_callable=AsyncMock, return_value=fake_resp):
                 result = await router.chat_json([{"role": "user", "content": "test"}])
                 assert isinstance(result, dict)
                 assert "error" in result
@@ -132,7 +132,7 @@ class TestJsonPoisonPayload:
         fake_resp = FakeLLMResponse(content='{"key": "value"}')
 
         async def run():
-            with patch.object(router, 'chat', new_callable=AsyncMock, return_value=fake_resp):
+            with patch.object(router, "chat", new_callable=AsyncMock, return_value=fake_resp):
                 result = await router.chat_json([{"role": "user", "content": "test"}])
                 assert result == {"key": "value"}
 
@@ -142,6 +142,7 @@ class TestJsonPoisonPayload:
 # ============================================================================
 # Test 4: 所有 Provider 熔断优雅降级
 # ============================================================================
+
 
 class TestAllProvidersDown:
     """验证所有 Provider 失败返回标准响应而非 RuntimeError"""
@@ -160,7 +161,7 @@ class TestAllProvidersDown:
                     auto_failover=True,
                 )
                 # 应该返回 LLMResponse 而非抛异常
-                assert hasattr(result, 'content'), "返回值应为 LLMResponse"
+                assert hasattr(result, "content"), "返回值应为 LLMResponse"
                 assert result.provider == "none"
                 assert "不可用" in result.content or "服务" in result.content
             except RuntimeError:
@@ -172,6 +173,7 @@ class TestAllProvidersDown:
 # ============================================================================
 # Test 5: Dashboard deletion
 # ============================================================================
+
 
 class TestDashboardRouterSingleton:
     """验证 dashboard 旧表层已删除。"""
@@ -187,22 +189,24 @@ class TestDashboardRouterSingleton:
 # Test 6: ReAct 超时防护签名检查
 # ============================================================================
 
+
 class TestReActTimeout:
     """验证 ReAct 循环有超时参数"""
 
     def test_react_loop_has_timeout_param(self, openclawd):
         """_react_loop 应有 timeout 参数"""
         import inspect
+
         sig = inspect.signature(openclawd._react_loop)
         assert "timeout" in sig.parameters, "_react_loop 缺少 timeout 参数"
         default = sig.parameters["timeout"].default
-        assert isinstance(default, (int, float)) and default > 0, \
-            f"timeout 默认值应为正数，实际: {default}"
+        assert isinstance(default, (int, float)) and default > 0, f"timeout 默认值应为正数，实际: {default}"
 
 
 # ============================================================================
 # Test 7: 工具分发超时防护
 # ============================================================================
+
 
 class TestToolDispatchTimeout:
     """验证工具分发有超时保护"""
@@ -210,31 +214,35 @@ class TestToolDispatchTimeout:
     def test_react_loop_has_wait_for(self, openclawd):
         """_react_loop 内部使用 asyncio.wait_for 包裹工具调用"""
         import inspect
+
         source = inspect.getsource(openclawd._react_loop)
         assert "wait_for" in source, "_react_loop 应使用 asyncio.wait_for 保护工具调用"
-        assert "timeout=30" in source or "timeout=30.0" in source, \
-            "_react_loop 应有 30s 单工具超时"
+        assert "timeout=30" in source or "timeout=30.0" in source, "_react_loop 应有 30s 单工具超时"
 
 
 # ============================================================================
 # Test 8: Team gather 容错
 # ============================================================================
 
+
 class TestTeamGatherResilience:
     """验证团队并行执行的 gather 容错"""
 
     def test_parallel_uses_return_exceptions(self):
         """_execute_parallel 应使用 return_exceptions=True"""
-        from core.agent_team import AgentTeam
         import inspect
+
+        from core.agent_team import AgentTeam
+
         source = inspect.getsource(AgentTeam._execute_parallel)
-        assert "return_exceptions=True" in source, \
-            "_execute_parallel 的 gather 应使用 return_exceptions=True"
+        assert "return_exceptions=True" in source, "_execute_parallel 的 gather 应使用 return_exceptions=True"
 
     def test_parallel_has_member_timeout(self):
         """_execute_parallel 应有成员超时保护"""
-        from core.agent_team import AgentTeam
         import inspect
+
+        from core.agent_team import AgentTeam
+
         source = inspect.getsource(AgentTeam._execute_parallel)
         assert "wait_for" in source, "_execute_parallel 应使用 asyncio.wait_for"
         assert "90" in source, "成员超时应为 90 秒"
@@ -243,6 +251,7 @@ class TestTeamGatherResilience:
 # ============================================================================
 # Test 9: Windows Client legacy shell deletion
 # ============================================================================
+
 
 class TestWindowsClientEncoding:
     """验证旧 windows_client/main.py 已删除，避免继续承载旧壳逻辑。"""

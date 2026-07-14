@@ -216,9 +216,7 @@ class ContinuationRebindRecord:
         Arbitrary extensibility bag.
     """
 
-    record_id: str = dataclasses.field(
-        default_factory=lambda: f"crr_{uuid.uuid4().hex[:12]}"
-    )
+    record_id: str = dataclasses.field(default_factory=lambda: f"crr_{uuid.uuid4().hex[:12]}")
     task_id: str = ""
     state: RebindState = RebindState.pending_rebind
     failed_at: float = dataclasses.field(default_factory=time.time)
@@ -451,34 +449,22 @@ class ContinuationRebindRegistry:
     def pending_rebind_count(self) -> int:
         """Return the number of tasks still waiting for a rebind."""
         with self._lock:
-            return sum(
-                1 for r in self._records.values()
-                if r.state == RebindState.pending_rebind
-            )
+            return sum(1 for r in self._records.values() if r.state == RebindState.pending_rebind)
 
     def rebound_count(self) -> int:
         """Return the number of tasks that have had a new waiter registered."""
         with self._lock:
-            return sum(
-                1 for r in self._records.values()
-                if r.state == RebindState.rebound
-            )
+            return sum(1 for r in self._records.values() if r.state == RebindState.rebound)
 
     def completed_count(self) -> int:
         """Return the number of tasks whose continuation loop has been fully closed."""
         with self._lock:
-            return sum(
-                1 for r in self._records.values()
-                if r.state == RebindState.completed
-            )
+            return sum(1 for r in self._records.values() if r.state == RebindState.completed)
 
     def list_pending_task_ids(self) -> List[str]:
         """Return a list of task IDs that are still in pending_rebind state."""
         with self._lock:
-            return [
-                tid for tid, r in self._records.items()
-                if r.state == RebindState.pending_rebind
-            ]
+            return [tid for tid, r in self._records.items() if r.state == RebindState.pending_rebind]
 
     def snapshot(self) -> Dict[str, Any]:
         """Return a JSON-serialisable snapshot of the registry state."""
@@ -486,15 +472,9 @@ class ContinuationRebindRegistry:
             records_list = [r.to_dict() for r in self._records.values()]
         return {
             "total": len(records_list),
-            "pending_rebind": sum(
-                1 for r in records_list if r["state"] == RebindState.pending_rebind.value
-            ),
-            "rebound": sum(
-                1 for r in records_list if r["state"] == RebindState.rebound.value
-            ),
-            "completed": sum(
-                1 for r in records_list if r["state"] == RebindState.completed.value
-            ),
+            "pending_rebind": sum(1 for r in records_list if r["state"] == RebindState.pending_rebind.value),
+            "rebound": sum(1 for r in records_list if r["state"] == RebindState.rebound.value),
+            "completed": sum(1 for r in records_list if r["state"] == RebindState.completed.value),
             "records": records_list,
             "authority": CONTINUATION_REBIND_REGISTRY_IS_AUTHORITY,
         }

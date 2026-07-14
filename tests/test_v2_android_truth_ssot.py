@@ -27,7 +27,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # 组 A：权威哨兵与合约版本
 # ---------------------------------------------------------------------------
@@ -203,7 +202,7 @@ class TestGroupC_V2AndroidTruthBlock:
 
     def test_C06_ssot_version_is_nonempty_string(self) -> None:
         """C06：V2AndroidTruthBlock.ssot_version 为非空字符串，匹配合约版本常量。"""
-        from core.v2_android_truth_ssot import V2AndroidTruthBlock, V2_ANDROID_TRUTH_SSOT_CONTRACT_VERSION
+        from core.v2_android_truth_ssot import V2_ANDROID_TRUTH_SSOT_CONTRACT_VERSION, V2AndroidTruthBlock
 
         blk = V2AndroidTruthBlock()
         assert isinstance(blk.ssot_version, str)
@@ -330,9 +329,7 @@ class TestGroupD_BuildBlockDegradation:
 class TestGroupE_BuildBlockSuccess:
     """E01–E05：成功摄取所有子系统字段。"""
 
-    def _make_participation_state(
-        self, tier_value: str = "dispatch_eligible"
-    ) -> MagicMock:
+    def _make_participation_state(self, tier_value: str = "dispatch_eligible") -> MagicMock:
         state = MagicMock()
         # Make >= comparisons work by using the real enum
         from core.android_network_participation import AndroidNetworkParticipationTier
@@ -728,9 +725,7 @@ class TestGroupI_PanelAggregationSSOT:
                 "core.android_device_state_store.list_device_state_snapshots",
                 return_value=[snap],
             ),
-            patch(
-                "core.v2_android_truth_ssot.build_v2_android_truth_block"
-            ) as mock_build,
+            patch("core.v2_android_truth_ssot.build_v2_android_truth_block") as mock_build,
         ):
             from core.v2_android_truth_ssot import V2AndroidTruthBlock
 
@@ -793,9 +788,7 @@ class TestGroupJ_ResultIngressAndroidContext:
         ingress = UnifiedResultIngress()
 
         with (
-            patch(
-                "core.v2_android_truth_ssot.build_v2_android_truth_block"
-            ) as mock_build,
+            patch("core.v2_android_truth_ssot.build_v2_android_truth_block") as mock_build,
             patch.object(ingress, "_check_idempotency", return_value=False),
         ):
             from core.v2_android_truth_ssot import V2AndroidTruthBlock
@@ -899,12 +892,12 @@ class TestGroupK_StateContractSSOT:
 
     def test_K02_caller_supplied_participation_evidence_takes_priority(self) -> None:
         """K02：调用方预先提供 participation_evidence 时优先使用，不重新调用 SSOT。"""
-        from core.v2_unified_state_contract import build_v2_unified_state_contract
         from core.operational_registration_path import (
             OnboardingValidation,
             OperationalRegistrationPath,
             ValidationStatus,
         )
+        from core.v2_unified_state_contract import build_v2_unified_state_contract
 
         path = MagicMock(spec=OperationalRegistrationPath)
         path.system_identity = {}
@@ -926,9 +919,7 @@ class TestGroupK_StateContractSSOT:
             "prior_tier": None,
         }
 
-        with patch(
-            "core.v2_android_truth_ssot.build_v2_android_truth_block"
-        ) as mock_ssot:
+        with patch("core.v2_android_truth_ssot.build_v2_android_truth_block") as mock_ssot:
             try:
                 contract = build_v2_unified_state_contract(
                     path=path,

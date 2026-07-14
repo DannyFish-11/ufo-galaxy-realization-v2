@@ -12,10 +12,10 @@ LLM 驱动 Agent 完整链路测试
 4. ReAct Loop 数据流验证 (mock LLM)
 """
 
+import asyncio
+import json
 import os
 import sys
-import json
-import asyncio
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -75,21 +75,74 @@ def test_3_intent_routing():
 
     # 模拟 api_routes 中的 _is_action_intent 函数
     _ACTION_KEYWORDS_ZH = [
-        "打开", "关闭", "启动", "运行", "安装", "卸载", "截图", "截屏",
-        "点击", "滑动", "输入", "搜索", "发送", "下载", "上传",
-        "复制", "粘贴", "传输", "同步", "分享",
-        "拍照", "录屏", "录音", "播放", "暂停", "停止",
-        "查看电量", "查看状态", "连接设备", "断开设备",
-        "帮我操作", "帮我执行", "帮我控制",
-        "在手机上", "在电脑上", "在平板上", "在设备上",
-        "切换应用", "返回桌面", "锁屏", "解锁", "音量",
+        "打开",
+        "关闭",
+        "启动",
+        "运行",
+        "安装",
+        "卸载",
+        "截图",
+        "截屏",
+        "点击",
+        "滑动",
+        "输入",
+        "搜索",
+        "发送",
+        "下载",
+        "上传",
+        "复制",
+        "粘贴",
+        "传输",
+        "同步",
+        "分享",
+        "拍照",
+        "录屏",
+        "录音",
+        "播放",
+        "暂停",
+        "停止",
+        "查看电量",
+        "查看状态",
+        "连接设备",
+        "断开设备",
+        "帮我操作",
+        "帮我执行",
+        "帮我控制",
+        "在手机上",
+        "在电脑上",
+        "在平板上",
+        "在设备上",
+        "切换应用",
+        "返回桌面",
+        "锁屏",
+        "解锁",
+        "音量",
     ]
     _ACTION_KEYWORDS_EN = [
-        "open ", "close ", "launch ", "run ", "install ", "click ",
-        "swipe ", "type ", "screenshot", "send ", "download ",
-        "upload ", "execute ", "control ", "operate ",
-        "on my phone", "on my pc", "on device", "on android",
-        "take photo", "record ", "play ", "pause ", "stop ",
+        "open ",
+        "close ",
+        "launch ",
+        "run ",
+        "install ",
+        "click ",
+        "swipe ",
+        "type ",
+        "screenshot",
+        "send ",
+        "download ",
+        "upload ",
+        "execute ",
+        "control ",
+        "operate ",
+        "on my phone",
+        "on my pc",
+        "on device",
+        "on android",
+        "take photo",
+        "record ",
+        "play ",
+        "pause ",
+        "stop ",
     ]
 
     def _is_action_intent(msg: str) -> bool:
@@ -195,22 +248,20 @@ def test_4_react_loop_data_flow():
                     tc = MockToolCall(
                         id="call_001",
                         name="send_to_device",
-                        arguments=json.dumps({
-                            "device_id": "android_001",
-                            "task_type": "open_app",
-                            "payload": {"app_name": "微信"}
-                        })
+                        arguments=json.dumps(
+                            {"device_id": "android_001", "task_type": "open_app", "payload": {"app_name": "微信"}}
+                        ),
                     )
-                    return MockResponse([MockChoice(MockMessage(
-                        content="好的，我来帮你打开微信。",
-                        tool_calls=[tc]
-                    ))])
+                    return MockResponse([MockChoice(MockMessage(content="好的，我来帮你打开微信。", tool_calls=[tc]))])
                 else:
                     # 第二轮: LLM 总结结果
-                    return MockResponse([MockChoice(MockMessage(
-                        content="已成功发送打开微信的指令到你的 Android 设备。",
-                        tool_calls=None
-                    ))])
+                    return MockResponse(
+                        [
+                            MockChoice(
+                                MockMessage(content="已成功发送打开微信的指令到你的 Android 设备。", tool_calls=None)
+                            )
+                        ]
+                    )
 
         # Mock executor
         executed_commands = []
@@ -262,11 +313,11 @@ def test_5_api_routes_import():
         from core.scheduler import AutonomousScheduler
 
         # 验证关键类存在
-        assert hasattr(LLMManager, 'chat_completion')
-        assert hasattr(LLMManager, 'is_available')
-        assert hasattr(LLMManager, 'get_provider_status')
-        assert hasattr(AutonomousScheduler, 'plan_and_execute')
-        assert hasattr(AutonomousScheduler, '_select_relevant_tools')
+        assert hasattr(LLMManager, "chat_completion")
+        assert hasattr(LLMManager, "is_available")
+        assert hasattr(LLMManager, "get_provider_status")
+        assert hasattr(AutonomousScheduler, "plan_and_execute")
+        assert hasattr(AutonomousScheduler, "_select_relevant_tools")
         print("  ✅ 核心模块导入成功")
     except Exception as e:
         print(f"  ❌ 导入失败: {e}")

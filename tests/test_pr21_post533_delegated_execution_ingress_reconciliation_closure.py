@@ -64,19 +64,19 @@ from core.android_delegated_signal_ingress import (
     CANONICAL_PATH_IS_INGRESS_GUARD_RECONCILE_TRACKER_POLICY,
     IDENTITY_CONTINUITY_ACROSS_CANONICAL_PATH_POLICY,
     TERMINAL_STATE_IS_PROTECTED_AGAINST_REPLAY_POLICY,
+    DelegatedExecutionSignalEnvelope,
     DelegatedSignalKind,
     ResultKind,
-    DelegatedExecutionSignalEnvelope,
     extract_delegated_signal_envelope,
     ingest_delegated_execution_signal,
 )
 from core.attached_runtime_recovery_readiness import (
     RecoveryReadinessRuntime,
     SignalGuardDecision,
-    guard_inbound_signal,
     build_idempotency_key,
-    record_seen_signal,
     build_recovery_readiness_snapshot,
+    guard_inbound_signal,
+    record_seen_signal,
 )
 from core.delegated_runtime_execution_tracker import (
     DelegatedExecutionPhase,
@@ -211,15 +211,11 @@ def test_B02_canonical_path_policy_key_word_present():
 
 
 def test_B03_identity_continuity_policy_key_word_present():
-    assert "IDENTITY_CONTINUITY_ACROSS_CANONICAL_PATH" in (
-        IDENTITY_CONTINUITY_ACROSS_CANONICAL_PATH_POLICY
-    )
+    assert "IDENTITY_CONTINUITY_ACROSS_CANONICAL_PATH" in (IDENTITY_CONTINUITY_ACROSS_CANONICAL_PATH_POLICY)
 
 
 def test_B04_terminal_state_policy_key_word_present():
-    assert "TERMINAL_STATE_IS_PROTECTED_AGAINST_REPLAY" in (
-        TERMINAL_STATE_IS_PROTECTED_AGAINST_REPLAY_POLICY
-    )
+    assert "TERMINAL_STATE_IS_PROTECTED_AGAINST_REPLAY" in (TERMINAL_STATE_IS_PROTECTED_AGAINST_REPLAY_POLICY)
 
 
 def test_B05_closure_sentinel_references_pr21_policies():
@@ -242,6 +238,7 @@ def test_B06_pr16_sentinel_still_present():
 def test_C01_core_runtime_exports_closure_sentinel():
     pytest.importorskip("pydantic", reason="pydantic not installed (core.runtime dep)")
     from core.runtime import CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_PR21_SENTINEL as s
+
     assert s
     assert "package=21" in s
 
@@ -249,6 +246,7 @@ def test_C01_core_runtime_exports_closure_sentinel():
 def test_C02_core_runtime_exports_canonical_path_policy():
     pytest.importorskip("pydantic", reason="pydantic not installed (core.runtime dep)")
     from core.runtime import CANONICAL_PATH_IS_INGRESS_GUARD_RECONCILE_TRACKER_POLICY as p
+
     assert p
     assert "CANONICAL_PATH_IS_INGRESS_GUARD_RECONCILE_TRACKER" in p
 
@@ -256,6 +254,7 @@ def test_C02_core_runtime_exports_canonical_path_policy():
 def test_C03_core_runtime_exports_identity_continuity_policy():
     pytest.importorskip("pydantic", reason="pydantic not installed (core.runtime dep)")
     from core.runtime import IDENTITY_CONTINUITY_ACROSS_CANONICAL_PATH_POLICY as p
+
     assert p
     assert "IDENTITY_CONTINUITY_ACROSS_CANONICAL_PATH" in p
 
@@ -263,6 +262,7 @@ def test_C03_core_runtime_exports_identity_continuity_policy():
 def test_C04_core_runtime_exports_terminal_state_policy():
     pytest.importorskip("pydantic", reason="pydantic not installed (core.runtime dep)")
     from core.runtime import TERMINAL_STATE_IS_PROTECTED_AGAINST_REPLAY_POLICY as p
+
     assert p
     assert "TERMINAL_STATE_IS_PROTECTED_AGAINST_REPLAY" in p
 
@@ -275,6 +275,7 @@ def test_C04_core_runtime_exports_terminal_state_policy():
 def test_D01_projection_sentinel_present_and_not_unavailable():
     pytest.importorskip("fastapi", reason="fastapi not installed")
     from core.routes.projection import CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_ALIGNED_PR21
+
     assert CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_ALIGNED_PR21
     assert "UNAVAILABLE" not in CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_ALIGNED_PR21
 
@@ -282,12 +283,17 @@ def test_D01_projection_sentinel_present_and_not_unavailable():
 def test_D02_projection_sentinel_references_pr21():
     pytest.importorskip("fastapi", reason="fastapi not installed")
     from core.routes.projection import CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_ALIGNED_PR21
-    assert "PR21" in CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_ALIGNED_PR21 or "package=21" in CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_ALIGNED_PR21.lower()
+
+    assert (
+        "PR21" in CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_ALIGNED_PR21
+        or "package=21" in CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_ALIGNED_PR21.lower()
+    )
 
 
 def test_D03_projection_sentinel_mentions_canonical_path():
     pytest.importorskip("fastapi", reason="fastapi not installed")
     from core.routes.projection import CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_ALIGNED_PR21
+
     assert "canonical" in CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_ALIGNED_PR21.lower()
 
 
@@ -303,9 +309,7 @@ def test_E01_accepted_signal_flows_from_ingress_to_tracker():
     _make_tracking_record(runtime=tracker_rt)
 
     msg = _make_signal_message(signal_id=str(uuid.uuid4()), emission_seq=1)
-    outcome = ingest_delegated_execution_signal(
-        msg, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    outcome = ingest_delegated_execution_signal(msg, runtime=tracker_rt, guard_runtime=guard_rt)
     assert outcome.was_updated is True
 
 
@@ -319,14 +323,10 @@ def test_E02_guard_is_consulted_before_reconcile():
     # Send same signal twice — second should be rejected by guard as duplicate.
     sig_id = str(uuid.uuid4())
     msg = _make_signal_message(signal_id=sig_id, emission_seq=1)
-    outcome1 = ingest_delegated_execution_signal(
-        msg, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    outcome1 = ingest_delegated_execution_signal(msg, runtime=tracker_rt, guard_runtime=guard_rt)
     assert outcome1.was_updated is True
 
-    outcome2 = ingest_delegated_execution_signal(
-        msg, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    outcome2 = ingest_delegated_execution_signal(msg, runtime=tracker_rt, guard_runtime=guard_rt)
     # Guard rejects duplicate — reconciler must NOT have updated tracker.
     assert outcome2.was_updated is False
     assert "guard" in outcome2.reject_reason.lower() or "duplicate" in outcome2.reject_reason.lower()
@@ -340,9 +340,7 @@ def test_E03_ingress_extracts_envelope_before_guard():
     _make_tracking_record(runtime=tracker_rt)
 
     raw_msg = _make_signal_message(signal_id=str(uuid.uuid4()), emission_seq=5)
-    outcome = ingest_delegated_execution_signal(
-        raw_msg, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    outcome = ingest_delegated_execution_signal(raw_msg, runtime=tracker_rt, guard_runtime=guard_rt)
     # Envelope was extracted and signal reached reconciler — tracker was updated.
     assert outcome.was_updated is True
     assert outcome.envelope is not None
@@ -362,9 +360,7 @@ def test_E04_ingress_delegates_to_reconciler_not_directly_to_tracker():
         signal_id=str(uuid.uuid4()),
         emission_seq=1,
     )
-    outcome = ingest_delegated_execution_signal(
-        msg, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    outcome = ingest_delegated_execution_signal(msg, runtime=tracker_rt, guard_runtime=guard_rt)
     assert outcome.was_updated is False
     # Confirm no phantom record was created.
     rec = get_execution_tracking_record("ses-pr21-phantom", runtime=tracker_rt)
@@ -392,9 +388,7 @@ def test_F01_duplicate_does_not_mutate_tracker():
     phase_before = record_before.phase
 
     # Second ingestion — duplicate, guard rejects.
-    outcome = ingest_delegated_execution_signal(
-        msg, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    outcome = ingest_delegated_execution_signal(msg, runtime=tracker_rt, guard_runtime=guard_rt)
     assert outcome.was_updated is False
 
     record_after = get_execution_tracking_record("ses-pr21-001", runtime=tracker_rt)
@@ -409,21 +403,15 @@ def test_F02_replay_does_not_mutate_tracker():
     _make_tracking_record(runtime=tracker_rt)
 
     # First: accepted at seq=2
-    msg1 = _make_signal_message(
-        signal_id=str(uuid.uuid4()), emission_seq=2, signal_kind="ack"
-    )
+    msg1 = _make_signal_message(signal_id=str(uuid.uuid4()), emission_seq=2, signal_kind="ack")
     ingest_delegated_execution_signal(msg1, runtime=tracker_rt, guard_runtime=guard_rt)
 
     record_before = get_execution_tracking_record("ses-pr21-001", runtime=tracker_rt)
     phase_before = record_before.phase
 
     # Replay: different signal_id, same seq=2 → guard should detect replay.
-    msg_replay = _make_signal_message(
-        signal_id=str(uuid.uuid4()), emission_seq=2, signal_kind="progress"
-    )
-    outcome = ingest_delegated_execution_signal(
-        msg_replay, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    msg_replay = _make_signal_message(signal_id=str(uuid.uuid4()), emission_seq=2, signal_kind="progress")
+    outcome = ingest_delegated_execution_signal(msg_replay, runtime=tracker_rt, guard_runtime=guard_rt)
     assert outcome.was_updated is False
 
     record_after = get_execution_tracking_record("ses-pr21-001", runtime=tracker_rt)
@@ -440,23 +428,15 @@ def test_F03_stale_does_not_mutate_tracker():
 
     high_seq = STALE_EMISSION_SEQ_THRESHOLD + 5
     # First: accepted at high seq.
-    msg_high = _make_signal_message(
-        signal_id=str(uuid.uuid4()), emission_seq=high_seq, signal_kind="ack"
-    )
-    ingest_delegated_execution_signal(
-        msg_high, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    msg_high = _make_signal_message(signal_id=str(uuid.uuid4()), emission_seq=high_seq, signal_kind="ack")
+    ingest_delegated_execution_signal(msg_high, runtime=tracker_rt, guard_runtime=guard_rt)
 
     record_before = get_execution_tracking_record("ses-pr21-001", runtime=tracker_rt)
     phase_before = record_before.phase
 
     # Stale: seq=0, far below max_seen.
-    msg_stale = _make_signal_message(
-        signal_id=str(uuid.uuid4()), emission_seq=0, signal_kind="progress"
-    )
-    outcome = ingest_delegated_execution_signal(
-        msg_stale, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    msg_stale = _make_signal_message(signal_id=str(uuid.uuid4()), emission_seq=0, signal_kind="progress")
+    outcome = ingest_delegated_execution_signal(msg_stale, runtime=tracker_rt, guard_runtime=guard_rt)
     assert outcome.was_updated is False
 
     record_after = get_execution_tracking_record("ses-pr21-001", runtime=tracker_rt)
@@ -470,23 +450,15 @@ def test_F04_out_of_order_does_not_mutate_tracker():
     _make_tracking_record(runtime=tracker_rt)
 
     # First: accepted at seq=5.
-    msg_5 = _make_signal_message(
-        signal_id=str(uuid.uuid4()), emission_seq=5, signal_kind="ack"
-    )
-    ingest_delegated_execution_signal(
-        msg_5, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    msg_5 = _make_signal_message(signal_id=str(uuid.uuid4()), emission_seq=5, signal_kind="ack")
+    ingest_delegated_execution_signal(msg_5, runtime=tracker_rt, guard_runtime=guard_rt)
 
     record_before = get_execution_tracking_record("ses-pr21-001", runtime=tracker_rt)
     phase_before = record_before.phase
 
     # Out-of-order: seq=3, slightly behind max_seen=5.
-    msg_ooo = _make_signal_message(
-        signal_id=str(uuid.uuid4()), emission_seq=3, signal_kind="progress"
-    )
-    outcome = ingest_delegated_execution_signal(
-        msg_ooo, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    msg_ooo = _make_signal_message(signal_id=str(uuid.uuid4()), emission_seq=3, signal_kind="progress")
+    outcome = ingest_delegated_execution_signal(msg_ooo, runtime=tracker_rt, guard_runtime=guard_rt)
     assert outcome.was_updated is False
 
     record_after = get_execution_tracking_record("ses-pr21-001", runtime=tracker_rt)
@@ -504,9 +476,7 @@ def test_F05_rejected_outcome_reject_reason_encodes_guard_decision():
     ingest_delegated_execution_signal(msg, runtime=tracker_rt, guard_runtime=guard_rt)
 
     # duplicate
-    outcome = ingest_delegated_execution_signal(
-        msg, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    outcome = ingest_delegated_execution_signal(msg, runtime=tracker_rt, guard_runtime=guard_rt)
     assert outcome.reject_reason
     assert "duplicate" in outcome.reject_reason.lower() or "guard" in outcome.reject_reason.lower()
 
@@ -521,12 +491,8 @@ def test_G01_ack_signal_transitions_to_acknowledged():
     guard_rt = _fresh_guard_runtime()
     _make_tracking_record(runtime=tracker_rt)
 
-    msg = _make_signal_message(
-        signal_kind="ack", signal_id=str(uuid.uuid4()), emission_seq=1
-    )
-    outcome = ingest_delegated_execution_signal(
-        msg, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    msg = _make_signal_message(signal_kind="ack", signal_id=str(uuid.uuid4()), emission_seq=1)
+    outcome = ingest_delegated_execution_signal(msg, runtime=tracker_rt, guard_runtime=guard_rt)
     assert outcome.was_updated is True
     assert outcome.record is not None
     assert outcome.record.phase == DelegatedExecutionPhase.acknowledged
@@ -540,14 +506,14 @@ def test_G02_progress_signal_transitions_to_in_progress():
     # ack first
     ingest_delegated_execution_signal(
         _make_signal_message(signal_kind="ack", signal_id=str(uuid.uuid4()), emission_seq=1),
-        runtime=tracker_rt, guard_runtime=guard_rt,
+        runtime=tracker_rt,
+        guard_runtime=guard_rt,
     )
     # then progress
     outcome = ingest_delegated_execution_signal(
-        _make_signal_message(
-            signal_kind="progress", signal_id=str(uuid.uuid4()), emission_seq=2
-        ),
-        runtime=tracker_rt, guard_runtime=guard_rt,
+        _make_signal_message(signal_kind="progress", signal_id=str(uuid.uuid4()), emission_seq=2),
+        runtime=tracker_rt,
+        guard_runtime=guard_rt,
     )
     assert outcome.was_updated is True
     assert outcome.record.phase == DelegatedExecutionPhase.in_progress
@@ -560,14 +526,18 @@ def test_G03_result_success_transitions_to_completed():
 
     ingest_delegated_execution_signal(
         _make_signal_message(signal_kind="ack", signal_id=str(uuid.uuid4()), emission_seq=1),
-        runtime=tracker_rt, guard_runtime=guard_rt,
+        runtime=tracker_rt,
+        guard_runtime=guard_rt,
     )
     outcome = ingest_delegated_execution_signal(
         _make_signal_message(
-            signal_kind="result", result_kind="success",
-            signal_id=str(uuid.uuid4()), emission_seq=2,
+            signal_kind="result",
+            result_kind="success",
+            signal_id=str(uuid.uuid4()),
+            emission_seq=2,
         ),
-        runtime=tracker_rt, guard_runtime=guard_rt,
+        runtime=tracker_rt,
+        guard_runtime=guard_rt,
     )
     assert outcome.was_updated is True
     assert outcome.record.phase == DelegatedExecutionPhase.completed
@@ -580,14 +550,18 @@ def test_G04_result_failure_transitions_to_failed():
 
     ingest_delegated_execution_signal(
         _make_signal_message(signal_kind="ack", signal_id=str(uuid.uuid4()), emission_seq=1),
-        runtime=tracker_rt, guard_runtime=guard_rt,
+        runtime=tracker_rt,
+        guard_runtime=guard_rt,
     )
     outcome = ingest_delegated_execution_signal(
         _make_signal_message(
-            signal_kind="result", result_kind="failure",
-            signal_id=str(uuid.uuid4()), emission_seq=2,
+            signal_kind="result",
+            result_kind="failure",
+            signal_id=str(uuid.uuid4()),
+            emission_seq=2,
         ),
-        runtime=tracker_rt, guard_runtime=guard_rt,
+        runtime=tracker_rt,
+        guard_runtime=guard_rt,
     )
     assert outcome.was_updated is True
     assert outcome.record.phase == DelegatedExecutionPhase.failed
@@ -600,13 +574,13 @@ def test_G05_timeout_transitions_to_timed_out():
 
     ingest_delegated_execution_signal(
         _make_signal_message(signal_kind="ack", signal_id=str(uuid.uuid4()), emission_seq=1),
-        runtime=tracker_rt, guard_runtime=guard_rt,
+        runtime=tracker_rt,
+        guard_runtime=guard_rt,
     )
     outcome = ingest_delegated_execution_signal(
-        _make_signal_message(
-            signal_kind="timeout", signal_id=str(uuid.uuid4()), emission_seq=2
-        ),
-        runtime=tracker_rt, guard_runtime=guard_rt,
+        _make_signal_message(signal_kind="timeout", signal_id=str(uuid.uuid4()), emission_seq=2),
+        runtime=tracker_rt,
+        guard_runtime=guard_rt,
     )
     assert outcome.was_updated is True
     assert outcome.record.phase == DelegatedExecutionPhase.timed_out
@@ -619,13 +593,13 @@ def test_G06_cancelled_transitions_to_cancelled():
 
     ingest_delegated_execution_signal(
         _make_signal_message(signal_kind="ack", signal_id=str(uuid.uuid4()), emission_seq=1),
-        runtime=tracker_rt, guard_runtime=guard_rt,
+        runtime=tracker_rt,
+        guard_runtime=guard_rt,
     )
     outcome = ingest_delegated_execution_signal(
-        _make_signal_message(
-            signal_kind="cancelled", signal_id=str(uuid.uuid4()), emission_seq=2
-        ),
-        runtime=tracker_rt, guard_runtime=guard_rt,
+        _make_signal_message(signal_kind="cancelled", signal_id=str(uuid.uuid4()), emission_seq=2),
+        runtime=tracker_rt,
+        guard_runtime=guard_rt,
     )
     assert outcome.was_updated is True
     assert outcome.record.phase == DelegatedExecutionPhase.cancelled
@@ -655,9 +629,7 @@ def test_H01_phase_progresses_monotonically_ack_to_progress_to_completed():
             signal_id=str(uuid.uuid4()),
             emission_seq=seq,
         )
-        outcome = ingest_delegated_execution_signal(
-            msg, runtime=tracker_rt, guard_runtime=guard_rt
-        )
+        outcome = ingest_delegated_execution_signal(msg, runtime=tracker_rt, guard_runtime=guard_rt)
         assert outcome.was_updated is True
         phases.append(outcome.record.phase)
         seq += 1
@@ -674,15 +646,16 @@ def test_H02_terminal_phase_blocks_ack_regression():
     _make_tracking_record(runtime=tracker_rt)
 
     # Advance to completed.
-    for seq, (sk, rk) in enumerate(
-        [("ack", ""), ("result", "success")], start=1
-    ):
+    for seq, (sk, rk) in enumerate([("ack", ""), ("result", "success")], start=1):
         ingest_delegated_execution_signal(
             _make_signal_message(
-                signal_kind=sk, result_kind=rk,
-                signal_id=str(uuid.uuid4()), emission_seq=seq,
+                signal_kind=sk,
+                result_kind=rk,
+                signal_id=str(uuid.uuid4()),
+                emission_seq=seq,
             ),
-            runtime=tracker_rt, guard_runtime=guard_rt,
+            runtime=tracker_rt,
+            guard_runtime=guard_rt,
         )
 
     record = get_execution_tracking_record("ses-pr21-001", runtime=tracker_rt)
@@ -690,10 +663,9 @@ def test_H02_terminal_phase_blocks_ack_regression():
 
     # Attempt to send ack after terminal → tracker must not regress.
     outcome = ingest_delegated_execution_signal(
-        _make_signal_message(
-            signal_kind="ack", signal_id=str(uuid.uuid4()), emission_seq=3
-        ),
-        runtime=tracker_rt, guard_runtime=guard_rt,
+        _make_signal_message(signal_kind="ack", signal_id=str(uuid.uuid4()), emission_seq=3),
+        runtime=tracker_rt,
+        guard_runtime=guard_rt,
     )
     assert outcome.was_updated is False
 
@@ -713,25 +685,26 @@ def test_I01_completed_terminal_not_overwritten_by_duplicate():
 
     sig_id = str(uuid.uuid4())
     # Advance to completed via result/success
-    for seq, (sk, rk, sid) in enumerate(
-        [("ack", "", str(uuid.uuid4())), ("result", "success", sig_id)], start=1
-    ):
+    for seq, (sk, rk, sid) in enumerate([("ack", "", str(uuid.uuid4())), ("result", "success", sig_id)], start=1):
         ingest_delegated_execution_signal(
             _make_signal_message(
-                signal_kind=sk, result_kind=rk,
-                signal_id=sid, emission_seq=seq,
+                signal_kind=sk,
+                result_kind=rk,
+                signal_id=sid,
+                emission_seq=seq,
             ),
-            runtime=tracker_rt, guard_runtime=guard_rt,
+            runtime=tracker_rt,
+            guard_runtime=guard_rt,
         )
 
     # Duplicate: same sig_id resent.
     result_msg = _make_signal_message(
-        signal_kind="result", result_kind="failure",
-        signal_id=sig_id, emission_seq=2,
+        signal_kind="result",
+        result_kind="failure",
+        signal_id=sig_id,
+        emission_seq=2,
     )
-    outcome = ingest_delegated_execution_signal(
-        result_msg, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    outcome = ingest_delegated_execution_signal(result_msg, runtime=tracker_rt, guard_runtime=guard_rt)
     assert outcome.was_updated is False
     record = get_execution_tracking_record("ses-pr21-001", runtime=tracker_rt)
     assert record.phase == DelegatedExecutionPhase.completed
@@ -743,24 +716,28 @@ def test_I02_failed_terminal_not_overwritten_by_replay():
     _make_tracking_record(runtime=tracker_rt)
 
     # Advance to failed.
-    for seq, (sk, rk) in enumerate(
-        [("ack", ""), ("result", "failure")], start=1
-    ):
+    for seq, (sk, rk) in enumerate([("ack", ""), ("result", "failure")], start=1):
         ingest_delegated_execution_signal(
             _make_signal_message(
-                signal_kind=sk, result_kind=rk,
-                signal_id=str(uuid.uuid4()), emission_seq=seq,
+                signal_kind=sk,
+                result_kind=rk,
+                signal_id=str(uuid.uuid4()),
+                emission_seq=seq,
             ),
-            runtime=tracker_rt, guard_runtime=guard_rt,
+            runtime=tracker_rt,
+            guard_runtime=guard_rt,
         )
 
     # Replay: different signal_id, same seq=2.
     outcome = ingest_delegated_execution_signal(
         _make_signal_message(
-            signal_kind="result", result_kind="success",
-            signal_id=str(uuid.uuid4()), emission_seq=2,
+            signal_kind="result",
+            result_kind="success",
+            signal_id=str(uuid.uuid4()),
+            emission_seq=2,
         ),
-        runtime=tracker_rt, guard_runtime=guard_rt,
+        runtime=tracker_rt,
+        guard_runtime=guard_rt,
     )
     assert outcome.was_updated is False
     record = get_execution_tracking_record("ses-pr21-001", runtime=tracker_rt)
@@ -774,18 +751,20 @@ def test_I03_timed_out_terminal_not_overwritten():
 
     for seq, sk in enumerate(["ack", "timeout"], start=1):
         ingest_delegated_execution_signal(
-            _make_signal_message(
-                signal_kind=sk, signal_id=str(uuid.uuid4()), emission_seq=seq
-            ),
-            runtime=tracker_rt, guard_runtime=guard_rt,
+            _make_signal_message(signal_kind=sk, signal_id=str(uuid.uuid4()), emission_seq=seq),
+            runtime=tracker_rt,
+            guard_runtime=guard_rt,
         )
 
     outcome = ingest_delegated_execution_signal(
         _make_signal_message(
-            signal_kind="result", result_kind="success",
-            signal_id=str(uuid.uuid4()), emission_seq=3,
+            signal_kind="result",
+            result_kind="success",
+            signal_id=str(uuid.uuid4()),
+            emission_seq=3,
         ),
-        runtime=tracker_rt, guard_runtime=guard_rt,
+        runtime=tracker_rt,
+        guard_runtime=guard_rt,
     )
     assert outcome.was_updated is False
     record = get_execution_tracking_record("ses-pr21-001", runtime=tracker_rt)
@@ -799,18 +778,20 @@ def test_I04_cancelled_terminal_not_overwritten():
 
     for seq, sk in enumerate(["ack", "cancelled"], start=1):
         ingest_delegated_execution_signal(
-            _make_signal_message(
-                signal_kind=sk, signal_id=str(uuid.uuid4()), emission_seq=seq
-            ),
-            runtime=tracker_rt, guard_runtime=guard_rt,
+            _make_signal_message(signal_kind=sk, signal_id=str(uuid.uuid4()), emission_seq=seq),
+            runtime=tracker_rt,
+            guard_runtime=guard_rt,
         )
 
     outcome = ingest_delegated_execution_signal(
         _make_signal_message(
-            signal_kind="result", result_kind="success",
-            signal_id=str(uuid.uuid4()), emission_seq=3,
+            signal_kind="result",
+            result_kind="success",
+            signal_id=str(uuid.uuid4()),
+            emission_seq=3,
         ),
-        runtime=tracker_rt, guard_runtime=guard_rt,
+        runtime=tracker_rt,
+        guard_runtime=guard_rt,
     )
     assert outcome.was_updated is False
     record = get_execution_tracking_record("ses-pr21-001", runtime=tracker_rt)
@@ -828,12 +809,8 @@ def test_J01_task_id_preserved_in_outcome_envelope():
     _make_tracking_record(runtime=tracker_rt)
 
     task_id = "task-pr21-identity-001"
-    msg = _make_signal_message(
-        task_id=task_id, signal_id=str(uuid.uuid4()), emission_seq=1
-    )
-    outcome = ingest_delegated_execution_signal(
-        msg, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    msg = _make_signal_message(task_id=task_id, signal_id=str(uuid.uuid4()), emission_seq=1)
+    outcome = ingest_delegated_execution_signal(msg, runtime=tracker_rt, guard_runtime=guard_rt)
     assert outcome.envelope is not None
     assert outcome.envelope.task_id == task_id
 
@@ -843,16 +820,10 @@ def test_J02_trace_id_preserved_in_outcome_envelope():
     guard_rt = _fresh_guard_runtime()
 
     trace_id = "trace-pr21-identity-002"
-    _make_tracking_record(
-        trace_id=trace_id, runtime=tracker_rt
-    )
+    _make_tracking_record(trace_id=trace_id, runtime=tracker_rt)
 
-    msg = _make_signal_message(
-        trace_id=trace_id, signal_id=str(uuid.uuid4()), emission_seq=1
-    )
-    outcome = ingest_delegated_execution_signal(
-        msg, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    msg = _make_signal_message(trace_id=trace_id, signal_id=str(uuid.uuid4()), emission_seq=1)
+    outcome = ingest_delegated_execution_signal(msg, runtime=tracker_rt, guard_runtime=guard_rt)
     assert outcome.envelope is not None
     assert outcome.envelope.trace_id == trace_id
 
@@ -864,9 +835,7 @@ def test_J03_signal_id_preserved_in_outcome_envelope():
 
     signal_id = str(uuid.uuid4())
     msg = _make_signal_message(signal_id=signal_id, emission_seq=1)
-    outcome = ingest_delegated_execution_signal(
-        msg, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    outcome = ingest_delegated_execution_signal(msg, runtime=tracker_rt, guard_runtime=guard_rt)
     assert outcome.envelope is not None
     assert outcome.envelope.signal_id == signal_id
 
@@ -878,9 +847,7 @@ def test_J04_emission_seq_preserved_in_outcome_envelope():
 
     emission_seq = 42
     msg = _make_signal_message(signal_id=str(uuid.uuid4()), emission_seq=emission_seq)
-    outcome = ingest_delegated_execution_signal(
-        msg, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    outcome = ingest_delegated_execution_signal(msg, runtime=tracker_rt, guard_runtime=guard_rt)
     assert outcome.envelope is not None
     assert outcome.envelope.emission_seq == emission_seq
 
@@ -890,9 +857,7 @@ def test_J05_contract_id_preserved_in_outcome_envelope():
     guard_rt = _fresh_guard_runtime()
     contract_id = "ctr-pr21-identity-005"
     session_id = "ses-pr21-identity-005"
-    _make_tracking_record(
-        contract_id=contract_id, session_id=session_id, runtime=tracker_rt
-    )
+    _make_tracking_record(contract_id=contract_id, session_id=session_id, runtime=tracker_rt)
 
     msg = _make_signal_message(
         contract_id=contract_id,
@@ -900,9 +865,7 @@ def test_J05_contract_id_preserved_in_outcome_envelope():
         signal_id=str(uuid.uuid4()),
         emission_seq=1,
     )
-    outcome = ingest_delegated_execution_signal(
-        msg, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    outcome = ingest_delegated_execution_signal(msg, runtime=tracker_rt, guard_runtime=guard_rt)
     assert outcome.envelope is not None
     assert outcome.envelope.contract_id == contract_id
 
@@ -912,9 +875,7 @@ def test_J06_session_id_preserved_in_outcome_envelope():
     guard_rt = _fresh_guard_runtime()
     session_id = "ses-pr21-identity-006"
     contract_id = "ctr-pr21-identity-006"
-    _make_tracking_record(
-        contract_id=contract_id, session_id=session_id, runtime=tracker_rt
-    )
+    _make_tracking_record(contract_id=contract_id, session_id=session_id, runtime=tracker_rt)
 
     msg = _make_signal_message(
         contract_id=contract_id,
@@ -922,9 +883,7 @@ def test_J06_session_id_preserved_in_outcome_envelope():
         signal_id=str(uuid.uuid4()),
         emission_seq=1,
     )
-    outcome = ingest_delegated_execution_signal(
-        msg, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    outcome = ingest_delegated_execution_signal(msg, runtime=tracker_rt, guard_runtime=guard_rt)
     assert outcome.envelope is not None
     assert outcome.envelope.session_id == session_id
 
@@ -935,12 +894,8 @@ def test_J07_device_id_preserved_in_outcome_envelope():
     device_id = "dev-pr21-identity-007"
     _make_tracking_record(device_id=device_id, runtime=tracker_rt)
 
-    msg = _make_signal_message(
-        device_id=device_id, signal_id=str(uuid.uuid4()), emission_seq=1
-    )
-    outcome = ingest_delegated_execution_signal(
-        msg, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    msg = _make_signal_message(device_id=device_id, signal_id=str(uuid.uuid4()), emission_seq=1)
+    outcome = ingest_delegated_execution_signal(msg, runtime=tracker_rt, guard_runtime=guard_rt)
     assert outcome.envelope is not None
     assert outcome.envelope.device_id == device_id
 
@@ -963,10 +918,13 @@ def test_K01_full_lifecycle_success():
     for sk, rk, seq in signals:
         outcome = ingest_delegated_execution_signal(
             _make_signal_message(
-                signal_kind=sk, result_kind=rk,
-                signal_id=str(uuid.uuid4()), emission_seq=seq,
+                signal_kind=sk,
+                result_kind=rk,
+                signal_id=str(uuid.uuid4()),
+                emission_seq=seq,
             ),
-            runtime=tracker_rt, guard_runtime=guard_rt,
+            runtime=tracker_rt,
+            guard_runtime=guard_rt,
         )
         assert outcome.was_updated is True
 
@@ -990,10 +948,13 @@ def test_K02_full_lifecycle_phase_sequence():
     ):
         outcome = ingest_delegated_execution_signal(
             _make_signal_message(
-                signal_kind=sk, result_kind=rk,
-                signal_id=str(uuid.uuid4()), emission_seq=seq,
+                signal_kind=sk,
+                result_kind=rk,
+                signal_id=str(uuid.uuid4()),
+                emission_seq=seq,
             ),
-            runtime=tracker_rt, guard_runtime=guard_rt,
+            runtime=tracker_rt,
+            guard_runtime=guard_rt,
         )
         assert outcome.record.phase == expected
 
@@ -1011,10 +972,13 @@ def test_L01_full_lifecycle_failure():
     for sk, rk, seq in [("ack", "", 1), ("result", "failure", 2)]:
         outcome = ingest_delegated_execution_signal(
             _make_signal_message(
-                signal_kind=sk, result_kind=rk,
-                signal_id=str(uuid.uuid4()), emission_seq=seq,
+                signal_kind=sk,
+                result_kind=rk,
+                signal_id=str(uuid.uuid4()),
+                emission_seq=seq,
             ),
-            runtime=tracker_rt, guard_runtime=guard_rt,
+            runtime=tracker_rt,
+            guard_runtime=guard_rt,
         )
         assert outcome.was_updated is True
 
@@ -1034,10 +998,9 @@ def test_M01_timeout_produces_timed_out_terminal():
 
     for sk, seq in [("ack", 1), ("timeout", 2)]:
         outcome = ingest_delegated_execution_signal(
-            _make_signal_message(
-                signal_kind=sk, signal_id=str(uuid.uuid4()), emission_seq=seq
-            ),
-            runtime=tracker_rt, guard_runtime=guard_rt,
+            _make_signal_message(signal_kind=sk, signal_id=str(uuid.uuid4()), emission_seq=seq),
+            runtime=tracker_rt,
+            guard_runtime=guard_rt,
         )
         assert outcome.was_updated is True
 
@@ -1058,10 +1021,9 @@ def test_N01_cancelled_produces_cancelled_terminal():
 
     for sk, seq in [("ack", 1), ("cancelled", 2)]:
         outcome = ingest_delegated_execution_signal(
-            _make_signal_message(
-                signal_kind=sk, signal_id=str(uuid.uuid4()), emission_seq=seq
-            ),
-            runtime=tracker_rt, guard_runtime=guard_rt,
+            _make_signal_message(signal_kind=sk, signal_id=str(uuid.uuid4()), emission_seq=seq),
+            runtime=tracker_rt,
+            guard_runtime=guard_rt,
         )
         assert outcome.was_updated is True
 
@@ -1090,9 +1052,7 @@ def test_O01_duplicate_signal_does_not_change_phase():
     phase_mid = record_mid.phase
 
     # Duplicate: same msg.
-    outcome = ingest_delegated_execution_signal(
-        msg, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    outcome = ingest_delegated_execution_signal(msg, runtime=tracker_rt, guard_runtime=guard_rt)
     assert outcome.was_updated is False
 
     record_after = get_execution_tracking_record("ses-pr21-001", runtime=tracker_rt)
@@ -1111,7 +1071,8 @@ def test_P01_replay_signal_does_not_change_phase():
 
     ingest_delegated_execution_signal(
         _make_signal_message(signal_kind="ack", signal_id=str(uuid.uuid4()), emission_seq=2),
-        runtime=tracker_rt, guard_runtime=guard_rt,
+        runtime=tracker_rt,
+        guard_runtime=guard_rt,
     )
 
     record_mid = get_execution_tracking_record("ses-pr21-001", runtime=tracker_rt)
@@ -1119,15 +1080,12 @@ def test_P01_replay_signal_does_not_change_phase():
 
     # Replay: different signal_id, same seq=2.
     outcome = ingest_delegated_execution_signal(
-        _make_signal_message(
-            signal_kind="progress", signal_id=str(uuid.uuid4()), emission_seq=2
-        ),
-        runtime=tracker_rt, guard_runtime=guard_rt,
+        _make_signal_message(signal_kind="progress", signal_id=str(uuid.uuid4()), emission_seq=2),
+        runtime=tracker_rt,
+        guard_runtime=guard_rt,
     )
     assert outcome.was_updated is False
-    assert get_execution_tracking_record(
-        "ses-pr21-001", runtime=tracker_rt
-    ).phase == phase_mid
+    assert get_execution_tracking_record("ses-pr21-001", runtime=tracker_rt).phase == phase_mid
 
 
 # ===========================================================================
@@ -1145,22 +1103,20 @@ def test_Q01_stale_signal_does_not_update_tracker():
     high_seq = STALE_EMISSION_SEQ_THRESHOLD + 10
     ingest_delegated_execution_signal(
         _make_signal_message(signal_kind="ack", signal_id=str(uuid.uuid4()), emission_seq=high_seq),
-        runtime=tracker_rt, guard_runtime=guard_rt,
+        runtime=tracker_rt,
+        guard_runtime=guard_rt,
     )
 
     record_mid = get_execution_tracking_record("ses-pr21-001", runtime=tracker_rt)
     phase_mid = record_mid.phase
 
     outcome = ingest_delegated_execution_signal(
-        _make_signal_message(
-            signal_kind="progress", signal_id=str(uuid.uuid4()), emission_seq=0
-        ),
-        runtime=tracker_rt, guard_runtime=guard_rt,
+        _make_signal_message(signal_kind="progress", signal_id=str(uuid.uuid4()), emission_seq=0),
+        runtime=tracker_rt,
+        guard_runtime=guard_rt,
     )
     assert outcome.was_updated is False
-    assert get_execution_tracking_record(
-        "ses-pr21-001", runtime=tracker_rt
-    ).phase == phase_mid
+    assert get_execution_tracking_record("ses-pr21-001", runtime=tracker_rt).phase == phase_mid
 
 
 # ===========================================================================
@@ -1175,22 +1131,20 @@ def test_R01_out_of_order_signal_does_not_update_tracker():
 
     ingest_delegated_execution_signal(
         _make_signal_message(signal_kind="ack", signal_id=str(uuid.uuid4()), emission_seq=5),
-        runtime=tracker_rt, guard_runtime=guard_rt,
+        runtime=tracker_rt,
+        guard_runtime=guard_rt,
     )
 
     record_mid = get_execution_tracking_record("ses-pr21-001", runtime=tracker_rt)
     phase_mid = record_mid.phase
 
     outcome = ingest_delegated_execution_signal(
-        _make_signal_message(
-            signal_kind="progress", signal_id=str(uuid.uuid4()), emission_seq=3
-        ),
-        runtime=tracker_rt, guard_runtime=guard_rt,
+        _make_signal_message(signal_kind="progress", signal_id=str(uuid.uuid4()), emission_seq=3),
+        runtime=tracker_rt,
+        guard_runtime=guard_rt,
     )
     assert outcome.was_updated is False
-    assert get_execution_tracking_record(
-        "ses-pr21-001", runtime=tracker_rt
-    ).phase == phase_mid
+    assert get_execution_tracking_record("ses-pr21-001", runtime=tracker_rt).phase == phase_mid
 
 
 # ===========================================================================
@@ -1206,34 +1160,48 @@ def test_S01_two_contracts_do_not_interfere():
     contract_a, session_a = "ctr-pr21-a", "ses-pr21-a"
     contract_b, session_b = "ctr-pr21-b", "ses-pr21-b"
     create_execution_tracking_record(
-        session_id=session_a, contract_id=contract_a,
-        device_id="dev-pr21-001", trace_id="trace-pr21-a",
-        source_runtime_posture="join_runtime", runtime=tracker_rt,
+        session_id=session_a,
+        contract_id=contract_a,
+        device_id="dev-pr21-001",
+        trace_id="trace-pr21-a",
+        source_runtime_posture="join_runtime",
+        runtime=tracker_rt,
     )
     create_execution_tracking_record(
-        session_id=session_b, contract_id=contract_b,
-        device_id="dev-pr21-002", trace_id="trace-pr21-b",
-        source_runtime_posture="join_runtime", runtime=tracker_rt,
+        session_id=session_b,
+        contract_id=contract_b,
+        device_id="dev-pr21-002",
+        trace_id="trace-pr21-b",
+        source_runtime_posture="join_runtime",
+        runtime=tracker_rt,
     )
 
     # Advance contract A to completed.
     for sk, rk, seq in [("ack", "", 1), ("result", "success", 2)]:
         ingest_delegated_execution_signal(
             _make_signal_message(
-                contract_id=contract_a, session_id=session_a,
-                signal_kind=sk, result_kind=rk,
-                signal_id=str(uuid.uuid4()), emission_seq=seq,
+                contract_id=contract_a,
+                session_id=session_a,
+                signal_kind=sk,
+                result_kind=rk,
+                signal_id=str(uuid.uuid4()),
+                emission_seq=seq,
             ),
-            runtime=tracker_rt, guard_runtime=guard_rt,
+            runtime=tracker_rt,
+            guard_runtime=guard_rt,
         )
 
     # Advance contract B to acknowledged only.
     ingest_delegated_execution_signal(
         _make_signal_message(
-            contract_id=contract_b, session_id=session_b,
-            signal_kind="ack", signal_id=str(uuid.uuid4()), emission_seq=1,
+            contract_id=contract_b,
+            session_id=session_b,
+            signal_kind="ack",
+            signal_id=str(uuid.uuid4()),
+            emission_seq=1,
         ),
-        runtime=tracker_rt, guard_runtime=guard_rt,
+        runtime=tracker_rt,
+        guard_runtime=guard_rt,
     )
 
     record_a = get_execution_tracking_record(session_a, runtime=tracker_rt)
@@ -1257,8 +1225,11 @@ def test_S02_guard_contexts_are_isolated_per_contract():
         (contract_b, session_b, "dev-b", "trace-b"),
     ]:
         create_execution_tracking_record(
-            session_id=sid, contract_id=cid, device_id=did,
-            trace_id=tid, source_runtime_posture="join_runtime",
+            session_id=sid,
+            contract_id=cid,
+            device_id=did,
+            trace_id=tid,
+            source_runtime_posture="join_runtime",
             runtime=tracker_rt,
         )
 
@@ -1266,20 +1237,25 @@ def test_S02_guard_contexts_are_isolated_per_contract():
     # Send signal for A twice (second should be duplicate).
     for i in range(2):
         msg = _make_signal_message(
-            contract_id=contract_a, session_id=session_a,
-            signal_kind="ack", signal_id=sig_id_a, emission_seq=1,
+            contract_id=contract_a,
+            session_id=session_a,
+            signal_kind="ack",
+            signal_id=sig_id_a,
+            emission_seq=1,
         )
-        ingest_delegated_execution_signal(
-            msg, runtime=tracker_rt, guard_runtime=guard_rt
-        )
+        ingest_delegated_execution_signal(msg, runtime=tracker_rt, guard_runtime=guard_rt)
 
     # Send a fresh signal for B — should be accepted (not affected by A's duplicate).
     outcome_b = ingest_delegated_execution_signal(
         _make_signal_message(
-            contract_id=contract_b, session_id=session_b,
-            signal_kind="ack", signal_id=str(uuid.uuid4()), emission_seq=1,
+            contract_id=contract_b,
+            session_id=session_b,
+            signal_kind="ack",
+            signal_id=str(uuid.uuid4()),
+            emission_seq=1,
         ),
-        runtime=tracker_rt, guard_runtime=guard_rt,
+        runtime=tracker_rt,
+        guard_runtime=guard_rt,
     )
     assert outcome_b.was_updated is True
 
@@ -1320,7 +1296,8 @@ def test_T02_guard_snapshot_total_accepted_reflects_successes():
                 signal_id=str(uuid.uuid4()),
                 emission_seq=seq,
             ),
-            runtime=tracker_rt, guard_runtime=guard_rt,
+            runtime=tracker_rt,
+            guard_runtime=guard_rt,
         )
 
     snapshot = build_recovery_readiness_snapshot(runtime=guard_rt)
@@ -1347,9 +1324,12 @@ def test_U01_android_signal_identity_preserved_end_to_end():
     emission_seq = 7
 
     create_execution_tracking_record(
-        session_id=session_id, contract_id=contract_id,
-        device_id=device_id, trace_id=trace_id,
-        source_runtime_posture="join_runtime", runtime=tracker_rt,
+        session_id=session_id,
+        contract_id=contract_id,
+        device_id=device_id,
+        trace_id=trace_id,
+        source_runtime_posture="join_runtime",
+        runtime=tracker_rt,
     )
 
     msg = {
@@ -1365,9 +1345,7 @@ def test_U01_android_signal_identity_preserved_end_to_end():
             "emission_seq": emission_seq,
         },
     }
-    outcome = ingest_delegated_execution_signal(
-        msg, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    outcome = ingest_delegated_execution_signal(msg, runtime=tracker_rt, guard_runtime=guard_rt)
 
     assert outcome.was_updated is True
     env = outcome.envelope
@@ -1391,32 +1369,40 @@ def test_U02_stable_handling_of_android_delegated_execution_result_in_canonical_
     session_id = "ses-pr21-stable-001"
 
     create_execution_tracking_record(
-        session_id=session_id, contract_id=contract_id,
-        device_id="dev-pr21-stable", trace_id="trace-pr21-stable",
-        source_runtime_posture="join_runtime", runtime=tracker_rt,
+        session_id=session_id,
+        contract_id=contract_id,
+        device_id="dev-pr21-stable",
+        trace_id="trace-pr21-stable",
+        source_runtime_posture="join_runtime",
+        runtime=tracker_rt,
     )
 
     # Send ack then result/success — both must be accepted.
     for seq, sk, rk in [(1, "ack", ""), (2, "result", "success")]:
         outcome = ingest_delegated_execution_signal(
             _make_signal_message(
-                contract_id=contract_id, session_id=session_id,
-                signal_kind=sk, result_kind=rk,
-                signal_id=str(uuid.uuid4()), emission_seq=seq,
+                contract_id=contract_id,
+                session_id=session_id,
+                signal_kind=sk,
+                result_kind=rk,
+                signal_id=str(uuid.uuid4()),
+                emission_seq=seq,
             ),
-            runtime=tracker_rt, guard_runtime=guard_rt,
+            runtime=tracker_rt,
+            guard_runtime=guard_rt,
         )
         assert outcome.was_updated is True
 
     # Send a late duplicate result — must NOT change terminal state.
     late_msg = _make_signal_message(
-        contract_id=contract_id, session_id=session_id,
-        signal_kind="result", result_kind="failure",
-        signal_id=str(uuid.uuid4()), emission_seq=2,  # replay seq
+        contract_id=contract_id,
+        session_id=session_id,
+        signal_kind="result",
+        result_kind="failure",
+        signal_id=str(uuid.uuid4()),
+        emission_seq=2,  # replay seq
     )
-    late_outcome = ingest_delegated_execution_signal(
-        late_msg, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    late_outcome = ingest_delegated_execution_signal(late_msg, runtime=tracker_rt, guard_runtime=guard_rt)
     assert late_outcome.was_updated is False
 
     final_record = get_execution_tracking_record(session_id, runtime=tracker_rt)

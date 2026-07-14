@@ -11,11 +11,12 @@
 版本: v2.3.22
 """
 
-import os
 import logging
-from typing import Dict, List, Optional, Any
+import os
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any, Dict, List, Optional
+
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 class DevicePlatform(Enum):
     """设备平台"""
+
     WINDOWS = "windows"
     ANDROID = "android"
     MACOS = "macos"
@@ -32,6 +34,7 @@ class DevicePlatform(Enum):
 @dataclass
 class DeviceInfo:
     """设备信息"""
+
     device_id: str
     platform: DevicePlatform
     name: str
@@ -71,20 +74,14 @@ class DeviceControlService:
     # 设备管理
     # =========================================================================
 
-    async def register_device(
-        self,
-        device_id: str,
-        platform: str,
-        name: str,
-        capabilities: List[str] = None
-    ) -> bool:
+    async def register_device(self, device_id: str, platform: str, name: str, capabilities: List[str] = None) -> bool:
         """注册设备"""
         device = DeviceInfo(
             device_id=device_id,
             platform=DevicePlatform(platform.lower()),
             name=name,
             status="online",
-            capabilities=capabilities or []
+            capabilities=capabilities or [],
         )
         self.devices[device_id] = device
         logger.info(f"Device registered: {device_id} ({platform})")
@@ -102,13 +99,7 @@ class DeviceControlService:
     # 统一控制接口 - 真正执行操作
     # =========================================================================
 
-    async def click(
-        self,
-        device_id: str,
-        x: int,
-        y: int,
-        clicks: int = 1
-    ) -> Dict[str, Any]:
+    async def click(self, device_id: str, x: int, y: int, clicks: int = 1) -> Dict[str, Any]:
         """
         点击屏幕
 
@@ -127,13 +118,7 @@ class DeviceControlService:
                 # 调用 Node_92 AutoControl
                 response = await client.post(
                     f"{self.node_urls['auto_control']}/click",
-                    json={
-                        "device_id": device_id,
-                        "platform": "windows",
-                        "x": x,
-                        "y": y,
-                        "clicks": clicks
-                    }
+                    json={"device_id": device_id, "platform": "windows", "x": x, "y": y, "clicks": clicks},
                 )
                 result = response.json()
                 logger.info(f"Windows click: ({x}, {y}) -> {result}")
@@ -143,12 +128,7 @@ class DeviceControlService:
                 # 调用 Node_92 AutoControl (Android)
                 response = await client.post(
                     f"{self.node_urls['auto_control']}/click",
-                    json={
-                        "device_id": device_id,
-                        "platform": "android",
-                        "x": x,
-                        "y": y
-                    }
+                    json={"device_id": device_id, "platform": "android", "x": x, "y": y},
                 )
                 result = response.json()
                 logger.info(f"Android click: ({x}, {y}) -> {result}")
@@ -161,11 +141,7 @@ class DeviceControlService:
             logger.error(f"Click failed: {e}")
             return {"success": False, "error": str(e)}
 
-    async def input_text(
-        self,
-        device_id: str,
-        text: str
-    ) -> Dict[str, Any]:
+    async def input_text(self, device_id: str, text: str) -> Dict[str, Any]:
         """
         输入文本
 
@@ -183,11 +159,7 @@ class DeviceControlService:
             if device.platform == DevicePlatform.WINDOWS:
                 response = await client.post(
                     f"{self.node_urls['auto_control']}/input",
-                    json={
-                        "device_id": device_id,
-                        "platform": "windows",
-                        "text": text
-                    }
+                    json={"device_id": device_id, "platform": "windows", "text": text},
                 )
                 result = response.json()
                 logger.info(f"Windows input: {text[:20]}... -> {result}")
@@ -196,11 +168,7 @@ class DeviceControlService:
             elif device.platform == DevicePlatform.ANDROID:
                 response = await client.post(
                     f"{self.node_urls['auto_control']}/input",
-                    json={
-                        "device_id": device_id,
-                        "platform": "android",
-                        "text": text
-                    }
+                    json={"device_id": device_id, "platform": "android", "text": text},
                 )
                 result = response.json()
                 logger.info(f"Android input: {text[:20]}... -> {result}")
@@ -213,12 +181,7 @@ class DeviceControlService:
             logger.error(f"Input failed: {e}")
             return {"success": False, "error": str(e)}
 
-    async def scroll(
-        self,
-        device_id: str,
-        direction: str = "down",
-        amount: int = 500
-    ) -> Dict[str, Any]:
+    async def scroll(self, device_id: str, direction: str = "down", amount: int = 500) -> Dict[str, Any]:
         """
         滚动屏幕
 
@@ -237,11 +200,7 @@ class DeviceControlService:
                 scroll_amount = amount if direction == "down" else -amount
                 response = await client.post(
                     f"{self.node_urls['auto_control']}/scroll",
-                    json={
-                        "device_id": device_id,
-                        "platform": "windows",
-                        "amount": scroll_amount
-                    }
+                    json={"device_id": device_id, "platform": "windows", "amount": scroll_amount},
                 )
                 result = response.json()
                 logger.info(f"Windows scroll: {direction} -> {result}")
@@ -250,11 +209,7 @@ class DeviceControlService:
             elif device.platform == DevicePlatform.ANDROID:
                 response = await client.post(
                     f"{self.node_urls['auto_control']}/scroll",
-                    json={
-                        "device_id": device_id,
-                        "platform": "android",
-                        "direction": direction
-                    }
+                    json={"device_id": device_id, "platform": "android", "direction": direction},
                 )
                 result = response.json()
                 logger.info(f"Android scroll: {direction} -> {result}")
@@ -285,10 +240,7 @@ class DeviceControlService:
             # 尝试调用截图接口
             response = await client.post(
                 f"{self.node_urls['auto_control']}/screenshot",
-                json={
-                    "device_id": device_id,
-                    "platform": device.platform.value
-                }
+                json={"device_id": device_id, "platform": device.platform.value},
             )
             result = response.json()
             logger.info(f"Screenshot: {device_id} -> {result.get('success', False)}")
@@ -298,11 +250,7 @@ class DeviceControlService:
             logger.error(f"Screenshot failed: {e}")
             return {"success": False, "error": str(e)}
 
-    async def open_app(
-        self,
-        device_id: str,
-        app_name: str
-    ) -> Dict[str, Any]:
+    async def open_app(self, device_id: str, app_name: str) -> Dict[str, Any]:
         """
         打开应用
 
@@ -323,6 +271,7 @@ class DeviceControlService:
                     from core.system_api.windows_system_api import (  # type: ignore[import]
                         get_windows_system_api,
                     )
+
                     facade = get_windows_system_api()
                     if facade.is_available:
                         resp = facade.dispatch(
@@ -332,15 +281,14 @@ class DeviceControlService:
                         )
                         if resp.handled:
                             logger.info(
-                                "device_control | open_app via system_api | "
-                                "device=%s app=%s success=%s",
-                                device_id, app_name, resp.success,
+                                "device_control | open_app via system_api | " "device=%s app=%s success=%s",
+                                device_id,
+                                app_name,
+                                resp.success,
                             )
                             return {"success": resp.success, "error": resp.error, **resp.data}
                 except Exception as _sapi_err:
-                    logger.debug(
-                        "device_control | system_api open_app fallback | %s", _sapi_err
-                    )
+                    logger.debug("device_control | system_api open_app fallback | %s", _sapi_err)
 
                 # Fallback: Node_45_Desktop HTTP API
                 client = await self._get_client()
@@ -350,10 +298,7 @@ class DeviceControlService:
                 }
                 app_path = app_paths.get(app_name)
                 if app_path:
-                    response = await client.post(
-                        f"{self.node_urls['desktop']}/open_app",
-                        json={"app_path": app_path}
-                    )
+                    response = await client.post(f"{self.node_urls['desktop']}/open_app", json={"app_path": app_path})
                     result = response.json()
                 else:
                     result = {"success": True, "message": f"App {app_name} not configured"}
@@ -376,8 +321,7 @@ class DeviceControlService:
             if device.platform == DevicePlatform.ANDROID:
                 package = app_packages.get(app_name, app_name)
                 response = await client.post(
-                    f"{self.node_urls['adb']}/start_app",
-                    json={"device_id": device_id, "package": package}
+                    f"{self.node_urls['adb']}/start_app", json={"device_id": device_id, "package": package}
                 )
                 result = response.json()
                 logger.info("Android open_app: %s (%s) -> %s", app_name, package, result)
@@ -389,11 +333,7 @@ class DeviceControlService:
             logger.error(f"Open app failed: {e}")
             return {"success": False, "error": str(e)}
 
-    async def press_key(
-        self,
-        device_id: str,
-        key: str
-    ) -> Dict[str, Any]:
+    async def press_key(self, device_id: str, key: str) -> Dict[str, Any]:
         """
         按键
 
@@ -410,11 +350,7 @@ class DeviceControlService:
 
             response = await client.post(
                 f"{self.node_urls['auto_control']}/press_key",
-                json={
-                    "device_id": device_id,
-                    "platform": device.platform.value,
-                    "key": key
-                }
+                json={"device_id": device_id, "platform": device.platform.value, "key": key},
             )
             result = response.json()
             logger.info(f"Press key: {key} -> {result}")
@@ -429,11 +365,7 @@ class DeviceControlService:
     # =========================================================================
 
     async def control_device(
-        self,
-        from_device_id: str,
-        to_device_id: str,
-        action: str,
-        params: Dict[str, Any]
+        self, from_device_id: str, to_device_id: str, action: str, params: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         跨设备控制
@@ -450,30 +382,15 @@ class DeviceControlService:
 
         # 执行操作
         if action == "click":
-            return await self.click(
-                to_device_id,
-                params.get("x", 0),
-                params.get("y", 0),
-                params.get("clicks", 1)
-            )
+            return await self.click(to_device_id, params.get("x", 0), params.get("y", 0), params.get("clicks", 1))
         elif action == "input":
-            return await self.input_text(
-                to_device_id,
-                params.get("text", "")
-            )
+            return await self.input_text(to_device_id, params.get("text", ""))
         elif action == "scroll":
-            return await self.scroll(
-                to_device_id,
-                params.get("direction", "down"),
-                params.get("amount", 500)
-            )
+            return await self.scroll(to_device_id, params.get("direction", "down"), params.get("amount", 500))
         elif action == "screenshot":
             return await self.screenshot(to_device_id)
         elif action == "open_app":
-            return await self.open_app(
-                to_device_id,
-                params.get("app_name", "")
-            )
+            return await self.open_app(to_device_id, params.get("app_name", ""))
         else:
             return {"success": False, "error": f"Unknown action: {action}"}
 

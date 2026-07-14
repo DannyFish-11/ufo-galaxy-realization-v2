@@ -28,6 +28,7 @@ logger = logging.getLogger("Galaxy.AudioPipeline")
 
 # ── 纯函数：原生音频 payload 构造（可单测，不依赖网络）────────────────────────
 
+
 def _openai_audio_format(mime: str) -> str:
     """从 mime 推断 OpenAI input_audio 的 format 字段。"""
     m = (mime or "").lower()
@@ -92,9 +93,7 @@ class AudioPipeline:
         self.gemini_api_key = self.config.get(
             "gemini_api_key", os.getenv("GEMINI_API_KEY", os.getenv("GOOGLE_API_KEY", ""))
         )
-        self.gemini_model = self.config.get(
-            "gemini_audio_model", os.getenv("GEMINI_AUDIO_MODEL", "gemini-2.0-flash")
-        )
+        self.gemini_model = self.config.get("gemini_audio_model", os.getenv("GEMINI_AUDIO_MODEL", "gemini-2.0-flash"))
         # OpenAI 兼容音频模型
         self.openai_api_key = self.config.get("openai_api_key", os.getenv("OPENAI_API_KEY", ""))
         self.openai_api_base = self.config.get(
@@ -109,10 +108,9 @@ class AudioPipeline:
         # ollama 地址解析收口到 core.ollama_endpoint 唯一属主(空值/缺协议头都兜底):
         # 面板 config 的 ollama_base > 环境变量 OLLAMA_URL > 默认 localhost:11434。
         from core.ollama_endpoint import resolve_ollama_base_url
+
         self.ollama_base = resolve_ollama_base_url(self.config.get("ollama_base"))
-        self.local_audio_enabled = os.getenv("GALAXY_LOCAL_AUDIO", "1").strip().lower() in (
-            "1", "true", "yes", "on"
-        )
+        self.local_audio_enabled = os.getenv("GALAXY_LOCAL_AUDIO", "1").strip().lower() in ("1", "true", "yes", "on")
         self._ollama_audio_model: Optional[str] = None
         self._client = None
 
@@ -122,6 +120,7 @@ class AudioPipeline:
 
     async def _get_client(self):
         import httpx
+
         if self._client is None or self._client.is_closed:
             self._client = httpx.AsyncClient(timeout=60.0)
         return self._client
@@ -142,8 +141,7 @@ class AudioPipeline:
         if self.local_audio_enabled:
             out = await self._call_ollama_audio(audio_base64, mime, prompt)
             if out is not None:
-                return {"success": True, "text": out,
-                        "engine": f"ollama-{self._ollama_audio_model or 'local'}"}
+                return {"success": True, "text": out, "engine": f"ollama-{self._ollama_audio_model or 'local'}"}
         # 回退：Gemini（inline_data 原生音频），再 OpenAI input_audio
         if self.gemini_api_key:
             out = await self._call_gemini(audio_base64, mime, prompt)

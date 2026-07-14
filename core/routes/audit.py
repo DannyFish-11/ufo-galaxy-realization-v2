@@ -79,6 +79,7 @@ def create_router() -> APIRouter:
 
     def _ledger():
         from core.control_plane._globals import get_audit_ledger
+
         return get_audit_ledger()
 
     @router.get("/api/v1/audit/traces")
@@ -149,6 +150,7 @@ def create_router() -> APIRouter:
                     content={"ok": False, "error": f"No events found for trace_id '{trace_id}'"},
                 )
             from core.control_plane.audit_ledger import events_to_dag
+
             dag = events_to_dag(events)
             return JSONResponse(
                 content={

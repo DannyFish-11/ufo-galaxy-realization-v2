@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-
 from unittest.mock import patch
 
 from fastapi import FastAPI
@@ -33,8 +32,8 @@ def test_chat_stream_times_out_instead_of_hanging(monkeypatch):
     """handle_request 挂起时,chat_stream 必须在超时后吐 error+silent 并收流。"""
     monkeypatch.setenv("GALAXY_CHAT_TIMEOUT_S", "2")
 
-    import core.routes.chat as chat_mod
     import core.desktop_presence_runtime as dpr
+    import core.routes.chat as chat_mod
 
     class _HangingRuntime:
         async def handle_request(self, *a, **k):
@@ -46,7 +45,8 @@ def test_chat_stream_times_out_instead_of_hanging(monkeypatch):
 
     with patch.object(dpr, "get_desktop_presence_runtime", lambda: _HangingRuntime()):
         with client.stream(
-            "POST", "/api/v1/chat/stream",
+            "POST",
+            "/api/v1/chat/stream",
             json={"message": "你好", "session_id": "timeout-test"},
         ) as r:
             frames = _collect_frames(r.iter_lines())

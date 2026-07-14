@@ -76,11 +76,13 @@ class TestGatewaySubstrateAuthority(unittest.TestCase):
 
     def test_01_gateway_substrate_authority_exists(self):
         from galaxy_gateway.gateway_nats_adapter import GATEWAY_SUBSTRATE_AUTHORITY
+
         self.assertIsInstance(GATEWAY_SUBSTRATE_AUTHORITY, str)
         self.assertTrue(len(GATEWAY_SUBSTRATE_AUTHORITY) > 0)
 
     def test_02_message_interop_applied_exists(self):
         from galaxy_gateway.gateway_nats_adapter import MESSAGE_INTEROP_APPLIED
+
         self.assertIsInstance(MESSAGE_INTEROP_APPLIED, str)
         self.assertTrue(len(MESSAGE_INTEROP_APPLIED) > 0)
 
@@ -102,6 +104,7 @@ class TestGatewaySubstrateAuthority(unittest.TestCase):
 
     def test_05_gateway_substrate_layer_importable(self):
         from core.agent_bus_fabric import GATEWAY_SUBSTRATE_LAYER
+
         self.assertIsInstance(GATEWAY_SUBSTRATE_LAYER, str)
         self.assertIn("GATEWAY", GATEWAY_SUBSTRATE_LAYER)
 
@@ -110,25 +113,29 @@ class TestWrapForGateway(unittest.TestCase):
     """Validate wrap_for_gateway helper."""
 
     def test_06_wrap_for_gateway_adds_fabric_layer(self):
-        from core.agent_bus_fabric import wrap_for_gateway, GATEWAY_SUBSTRATE_LAYER
+        from core.agent_bus_fabric import GATEWAY_SUBSTRATE_LAYER, wrap_for_gateway
+
         payload = {"task_id": "t-gw-1", "trace_id": "tr-gw-1"}
         result = wrap_for_gateway(payload)
         self.assertEqual(result["_fabric_layer"], GATEWAY_SUBSTRATE_LAYER)
 
     def test_07_wrap_for_gateway_returns_same_dict(self):
         from core.agent_bus_fabric import wrap_for_gateway
+
         payload = {"task_id": "t-gw-2", "trace_id": "tr-gw-2"}
         result = wrap_for_gateway(payload)
         self.assertIs(result, payload)
 
     def test_08_wrap_for_gateway_result_satisfies_canonical_contract(self):
-        from core.agent_bus_fabric import wrap_for_gateway, is_canonical_contract
+        from core.agent_bus_fabric import is_canonical_contract, wrap_for_gateway
+
         payload = {"task_id": "t-gw-3", "trace_id": "tr-gw-3"}
         result = wrap_for_gateway(payload)
         self.assertTrue(is_canonical_contract(result))
 
     def test_09_gateway_wrapped_dict_canonical(self):
-        from core.agent_bus_fabric import wrap_for_gateway, is_canonical_contract, GATEWAY_SUBSTRATE_LAYER
+        from core.agent_bus_fabric import GATEWAY_SUBSTRATE_LAYER, is_canonical_contract, wrap_for_gateway
+
         payload = {"task_id": "t-gw-4", "trace_id": "tr-gw-4", "tool_name": "tap"}
         result = wrap_for_gateway(payload)
         self.assertEqual(result["_fabric_layer"], GATEWAY_SUBSTRATE_LAYER)
@@ -136,6 +143,7 @@ class TestWrapForGateway(unittest.TestCase):
 
     def test_25_wrap_for_gateway_no_nats_schema(self):
         from core.agent_bus_fabric import wrap_for_gateway
+
         payload = {"task_id": "t-gw-5", "trace_id": "tr-gw-5"}
         result = wrap_for_gateway(payload)
         self.assertNotIn("_nats_schema", result)
@@ -146,6 +154,7 @@ class TestGatewayAuthorityBoundary(unittest.TestCase):
 
     def test_10_gateway_authority_not_orchestration(self):
         from galaxy_gateway.gateway_nats_adapter import GATEWAY_SUBSTRATE_AUTHORITY
+
         # Substrate authority must NOT claim orchestration capability
         lower = GATEWAY_SUBSTRATE_AUTHORITY.lower()
         self.assertNotIn("orchestration", lower)
@@ -164,6 +173,7 @@ class TestGatewayAuthorityBoundary(unittest.TestCase):
 
     def test_12_gateway_authority_contains_gateway(self):
         from galaxy_gateway.gateway_nats_adapter import GATEWAY_SUBSTRATE_AUTHORITY
+
         self.assertIn("GATEWAY", GATEWAY_SUBSTRATE_AUTHORITY)
 
 
@@ -171,7 +181,8 @@ class TestGatewayFabricObservability(unittest.TestCase):
     """Validate fabric observability records for the Gateway substrate layer."""
 
     def test_13_record_fabric_event_gateway_layer_recorded(self):
-        from core.agent_bus_fabric import record_fabric_event, GATEWAY_SUBSTRATE_LAYER, get_fabric_event_log
+        from core.agent_bus_fabric import GATEWAY_SUBSTRATE_LAYER, get_fabric_event_log, record_fabric_event
+
         log = get_fabric_event_log()
         initial_count = len(log)
         record_fabric_event(
@@ -188,10 +199,11 @@ class TestGatewayFabricObservability(unittest.TestCase):
 
     def test_14_record_fabric_event_gateway_failure(self):
         from core.agent_bus_fabric import (
-            record_fabric_event,
-            GATEWAY_SUBSTRATE_LAYER,
             FABRIC_REASON_DEVICE_TRANSPORT_FAILURE,
+            GATEWAY_SUBSTRATE_LAYER,
+            record_fabric_event,
         )
+
         rec = record_fabric_event(
             task_id="t-gw-fail",
             strategy="gateway",
@@ -204,10 +216,11 @@ class TestGatewayFabricObservability(unittest.TestCase):
 
     def test_15_record_fabric_event_gateway_fallback_flag(self):
         from core.agent_bus_fabric import (
-            record_fabric_event,
-            GATEWAY_SUBSTRATE_LAYER,
             FABRIC_REASON_STRATEGY_FALLBACK,
+            GATEWAY_SUBSTRATE_LAYER,
+            record_fabric_event,
         )
+
         rec = record_fabric_event(
             task_id="t-gw-fb",
             strategy="relay",
@@ -218,7 +231,8 @@ class TestGatewayFabricObservability(unittest.TestCase):
         self.assertTrue(rec.fallback_triggered)
 
     def test_16_record_fabric_event_gateway_layer_in_dict(self):
-        from core.agent_bus_fabric import record_fabric_event, GATEWAY_SUBSTRATE_LAYER
+        from core.agent_bus_fabric import GATEWAY_SUBSTRATE_LAYER, record_fabric_event
+
         rec = record_fabric_event(
             task_id="t-gw-dict",
             layer=GATEWAY_SUBSTRATE_LAYER,
@@ -228,10 +242,11 @@ class TestGatewayFabricObservability(unittest.TestCase):
 
     def test_17_fabric_reason_device_transport_failure_usable(self):
         from core.agent_bus_fabric import (
-            record_fabric_event,
-            GATEWAY_SUBSTRATE_LAYER,
             FABRIC_REASON_DEVICE_TRANSPORT_FAILURE,
+            GATEWAY_SUBSTRATE_LAYER,
+            record_fabric_event,
         )
+
         rec = record_fabric_event(
             task_id="t-dev-trans",
             layer=GATEWAY_SUBSTRATE_LAYER,
@@ -242,10 +257,11 @@ class TestGatewayFabricObservability(unittest.TestCase):
 
     def test_18_fabric_reason_semantic_failure_usable(self):
         from core.agent_bus_fabric import (
-            record_fabric_event,
             AGENT_BUS_LAYER,
             FABRIC_REASON_SEMANTIC_FAILURE,
+            record_fabric_event,
         )
+
         rec = record_fabric_event(
             task_id="t-semantic",
             layer=AGENT_BUS_LAYER,
@@ -259,7 +275,8 @@ class TestGatewayTransportStrategy(unittest.TestCase):
     """Validate transport strategy selection for gateway paths."""
 
     def test_19_gateway_preferred_and_available_no_fallback(self):
-        from core.agent_bus_fabric import select_transport_strategy, TRANSPORT_STRATEGY_GATEWAY
+        from core.agent_bus_fabric import TRANSPORT_STRATEGY_GATEWAY, select_transport_strategy
+
         rec = select_transport_strategy(
             gateway_available=True,
             preferred=TRANSPORT_STRATEGY_GATEWAY,
@@ -269,10 +286,11 @@ class TestGatewayTransportStrategy(unittest.TestCase):
 
     def test_20_gateway_preferred_unavailable_fallback_to_nats(self):
         from core.agent_bus_fabric import (
-            select_transport_strategy,
             TRANSPORT_STRATEGY_GATEWAY,
             TRANSPORT_STRATEGY_NATS,
+            select_transport_strategy,
         )
+
         rec = select_transport_strategy(
             gateway_available=False,
             nats_available=True,
@@ -282,15 +300,17 @@ class TestGatewayTransportStrategy(unittest.TestCase):
         self.assertEqual(rec.strategy, TRANSPORT_STRATEGY_NATS)
 
     def test_21_only_gateway_available(self):
-        from core.agent_bus_fabric import select_transport_strategy, TRANSPORT_STRATEGY_GATEWAY
+        from core.agent_bus_fabric import TRANSPORT_STRATEGY_GATEWAY, select_transport_strategy
+
         rec = select_transport_strategy(gateway_available=True)
         self.assertEqual(rec.strategy, TRANSPORT_STRATEGY_GATEWAY)
 
     def test_22_preferred_gateway_both_available_selects_gateway(self):
         from core.agent_bus_fabric import (
-            select_transport_strategy,
             TRANSPORT_STRATEGY_GATEWAY,
+            select_transport_strategy,
         )
+
         rec = select_transport_strategy(
             gateway_available=True,
             nats_available=True,
@@ -305,10 +325,12 @@ class TestGatewayNATSAdapterAttributes(unittest.TestCase):
 
     def test_23_gateway_nats_adapter_has_message_interop_applied(self):
         import galaxy_gateway.gateway_nats_adapter as mod
+
         self.assertTrue(hasattr(mod, "MESSAGE_INTEROP_APPLIED"))
 
     def test_24_gateway_nats_adapter_has_gateway_substrate_authority(self):
         import galaxy_gateway.gateway_nats_adapter as mod
+
         self.assertTrue(hasattr(mod, "GATEWAY_SUBSTRATE_AUTHORITY"))
 
 

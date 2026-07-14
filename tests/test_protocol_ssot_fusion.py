@@ -10,6 +10,7 @@
   归一化到 canonical 长名——此前短名被枚举收留但无人消费,relay/lock 静默丢弃。
 - 死成员 FILE_DELETE/FILE_LIST(全仓零足迹)已删。
 """
+
 from __future__ import annotations
 
 from galaxy_gateway.protocol.aip_v3 import MessageType
@@ -19,6 +20,7 @@ from galaxy_gateway.protocol.compat import _LEGACY_TYPE_MAP
 class TestSSOTDriftGuard:
     def test_core_schemas_values_subset_of_gateway_ssot(self):
         from core.schemas.aip_v3 import MsgType
+
         gateway_values = {m.value for m in MessageType}
         missing = {m.value for m in MsgType} - gateway_values
         assert missing == set(), (
@@ -28,8 +30,7 @@ class TestSSOTDriftGuard:
 
     def test_promoted_nats_values_present(self):
         vals = {m.value for m in MessageType}
-        assert {"capability_query", "webrtc_bind", "webrtc_unbind",
-                "webrtc_transport_state"} <= vals
+        assert {"capability_query", "webrtc_bind", "webrtc_unbind", "webrtc_transport_state"} <= vals
 
     def test_dead_members_removed(self):
         vals = {m.value for m in MessageType}

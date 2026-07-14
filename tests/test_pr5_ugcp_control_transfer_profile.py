@@ -69,10 +69,13 @@ def test_map_from_delegated_signal() -> None:
 
 def test_terminal_reason_inference() -> None:
     assert infer_terminal_reason(ControlTransferState.failed) == ControlTransferTerminalReason.failed
-    assert infer_terminal_reason(
-        ControlTransferState.rejected,
-        raw_reason="takeover_disallowed_by_policy",
-    ) == ControlTransferTerminalReason.takeover_disallowed_by_policy
+    assert (
+        infer_terminal_reason(
+            ControlTransferState.rejected,
+            raw_reason="takeover_disallowed_by_policy",
+        )
+        == ControlTransferTerminalReason.takeover_disallowed_by_policy
+    )
 
 
 def test_build_transfer_truth_event_payload() -> None:

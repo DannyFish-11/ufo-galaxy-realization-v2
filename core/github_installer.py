@@ -62,6 +62,7 @@ import re
 import shutil
 import subprocess
 import sys
+
 # Used by _run_coro_sync to safely bridge async loader calls from sync installer helpers.
 import threading
 from datetime import datetime, timezone
@@ -81,14 +82,12 @@ _SKILL_MD_MANIFEST = "SKILL.md"
 
 # Ingestion size limits — keep chunks small enough for the knowledge store
 # while preserving meaningful context.  These are intentionally conservative.
-_MAX_INGEST_FILE_SIZE = 8000    # bytes per file written to Knowledge Core
+_MAX_INGEST_FILE_SIZE = 8000  # bytes per file written to Knowledge Core
 _MAX_CONTEXT_README_SIZE = 4096  # bytes of README returned by get_repo_context
-_MAX_MANIFEST_SIZE = 2000        # bytes per manifest file in context result
+_MAX_MANIFEST_SIZE = 2000  # bytes per manifest file in context result
 
 # GitHub archive download URL template (no git required)
-_ARCHIVE_URL_TMPL = (
-    "https://api.github.com/repos/{owner}/{repo}/zipball/{ref}"
-)
+_ARCHIVE_URL_TMPL = "https://api.github.com/repos/{owner}/{repo}/zipball/{ref}"
 _GITHUB_API_BASE = "https://api.github.com"
 
 # Regex for HTTPS GitHub URLs:
@@ -105,6 +104,7 @@ _GH_URL_RE = re.compile(
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _get_token() -> str:
     """Return GITHUB_TOKEN from env (or empty string)."""
@@ -172,6 +172,7 @@ def _build_gh_headers() -> Dict[str, str]:
 
 # ── URL Validation ────────────────────────────────────────────────────────────
 
+
 def parse_github_url(url: str) -> Optional[Dict[str, str]]:
     """Parse a GitHub HTTPS URL and return ``{owner, repo, ref}`` or ``None``."""
     m = _GH_URL_RE.match(url.strip())
@@ -219,6 +220,7 @@ def validate_repo_url(url: str) -> Dict[str, Any]:
 
 # ── Manifest Persistence ──────────────────────────────────────────────────────
 
+
 class _ManifestStore:
     """Simple JSON manifest for installed addons."""
 
@@ -257,6 +259,7 @@ class _ManifestStore:
 
 # ── Downloader ────────────────────────────────────────────────────────────────
 
+
 def _resolve_ref(owner: str, repo: str, ref: str) -> Optional[str]:
     """Resolve a ref/branch/tag to a commit SHA via GitHub API."""
     url = f"{_GITHUB_API_BASE}/repos/{owner}/{repo}/commits/{ref}"
@@ -270,15 +273,13 @@ def _resolve_ref(owner: str, repo: str, ref: str) -> Optional[str]:
     return None
 
 
-def _download_and_extract(
-    owner: str, repo: str, ref: str, dest: Path
-) -> Optional[str]:
+def _download_and_extract(owner: str, repo: str, ref: str, dest: Path) -> Optional[str]:
     """Download a ZIP archive of the repo and extract to *dest*.
 
     Returns the resolved commit SHA if successful, else ``None``.
     """
-    import zipfile
     import io
+    import zipfile
 
     # Resolve commit SHA first
     commit_sha = _resolve_ref(owner, repo, ref)
@@ -351,9 +352,7 @@ def _clone_shallow(owner: str, repo: str, ref: str, dest: Path) -> Optional[str]
 
     cmd = ["git", "clone", "--depth", "1", "--branch", ref, clone_url, str(dest)]
     try:
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
         if result.returncode != 0:
             logger.debug("git clone failed: %s", result.stderr)
             return None
@@ -361,7 +360,11 @@ def _clone_shallow(owner: str, repo: str, ref: str, dest: Path) -> Optional[str]
         # Get commit SHA
         rev = subprocess.run(
             ["git", "-C", str(dest), "rev-parse", "HEAD"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
         )
         return rev.stdout.strip() if rev.returncode == 0 else None
     except Exception as exc:
@@ -385,6 +388,7 @@ def _fetch_repo(owner: str, repo: str, ref: str, dest: Path) -> Optional[str]:
 
 
 # ── Dependency Installation ───────────────────────────────────────────────────
+
 
 def _install_deps(addon_dir: Path, deps: List[str]) -> bool:
     """Install Python dependencies for an addon.
@@ -436,7 +440,9 @@ def _install_deps(addon_dir: Path, deps: List[str]) -> bool:
 
     logger.info("Installing dependencies: %s", pip_cmd[3:])  # skip ['python', '-m', 'pip']
     try:
-        result = subprocess.run(pip_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300)
+        result = subprocess.run(
+            pip_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300
+        )
         if result.returncode != 0:
             logger.warning("Dependency install warnings/errors: %s", result.stderr[:500])
         return result.returncode == 0
@@ -480,14 +486,12 @@ def _run_coro_sync(coro: Any, timeout: float) -> Any:
 
 # ── Registration Helpers ──────────────────────────────────────────────────────
 
+
 def _build_mcp_command(addon_dir: Path, entrypoint: Any) -> List[str]:
     """Resolve an entrypoint value to a launch command list."""
     if isinstance(entrypoint, list):
         # Last element is treated as the script path relative to addon_dir
-        return [
-            str(addon_dir / part) if i == len(entrypoint) - 1 else part
-            for i, part in enumerate(entrypoint)
-        ]
+        return [str(addon_dir / part) if i == len(entrypoint) - 1 else part for i, part in enumerate(entrypoint)]
     entrypoint_str = str(entrypoint)
     if entrypoint_str.endswith(".py"):
         return [sys.executable, str(addon_dir / entrypoint_str)]
@@ -515,14 +519,13 @@ def _register_mcp_tool(addon_dir: Path, tool_manifest: Dict[str, Any]) -> Dict[s
     """
     # ── Contract validation ──────────────────────────────────────────────────
     try:
-        from core.mcp_addon_contract import validate_mcp_addon_contract, MCPAddonContractError
+        from core.mcp_addon_contract import MCPAddonContractError, validate_mcp_addon_contract  # noqa: F401
+
         contract = validate_mcp_addon_contract(tool_manifest)
     except ImportError:
         # Graceful degradation: fall back to minimal field checks if the
         # contract module is unavailable (should never happen in production).
-        logger.warning(
-            "core.mcp_addon_contract not available; falling back to minimal validation"
-        )
+        logger.warning("core.mcp_addon_contract not available; falling back to minimal validation")
         name = tool_manifest.get("name", "")
         if not name:
             return {"success": False, "error": "mcp_tool.json missing 'name' field"}
@@ -534,9 +537,7 @@ def _register_mcp_tool(addon_dir: Path, tool_manifest: Dict[str, Any]) -> Dict[s
         logger.debug("Fallback triggered: %s", exc)
         violations = getattr(exc, "violations", [str(exc)])
         addon_name = tool_manifest.get("name", "")
-        logger.warning(
-            "MCP addon contract validation failed for '%s': %s", addon_name, violations
-        )
+        logger.warning("MCP addon contract validation failed for '%s': %s", addon_name, violations)
         return {
             "success": False,
             "error": f"mcp_tool.json contract validation failed: {exc}",
@@ -565,11 +566,13 @@ def _register_mcp_tool(addon_dir: Path, tool_manifest: Dict[str, Any]) -> Dict[s
                 command=command,
                 env=env_vars if env_vars else None,
             )
+
         result = _run_coro_sync(_do_load(), timeout=60)
 
         if not result.get("success", False):
             # Try MCPDynamicGateway as fallback
             from core.mcp_gateway import get_mcp_gateway
+
             gw = get_mcp_gateway()
             gw_result = gw.register_external_tool(name, command, tool_manifest)
             return gw_result
@@ -604,10 +607,11 @@ def _register_skill(addon_dir: Path, skill_manifest: Dict[str, Any]) -> Dict[str
     # ── Contract validation (PR-005) ────────────────────────────────────────
     try:
         from core.skill_package_contract import (
-            validate_skill_package_contract,
             SkillPackageContractError,
             build_skill_package_contract_summary,
+            validate_skill_package_contract,
         )
+
         contract = validate_skill_package_contract(skill_manifest)
         logger.debug(
             "skill.json contract validated: %s",
@@ -635,6 +639,7 @@ def _register_skill(addon_dir: Path, skill_manifest: Dict[str, Any]) -> Dict[str
 
         async def _do_load():
             return await skill_loader.load(str(addon_dir))
+
         result = _run_coro_sync(_do_load(), timeout=60)
 
         if result.get("success", False):
@@ -776,17 +781,15 @@ def _verify_callable_skill_install(
     handler_executable = loaded.get("status") == "loaded"
 
     required = [
-        p.get("name")
-        for p in skill_manifest.get("parameters", [])
-        if isinstance(p, dict) and p.get("required")
+        p.get("name") for p in skill_manifest.get("parameters", []) if isinstance(p, dict) and p.get("required")
     ]
     smoke = {"applicable": False, "passed": False}
     if not required and handler_executable:
         smoke_result = _run_coro_sync(skill_loader.execute(skill_id), timeout=30)
         smoke = {"applicable": True, "passed": bool(smoke_result.get("success")), "result": smoke_result}
 
-    verified = loader_recognized and contract_valid and handler_executable and (
-        not smoke["applicable"] or smoke["passed"]
+    verified = (
+        loader_recognized and contract_valid and handler_executable and (not smoke["applicable"] or smoke["passed"])
     )
     return {
         "success": verified,
@@ -842,15 +845,16 @@ def _verify_skill_md_install(registration: Dict[str, Any]) -> Dict[str, Any]:
 def _publish_install_truth(payload: Dict[str, Any]) -> None:
     """Push structured install truth to operator-visible surfaces (best effort)."""
     try:
-        from core.state_event_bus import emit, StateEventType
+        from core.state_event_bus import StateEventType, emit
 
         emit(StateEventType.GENERIC, "github_installer", {"event": "github_install_result", **payload})
     except Exception as exc:
         logger.warning("Exception suppressed: %s", exc)
 
     try:
-        from core.routes._shared import broadcast_event
         import asyncio
+
+        from core.routes._shared import broadcast_event
 
         async def _do_broadcast() -> None:
             await broadcast_event("github_install_update", payload)
@@ -867,8 +871,9 @@ def _publish_install_truth(payload: Dict[str, Any]) -> None:
 
 def _unregister_mcp_tool(name: str) -> bool:
     try:
-        from core.mcp_loader import mcp_loader
         import asyncio
+
+        from core.mcp_loader import mcp_loader
 
         async def _do_unload():
             return await mcp_loader.unload(name)
@@ -886,8 +891,9 @@ def _unregister_mcp_tool(name: str) -> bool:
 
 def _unregister_skill(name: str) -> bool:
     try:
-        from core.skill_loader import skill_loader
         import asyncio
+
+        from core.skill_loader import skill_loader
 
         async def _do_unload():
             return await skill_loader.unload(name)
@@ -904,6 +910,7 @@ def _unregister_skill(name: str) -> bool:
 
 
 # ── Main Installer Class ───────────────────────────────────────────────────────
+
 
 class GitHubInstaller:
     """Singleton installer for GitHub-sourced MCP tools and Skills.
@@ -958,7 +965,10 @@ class GitHubInstaller:
 
         logger.info(
             "install | owner=%s repo=%s ref=%s dry_run=%s",
-            owner, repo, effective_ref, dry_run,
+            owner,
+            repo,
+            effective_ref,
+            dry_run,
         )
 
         if dry_run:
@@ -983,7 +993,9 @@ class GitHubInstaller:
             commit_sha = "unknown"
             logger.warning(
                 "Could not resolve commit SHA for %s/%s@%s",
-                owner, repo, effective_ref,
+                owner,
+                repo,
+                effective_ref,
             )
 
         # 4. Detect addon type
@@ -1011,13 +1023,16 @@ class GitHubInstaller:
         if detected_type == "mcp" and tool_manifest:
             try:
                 from core.mcp_addon_contract import validate_mcp_addon_contract
+
                 validate_mcp_addon_contract(tool_manifest)
             except Exception as contract_exc:
                 logger.debug("Fallback triggered: %s", contract_exc)
                 violations = getattr(contract_exc, "violations", [str(contract_exc)])
                 logger.warning(
                     "MCP addon contract validation failed for %s/%s: %s",
-                    owner, repo, violations,
+                    owner,
+                    repo,
+                    violations,
                 )
                 return {
                     "success": False,
@@ -1037,9 +1052,7 @@ class GitHubInstaller:
                         "skill.json contract validation failed: "
                         f"skill.json must be a JSON object (dict), got {type(tool_manifest).__name__}"
                     ),
-                    "violations": [
-                        f"skill.json must be a JSON object (dict), got {type(tool_manifest).__name__}"
-                    ],
+                    "violations": [f"skill.json must be a JSON object (dict), got {type(tool_manifest).__name__}"],
                     "owner": owner,
                     "repo": repo,
                     "ref": effective_ref,
@@ -1049,11 +1062,14 @@ class GitHubInstaller:
                     SkillPackageContractError,
                     validate_skill_package_contract,
                 )
+
                 validate_skill_package_contract(tool_manifest)
             except SkillPackageContractError as contract_exc:
                 logger.warning(
                     "Skill package contract validation failed for %s/%s: %s",
-                    owner, repo, contract_exc.violations,
+                    owner,
+                    repo,
+                    contract_exc.violations,
                 )
                 return {
                     "success": False,
@@ -1123,7 +1139,10 @@ class GitHubInstaller:
 
         logger.info(
             "install done | name=%s type=%s commit=%.8s checksum=%.8s",
-            addon_name, detected_type, commit_sha, checksum,
+            addon_name,
+            detected_type,
+            commit_sha,
+            checksum,
         )
 
         install_success = bool(reg_result.get("success")) and bool(verify_result.get("success"))
@@ -1153,9 +1172,7 @@ class GitHubInstaller:
         }
         if not install_success:
             result["failure_reason"] = (
-                reg_result.get("error")
-                or verify_result.get("error")
-                or "installation closure did not complete"
+                reg_result.get("error") or verify_result.get("error") or "installation closure did not complete"
             )
         _publish_install_truth(result)
         return result
@@ -1262,9 +1279,7 @@ _INGEST_CANDIDATES: List[str] = [
 _CODE_EXTENSIONS: List[str] = [".py", ".ts", ".js", ".go", ".rs", ".java"]
 
 
-def _fetch_file_content_api(
-    owner: str, repo: str, path: str, ref: str = "HEAD"
-) -> Optional[str]:
+def _fetch_file_content_api(owner: str, repo: str, path: str, ref: str = "HEAD") -> Optional[str]:
     """Fetch a single file's decoded text content via the GitHub contents API.
 
     Returns the UTF-8 decoded file content, or ``None`` if the request
@@ -1317,6 +1332,7 @@ def _fetch_repo_metadata_api(owner: str, repo: str) -> Dict[str, Any]:
 
 
 # ── Knowledge Resource: GitHubRepoIngester ────────────────────────────────────
+
 
 class GitHubRepoIngester:
     """GitHub repository knowledge and engineering context resource.
@@ -1422,6 +1438,7 @@ class GitHubRepoIngester:
         # 4. Fetch and ingest each candidate file
         try:
             from core.rag_memory import RAGMemory
+
             rag = RAGMemory()
         except Exception as exc:
             logger.warning("ingest_repo: RAGMemory unavailable: %s", exc)
@@ -1440,10 +1457,7 @@ class GitHubRepoIngester:
                 tags += [f"topic:{t}" for t in meta["topics"][:5]]
 
             chunk_text = (
-                f"# GitHub Repository: {owner}/{repo}\n"
-                f"File: {path}\n"
-                f"Source: {source_label}\n\n"
-                f"{content}"
+                f"# GitHub Repository: {owner}/{repo}\n" f"File: {path}\n" f"Source: {source_label}\n\n" f"{content}"
             )
             metadata = {
                 "owner": owner,
@@ -1469,14 +1483,20 @@ class GitHubRepoIngester:
                 except Exception as exc:
                     logger.warning(
                         "ingest_repo: failed to ingest %s/%s/%s: %s",
-                        owner, repo, path, exc,
+                        owner,
+                        repo,
+                        path,
+                        exc,
                     )
             else:
                 ingested_files.append(path)
 
         logger.info(
             "ingest_repo done | %s/%s ref=%s files=%d",
-            owner, repo, effective_ref, len(ingested_files),
+            owner,
+            repo,
+            effective_ref,
+            len(ingested_files),
         )
         return {
             "success": True,
@@ -1572,7 +1592,11 @@ class GitHubRepoIngester:
 
         logger.info(
             "get_repo_context done | %s/%s ref=%s manifests=%d readme_len=%d",
-            owner, repo, effective_ref, len(manifests), len(readme_content),
+            owner,
+            repo,
+            effective_ref,
+            len(manifests),
+            len(readme_content),
         )
         return {
             "success": True,

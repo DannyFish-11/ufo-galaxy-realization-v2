@@ -7,13 +7,13 @@ from __future__ import annotations
 import pytest
 
 from core.truth_projection_boundary import (
-    AuthorityPlane,
-    BoundaryRole,
     COMPAT_REGISTRIES_ARE_NOT_AUTHORITY_POLICY,
     PROJECTIONS_ARE_NOT_LIFECYCLE_OWNERS_POLICY,
     SYNC_LAYERS_MUST_NOT_SELF_PROMOTE_POLICY,
     TRUTH_PROJECTION_BOUNDARY_IS_AUTHORITY,
     TRUTH_PROJECTION_BOUNDARY_PR7_SENTINEL,
+    AuthorityPlane,
+    BoundaryRole,
     build_plane_boundary_contracts,
     build_truth_projection_boundary_catalog,
     build_truth_projection_boundary_snapshot,

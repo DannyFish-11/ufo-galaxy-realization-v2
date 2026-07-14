@@ -32,6 +32,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _console_html() -> str:
     p = PROJECT_ROOT / "static" / "operator-console" / "index.html"
     return p.read_text(encoding="utf-8")
@@ -45,10 +46,12 @@ def _launcher_text() -> str:
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="module")
 def op_app():
-    from core.routes.operator import create_router
     from core.android_device_state_store import reset_android_device_state_store
+    from core.routes.operator import create_router
+
     reset_android_device_state_store()
     app = FastAPI()
     app.include_router(create_router())
@@ -63,6 +66,7 @@ def op_client(op_app):
 # ---------------------------------------------------------------------------
 # 1.  Static file presence
 # ---------------------------------------------------------------------------
+
 
 class TestStaticFilePresence:
     def test_console_html_exists(self):
@@ -98,9 +102,7 @@ class TestApiPathReferences:
     @pytest.mark.parametrize("api_path", REQUIRED_API_PATHS)
     def test_console_references_api_path(self, api_path):
         html = _console_html()
-        assert api_path in html, (
-            f"Operator console HTML does not reference API path: {api_path}"
-        )
+        assert api_path in html, f"Operator console HTML does not reference API path: {api_path}"
 
     def test_all_paths_reference_operator_routes_v1_authority(self):
         html = _console_html()
@@ -110,6 +112,7 @@ class TestApiPathReferences:
 # ---------------------------------------------------------------------------
 # 3.  No parallel truth model in the console
 # ---------------------------------------------------------------------------
+
 
 class TestNoParallelTruthModel:
     def test_console_does_not_define_device_class(self):
@@ -137,6 +140,7 @@ class TestNoParallelTruthModel:
 # ---------------------------------------------------------------------------
 # 4.  Data-binding — operator API endpoints return correct payload shapes
 # ---------------------------------------------------------------------------
+
 
 class TestReadinessBinding:
     def test_readiness_returns_200(self, op_client):
@@ -247,6 +251,7 @@ class TestExecutionEventsBinding:
 # 5.  unified_launcher.py registers /operator-console
 # ---------------------------------------------------------------------------
 
+
 class TestLauncherRoute:
     def test_launcher_has_operator_console_route(self):
         text = _launcher_text()
@@ -264,6 +269,7 @@ class TestLauncherRoute:
 # ---------------------------------------------------------------------------
 # 6.  No new backend aggregation route introduced
 # ---------------------------------------------------------------------------
+
 
 class TestNoSecondAggregationLayer:
     def test_operator_console_route_not_in_operator_py(self):

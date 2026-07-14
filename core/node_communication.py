@@ -9,21 +9,23 @@ Galaxy - Universal Node Communication System - 修复版
 4. 添加网络分区检测
 5. 添加TLS/SSL加密通信支持
 """
+
 import asyncio
 import logging
+import ssl
 import time
 import uuid
-import ssl
-from typing import Dict, List, Optional, Any, Callable, Set
+from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
-from collections import defaultdict
+from typing import Any, Callable, Dict, List, Optional, Set
 
 logger = logging.getLogger(__name__)
 
 
 class MessageType(str, Enum):
     """Universal message types for node communication"""
+
     # Node lifecycle
     NODE_WAKEUP = "node_wakeup"
     NODE_ACTIVATE = "node_activate"
@@ -67,6 +69,7 @@ class MessageType(str, Enum):
 
 class NodeType(str, Enum):
     """Node types"""
+
     SERVER = "server"
     ANDROID = "android"
     IOS = "ios"
@@ -80,6 +83,7 @@ class NodeType(str, Enum):
 @dataclass
 class NodeIdentity:
     """Node identity information"""
+
     node_id: str
     node_type: NodeType
     node_name: str
@@ -102,13 +106,14 @@ class NodeIdentity:
             "metadata": self.metadata,
             "load_score": self.load_score,
             "last_heartbeat": self.last_heartbeat,
-            "is_online": self.is_online
+            "is_online": self.is_online,
         }
 
 
 @dataclass
 class Message:
     """Universal message format with reliability support"""
+
     message_type: MessageType
     source_id: str
     target_id: str
@@ -131,7 +136,7 @@ class Message:
             "priority": self.priority,
             "ttl": self.ttl,
             "requires_ack": self.requires_ack,
-            "retry_count": self.retry_count
+            "retry_count": self.retry_count,
         }
 
     @classmethod
@@ -146,13 +151,14 @@ class Message:
             priority=data.get("priority", 5),
             ttl=data.get("ttl", 10),
             requires_ack=data.get("requires_ack", False),
-            retry_count=data.get("retry_count", 0)
+            retry_count=data.get("retry_count", 0),
         )
 
 
 @dataclass
 class RouteEntry:
     """路由表条目 (AODV)"""
+
     destination: str
     next_hop: str
     hop_count: int
@@ -167,6 +173,7 @@ class RouteEntry:
 @dataclass
 class PendingMessage:
     """待确认消息"""
+
     message: Message
     send_time: float
     retry_count: int = 0
@@ -181,8 +188,7 @@ class RoutingTable:
         self.route_timeout = route_timeout
         self._lock = asyncio.Lock()
 
-    async def add_route(self, destination: str, next_hop: str, hop_count: int,
-                        sequence_number: int = 0) -> None:
+    async def add_route(self, destination: str, next_hop: str, hop_count: int, sequence_number: int = 0) -> None:
         """添加路由"""
         async with self._lock:
             expiration = time.time() + self.route_timeout
@@ -199,7 +205,7 @@ class RoutingTable:
                 next_hop=next_hop,
                 hop_count=hop_count,
                 sequence_number=sequence_number,
-                expiration_time=expiration
+                expiration_time=expiration,
             )
             logger.debug(f"路由添加: {destination} via {next_hop}, hops={hop_count}")
 
@@ -272,6 +278,7 @@ class LoadBalancer:
 
             # 加权随机选择
             import random
+
             r = random.uniform(0, total_weight)
             cumulative = 0
             for node, weight in weights.items():
@@ -426,6 +433,7 @@ class UniversalCommunicator:
 
         # Start background tasks (tracked to prevent silent failures)
         from core.task_utils import create_tracked_task
+
         self._cleanup_task = create_tracked_task(self._cleanup_loop(), name="node_comm_cleanup")
         self._health_task = create_tracked_task(self._health_check_loop(), name="node_comm_health")
 
@@ -454,7 +462,7 @@ class UniversalCommunicator:
         wait_response: bool = False,
         timeout: float = 30.0,
         priority: int = 5,
-        requires_ack: bool = False
+        requires_ack: bool = False,
     ) -> Optional[Dict[str, Any]]:
         """
         Send message to a specific node with routing and reliability
@@ -476,7 +484,7 @@ class UniversalCommunicator:
             target_id=target_id,
             payload=payload,
             priority=priority,
-            requires_ack=requires_ack
+            requires_ack=requires_ack,
         )
 
         # Check if target is directly reachable
@@ -501,12 +509,7 @@ class UniversalCommunicator:
         logger.error(f"无法找到到 {target_id} 的路由")
         return None
 
-    async def _send_direct(
-        self,
-        message: Message,
-        wait_response: bool,
-        timeout: float
-    ) -> Optional[Dict[str, Any]]:
+    async def _send_direct(self, message: Message, wait_response: bool, timeout: float) -> Optional[Dict[str, Any]]:
         """直接发送消息"""
         handler = self.registry.get_handler(message.target_id)
         if not handler:
@@ -518,10 +521,9 @@ class UniversalCommunicator:
             if message.requires_ack:
                 # 防止 pending 消息无限增长
                 if len(self._pending_messages) >= self._max_pending:
-                    oldest_ids = sorted(
-                        self._pending_messages,
-                        key=lambda k: self._pending_messages[k].send_time
-                    )[:len(self._pending_messages) // 4]
+                    oldest_ids = sorted(self._pending_messages, key=lambda k: self._pending_messages[k].send_time)[
+                        : len(self._pending_messages) // 4
+                    ]
                     for oid in oldest_ids:
                         del self._pending_messages[oid]
                     logger.warning(f"pending 消息达到上限 {self._max_pending}，已清理 {len(oldest_ids)} 条最旧消息")
@@ -548,11 +550,7 @@ class UniversalCommunicator:
             return None
 
     async def _send_via_route(
-        self,
-        message: Message,
-        route: RouteEntry,
-        wait_response: bool,
-        timeout: float
+        self, message: Message, route: RouteEntry, wait_response: bool, timeout: float
     ) -> Optional[Dict[str, Any]]:
         """通过路由发送消息"""
         # Forward to next hop
@@ -590,9 +588,9 @@ class UniversalCommunicator:
                 "originator": self.node_id,
                 "target": target_id,
                 "originator_seq": self._sequence_number,
-                "hop_count": 0
+                "hop_count": 0,
             },
-            ttl=10
+            ttl=10,
         )
 
         # Broadcast RREQ to all neighbors
@@ -611,7 +609,7 @@ class UniversalCommunicator:
             destination=originator,
             next_hop=message.get("source_id"),
             hop_count=hop_count,
-            sequence_number=payload.get("originator_seq", 0)
+            sequence_number=payload.get("originator_seq", 0),
         )
 
         # Check if we are the target
@@ -640,11 +638,7 @@ class UniversalCommunicator:
             message_type=MessageType.RREP,
             source_id=self.node_id,
             target_id=originator,
-            payload={
-                "originator": originator,
-                "target": target,
-                "hop_count": hop_count
-            }
+            payload={"originator": originator, "target": target, "hop_count": hop_count},
         )
 
         route = await self.routing_table.get_route(originator)
@@ -659,11 +653,7 @@ class UniversalCommunicator:
         hop_count = payload.get("hop_count", 0) + 1
 
         # Add forward route
-        await self.routing_table.add_route(
-            destination=target,
-            next_hop=message.get("source_id"),
-            hop_count=hop_count
-        )
+        await self.routing_table.add_route(destination=target, next_hop=message.get("source_id"), hop_count=hop_count)
 
         # Forward to originator if needed
         originator = payload.get("originator")
@@ -722,11 +712,7 @@ class UniversalCommunicator:
             await self._send_direct(pending.message, False, self._ack_timeout)
 
     async def _broadcast(
-        self,
-        source_id: str,
-        message_type: MessageType,
-        payload: Dict[str, Any],
-        priority: int = 5
+        self, source_id: str, message_type: MessageType, payload: Dict[str, Any], priority: int = 5
     ) -> List[Dict[str, Any]]:
         """广播消息到所有在线节点"""
         responses = []
@@ -740,7 +726,7 @@ class UniversalCommunicator:
                         target_id=node.node_id,
                         message_type=message_type,
                         payload=payload,
-                        priority=priority
+                        priority=priority,
                     )
                     if response:
                         responses.append(response)
@@ -749,12 +735,7 @@ class UniversalCommunicator:
 
         return responses
 
-    async def activate_self(
-        self,
-        node_id: str,
-        action: str,
-        params: Dict[str, Any] = None
-    ) -> Dict[str, Any]:
+    async def activate_self(self, node_id: str, action: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
         """Node self-activation"""
         params = params or {}
 
@@ -822,7 +803,7 @@ class UniversalCommunicator:
             message_type=MessageType.HEARTBEAT,
             source_id=self.node_id,
             target_id="*",
-            payload={"timestamp": time.time(), "load": self._get_load()}
+            payload={"timestamp": time.time(), "load": self._get_load()},
         )
         await self._broadcast(self.node_id, MessageType.HEARTBEAT, heartbeat.payload)
 
@@ -869,7 +850,7 @@ class UniversalCommunicator:
                 "node_type": node.node_type.value,
                 "is_online": node.is_online,
                 "load_score": node.load_score,
-                "capabilities": node.capabilities
+                "capabilities": node.capabilities,
             }
         return {"status": "error", "message": f"Node not found: {node_id}"}
 
@@ -882,11 +863,7 @@ class UniversalCommunicator:
         logger.info(f"Executing command: {command}, args: {args}")
 
         # Command execution would be implemented here
-        return {
-            "status": "success",
-            "command": command,
-            "result": f"Command {command} executed"
-        }
+        return {"status": "success", "command": command, "result": f"Command {command} executed"}
 
     async def _handle_event_broadcast(self, message: Dict[str, Any]):
         """Handle event broadcast"""
@@ -901,17 +878,21 @@ class UniversalCommunicator:
             if handler:
                 try:
                     if asyncio.iscoroutinefunction(handler):
-                        await handler({
-                            "message_type": MessageType.EVENT_BROADCAST.value,
-                            "event_type": event_type,
-                            "event_data": event_data
-                        })
+                        await handler(
+                            {
+                                "message_type": MessageType.EVENT_BROADCAST.value,
+                                "event_type": event_type,
+                                "event_data": event_data,
+                            }
+                        )
                     else:
-                        handler({
-                            "message_type": MessageType.EVENT_BROADCAST.value,
-                            "event_type": event_type,
-                            "event_data": event_data
-                        })
+                        handler(
+                            {
+                                "message_type": MessageType.EVENT_BROADCAST.value,
+                                "event_type": event_type,
+                                "event_data": event_data,
+                            }
+                        )
                 except Exception as e:
                     logger.error(f"Error notifying subscriber {subscriber_id}: {e}")
 
@@ -920,8 +901,7 @@ class UniversalCommunicator:
 class SecureCommunicator(UniversalCommunicator):
     """支持TLS/SSL加密通信的通信器"""
 
-    def __init__(self, registry: NodeRegistry, node_id: str = None,
-                 ssl_cert: str = None, ssl_key: str = None):
+    def __init__(self, registry: NodeRegistry, node_id: str = None, ssl_cert: str = None, ssl_key: str = None):
         super().__init__(registry, node_id)
         self.ssl_context = None
         if ssl_cert and ssl_key:
@@ -936,8 +916,9 @@ class SecureCommunicator(UniversalCommunicator):
 
 
 # Convenience functions
-async def create_communicator(node_id: str = None, secure: bool = False,
-                               ssl_cert: str = None, ssl_key: str = None) -> UniversalCommunicator:
+async def create_communicator(
+    node_id: str = None, secure: bool = False, ssl_cert: str = None, ssl_key: str = None
+) -> UniversalCommunicator:
     """Create a new communicator"""
     registry = NodeRegistry()
 
@@ -955,11 +936,7 @@ if __name__ == "__main__":
         comm = await create_communicator(node_id="test_node")
 
         # Register a test node
-        test_node = NodeIdentity(
-            node_id="test_target",
-            node_type=NodeType.SERVER,
-            node_name="Test Target"
-        )
+        test_node = NodeIdentity(node_id="test_target", node_type=NodeType.SERVER, node_name="Test Target")
 
         async def test_handler(message):
             print(f"Received: {message}")
@@ -972,7 +949,7 @@ if __name__ == "__main__":
             source_id="test_node",
             target_id="test_target",
             message_type=MessageType.COMMAND,
-            payload={"command": "test", "args": ["hello"]}
+            payload={"command": "test", "args": ["hello"]},
         )
 
         print(f"Response: {response}")

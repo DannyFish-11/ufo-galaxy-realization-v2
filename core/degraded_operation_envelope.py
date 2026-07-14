@@ -117,13 +117,12 @@ Usage::
 
 from __future__ import annotations
 
+import logging
 import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
-
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -384,9 +383,7 @@ class ProviderFailoverStep:
             model=str(d.get("model") or ""),
             selected=bool(d.get("selected", False)),
             skipped=bool(d.get("skipped", False)),
-            failover_reason=str(
-                d.get("failover_reason") or ProviderFailoverReason.UNKNOWN.value
-            ),
+            failover_reason=str(d.get("failover_reason") or ProviderFailoverReason.UNKNOWN.value),
             raw_reason=str(d.get("raw_reason") or ""),
             health_status=str(d.get("health_status") or "unknown"),
             is_native_multimodal=bool(d.get("is_native_multimodal", False)),
@@ -443,9 +440,7 @@ class ProviderFailoverChain:
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "ProviderFailoverChain":
-        steps = [
-            ProviderFailoverStep.from_dict(s) for s in (d.get("steps") or [])
-        ]
+        steps = [ProviderFailoverStep.from_dict(s) for s in (d.get("steps") or [])]
         return cls(
             chain_id=str(d.get("chain_id") or str(uuid.uuid4())),
             steps=steps,
@@ -453,9 +448,7 @@ class ProviderFailoverChain:
             final_model=str(d.get("final_model") or ""),
             total_steps=int(d.get("total_steps") or len(steps)),
             failover_occurred=bool(d.get("failover_occurred", False)),
-            primary_failover_reason=str(
-                d.get("primary_failover_reason") or ProviderFailoverReason.UNKNOWN.value
-            ),
+            primary_failover_reason=str(d.get("primary_failover_reason") or ProviderFailoverReason.UNKNOWN.value),
             timestamp=float(d.get("timestamp") or time.time()),
         )
 
@@ -544,9 +537,7 @@ class FallbackPolicyLadder:
         return cls(
             ladder_id=str(d.get("ladder_id") or str(uuid.uuid4())),
             rungs=rungs,
-            current_level=str(
-                d.get("current_level") or DegradedOperationLevel.UNKNOWN.value
-            ),
+            current_level=str(d.get("current_level") or DegradedOperationLevel.UNKNOWN.value),
             prior_level=str(d["prior_level"]) if d.get("prior_level") is not None else None,
             transition_occurred=bool(d.get("transition_occurred", False)),
             timestamp=float(d.get("timestamp") or time.time()),
@@ -645,9 +636,7 @@ class DegradedOperationEnvelope:
     def from_dict(cls, d: Dict[str, Any]) -> "DegradedOperationEnvelope":
         return cls(
             envelope_id=str(d.get("envelope_id") or str(uuid.uuid4())),
-            current_level=str(
-                d.get("current_level") or DegradedOperationLevel.UNKNOWN.value
-            ),
+            current_level=str(d.get("current_level") or DegradedOperationLevel.UNKNOWN.value),
             severity=str(d.get("severity") or DegradedOperationSeverity.UNKNOWN.value),
             failover_chain=d.get("failover_chain"),
             fallback_ladder=d.get("fallback_ladder"),
@@ -781,15 +770,15 @@ def build_provider_failover_chain(
                             model=str(rec.get("default_model") or ""),
                             selected=False,
                             skipped=True,
-                            failover_reason=ProviderFailoverReason.PROVIDER_UNAVAILABLE.value
-                            if pstatus == "down"
-                            else ProviderFailoverReason.PROVIDER_DEGRADED.value,
+                            failover_reason=(
+                                ProviderFailoverReason.PROVIDER_UNAVAILABLE.value
+                                if pstatus == "down"
+                                else ProviderFailoverReason.PROVIDER_DEGRADED.value
+                            ),
                             raw_reason=f"health_status={pstatus}",
                             health_status=pstatus,
                             is_native_multimodal=bool(
-                                rec.get("native_multimodal_capability", {}).get(
-                                    "has_native_multimodal", False
-                                )
+                                rec.get("native_multimodal_capability", {}).get("has_native_multimodal", False)
                                 if isinstance(rec.get("native_multimodal_capability"), dict)
                                 else False
                             ),
@@ -808,9 +797,7 @@ def build_provider_failover_chain(
                     skipped=False,
                     failover_reason=_primary_reason.value,
                     raw_reason=raw_fallback_reason,
-                    health_status="healthy"
-                    if route_type != "advisory"
-                    else "unavailable",
+                    health_status="healthy" if route_type != "advisory" else "unavailable",
                     is_native_multimodal=is_native_mm,
                 )
             )
@@ -830,9 +817,7 @@ def build_provider_failover_chain(
                 )
             )
 
-        failover_occurred = len(steps) > 1 or bool(_skipped_providers) or bool(
-            raw_fallback_reason
-        )
+        failover_occurred = len(steps) > 1 or bool(_skipped_providers) or bool(raw_fallback_reason)
 
         return ProviderFailoverChain(
             steps=steps,
@@ -894,9 +879,7 @@ def build_fallback_policy_ladder(
             )
 
         transition = (
-            prior_level is not None
-            and prior_level != current_level
-            and prior_level != DegradedOperationLevel.UNKNOWN
+            prior_level is not None and prior_level != current_level and prior_level != DegradedOperationLevel.UNKNOWN
         )
 
         return FallbackPolicyLadder(
@@ -1007,9 +990,7 @@ def build_degraded_operation_envelope(
 
         # ── Transition detection ──────────────────────────────────────────────
         transition_occurred = (
-            prior_level is not None
-            and prior_level != current_level
-            and prior_level != DegradedOperationLevel.UNKNOWN
+            prior_level is not None and prior_level != current_level and prior_level != DegradedOperationLevel.UNKNOWN
         )
 
         return DegradedOperationEnvelope(

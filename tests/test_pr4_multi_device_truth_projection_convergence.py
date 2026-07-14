@@ -81,56 +81,67 @@ class TestSentinels:
 
     def test_authority_sentinel_importable(self):
         from core.multi_device_truth_convergence import MULTI_DEVICE_TRUTH_CONVERGENCE_AUTHORITY
+
         assert MULTI_DEVICE_TRUTH_CONVERGENCE_AUTHORITY
         assert "PR4" in MULTI_DEVICE_TRUTH_CONVERGENCE_AUTHORITY
 
     def test_pr4_sentinel_importable(self):
         from core.multi_device_truth_convergence import MULTI_DEVICE_TRUTH_CONVERGENCE_PR4_SENTINEL
+
         assert MULTI_DEVICE_TRUTH_CONVERGENCE_PR4_SENTINEL
         assert "PR-4" in MULTI_DEVICE_TRUTH_CONVERGENCE_PR4_SENTINEL
 
     def test_layer_position(self):
         from core.multi_device_truth_convergence import MULTI_DEVICE_TRUTH_CONVERGENCE_LAYER_POSITION
+
         assert isinstance(MULTI_DEVICE_TRUTH_CONVERGENCE_LAYER_POSITION, int)
         assert MULTI_DEVICE_TRUTH_CONVERGENCE_LAYER_POSITION > 0
 
     def test_formation_precedence_policy_importable(self):
         from core.multi_device_truth_convergence import FORMATION_TRUTH_SOURCE_PRECEDENCE_POLICY
+
         assert FORMATION_TRUTH_SOURCE_PRECEDENCE_POLICY
         assert "formation" in FORMATION_TRUTH_SOURCE_PRECEDENCE_POLICY.lower()
 
     def test_readiness_precedence_policy_importable(self):
         from core.multi_device_truth_convergence import READINESS_TRUTH_SOURCE_PRECEDENCE_POLICY
+
         assert READINESS_TRUTH_SOURCE_PRECEDENCE_POLICY
         assert "TruthIntegrationLayer" in READINESS_TRUTH_SOURCE_PRECEDENCE_POLICY
 
     def test_participation_precedence_policy_importable(self):
         from core.multi_device_truth_convergence import PARTICIPATION_TRUTH_SOURCE_PRECEDENCE_POLICY
+
         assert PARTICIPATION_TRUTH_SOURCE_PRECEDENCE_POLICY
         assert "participation" in PARTICIPATION_TRUTH_SOURCE_PRECEDENCE_POLICY.lower()
 
     def test_topology_precedence_policy_importable(self):
         from core.multi_device_truth_convergence import TOPOLOGY_TRUTH_SOURCE_PRECEDENCE_POLICY
+
         assert TOPOLOGY_TRUTH_SOURCE_PRECEDENCE_POLICY
         assert "NetworkTopologyRuntime" in TOPOLOGY_TRUTH_SOURCE_PRECEDENCE_POLICY
 
     def test_session_context_precedence_policy_importable(self):
         from core.multi_device_truth_convergence import SESSION_CONTEXT_TRUTH_SOURCE_PRECEDENCE_POLICY
+
         assert SESSION_CONTEXT_TRUTH_SOURCE_PRECEDENCE_POLICY
         assert "AttachedSessionRegistry" in SESSION_CONTEXT_TRUTH_SOURCE_PRECEDENCE_POLICY
 
     def test_downstream_policy_importable(self):
         from core.multi_device_truth_convergence import DOWNSTREAM_MUST_USE_CONVERGENCE_SNAPSHOT_POLICY
+
         assert DOWNSTREAM_MUST_USE_CONVERGENCE_SNAPSHOT_POLICY
         assert "converge_multi_device_truth" in DOWNSTREAM_MUST_USE_CONVERGENCE_SNAPSHOT_POLICY
 
     def test_contracts_pr4_sentinel_importable(self):
         from contracts.multi_device_runtime_projection import MULTI_DEVICE_PROJECTION_PR4_CONVERGENCE_SENTINEL
+
         assert MULTI_DEVICE_PROJECTION_PR4_CONVERGENCE_SENTINEL
         assert "truth_convergence" in MULTI_DEVICE_PROJECTION_PR4_CONVERGENCE_SENTINEL
 
     def test_contracts_truth_authority_policy_importable(self):
         from contracts.multi_device_runtime_projection import MULTI_DEVICE_PROJECTION_TRUTH_AUTHORITY_POLICY
+
         assert MULTI_DEVICE_PROJECTION_TRUTH_AUTHORITY_POLICY
         assert "formation" in MULTI_DEVICE_PROJECTION_TRUTH_AUTHORITY_POLICY
 
@@ -138,6 +149,7 @@ class TestSentinels:
         from core.multi_device_projection_canonicalization import (
             MULTI_DEVICE_PROJECTION_PR4_TRUTH_CONVERGENCE_INTEGRATED,
         )
+
         assert MULTI_DEVICE_PROJECTION_PR4_TRUTH_CONVERGENCE_INTEGRATED
         assert "PR-4" in MULTI_DEVICE_PROJECTION_PR4_TRUTH_CONVERGENCE_INTEGRATED
         assert "truth_convergence" in MULTI_DEVICE_PROJECTION_PR4_TRUTH_CONVERGENCE_INTEGRATED
@@ -151,6 +163,7 @@ class TestSentinels:
 class TestMultiDeviceTruthDomain:
     def test_five_domains_defined(self):
         from core.multi_device_truth_convergence import MultiDeviceTruthDomain
+
         assert MultiDeviceTruthDomain.FORMATION.value == "formation"
         assert MultiDeviceTruthDomain.READINESS.value == "readiness"
         assert MultiDeviceTruthDomain.PARTICIPATION.value == "participation"
@@ -159,6 +172,7 @@ class TestMultiDeviceTruthDomain:
 
     def test_all_values_are_strings(self):
         from core.multi_device_truth_convergence import MultiDeviceTruthDomain
+
         for domain in MultiDeviceTruthDomain:
             assert isinstance(domain.value, str)
             assert domain.value  # non-empty
@@ -172,9 +186,10 @@ class TestMultiDeviceTruthDomain:
 class TestMultiDeviceTruthDomainFacet:
     def test_default_construction(self):
         from core.multi_device_truth_convergence import (
-            MultiDeviceTruthDomainFacet,
             MultiDeviceTruthDomain,
+            MultiDeviceTruthDomainFacet,
         )
+
         facet = MultiDeviceTruthDomainFacet(domain=MultiDeviceTruthDomain.FORMATION)
         assert facet.domain == MultiDeviceTruthDomain.FORMATION
         assert facet.authority_tier == "unavailable"
@@ -183,9 +198,10 @@ class TestMultiDeviceTruthDomainFacet:
 
     def test_to_dict_stable_keys(self):
         from core.multi_device_truth_convergence import (
-            MultiDeviceTruthDomainFacet,
             MultiDeviceTruthDomain,
+            MultiDeviceTruthDomainFacet,
         )
+
         facet = MultiDeviceTruthDomainFacet(domain=MultiDeviceTruthDomain.READINESS)
         d = facet.to_dict()
         expected_keys = {"domain", "authority_source", "authority_tier", "data", "gap_reasons", "latency_ms"}
@@ -193,9 +209,10 @@ class TestMultiDeviceTruthDomainFacet:
 
     def test_primary_tier_representable(self):
         from core.multi_device_truth_convergence import (
-            MultiDeviceTruthDomainFacet,
             MultiDeviceTruthDomain,
+            MultiDeviceTruthDomainFacet,
         )
+
         facet = MultiDeviceTruthDomainFacet(
             domain=MultiDeviceTruthDomain.TOPOLOGY,
             authority_source="NetworkTopologyRuntime",
@@ -208,9 +225,10 @@ class TestMultiDeviceTruthDomainFacet:
 
     def test_secondary_tier_representable(self):
         from core.multi_device_truth_convergence import (
-            MultiDeviceTruthDomainFacet,
             MultiDeviceTruthDomain,
+            MultiDeviceTruthDomainFacet,
         )
+
         facet = MultiDeviceTruthDomainFacet(
             domain=MultiDeviceTruthDomain.FORMATION,
             authority_tier="secondary",
@@ -221,9 +239,10 @@ class TestMultiDeviceTruthDomainFacet:
 
     def test_latency_ms_rounded(self):
         from core.multi_device_truth_convergence import (
-            MultiDeviceTruthDomainFacet,
             MultiDeviceTruthDomain,
+            MultiDeviceTruthDomainFacet,
         )
+
         facet = MultiDeviceTruthDomainFacet(
             domain=MultiDeviceTruthDomain.PARTICIPATION,
             latency_ms=12.3456789,
@@ -242,6 +261,7 @@ class TestMultiDeviceTruthDomainFacet:
 class TestMultiDeviceTruthConvergenceSnapshot:
     def test_default_construction(self):
         from core.multi_device_truth_convergence import MultiDeviceTruthConvergenceSnapshot
+
         snap = MultiDeviceTruthConvergenceSnapshot()
         assert snap.convergence_id
         assert snap.assembled_at > 0
@@ -254,6 +274,7 @@ class TestMultiDeviceTruthConvergenceSnapshot:
             MultiDeviceTruthConvergenceSnapshot,
             MultiDeviceTruthDomain,
         )
+
         snap = MultiDeviceTruthConvergenceSnapshot()
         assert snap.formation.domain == MultiDeviceTruthDomain.FORMATION
         assert snap.readiness.domain == MultiDeviceTruthDomain.READINESS
@@ -263,26 +284,37 @@ class TestMultiDeviceTruthConvergenceSnapshot:
 
     def test_to_dict_stable_keys(self):
         from core.multi_device_truth_convergence import MultiDeviceTruthConvergenceSnapshot
+
         snap = MultiDeviceTruthConvergenceSnapshot()
         d = snap.to_dict()
         expected_keys = {
-            "convergence_id", "assembled_at", "authority",
-            "fully_canonical", "partial_domains", "convergence_notes",
-            "formation", "readiness", "participation", "topology", "session_context",
+            "convergence_id",
+            "assembled_at",
+            "authority",
+            "fully_canonical",
+            "partial_domains",
+            "convergence_notes",
+            "formation",
+            "readiness",
+            "participation",
+            "topology",
+            "session_context",
         }
         assert expected_keys.issubset(set(d.keys()))
 
     def test_authority_field_in_dict(self):
         from core.multi_device_truth_convergence import (
-            MultiDeviceTruthConvergenceSnapshot,
             MULTI_DEVICE_TRUTH_CONVERGENCE_AUTHORITY,
+            MultiDeviceTruthConvergenceSnapshot,
         )
+
         snap = MultiDeviceTruthConvergenceSnapshot()
         d = snap.to_dict()
         assert d["authority"] == MULTI_DEVICE_TRUTH_CONVERGENCE_AUTHORITY
 
     def test_convergence_ids_unique(self):
         from core.multi_device_truth_convergence import MultiDeviceTruthConvergenceSnapshot
+
         s1 = MultiDeviceTruthConvergenceSnapshot()
         s2 = MultiDeviceTruthConvergenceSnapshot()
         assert s1.convergence_id != s2.convergence_id
@@ -290,15 +322,20 @@ class TestMultiDeviceTruthConvergenceSnapshot:
     def test_fully_canonical_when_all_primary(self):
         from core.multi_device_truth_convergence import (
             MultiDeviceTruthConvergenceSnapshot,
-            MultiDeviceTruthDomainFacet,
             MultiDeviceTruthDomain,
+            MultiDeviceTruthDomainFacet,
         )
+
         snap = MultiDeviceTruthConvergenceSnapshot(
             formation=MultiDeviceTruthDomainFacet(domain=MultiDeviceTruthDomain.FORMATION, authority_tier="primary"),
             readiness=MultiDeviceTruthDomainFacet(domain=MultiDeviceTruthDomain.READINESS, authority_tier="primary"),
-            participation=MultiDeviceTruthDomainFacet(domain=MultiDeviceTruthDomain.PARTICIPATION, authority_tier="primary"),
+            participation=MultiDeviceTruthDomainFacet(
+                domain=MultiDeviceTruthDomain.PARTICIPATION, authority_tier="primary"
+            ),
             topology=MultiDeviceTruthDomainFacet(domain=MultiDeviceTruthDomain.TOPOLOGY, authority_tier="primary"),
-            session_context=MultiDeviceTruthDomainFacet(domain=MultiDeviceTruthDomain.SESSION_CONTEXT, authority_tier="primary"),
+            session_context=MultiDeviceTruthDomainFacet(
+                domain=MultiDeviceTruthDomain.SESSION_CONTEXT, authority_tier="primary"
+            ),
             fully_canonical=True,
             partial_domains=[],
         )
@@ -307,6 +344,7 @@ class TestMultiDeviceTruthConvergenceSnapshot:
 
     def test_nested_facet_dicts_in_to_dict(self):
         from core.multi_device_truth_convergence import MultiDeviceTruthConvergenceSnapshot
+
         snap = MultiDeviceTruthConvergenceSnapshot()
         d = snap.to_dict()
         # Each domain should be a dict with the standard keys
@@ -324,14 +362,16 @@ class TestMultiDeviceTruthConvergenceSnapshot:
 class TestConvergeMultiDeviceTruth:
     def test_returns_snapshot_never_raises(self):
         from core.multi_device_truth_convergence import (
-            converge_multi_device_truth,
             MultiDeviceTruthConvergenceSnapshot,
+            converge_multi_device_truth,
         )
+
         result = converge_multi_device_truth()
         assert isinstance(result, MultiDeviceTruthConvergenceSnapshot)
 
     def test_all_domains_have_valid_tier(self):
         from core.multi_device_truth_convergence import converge_multi_device_truth
+
         snap = converge_multi_device_truth()
         valid_tiers = {"primary", "secondary", "unavailable"}
         assert snap.formation.authority_tier in valid_tiers
@@ -342,21 +382,25 @@ class TestConvergeMultiDeviceTruth:
 
     def test_convergence_notes_is_list(self):
         from core.multi_device_truth_convergence import converge_multi_device_truth
+
         snap = converge_multi_device_truth()
         assert isinstance(snap.convergence_notes, list)
 
     def test_partial_domains_is_list(self):
         from core.multi_device_truth_convergence import converge_multi_device_truth
+
         snap = converge_multi_device_truth()
         assert isinstance(snap.partial_domains, list)
 
     def test_fully_canonical_is_bool(self):
         from core.multi_device_truth_convergence import converge_multi_device_truth
+
         snap = converge_multi_device_truth()
         assert isinstance(snap.fully_canonical, bool)
 
     def test_fully_canonical_consistent_with_partial_domains(self):
         from core.multi_device_truth_convergence import converge_multi_device_truth
+
         snap = converge_multi_device_truth()
         if snap.fully_canonical:
             assert snap.partial_domains == []
@@ -365,7 +409,9 @@ class TestConvergeMultiDeviceTruth:
 
     def test_to_dict_is_serialisable(self):
         import json
+
         from core.multi_device_truth_convergence import converge_multi_device_truth
+
         snap = converge_multi_device_truth()
         d = snap.to_dict()
         # Should be JSON-serialisable
@@ -374,6 +420,7 @@ class TestConvergeMultiDeviceTruth:
 
     def test_unavailable_domains_have_gap_reasons(self):
         from core.multi_device_truth_convergence import converge_multi_device_truth
+
         snap = converge_multi_device_truth()
         for facet in [snap.formation, snap.readiness, snap.participation, snap.topology, snap.session_context]:
             if facet.authority_tier == "unavailable":
@@ -385,12 +432,15 @@ class TestConvergeMultiDeviceTruth:
         """Even when all canonical sources are mocked to raise, converge_multi_device_truth
         returns a valid (fully unavailable) snapshot rather than raising."""
         from core.multi_device_truth_convergence import converge_multi_device_truth
-        with patch("core.multi_device_truth_convergence._assemble_formation_facet") as mf, \
-             patch("core.multi_device_truth_convergence._assemble_readiness_facet") as mr, \
-             patch("core.multi_device_truth_convergence._assemble_participation_facet") as mp, \
-             patch("core.multi_device_truth_convergence._assemble_topology_facet") as mt, \
-             patch("core.multi_device_truth_convergence._assemble_session_context_facet") as ms:
-            from core.multi_device_truth_convergence import MultiDeviceTruthDomainFacet, MultiDeviceTruthDomain
+
+        with (
+            patch("core.multi_device_truth_convergence._assemble_formation_facet") as mf,
+            patch("core.multi_device_truth_convergence._assemble_readiness_facet") as mr,
+            patch("core.multi_device_truth_convergence._assemble_participation_facet") as mp,
+            patch("core.multi_device_truth_convergence._assemble_topology_facet") as mt,
+            patch("core.multi_device_truth_convergence._assemble_session_context_facet") as ms,
+        ):
+            from core.multi_device_truth_convergence import MultiDeviceTruthDomain, MultiDeviceTruthDomainFacet
 
             def _make_unavailable(domain):
                 return MultiDeviceTruthDomainFacet(domain=domain, authority_tier="unavailable")
@@ -414,18 +464,21 @@ class TestConvergeMultiDeviceTruth:
 class TestMultiDeviceRuntimeProjectionTruthConvergence:
     def test_truth_convergence_field_exists_defaults_none(self):
         from contracts.multi_device_runtime_projection import MultiDeviceRuntimeProjection
+
         proj = MultiDeviceRuntimeProjection()
         assert hasattr(proj, "truth_convergence")
         assert proj.truth_convergence is None
 
     def test_to_dict_includes_truth_convergence_key(self):
         from contracts.multi_device_runtime_projection import MultiDeviceRuntimeProjection
+
         proj = MultiDeviceRuntimeProjection()
         d = proj.to_dict()
         assert "truth_convergence" in d
 
     def test_to_compact_summary_includes_truth_convergence_meta(self):
         from contracts.multi_device_runtime_projection import MultiDeviceRuntimeProjection
+
         proj = MultiDeviceRuntimeProjection()
         cs = proj.to_compact_summary()
         assert "has_truth_convergence" in cs
@@ -435,6 +488,7 @@ class TestMultiDeviceRuntimeProjectionTruthConvergence:
 
     def test_to_compact_summary_with_truth_convergence_set(self):
         from contracts.multi_device_runtime_projection import MultiDeviceRuntimeProjection
+
         proj = MultiDeviceRuntimeProjection(
             truth_convergence={
                 "fully_canonical": True,
@@ -449,6 +503,7 @@ class TestMultiDeviceRuntimeProjectionTruthConvergence:
 
     def test_build_projection_accepts_truth_convergence(self):
         from contracts.multi_device_runtime_projection import build_multi_device_runtime_projection
+
         tc = {"convergence_id": "test", "fully_canonical": False, "formation": {}}
         proj = build_multi_device_runtime_projection(truth_convergence=tc)
         assert proj.truth_convergence is not None
@@ -456,11 +511,13 @@ class TestMultiDeviceRuntimeProjectionTruthConvergence:
 
     def test_build_projection_truth_convergence_none_by_default(self):
         from contracts.multi_device_runtime_projection import build_multi_device_runtime_projection
+
         proj = build_multi_device_runtime_projection()
         assert proj.truth_convergence is None
 
     def test_from_dict_round_trip_preserves_truth_convergence(self):
         from contracts.multi_device_runtime_projection import MultiDeviceRuntimeProjection
+
         tc = {"convergence_id": "round-trip", "fully_canonical": True}
         proj = MultiDeviceRuntimeProjection(truth_convergence=tc)
         d = proj.to_dict()
@@ -477,24 +534,28 @@ class TestMultiDeviceRuntimeProjectionTruthConvergence:
 class TestOutwardRuntimeTruthSnapshotConvergence:
     def test_field_exists_defaults_none(self):
         from core.outward_runtime_truth import OutwardRuntimeTruthSnapshot
+
         snap = OutwardRuntimeTruthSnapshot(snapshot_id="x", compiled_at=1.0)
         assert hasattr(snap, "multi_device_truth_convergence")
         assert snap.multi_device_truth_convergence is None
 
     def test_to_dict_includes_field(self):
         from core.outward_runtime_truth import OutwardRuntimeTruthSnapshot
+
         snap = OutwardRuntimeTruthSnapshot(snapshot_id="x", compiled_at=1.0)
         d = snap.to_dict()
         assert "multi_device_truth_convergence" in d
 
     def test_to_dict_field_none_when_not_set(self):
         from core.outward_runtime_truth import OutwardRuntimeTruthSnapshot
+
         snap = OutwardRuntimeTruthSnapshot(snapshot_id="x", compiled_at=1.0)
         d = snap.to_dict()
         assert d["multi_device_truth_convergence"] is None
 
     def test_compile_outward_truth_includes_convergence_source(self):
         from core.outward_runtime_truth import compile_outward_truth, reset_outward_runtime_truth_runtime
+
         reset_outward_runtime_truth_runtime()
         snap = compile_outward_truth()
         source_names = [r.source_name for r in snap.source_records]
@@ -503,16 +564,16 @@ class TestOutwardRuntimeTruthSnapshotConvergence:
 
     def test_compile_outward_truth_multi_device_field_populated_or_none(self):
         from core.outward_runtime_truth import compile_outward_truth, reset_outward_runtime_truth_runtime
+
         reset_outward_runtime_truth_runtime()
         snap = compile_outward_truth()
         # Field should be a dict or None — never raises
-        assert snap.multi_device_truth_convergence is None or isinstance(
-            snap.multi_device_truth_convergence, dict
-        )
+        assert snap.multi_device_truth_convergence is None or isinstance(snap.multi_device_truth_convergence, dict)
         reset_outward_runtime_truth_runtime()
 
     def test_compile_outward_truth_to_dict_includes_convergence_key(self):
         from core.outward_runtime_truth import compile_outward_truth, reset_outward_runtime_truth_runtime
+
         reset_outward_runtime_truth_runtime()
         snap = compile_outward_truth()
         d = snap.to_dict()
@@ -528,9 +589,10 @@ class TestOutwardRuntimeTruthSnapshotConvergence:
 class TestTruthProjectionBoundaryPR4Entries:
     def test_formation_resolver_in_catalog(self):
         from core.truth_projection_boundary import (
-            build_truth_projection_boundary_catalog,
             BoundaryRole,
+            build_truth_projection_boundary_catalog,
         )
+
         catalog = build_truth_projection_boundary_catalog()
         entry = next((e for e in catalog if e.surface_id == "formation_resolver"), None)
         assert entry is not None
@@ -539,9 +601,10 @@ class TestTruthProjectionBoundaryPR4Entries:
 
     def test_network_topology_runtime_in_catalog(self):
         from core.truth_projection_boundary import (
-            build_truth_projection_boundary_catalog,
             BoundaryRole,
+            build_truth_projection_boundary_catalog,
         )
+
         catalog = build_truth_projection_boundary_catalog()
         entry = next((e for e in catalog if e.surface_id == "network_topology_runtime"), None)
         assert entry is not None
@@ -550,9 +613,10 @@ class TestTruthProjectionBoundaryPR4Entries:
 
     def test_multi_device_truth_convergence_in_catalog(self):
         from core.truth_projection_boundary import (
-            build_truth_projection_boundary_catalog,
             BoundaryRole,
+            build_truth_projection_boundary_catalog,
         )
+
         catalog = build_truth_projection_boundary_catalog()
         entry = next((e for e in catalog if e.surface_id == "multi_device_truth_convergence"), None)
         assert entry is not None
@@ -561,9 +625,10 @@ class TestTruthProjectionBoundaryPR4Entries:
 
     def test_formation_truth_convergence_projection_in_catalog(self):
         from core.truth_projection_boundary import (
-            build_truth_projection_boundary_catalog,
             BoundaryRole,
+            build_truth_projection_boundary_catalog,
         )
+
         catalog = build_truth_projection_boundary_catalog()
         entry = next((e for e in catalog if e.surface_id == "formation_truth_convergence_projection"), None)
         assert entry is not None
@@ -572,9 +637,10 @@ class TestTruthProjectionBoundaryPR4Entries:
 
     def test_topology_truth_convergence_projection_in_catalog(self):
         from core.truth_projection_boundary import (
-            build_truth_projection_boundary_catalog,
             BoundaryRole,
+            build_truth_projection_boundary_catalog,
         )
+
         catalog = build_truth_projection_boundary_catalog()
         entry = next((e for e in catalog if e.surface_id == "topology_truth_convergence_projection"), None)
         assert entry is not None
@@ -582,6 +648,7 @@ class TestTruthProjectionBoundaryPR4Entries:
 
     def test_build_truth_projection_boundary_snapshot_includes_pr4_entries(self):
         from core.truth_projection_boundary import build_truth_projection_boundary_snapshot
+
         snap = build_truth_projection_boundary_snapshot()
         assert "total_surfaces" in snap
         # PR-4 added 5 new entries
@@ -598,6 +665,7 @@ class TestCanonicalizationPR4Sentinel:
         from core.multi_device_projection_canonicalization import (
             MULTI_DEVICE_PROJECTION_PR4_TRUTH_CONVERGENCE_INTEGRATED,
         )
+
         assert "PR-4" in MULTI_DEVICE_PROJECTION_PR4_TRUTH_CONVERGENCE_INTEGRATED
         assert "truth_convergence" in MULTI_DEVICE_PROJECTION_PR4_TRUTH_CONVERGENCE_INTEGRATED
 
@@ -605,10 +673,11 @@ class TestCanonicalizationPR4Sentinel:
         from core.multi_device_projection_canonicalization import (
             MULTI_DEVICE_PROJECTION_CANONICALIZATION_AUTHORITY,
             MULTI_DEVICE_PROJECTION_CANONICALIZATION_INTEGRATED,
-            MULTI_DEVICE_PROJECTION_GAP008_RESOLVED,
             MULTI_DEVICE_PROJECTION_COORDINATION_ROLE_INTEGRATED,
+            MULTI_DEVICE_PROJECTION_GAP008_RESOLVED,
             MULTI_DEVICE_PROJECTION_PR4_TRUTH_CONVERGENCE_INTEGRATED,
         )
+
         for sentinel in [
             MULTI_DEVICE_PROJECTION_CANONICALIZATION_AUTHORITY,
             MULTI_DEVICE_PROJECTION_CANONICALIZATION_INTEGRATED,
@@ -620,6 +689,7 @@ class TestCanonicalizationPR4Sentinel:
 
     def test_pr4_sentinel_in_all_list(self):
         import core.multi_device_projection_canonicalization as mod
+
         assert "MULTI_DEVICE_PROJECTION_PR4_TRUTH_CONVERGENCE_INTEGRATED" in mod.__all__
 
 
@@ -631,15 +701,27 @@ class TestCanonicalizationPR4Sentinel:
 class TestContractStability:
     def test_projection_to_dict_stable_keys_with_truth_convergence(self):
         from contracts.multi_device_runtime_projection import MultiDeviceRuntimeProjection
+
         proj = MultiDeviceRuntimeProjection()
         d = proj.to_dict()
         # All previously stable keys still present
         expected = {
-            "projection_id", "generated_at", "runtime_devices", "runtime_hosts",
-            "mesh_memberships", "mesh_sessions", "source_dispatches", "handoff_summaries",
-            "takeover_summaries", "coordinator_summaries", "merged_results",
-            "governance_snapshot", "policy_alignment", "metadata",
-            "runtime_recovery", "runtime_session_snapshot",
+            "projection_id",
+            "generated_at",
+            "runtime_devices",
+            "runtime_hosts",
+            "mesh_memberships",
+            "mesh_sessions",
+            "source_dispatches",
+            "handoff_summaries",
+            "takeover_summaries",
+            "coordinator_summaries",
+            "merged_results",
+            "governance_snapshot",
+            "policy_alignment",
+            "metadata",
+            "runtime_recovery",
+            "runtime_session_snapshot",
             # PR-4 new field
             "truth_convergence",
         }
@@ -648,6 +730,7 @@ class TestContractStability:
     def test_projection_from_dict_tolerates_missing_truth_convergence(self):
         """from_dict without truth_convergence key must still work (backward compat)."""
         from contracts.multi_device_runtime_projection import MultiDeviceRuntimeProjection
+
         proj = MultiDeviceRuntimeProjection()
         d = proj.to_dict()
         d.pop("truth_convergence", None)
@@ -656,6 +739,7 @@ class TestContractStability:
 
     def test_projection_from_dict_with_convergence_dict(self):
         from contracts.multi_device_runtime_projection import MultiDeviceRuntimeProjection
+
         d = {
             "projection_id": "test-proj",
             "generated_at": 1234567890.0,
@@ -671,10 +755,12 @@ class TestContractStability:
 
     def test_canonical_top_level_projection_sentinel_unchanged(self):
         from contracts.multi_device_runtime_projection import CANONICAL_TOP_LEVEL_PROJECTION
+
         assert CANONICAL_TOP_LEVEL_PROJECTION is True
 
     def test_empty_construction_valid_with_truth_convergence(self):
         from contracts.multi_device_runtime_projection import MultiDeviceRuntimeProjection
+
         proj = MultiDeviceRuntimeProjection()
         # Must be constructable without any args
         assert proj.projection_id

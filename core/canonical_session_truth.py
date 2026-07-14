@@ -76,9 +76,7 @@ from threading import Lock
 from typing import Any, Deque, Dict, List, Optional, Sequence
 
 try:
-    from core.replay_audit_persistence import (
-        append_replay_audit_record as _append_truth_audit_record,
-    )
+    from core.replay_audit_persistence import append_replay_audit_record as _append_truth_audit_record
 except ImportError:  # noqa: BLE001
     _append_truth_audit_record = None  # type: ignore[assignment]
 
@@ -426,9 +424,7 @@ class CanonicalSessionTruthRecord:
         Policy: :data:`PARTICIPANT_OWNERSHIP_BOUNDARY_FIELD_POLICY`.
     """
 
-    record_id: str = dataclasses.field(
-        default_factory=lambda: f"cst_{uuid.uuid4().hex[:12]}"
-    )
+    record_id: str = dataclasses.field(default_factory=lambda: f"cst_{uuid.uuid4().hex[:12]}")
     session_id: str = ""
     task_id: Optional[str] = None
     trace_id: Optional[str] = None
@@ -484,9 +480,7 @@ class CanonicalSessionTruthRecord:
             session_id=str(d.get("session_id") or ""),
             task_id=d.get("task_id"),
             trace_id=d.get("trace_id"),
-            source_runtime_posture=str(
-                d.get("source_runtime_posture") or _CONTROL_ONLY
-            ),
+            source_runtime_posture=str(d.get("source_runtime_posture") or _CONTROL_ONLY),
             coordination_role=str(d.get("coordination_role") or ""),
             source_eligible=bool(d.get("source_eligible", False)),
             total_units_received=int(d.get("total_units_received", 0)),
@@ -495,15 +489,11 @@ class CanonicalSessionTruthRecord:
             merge_id=d.get("merge_id"),
             merge_success=bool(d.get("merge_success", False)),
             primary_unit_id=d.get("primary_unit_id"),
-            truth_source=str(
-                d.get("truth_source") or SessionTruthSource.unknown.value
-            ),
+            truth_source=str(d.get("truth_source") or SessionTruthSource.unknown.value),
             reason=str(d.get("reason") or ""),
             timestamp=float(d.get("timestamp") or time.time()),
             metadata=dict(d.get("metadata") or {}),
-            participant_ownership_boundary=str(
-                d.get("participant_ownership_boundary") or ""
-            ),
+            participant_ownership_boundary=str(d.get("participant_ownership_boundary") or ""),
         )
 
 
@@ -534,9 +524,7 @@ class CanonicalSessionTruthSnapshot:
         Unix epoch seconds when this snapshot was taken.
     """
 
-    snapshot_id: str = dataclasses.field(
-        default_factory=lambda: f"cst_snap_{uuid.uuid4().hex[:8]}"
-    )
+    snapshot_id: str = dataclasses.field(default_factory=lambda: f"cst_snap_{uuid.uuid4().hex[:8]}")
     total_records: int = 0
     recent_records: List[Dict[str, Any]] = dataclasses.field(default_factory=list)
     control_only_session_count: int = 0
@@ -759,6 +747,7 @@ def get_canonical_session_truth_runtime() -> CanonicalSessionTruthRuntime:
                     from core.session_truth_snapshot import (
                         get_session_truth_snapshot_store,
                     )
+
                     _snap_store = get_session_truth_snapshot_store()
                     runtime.set_snapshot_store(_snap_store)
                 except Exception as _wire_exc:  # noqa: BLE001
@@ -873,8 +862,7 @@ def filter_result_units_by_posture(
             if unit_role == _OBSERVER_ONLY_ROLE:
                 excluded_ids.append(unit_id)
                 _logger.debug(
-                    "canonical_session_truth: excluded unit %r "
-                    "(coordination_role=observer_only). Policy: %s",
+                    "canonical_session_truth: excluded unit %r " "(coordination_role=observer_only). Policy: %s",
                     unit_id,
                     OBSERVER_ONLY_ROLE_EXCLUDED_FROM_MERGE_POLICY,
                 )
@@ -888,8 +876,7 @@ def filter_result_units_by_posture(
             else:
                 excluded_ids.append(unit_id)
                 _logger.debug(
-                    "canonical_session_truth: excluded unit %r (posture=control_only). "
-                    "Policy: %s",
+                    "canonical_session_truth: excluded unit %r (posture=control_only). " "Policy: %s",
                     unit_id,
                     CONTROL_ONLY_EXCLUDED_FROM_MERGE_POLICY,
                 )
@@ -1085,9 +1072,7 @@ def merge_session_truth(
 
     normalised_posture = _normalise_posture(source_runtime_posture)
     normalised_role = (coordination_role or "").strip().lower()
-    resolved_runtime_attachment_session_id = (
-        runtime_attachment_session_id or session_id
-    )
+    resolved_runtime_attachment_session_id = runtime_attachment_session_id or session_id
 
     # Step 1: posture-aware + coordination-role filter
     kept_units, excluded_ids = filter_result_units_by_posture(
@@ -1108,8 +1093,7 @@ def merge_session_truth(
                 coerced_units.append(RuntimeResultUnit.model_validate(u))
             except Exception as _coerce_err:
                 _logger.warning(
-                    "canonical_session_truth: could not coerce dict unit to "
-                    "RuntimeResultUnit (%s); skipping unit",
+                    "canonical_session_truth: could not coerce dict unit to " "RuntimeResultUnit (%s); skipping unit",
                     _coerce_err,
                 )
         # Non-dict, non-RuntimeResultUnit objects are skipped with a warning
@@ -1126,8 +1110,7 @@ def merge_session_truth(
             resolved_policy = ResultMergePolicy(merge_policy)
         except ValueError:
             _logger.warning(
-                "canonical_session_truth: unknown merge_policy %r; "
-                "falling back to primary_wins",
+                "canonical_session_truth: unknown merge_policy %r; " "falling back to primary_wins",
                 merge_policy,
             )
 
@@ -1218,9 +1201,7 @@ def record_session_truth(
     """
     normalised_posture = _normalise_posture(source_runtime_posture)
     normalised_role = (coordination_role or "").strip().lower()
-    resolved_runtime_attachment_session_id = (
-        runtime_attachment_session_id or session_id
-    )
+    resolved_runtime_attachment_session_id = runtime_attachment_session_id or session_id
     is_eligible = normalised_posture == _JOIN_RUNTIME
 
     # Pre-compute filter stats before full merge (cheap)
@@ -1250,10 +1231,7 @@ def record_session_truth(
     resolved_truth_source = truth_source or SessionTruthSource.unknown.value
     if truth_source is None and merged.primary_result_unit_id:
         # Infer from the primary unit's metadata if available
-        primary_units = [
-            u for u in (kept_units or [])
-            if _get_unit_id(u) == merged.primary_result_unit_id
-        ]
+        primary_units = [u for u in (kept_units or []) if _get_unit_id(u) == merged.primary_result_unit_id]
         if primary_units:
             primary_unit = primary_units[0]
             meta = (
@@ -1267,9 +1245,7 @@ def record_session_truth(
                 else SessionTruthSource.unknown.value
             )
 
-    normalised_truth_source, truth_source_downgrade_reason = _normalise_truth_source_label(
-        resolved_truth_source
-    )
+    normalised_truth_source, truth_source_downgrade_reason = _normalise_truth_source_label(resolved_truth_source)
     record_metadata = dict(metadata or {})
     if truth_source_downgrade_reason is not None:
         record_metadata.setdefault("truth_source_original", str(resolved_truth_source))
@@ -1286,9 +1262,11 @@ def record_session_truth(
             "truth_surface_boundary_policy",
             PROJECTION_INTEROP_COMPAT_NOT_TRUTH_AUTHORITY_POLICY,
         )
-    from core.ugcp_truth_event_model import (  # noqa: PLC0415  (lazy import inside function to avoid transitive pydantic dependency at module load time)
+    # 惰性导入:避免模块加载期传递依赖 pydantic(lazy import inside function)
+    from core.ugcp_truth_event_model import (  # noqa: PLC0415
         build_session_truth_authoritative_event,
     )
+
     authoritative_event = build_session_truth_authoritative_event(
         {
             "record_id": "",

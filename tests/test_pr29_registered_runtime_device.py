@@ -25,10 +25,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_mock_unified_device(**kwargs: Any) -> MagicMock:
     """Create a mock UnifiedDevice with sensible defaults."""
@@ -60,11 +60,13 @@ def _make_mock_router_device(**kwargs: Any) -> MagicMock:
 # 1. Serialisation stability
 # ---------------------------------------------------------------------------
 
+
 class TestSerialisationStability:
     """RegisteredRuntimeDevice serialises and round-trips correctly."""
 
     def test_to_dict_returns_serialisable_dict(self):
         from contracts.registered_runtime_device import RegisteredRuntimeDevice
+
         d = RegisteredRuntimeDevice(device_id="dev_001")
         result = d.to_dict()
         assert isinstance(result, dict)
@@ -74,6 +76,7 @@ class TestSerialisationStability:
 
     def test_to_json_returns_valid_json(self):
         from contracts.registered_runtime_device import RegisteredRuntimeDevice
+
         d = RegisteredRuntimeDevice(device_id="dev_002", device_name="Test Device")
         raw = d.to_json()
         parsed = json.loads(raw)
@@ -82,6 +85,7 @@ class TestSerialisationStability:
 
     def test_from_dict_round_trip(self):
         from contracts.registered_runtime_device import RegisteredRuntimeDevice
+
         original = RegisteredRuntimeDevice(
             device_id="dev_003",
             device_name="Round Trip",
@@ -98,19 +102,33 @@ class TestSerialisationStability:
     def test_stable_field_names_present(self):
         """All documented top-level fields are present in to_dict output."""
         from contracts.registered_runtime_device import RegisteredRuntimeDevice
+
         d = RegisteredRuntimeDevice(device_id="dev_004")
         result = d.to_dict()
         expected_keys = {
-            "device_id", "device_name", "owner_id",
-            "platform", "form_factor", "device_type", "device_execution_model",
-            "status", "online", "last_seen",
-            "connection", "capabilities", "autonomy",
-            "session_presence", "participation_hints", "participant_identity", "metadata",
+            "device_id",
+            "device_name",
+            "owner_id",
+            "platform",
+            "form_factor",
+            "device_type",
+            "device_execution_model",
+            "status",
+            "online",
+            "last_seen",
+            "connection",
+            "capabilities",
+            "autonomy",
+            "session_presence",
+            "participation_hints",
+            "participant_identity",
+            "metadata",
         }
         assert expected_keys <= set(result.keys())
 
     def test_sub_contract_fields_present(self):
         from contracts.registered_runtime_device import RegisteredRuntimeDevice
+
         d = RegisteredRuntimeDevice(device_id="dev_005")
         result = d.to_dict()
         assert "state" in result["connection"]
@@ -122,16 +140,17 @@ class TestSerialisationStability:
     def test_full_contract_round_trip(self):
         from contracts.registered_runtime_device import (
             RegisteredRuntimeDevice,
-            RuntimeConnectionSummary,
-            RuntimeCapabilityProfile,
             RuntimeAutonomySummary,
-            RuntimeSessionPresence,
-            RuntimeParticipationHints,
-            RuntimeDevicePlatform,
-            RuntimeDeviceFormFactor,
-            RuntimeDeviceStatus,
+            RuntimeCapabilityProfile,
             RuntimeConnectionState,
+            RuntimeConnectionSummary,
+            RuntimeDeviceFormFactor,
+            RuntimeDevicePlatform,
+            RuntimeDeviceStatus,
+            RuntimeParticipationHints,
+            RuntimeSessionPresence,
         )
+
         d = RegisteredRuntimeDevice(
             device_id="dev_full",
             device_name="Full Device",
@@ -188,9 +207,11 @@ class TestSerialisationStability:
 # 2. Adapter: from_udm_device
 # ---------------------------------------------------------------------------
 
+
 class TestFromUdmDevice:
     def test_basic_fields_mapped(self):
-        from contracts.registered_runtime_device import from_udm_device, RuntimeDeviceStatus
+        from contracts.registered_runtime_device import RuntimeDeviceStatus, from_udm_device
+
         m = _make_mock_unified_device()
         c = from_udm_device(m)
         assert c.device_id == "udm_dev_001"
@@ -202,13 +223,15 @@ class TestFromUdmDevice:
 
     def test_capabilities_transferred(self):
         from contracts.registered_runtime_device import from_udm_device
+
         m = _make_mock_unified_device(capabilities=["screen", "camera", "gps"])
         c = from_udm_device(m)
         assert "screen" in c.capabilities.capabilities
         assert "gps" in c.capabilities.capabilities
 
     def test_offline_device(self):
-        from contracts.registered_runtime_device import from_udm_device, RuntimeDeviceStatus
+        from contracts.registered_runtime_device import RuntimeDeviceStatus, from_udm_device
+
         m = _make_mock_unified_device(status="offline")
         c = from_udm_device(m)
         assert c.online is False
@@ -216,7 +239,9 @@ class TestFromUdmDevice:
 
     def test_last_heartbeat_datetime_converted(self):
         from datetime import datetime
+
         from contracts.registered_runtime_device import from_udm_device
+
         lh = datetime(2026, 3, 21, 9, 0, 0)
         m = _make_mock_unified_device(last_heartbeat=lh)
         c = from_udm_device(m)
@@ -225,6 +250,7 @@ class TestFromUdmDevice:
 
     def test_metadata_carried(self):
         from contracts.registered_runtime_device import from_udm_device
+
         m = _make_mock_unified_device(metadata={"source": "udm_test"})
         c = from_udm_device(m)
         assert c.metadata.get("source") == "udm_test"
@@ -234,9 +260,11 @@ class TestFromUdmDevice:
 # 3. Adapter: from_router_device
 # ---------------------------------------------------------------------------
 
+
 class TestFromRouterDevice:
     def test_connected_device(self):
-        from contracts.registered_runtime_device import from_router_device, RuntimeConnectionState
+        from contracts.registered_runtime_device import RuntimeConnectionState, from_router_device
+
         m = _make_mock_router_device()
         c = from_router_device(m)
         assert c.device_id == "router_dev_001"
@@ -247,7 +275,8 @@ class TestFromRouterDevice:
         )
 
     def test_disconnected_device_no_websocket(self):
-        from contracts.registered_runtime_device import from_router_device, RuntimeConnectionState
+        from contracts.registered_runtime_device import RuntimeConnectionState, from_router_device
+
         m = _make_mock_router_device(websocket=None)
         c = from_router_device(m)
         assert c.online is False
@@ -258,12 +287,14 @@ class TestFromRouterDevice:
 
     def test_capabilities_as_strings(self):
         from contracts.registered_runtime_device import from_router_device
+
         m = _make_mock_router_device(capabilities=["screen", "keyboard"])
         c = from_router_device(m)
         assert "screen" in c.capabilities.capabilities
 
     def test_capabilities_as_objects_with_name(self):
         from contracts.registered_runtime_device import from_router_device
+
         cap1 = MagicMock()
         cap1.name = "camera"
         m = _make_mock_router_device(capabilities=[cap1])
@@ -274,6 +305,7 @@ class TestFromRouterDevice:
 # ---------------------------------------------------------------------------
 # 4. Adapter: from_android_registration
 # ---------------------------------------------------------------------------
+
 
 class TestFromAndroidRegistration:
     def _sample_data(self, **overrides: Any) -> Dict[str, Any]:
@@ -294,10 +326,11 @@ class TestFromAndroidRegistration:
 
     def test_basic_registration(self):
         from contracts.registered_runtime_device import (
-            from_android_registration,
-            RuntimeDevicePlatform,
             RuntimeDeviceFormFactor,
+            RuntimeDevicePlatform,
+            from_android_registration,
         )
+
         c = from_android_registration(self._sample_data())
         assert c.device_id == "android_001"
         assert c.device_name == "My Phone"
@@ -307,34 +340,40 @@ class TestFromAndroidRegistration:
 
     def test_metadata_carries_model_os(self):
         from contracts.registered_runtime_device import from_android_registration
+
         c = from_android_registration(self._sample_data())
         assert c.metadata.get("model") == "Pixel 9"
         assert c.metadata.get("os_version") == "15"
 
     def test_list_capabilities(self):
         from contracts.registered_runtime_device import from_android_registration
+
         c = from_android_registration(self._sample_data(capabilities=["screen", "gps"]))
         assert "screen" in c.capabilities.capabilities
         assert "gps" in c.capabilities.capabilities
 
     def test_runtime_version_carried(self):
         from contracts.registered_runtime_device import from_android_registration
+
         c = from_android_registration(self._sample_data())
         assert c.autonomy.runtime_version == "3.2.0"
 
     def test_supports_remote_handoff_true(self):
         from contracts.registered_runtime_device import from_android_registration
+
         c = from_android_registration(self._sample_data())
         assert c.autonomy.supports_remote_handoff is True
 
     def test_missing_device_id_generates_one(self):
         from contracts.registered_runtime_device import from_android_registration
+
         c = from_android_registration({"name": "Unknown"})
         assert c.device_id.startswith("android_")
         assert len(c.device_id) > 0
 
     def test_connection_is_websocket(self):
-        from contracts.registered_runtime_device import from_android_registration, RuntimeConnectionState
+        from contracts.registered_runtime_device import RuntimeConnectionState, from_android_registration
+
         c = from_android_registration(self._sample_data())
         assert c.connection.state in (
             RuntimeConnectionState.CONNECTED,
@@ -344,9 +383,10 @@ class TestFromAndroidRegistration:
 
     def test_execution_model_defaults_to_full_runtime_host_for_android_app(self):
         from contracts.registered_runtime_device import (
-            from_android_registration,
             RuntimeDeviceExecutionModel,
+            from_android_registration,
         )
+
         c = from_android_registration(self._sample_data(app_version="3.2.0"))
         assert c.device_execution_model in (
             RuntimeDeviceExecutionModel.FULL_RUNTIME_HOST,
@@ -357,6 +397,7 @@ class TestFromAndroidRegistration:
 # ---------------------------------------------------------------------------
 # 5. Adapter: from_device_registry_record
 # ---------------------------------------------------------------------------
+
 
 class TestFromDeviceRegistryRecord:
     def _mock_device_model(self, **overrides: Any) -> MagicMock:
@@ -381,19 +422,22 @@ class TestFromDeviceRegistryRecord:
 
     def test_basic_mapping(self):
         from contracts.registered_runtime_device import from_device_registry_record
+
         m = self._mock_device_model()
         c = from_device_registry_record(m)
         assert c.device_id == "reg_dev_001"
         assert c.device_name == "Registry Device"
 
     def test_platform_resolved(self):
-        from contracts.registered_runtime_device import from_device_registry_record, RuntimeDevicePlatform
+        from contracts.registered_runtime_device import RuntimeDevicePlatform, from_device_registry_record
+
         m = self._mock_device_model(device_type="windows")
         c = from_device_registry_record(m)
         assert c.platform in (RuntimeDevicePlatform.WINDOWS, RuntimeDevicePlatform.WINDOWS.value)
 
     def test_capabilities_from_objects(self):
         from contracts.registered_runtime_device import from_device_registry_record
+
         cap1 = MagicMock()
         cap1.name = "keyboard"
         m = self._mock_device_model(capabilities=[cap1])
@@ -402,6 +446,7 @@ class TestFromDeviceRegistryRecord:
 
     def test_groups_and_tags_in_hints(self):
         from contracts.registered_runtime_device import from_device_registry_record
+
         m = self._mock_device_model(groups=["team_a"], tags=["test"])
         c = from_device_registry_record(m)
         assert "team_a" in c.participation_hints.groups
@@ -412,9 +457,11 @@ class TestFromDeviceRegistryRecord:
 # 6. Builder: build_registered_runtime_device
 # ---------------------------------------------------------------------------
 
+
 class TestBuildRegisteredRuntimeDevice:
     def test_minimal_required_only(self):
         from contracts.registered_runtime_device import build_registered_runtime_device
+
         c = build_registered_runtime_device(device_id="minimal_001")
         assert c.device_id == "minimal_001"
         assert c.online is False
@@ -422,6 +469,7 @@ class TestBuildRegisteredRuntimeDevice:
 
     def test_full_build(self):
         from contracts.registered_runtime_device import build_registered_runtime_device
+
         c = build_registered_runtime_device(
             device_id="full_001",
             device_name="Full Device",
@@ -468,6 +516,7 @@ class TestBuildRegisteredRuntimeDevice:
 
     def test_online_derived_from_status(self):
         from contracts.registered_runtime_device import build_registered_runtime_device
+
         c_online = build_registered_runtime_device(device_id="dev_on", status="online")
         c_offline = build_registered_runtime_device(device_id="dev_off", status="offline")
         assert c_online.online is True
@@ -475,15 +524,17 @@ class TestBuildRegisteredRuntimeDevice:
 
     def test_online_explicit_override(self):
         from contracts.registered_runtime_device import build_registered_runtime_device
+
         c = build_registered_runtime_device(device_id="dev_ovr", status="offline", online=True)
         assert c.online is True
 
     def test_participant_identity_and_adapter_model(self):
         from contracts.registered_runtime_device import (
-            build_registered_runtime_device,
             RuntimeDeviceExecutionModel,
             RuntimeParticipantTier,
+            build_registered_runtime_device,
         )
+
         c = build_registered_runtime_device(
             device_id="bridge_dev_01",
             participant_id="p_bridge_01",
@@ -509,9 +560,11 @@ class TestBuildRegisteredRuntimeDevice:
 # 7. Graceful handling of partial / missing data
 # ---------------------------------------------------------------------------
 
+
 class TestPartialDataHandling:
     def test_from_udm_device_missing_all_optional_fields(self):
         from contracts.registered_runtime_device import from_udm_device
+
         m = MagicMock()
         m.device_id = "sparse_001"
         # All other attributes raise AttributeError via MagicMock defaults —
@@ -528,17 +581,20 @@ class TestPartialDataHandling:
 
     def test_from_android_registration_empty_dict(self):
         from contracts.registered_runtime_device import from_android_registration
+
         c = from_android_registration({})
         assert c.device_id  # auto-generated
 
     def test_from_android_registration_no_capabilities_key(self):
         from contracts.registered_runtime_device import from_android_registration
+
         c = from_android_registration({"device_id": "droid_001"})
         # Should not raise; capabilities may be empty list
         assert isinstance(c.capabilities.capabilities, list)
 
     def test_build_with_none_lists_treated_as_empty(self):
         from contracts.registered_runtime_device import build_registered_runtime_device
+
         c = build_registered_runtime_device(
             device_id="dev_none",
             capabilities=None,
@@ -552,6 +608,7 @@ class TestPartialDataHandling:
     def test_from_device_registry_record_with_string_status(self):
         """Registry record with plain string status (not enum) is handled."""
         from contracts.registered_runtime_device import from_device_registry_record
+
         m = MagicMock()
         m.device_id = "str_status_dev"
         m.name = ""
@@ -573,30 +630,36 @@ class TestPartialDataHandling:
 # 8. Enum helpers
 # ---------------------------------------------------------------------------
 
+
 class TestEnumHelpers:
     def test_runtime_device_platform_unknown_fallback(self):
         from contracts.registered_runtime_device import RuntimeDevicePlatform
+
         assert RuntimeDevicePlatform.from_string("completely_unknown") == RuntimeDevicePlatform.UNKNOWN
         assert RuntimeDevicePlatform.from_string("") == RuntimeDevicePlatform.UNKNOWN
         assert RuntimeDevicePlatform.from_string("android") == RuntimeDevicePlatform.ANDROID
 
     def test_runtime_device_form_factor_unknown_fallback(self):
         from contracts.registered_runtime_device import RuntimeDeviceFormFactor
+
         assert RuntimeDeviceFormFactor.from_string("spaceship") == RuntimeDeviceFormFactor.UNKNOWN
         assert RuntimeDeviceFormFactor.from_string("phone") == RuntimeDeviceFormFactor.PHONE
 
     def test_runtime_device_status_offline_fallback(self):
         from contracts.registered_runtime_device import RuntimeDeviceStatus
+
         assert RuntimeDeviceStatus.from_string("unknown_xyz") == RuntimeDeviceStatus.OFFLINE
         assert RuntimeDeviceStatus.from_string("online") == RuntimeDeviceStatus.ONLINE
 
     def test_runtime_connection_state_disconnected_fallback(self):
         from contracts.registered_runtime_device import RuntimeConnectionState
+
         assert RuntimeConnectionState.from_string("blah") == RuntimeConnectionState.DISCONNECTED
         assert RuntimeConnectionState.from_string("connected") == RuntimeConnectionState.CONNECTED
 
     def test_is_online_method(self):
         from contracts.registered_runtime_device import RegisteredRuntimeDevice, RuntimeDeviceStatus
+
         d_on = RegisteredRuntimeDevice(device_id="x", status=RuntimeDeviceStatus.ONLINE, online=True)
         d_off = RegisteredRuntimeDevice(device_id="y", status=RuntimeDeviceStatus.OFFLINE, online=False)
         d_busy = RegisteredRuntimeDevice(device_id="z", status=RuntimeDeviceStatus.BUSY, online=True)
@@ -609,19 +672,22 @@ class TestEnumHelpers:
 # 9. contracts package root re-exports
 # ---------------------------------------------------------------------------
 
+
 class TestContractsPackageExports:
     def test_registered_runtime_device_importable(self):
         from contracts import RegisteredRuntimeDevice
+
         assert RegisteredRuntimeDevice is not None
 
     def test_all_adapter_functions_importable(self):
         from contracts import (
             build_registered_runtime_device,
-            from_udm_device,
-            from_router_device,
             from_android_registration,
             from_device_registry_record,
+            from_router_device,
+            from_udm_device,
         )
+
         assert callable(build_registered_runtime_device)
         assert callable(from_udm_device)
         assert callable(from_router_device)
@@ -630,13 +696,14 @@ class TestContractsPackageExports:
 
     def test_all_sub_contract_types_importable(self):
         from contracts import (
-            RuntimeConnectionSummary,
-            RuntimeCapabilityProfile,
             RuntimeAutonomySummary,
-            RuntimeSessionPresence,
-            RuntimeParticipationHints,
+            RuntimeCapabilityProfile,
+            RuntimeConnectionSummary,
             RuntimeParticipantIdentity,
+            RuntimeParticipationHints,
+            RuntimeSessionPresence,
         )
+
         for cls in (
             RuntimeConnectionSummary,
             RuntimeCapabilityProfile,
@@ -649,13 +716,14 @@ class TestContractsPackageExports:
 
     def test_all_enums_importable(self):
         from contracts import (
-            RuntimeDevicePlatform,
-            RuntimeDeviceFormFactor,
-            RuntimeDeviceStatus,
             RuntimeConnectionState,
-            RuntimeParticipantTier,
             RuntimeDeviceExecutionModel,
+            RuntimeDeviceFormFactor,
+            RuntimeDevicePlatform,
+            RuntimeDeviceStatus,
+            RuntimeParticipantTier,
         )
+
         assert RuntimeDevicePlatform.ANDROID.value == "android"
         assert RuntimeDeviceFormFactor.PHONE.value == "phone"
         assert RuntimeDeviceStatus.ONLINE.value == "online"
@@ -671,6 +739,7 @@ class TestContractsPackageExports:
             ExecutionTraceStage,
             ExecutionTraceStatus,
         )
+
         assert ExecutionTraceEnvelope is not None
         assert ExecutionTraceStage.INTENT_CREATED is not None
 
@@ -679,17 +748,21 @@ class TestContractsPackageExports:
 # 10. core.unified package re-exports
 # ---------------------------------------------------------------------------
 
+
 class TestCoreUnifiedReexports:
     def test_registered_runtime_device_in_core_unified(self):
         from core.unified import RegisteredRuntimeDevice
+
         assert RegisteredRuntimeDevice is not None
 
     def test_builder_in_core_unified(self):
         from core.unified import build_registered_runtime_device
+
         assert callable(build_registered_runtime_device)
 
     def test_adapters_in_core_unified(self):
-        from core.unified import from_udm_device, from_router_device
+        from core.unified import from_router_device, from_udm_device
+
         assert callable(from_udm_device)
         assert callable(from_router_device)
 
@@ -698,11 +771,13 @@ class TestCoreUnifiedReexports:
 # 11. Runtime contract API endpoint
 # ---------------------------------------------------------------------------
 
+
 class TestRuntimeContractEndpoint:
     @pytest.fixture(scope="class")
     def app_client(self):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
         from core.routes.devices import create_router
 
         app = FastAPI()
@@ -733,14 +808,20 @@ class TestRuntimeContractEndpoint:
         # Registration may succeed or raise validation error depending on env;
         # we only care about the contract endpoint when the device exists.
         if reg_resp.status_code == 200:
-            contract_resp = app_client.get(
-                "/api/v1/devices/test_contract_dev_001/runtime-contract"
-            )
+            contract_resp = app_client.get("/api/v1/devices/test_contract_dev_001/runtime-contract")
             assert contract_resp.status_code == 200
             data = contract_resp.json()
             assert data["device_id"] == "test_contract_dev_001"
             # Validate all expected top-level keys are present
-            for key in ("platform", "status", "online", "connection",
-                        "capabilities", "autonomy", "session_presence",
-                        "participation_hints", "metadata"):
+            for key in (
+                "platform",
+                "status",
+                "online",
+                "connection",
+                "capabilities",
+                "autonomy",
+                "session_presence",
+                "participation_hints",
+                "metadata",
+            ):
                 assert key in data, f"Missing key: {key}"

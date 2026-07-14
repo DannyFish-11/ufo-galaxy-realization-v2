@@ -47,44 +47,40 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from core.unified_execution_governance import (
-    # Sentinels
+from core.unified_execution_governance import (  # Sentinels; Enums; Dataclasses; Functions
+    ANDROID_RUNTIME_SEMANTICS_STALE_AFTER_SECONDS,
+    CANCELLATION_PROPAGATION_POLICY,
+    PRIORITY_ORDER_POLICY,
+    STALE_ANDROID_RUNTIME_TRUTH_DOWNGRADES_AUTHORITY_POLICY,
+    TAKEOVER_BLOCKS_LOWER_PRIORITY,
     UNIFIED_EXECUTION_GOVERNANCE_AUTHORITY,
     UNIFIED_EXECUTION_GOVERNANCE_CONTRACT_VERSION,
     UNIFIED_EXECUTION_GOVERNANCE_SENTINEL,
-    TAKEOVER_BLOCKS_LOWER_PRIORITY,
-    PRIORITY_ORDER_POLICY,
-    CANCELLATION_PROPAGATION_POLICY,
-    ANDROID_RUNTIME_SEMANTICS_STALE_AFTER_SECONDS,
-    STALE_ANDROID_RUNTIME_TRUTH_DOWNGRADES_AUTHORITY_POLICY,
-    # Enums
-    ExecutionType,
-    ExecutionPriority,
     CancellationReason,
+    ConflictResolution,
+    ConflictResolutionResult,
+    ExecutionConflict,
+    ExecutionGovernanceVerdict,
+    ExecutionPriority,
+    ExecutionType,
+    FailureSemantic,
     RollbackPolicy,
     TimeoutPolicy,
-    FailureSemantic,
-    ConflictResolution,
-    # Dataclasses
-    ExecutionGovernanceVerdict,
-    ExecutionConflict,
-    ConflictResolutionResult,
-    # Functions
-    get_execution_type_policy,
+    _clear_active_executions_for_device,
+    _clear_all_active_executions,
     evaluate_execution_governance,
-    resolve_execution_conflict,
-    is_takeover_active,
     get_active_execution_type,
     get_execution_runtime_snapshot,
+    get_execution_type_policy,
+    is_takeover_active,
     notify_execution_completed,
-    _clear_all_active_executions,
-    _clear_active_executions_for_device,
+    resolve_execution_conflict,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def _reset_active_executions():
@@ -114,6 +110,7 @@ def _patch_mode_gate_fail(reason: str = "test gate fail"):
 # A. Module imports
 # ---------------------------------------------------------------------------
 
+
 class TestModuleImports:
     def test_authority_sentinel_importable(self):
         assert UNIFIED_EXECUTION_GOVERNANCE_AUTHORITY
@@ -135,6 +132,7 @@ class TestModuleImports:
 # ---------------------------------------------------------------------------
 # B. ExecutionType enum
 # ---------------------------------------------------------------------------
+
 
 class TestExecutionTypeEnum:
     def test_all_values_present(self):
@@ -164,6 +162,7 @@ class TestExecutionTypeEnum:
 # C. ExecutionPriority — numeric ordering
 # ---------------------------------------------------------------------------
 
+
 class TestExecutionPriority:
     def test_takeover_highest_priority(self):
         assert ExecutionPriority.PRIORITY_1_TAKEOVER < ExecutionPriority.PRIORITY_2_GOAL
@@ -178,6 +177,7 @@ class TestExecutionPriority:
 # ---------------------------------------------------------------------------
 # D–H. Other enums completeness
 # ---------------------------------------------------------------------------
+
 
 class TestOtherEnums:
     def test_cancellation_reason_values(self):
@@ -224,6 +224,7 @@ class TestOtherEnums:
 # I. get_execution_type_policy()
 # ---------------------------------------------------------------------------
 
+
 class TestGetExecutionTypePolicy:
     def test_goal_execution_policy_returned(self):
         policy = get_execution_type_policy(ExecutionType.goal_execution)
@@ -249,6 +250,7 @@ class TestGetExecutionTypePolicy:
 # J. ExecutionTypePolicy.to_dict()
 # ---------------------------------------------------------------------------
 
+
 class TestExecutionTypePolicyToDict:
     def test_goal_execution_policy_to_dict(self):
         policy = get_execution_type_policy(ExecutionType.goal_execution)
@@ -268,6 +270,7 @@ class TestExecutionTypePolicyToDict:
 
     def test_policy_dict_is_json_serialisable(self):
         import json
+
         for et in (ExecutionType.goal_execution, ExecutionType.parallel_subtask, ExecutionType.takeover_request):
             policy = get_execution_type_policy(et)
             assert policy is not None
@@ -277,6 +280,7 @@ class TestExecutionTypePolicyToDict:
 # ---------------------------------------------------------------------------
 # K. ExecutionGovernanceVerdict.to_dict()
 # ---------------------------------------------------------------------------
+
 
 class TestExecutionGovernanceVerdictToDict:
     def test_accepted_verdict_to_dict(self):
@@ -313,6 +317,7 @@ class TestExecutionGovernanceVerdictToDict:
 
     def test_verdict_to_json(self):
         import json
+
         verdict = ExecutionGovernanceVerdict(
             execution_type=ExecutionType.takeover_request,
             device_id="device-json",
@@ -326,6 +331,7 @@ class TestExecutionGovernanceVerdictToDict:
 # ---------------------------------------------------------------------------
 # L. evaluate_execution_governance() — accepted when gates pass
 # ---------------------------------------------------------------------------
+
 
 class TestEvaluateGovernanceAccepted:
     def test_goal_execution_accepted_when_gates_pass(self):
@@ -361,6 +367,7 @@ class TestEvaluateGovernanceAccepted:
 # M. evaluate_execution_governance() — rejected when mode gate fails
 # ---------------------------------------------------------------------------
 
+
 class TestEvaluateGovernanceGateFail:
     def test_goal_execution_rejected_when_gate_fails(self):
         with _patch_mode_gate_fail("android_cross_device_enabled OFF"):
@@ -387,6 +394,7 @@ class TestEvaluateGovernanceGateFail:
 # ---------------------------------------------------------------------------
 # N. goal_execution rejected when active takeover
 # ---------------------------------------------------------------------------
+
 
 class TestTakeoverBlocksGoalExecution:
     def test_goal_execution_blocked_by_active_takeover(self):
@@ -440,6 +448,7 @@ class TestTakeoverBlocksGoalExecution:
 # O. parallel_subtask rejected when active takeover
 # ---------------------------------------------------------------------------
 
+
 class TestTakeoverBlocksParallelSubtask:
     def test_parallel_subtask_blocked_by_active_takeover(self):
         device_id = "device-conflict-o"
@@ -467,6 +476,7 @@ class TestTakeoverBlocksParallelSubtask:
 # P. takeover NOT blocked by active goal_execution
 # ---------------------------------------------------------------------------
 
+
 class TestTakeoverNotBlockedByGoalExecution:
     def test_takeover_accepted_when_goal_execution_active(self):
         device_id = "device-takeover-p"
@@ -492,6 +502,7 @@ class TestTakeoverNotBlockedByGoalExecution:
 # ---------------------------------------------------------------------------
 # Q. Concurrency limit enforced per type
 # ---------------------------------------------------------------------------
+
 
 class TestConcurrencyLimit:
     def test_takeover_max_concurrent_one(self):
@@ -546,6 +557,7 @@ class TestConcurrencyLimit:
 # R. skip_conflict_check bypasses conflict detection
 # ---------------------------------------------------------------------------
 
+
 class TestSkipConflictCheck:
     def test_skip_conflict_check_allows_evaluation_despite_takeover(self):
         device_id = "device-skip-r"
@@ -574,6 +586,7 @@ class TestSkipConflictCheck:
 # S. register_if_accepted=False does not track
 # ---------------------------------------------------------------------------
 
+
 class TestRegisterIfAccepted:
     def test_no_registration_when_flag_false(self):
         device_id = "device-noreg-s"
@@ -600,6 +613,7 @@ class TestRegisterIfAccepted:
 # ---------------------------------------------------------------------------
 # T. is_takeover_active()
 # ---------------------------------------------------------------------------
+
 
 class TestIsTakeoverActive:
     def test_false_when_no_active_executions(self):
@@ -643,6 +657,7 @@ class TestIsTakeoverActive:
 # U. get_active_execution_type()
 # ---------------------------------------------------------------------------
 
+
 class TestGetActiveExecutionType:
     def test_none_when_no_active(self):
         assert get_active_execution_type("device-empty-u") is None
@@ -672,6 +687,7 @@ class TestGetActiveExecutionType:
 # ---------------------------------------------------------------------------
 # V. notify_execution_completed()
 # ---------------------------------------------------------------------------
+
 
 class TestNotifyExecutionCompleted:
     def test_returns_true_when_found(self):
@@ -714,6 +730,7 @@ class TestNotifyExecutionCompleted:
 # W. resolve_execution_conflict() — takeover beats goal_execution
 # ---------------------------------------------------------------------------
 
+
 class TestResolveExecutionConflict:
     def test_takeover_incoming_beats_goal_active(self):
         result = resolve_execution_conflict(
@@ -751,6 +768,7 @@ class TestResolveExecutionConflict:
 # ---------------------------------------------------------------------------
 # Z. Multi-type conflict scenario
 # ---------------------------------------------------------------------------
+
 
 class TestMultiTypeConflictScenario:
     """Z. Full multi-execution-type conflict sequence test."""
@@ -821,6 +839,7 @@ class TestMultiTypeConflictScenario:
 # AA. ExecutionConflict.to_dict()
 # ---------------------------------------------------------------------------
 
+
 class TestExecutionConflictToDict:
     def test_to_dict_all_fields(self):
         conflict = ExecutionConflict(
@@ -844,6 +863,7 @@ class TestExecutionConflictToDict:
 # ---------------------------------------------------------------------------
 # AB. ConflictResolutionResult.to_dict()
 # ---------------------------------------------------------------------------
+
 
 class TestConflictResolutionResultToDict:
     def test_to_dict_all_fields(self):
@@ -873,6 +893,7 @@ class TestConflictResolutionResultToDict:
 # AC. evaluate_execution_governance() — unknown type → rejected
 # ---------------------------------------------------------------------------
 
+
 class TestUnknownTypeRejected:
     def test_unknown_execution_type_rejected(self):
         verdict = evaluate_execution_governance(
@@ -887,6 +908,7 @@ class TestUnknownTypeRejected:
 # ---------------------------------------------------------------------------
 # AD. Policy: blocks_lower_priority flags
 # ---------------------------------------------------------------------------
+
 
 class TestPolicyBlocksLowerPriority:
     def test_takeover_blocks_lower_priority_true(self):
@@ -906,6 +928,7 @@ class TestPolicyBlocksLowerPriority:
 # AE. Policy: max_concurrent_per_device
 # ---------------------------------------------------------------------------
 
+
 class TestPolicyMaxConcurrent:
     def test_takeover_max_concurrent_one(self):
         policy = get_execution_type_policy(ExecutionType.takeover_request)
@@ -923,6 +946,7 @@ class TestPolicyMaxConcurrent:
 # ---------------------------------------------------------------------------
 # AF. Policy: rollback semantics
 # ---------------------------------------------------------------------------
+
 
 class TestPolicyRollbackSemantics:
     def test_takeover_rollback_on_cancel_required_undo(self):
@@ -945,6 +969,7 @@ class TestPolicyRollbackSemantics:
 # ---------------------------------------------------------------------------
 # AG. Policy: timeout semantics
 # ---------------------------------------------------------------------------
+
 
 class TestPolicyTimeoutSemantics:
     def test_all_types_have_hard_timeout(self):
@@ -971,6 +996,7 @@ class TestPolicyTimeoutSemantics:
 # ---------------------------------------------------------------------------
 # AH. _clear_all_active_executions() test isolation
 # ---------------------------------------------------------------------------
+
 
 class TestClearActiveExecutions:
     def test_clear_all_removes_all_entries(self):
@@ -1047,25 +1073,30 @@ class TestExecutionRuntimeSnapshot:
         # With patched time.time()=200.0 this yields a deterministic age of 5.0 seconds.
         recent_event.absorbed_at = 195.0
 
-        with patch(
-            "core.android_device_state_store.get_device_state_snapshot",
-            return_value=state_snapshot,
-        ), patch(
-            "core.android_device_state_store.get_device_snapshot_reconciliation",
-            return_value={
-                "status": "out_of_order_rejected",
-                "reason": "snapshot_seq_regression",
-                "conflict": False,
-                "ordering_basis": "snapshot_seq",
-                "updated_at": 196.0,
-                "applied": False,
-            },
-        ), patch(
-            "core.android_device_state_store.list_recent_execution_events",
-            return_value=[recent_event],
-        ), patch(
-            "core.unified_execution_governance.time.time",
-            return_value=200.0,
+        with (
+            patch(
+                "core.android_device_state_store.get_device_state_snapshot",
+                return_value=state_snapshot,
+            ),
+            patch(
+                "core.android_device_state_store.get_device_snapshot_reconciliation",
+                return_value={
+                    "status": "out_of_order_rejected",
+                    "reason": "snapshot_seq_regression",
+                    "conflict": False,
+                    "ordering_basis": "snapshot_seq",
+                    "updated_at": 196.0,
+                    "applied": False,
+                },
+            ),
+            patch(
+                "core.android_device_state_store.list_recent_execution_events",
+                return_value=[recent_event],
+            ),
+            patch(
+                "core.unified_execution_governance.time.time",
+                return_value=200.0,
+            ),
         ):
             snapshot = get_execution_runtime_snapshot(device_ids=[device_id])
 
@@ -1088,35 +1119,40 @@ class TestExecutionRuntimeSnapshot:
         state_snapshot.runtime_health_snapshot = {"status": "healthy"}
         state_snapshot.is_local_ai_ready = lambda: False
 
-        with patch(
-            "core.android_device_state_store.get_device_state_snapshot",
-            return_value=state_snapshot,
-        ), patch(
-            "core.android_device_state_store.get_device_capability_report_semantics",
-            return_value={
-                "canonical_mode": "local",
-                "reported_mode_state": "local_only",
-                "mode_readiness_state": "degraded",
-                "cross_device_eligibility": False,
-                "goal_execution_eligibility": False,
-                "parallel_execution_eligibility": False,
-                "local_intelligence_status": "disabled",
-                "local_inference_ready": False,
-                "local_inference_available": True,
-                "canonical_gate_metadata_state": "complete",
-                "canonical_gate_metadata_complete": True,
-                "missing_canonical_gate_metadata_keys": [],
-                "malformed_canonical_gate_metadata_keys": [],
-                "absorbed_at": 123.0,
-                "reported_at": 120.0,
-                "semantics_age_s": 3.0,
-            },
-        ), patch(
-            "core.android_device_state_store.get_device_snapshot_reconciliation",
-            return_value={"status": "accepted", "reason": "initial_snapshot", "applied": True},
-        ), patch(
-            "core.android_device_state_store.list_recent_execution_events",
-            return_value=[],
+        with (
+            patch(
+                "core.android_device_state_store.get_device_state_snapshot",
+                return_value=state_snapshot,
+            ),
+            patch(
+                "core.android_device_state_store.get_device_capability_report_semantics",
+                return_value={
+                    "canonical_mode": "local",
+                    "reported_mode_state": "local_only",
+                    "mode_readiness_state": "degraded",
+                    "cross_device_eligibility": False,
+                    "goal_execution_eligibility": False,
+                    "parallel_execution_eligibility": False,
+                    "local_intelligence_status": "disabled",
+                    "local_inference_ready": False,
+                    "local_inference_available": True,
+                    "canonical_gate_metadata_state": "complete",
+                    "canonical_gate_metadata_complete": True,
+                    "missing_canonical_gate_metadata_keys": [],
+                    "malformed_canonical_gate_metadata_keys": [],
+                    "absorbed_at": 123.0,
+                    "reported_at": 120.0,
+                    "semantics_age_s": 3.0,
+                },
+            ),
+            patch(
+                "core.android_device_state_store.get_device_snapshot_reconciliation",
+                return_value={"status": "accepted", "reason": "initial_snapshot", "applied": True},
+            ),
+            patch(
+                "core.android_device_state_store.list_recent_execution_events",
+                return_value=[],
+            ),
         ):
             snapshot = get_execution_runtime_snapshot(device_ids=[device_id])
 
@@ -1135,39 +1171,41 @@ class TestExecutionRuntimeSnapshot:
         state_snapshot.runtime_health_snapshot = {"status": "healthy"}
         state_snapshot.is_local_ai_ready = lambda: False
 
-        with patch(
-            "core.android_device_state_store.get_device_state_snapshot",
-            return_value=state_snapshot,
-        ), patch(
-            "core.android_device_state_store.get_device_capability_report_semantics",
-            return_value={
-                "canonical_mode": "cross_device",
-                "reported_mode_state": "delegated",
-                "local_inference_available": True,
-                "canonical_gate_metadata_state": "complete",
-                "canonical_gate_metadata_complete": True,
-                "missing_canonical_gate_metadata_keys": [],
-                "malformed_canonical_gate_metadata_keys": [],
-                "absorbed_at": 123.0,
-                "reported_at": 120.0,
-                "semantics_age_s": ANDROID_RUNTIME_SEMANTICS_STALE_AFTER_SECONDS,
-            },
-        ), patch(
-            "core.android_device_state_store.get_device_snapshot_reconciliation",
-            return_value={"status": "accepted", "reason": "initial_snapshot", "applied": True},
-        ), patch(
-            "core.android_device_state_store.list_recent_execution_events",
-            return_value=[],
+        with (
+            patch(
+                "core.android_device_state_store.get_device_state_snapshot",
+                return_value=state_snapshot,
+            ),
+            patch(
+                "core.android_device_state_store.get_device_capability_report_semantics",
+                return_value={
+                    "canonical_mode": "cross_device",
+                    "reported_mode_state": "delegated",
+                    "local_inference_available": True,
+                    "canonical_gate_metadata_state": "complete",
+                    "canonical_gate_metadata_complete": True,
+                    "missing_canonical_gate_metadata_keys": [],
+                    "malformed_canonical_gate_metadata_keys": [],
+                    "absorbed_at": 123.0,
+                    "reported_at": 120.0,
+                    "semantics_age_s": ANDROID_RUNTIME_SEMANTICS_STALE_AFTER_SECONDS,
+                },
+            ),
+            patch(
+                "core.android_device_state_store.get_device_snapshot_reconciliation",
+                return_value={"status": "accepted", "reason": "initial_snapshot", "applied": True},
+            ),
+            patch(
+                "core.android_device_state_store.list_recent_execution_events",
+                return_value=[],
+            ),
         ):
             snapshot = get_execution_runtime_snapshot(device_ids=[device_id])
 
         device_state = snapshot["devices"][0]
         assert device_state["local_inference_available"] is True
         assert device_state["android_reported_mode"] == "cross_device"
-        assert (
-            device_state["android_semantics_freshness_threshold_s"]
-            == ANDROID_RUNTIME_SEMANTICS_STALE_AFTER_SECONDS
-        )
+        assert device_state["android_semantics_freshness_threshold_s"] == ANDROID_RUNTIME_SEMANTICS_STALE_AFTER_SECONDS
         assert device_state["android_semantics_freshness_state"] == "fresh"
         assert device_state["android_semantics_freshness_reason"] == "android_semantics_age_within_threshold"
         assert device_state["android_runtime_truth_authority"] == "authoritative"
@@ -1181,30 +1219,35 @@ class TestExecutionRuntimeSnapshot:
         state_snapshot.runtime_health_snapshot = {"status": "healthy"}
         state_snapshot.is_local_ai_ready = lambda: False
 
-        with patch(
-            "core.android_device_state_store.get_device_state_snapshot",
-            return_value=state_snapshot,
-        ), patch(
-            "core.android_device_state_store.get_device_capability_report_semantics",
-            return_value={
-                "canonical_mode": "cross_device",
-                "reported_mode_state": "delegated",
-                "local_inference_available": True,
-                "local_inference_ready": True,
-                "canonical_gate_metadata_state": "complete",
-                "canonical_gate_metadata_complete": True,
-                "missing_canonical_gate_metadata_keys": [],
-                "malformed_canonical_gate_metadata_keys": [],
-                "absorbed_at": 123.0,
-                "reported_at": 120.0,
-                "semantics_age_s": ANDROID_RUNTIME_SEMANTICS_STALE_AFTER_SECONDS + 0.1,
-            },
-        ), patch(
-            "core.android_device_state_store.get_device_snapshot_reconciliation",
-            return_value={"status": "accepted", "reason": "initial_snapshot", "applied": True},
-        ), patch(
-            "core.android_device_state_store.list_recent_execution_events",
-            return_value=[],
+        with (
+            patch(
+                "core.android_device_state_store.get_device_state_snapshot",
+                return_value=state_snapshot,
+            ),
+            patch(
+                "core.android_device_state_store.get_device_capability_report_semantics",
+                return_value={
+                    "canonical_mode": "cross_device",
+                    "reported_mode_state": "delegated",
+                    "local_inference_available": True,
+                    "local_inference_ready": True,
+                    "canonical_gate_metadata_state": "complete",
+                    "canonical_gate_metadata_complete": True,
+                    "missing_canonical_gate_metadata_keys": [],
+                    "malformed_canonical_gate_metadata_keys": [],
+                    "absorbed_at": 123.0,
+                    "reported_at": 120.0,
+                    "semantics_age_s": ANDROID_RUNTIME_SEMANTICS_STALE_AFTER_SECONDS + 0.1,
+                },
+            ),
+            patch(
+                "core.android_device_state_store.get_device_snapshot_reconciliation",
+                return_value={"status": "accepted", "reason": "initial_snapshot", "applied": True},
+            ),
+            patch(
+                "core.android_device_state_store.list_recent_execution_events",
+                return_value=[],
+            ),
         ):
             snapshot = get_execution_runtime_snapshot(device_ids=[device_id])
 
@@ -1228,29 +1271,34 @@ class TestExecutionRuntimeSnapshot:
         state_snapshot.runtime_health_snapshot = {"status": "healthy"}
         state_snapshot.is_local_ai_ready = lambda: False
 
-        with patch(
-            "core.android_device_state_store.get_device_state_snapshot",
-            return_value=state_snapshot,
-        ), patch(
-            "core.android_device_state_store.get_device_capability_report_semantics",
-            return_value={
-                "canonical_mode": "cross_device",
-                "reported_mode_state": "delegated",
-                "local_inference_available": True,
-                "canonical_gate_metadata_state": "complete",
-                "canonical_gate_metadata_complete": True,
-                "missing_canonical_gate_metadata_keys": [],
-                "malformed_canonical_gate_metadata_keys": [],
-                "absorbed_at": None,
-                "reported_at": 120.0,
-                "semantics_age_s": None,
-            },
-        ), patch(
-            "core.android_device_state_store.get_device_snapshot_reconciliation",
-            return_value={"status": "accepted", "reason": "initial_snapshot", "applied": True},
-        ), patch(
-            "core.android_device_state_store.list_recent_execution_events",
-            return_value=[],
+        with (
+            patch(
+                "core.android_device_state_store.get_device_state_snapshot",
+                return_value=state_snapshot,
+            ),
+            patch(
+                "core.android_device_state_store.get_device_capability_report_semantics",
+                return_value={
+                    "canonical_mode": "cross_device",
+                    "reported_mode_state": "delegated",
+                    "local_inference_available": True,
+                    "canonical_gate_metadata_state": "complete",
+                    "canonical_gate_metadata_complete": True,
+                    "missing_canonical_gate_metadata_keys": [],
+                    "malformed_canonical_gate_metadata_keys": [],
+                    "absorbed_at": None,
+                    "reported_at": 120.0,
+                    "semantics_age_s": None,
+                },
+            ),
+            patch(
+                "core.android_device_state_store.get_device_snapshot_reconciliation",
+                return_value={"status": "accepted", "reason": "initial_snapshot", "applied": True},
+            ),
+            patch(
+                "core.android_device_state_store.list_recent_execution_events",
+                return_value=[],
+            ),
         ):
             snapshot = get_execution_runtime_snapshot(device_ids=[device_id])
 
@@ -1271,28 +1319,33 @@ class TestExecutionRuntimeSnapshot:
         state_snapshot.runtime_health_snapshot = {"status": "healthy"}
         state_snapshot.is_local_ai_ready = lambda: False
 
-        with patch(
-            "core.android_device_state_store.get_device_state_snapshot",
-            return_value=state_snapshot,
-        ), patch(
-            "core.android_device_state_store.get_device_capability_report_semantics",
-            return_value={
-                "canonical_mode": None,
-                "reported_mode_state": "not_a_real_mode",
-                "canonical_gate_metadata_state": "malformed",
-                "canonical_gate_metadata_complete": False,
-                "missing_canonical_gate_metadata_keys": ["goal_execution_eligibility"],
-                "malformed_canonical_gate_metadata_keys": ["mode_state"],
-                "absorbed_at": 123.0,
-                "reported_at": 120.0,
-                "semantics_age_s": 3.0,
-            },
-        ), patch(
-            "core.android_device_state_store.get_device_snapshot_reconciliation",
-            return_value={"status": "accepted", "reason": "initial_snapshot", "applied": True},
-        ), patch(
-            "core.android_device_state_store.list_recent_execution_events",
-            return_value=[],
+        with (
+            patch(
+                "core.android_device_state_store.get_device_state_snapshot",
+                return_value=state_snapshot,
+            ),
+            patch(
+                "core.android_device_state_store.get_device_capability_report_semantics",
+                return_value={
+                    "canonical_mode": None,
+                    "reported_mode_state": "not_a_real_mode",
+                    "canonical_gate_metadata_state": "malformed",
+                    "canonical_gate_metadata_complete": False,
+                    "missing_canonical_gate_metadata_keys": ["goal_execution_eligibility"],
+                    "malformed_canonical_gate_metadata_keys": ["mode_state"],
+                    "absorbed_at": 123.0,
+                    "reported_at": 120.0,
+                    "semantics_age_s": 3.0,
+                },
+            ),
+            patch(
+                "core.android_device_state_store.get_device_snapshot_reconciliation",
+                return_value={"status": "accepted", "reason": "initial_snapshot", "applied": True},
+            ),
+            patch(
+                "core.android_device_state_store.list_recent_execution_events",
+                return_value=[],
+            ),
         ):
             snapshot = get_execution_runtime_snapshot(device_ids=[device_id])
 
@@ -1412,18 +1465,23 @@ class TestExecutionRuntimeSnapshot:
         for field_name in missing_semantic_fields:
             semantics.pop(field_name, None)
 
-        with patch(
-            "core.android_device_state_store.get_device_state_snapshot",
-            return_value=state_snapshot,
-        ), patch(
-            "core.android_device_state_store.get_device_capability_report_semantics",
-            return_value=semantics,
-        ), patch(
-            "core.android_device_state_store.get_device_snapshot_reconciliation",
-            return_value={"status": "accepted", "reason": "initial_snapshot", "applied": True},
-        ), patch(
-            "core.android_device_state_store.list_recent_execution_events",
-            return_value=[],
+        with (
+            patch(
+                "core.android_device_state_store.get_device_state_snapshot",
+                return_value=state_snapshot,
+            ),
+            patch(
+                "core.android_device_state_store.get_device_capability_report_semantics",
+                return_value=semantics,
+            ),
+            patch(
+                "core.android_device_state_store.get_device_snapshot_reconciliation",
+                return_value={"status": "accepted", "reason": "initial_snapshot", "applied": True},
+            ),
+            patch(
+                "core.android_device_state_store.list_recent_execution_events",
+                return_value=[],
+            ),
         ):
             snapshot = get_execution_runtime_snapshot(device_ids=[device_id])
 
@@ -1451,33 +1509,38 @@ class TestExecutionRuntimeSnapshot:
         state_snapshot.runtime_health_snapshot = {"status": "healthy"}
         state_snapshot.is_local_ai_ready = lambda: False
 
-        with patch(
-            "core.android_device_state_store.get_device_state_snapshot",
-            return_value=state_snapshot,
-        ), patch(
-            "core.android_device_state_store.get_device_capability_report_semantics",
-            return_value={
-                "canonical_mode": "cross_device",
-                "reported_mode_state": "cross_device_active",
-                "canonical_gate_metadata_state": "unknown",
-                "canonical_gate_metadata_complete": False,
-                "missing_canonical_gate_metadata_keys": [],
-                "malformed_canonical_gate_metadata_keys": [],
-                "unknown_canonical_gate_metadata_keys": ["extra_capability_flag"],
-                "canonical_gate_semantic_conflicts": [],
-                "downgraded_canonical_gate_metadata_reasons": [],
-                "canonical_gate_governance_readiness_impact": "block",
-                "canonical_gate_contract_diagnosis": "unknown field extra_capability_flag",
-                "absorbed_at": 123.0,
-                "reported_at": 120.0,
-                "semantics_age_s": 3.0,
-            },
-        ), patch(
-            "core.android_device_state_store.get_device_snapshot_reconciliation",
-            return_value={"status": "accepted", "reason": "initial_snapshot", "applied": True},
-        ), patch(
-            "core.android_device_state_store.list_recent_execution_events",
-            return_value=[],
+        with (
+            patch(
+                "core.android_device_state_store.get_device_state_snapshot",
+                return_value=state_snapshot,
+            ),
+            patch(
+                "core.android_device_state_store.get_device_capability_report_semantics",
+                return_value={
+                    "canonical_mode": "cross_device",
+                    "reported_mode_state": "cross_device_active",
+                    "canonical_gate_metadata_state": "unknown",
+                    "canonical_gate_metadata_complete": False,
+                    "missing_canonical_gate_metadata_keys": [],
+                    "malformed_canonical_gate_metadata_keys": [],
+                    "unknown_canonical_gate_metadata_keys": ["extra_capability_flag"],
+                    "canonical_gate_semantic_conflicts": [],
+                    "downgraded_canonical_gate_metadata_reasons": [],
+                    "canonical_gate_governance_readiness_impact": "block",
+                    "canonical_gate_contract_diagnosis": "unknown field extra_capability_flag",
+                    "absorbed_at": 123.0,
+                    "reported_at": 120.0,
+                    "semantics_age_s": 3.0,
+                },
+            ),
+            patch(
+                "core.android_device_state_store.get_device_snapshot_reconciliation",
+                return_value={"status": "accepted", "reason": "initial_snapshot", "applied": True},
+            ),
+            patch(
+                "core.android_device_state_store.list_recent_execution_events",
+                return_value=[],
+            ),
         ):
             snapshot = get_execution_runtime_snapshot(device_ids=[device_id])
 
@@ -1497,44 +1560,49 @@ class TestExecutionRuntimeSnapshot:
         state_snapshot.runtime_health_snapshot = {"status": "healthy"}
         state_snapshot.is_local_ai_ready = lambda: False
 
-        with patch(
-            "core.android_device_state_store.get_device_state_snapshot",
-            return_value=state_snapshot,
-        ), patch(
-            "core.android_device_state_store.get_device_capability_report_semantics",
-            return_value={
-                "canonical_mode": "cross_device",
-                "reported_mode_state": "cross_device_degraded",
-                "mode_readiness_state": "degraded",
-                "cross_device_eligibility": True,
-                "goal_execution_eligibility": True,
-                "parallel_execution_eligibility": True,
-                "local_intelligence_status": "degraded",
-                "local_inference_ready": False,
-                "local_inference_available": False,
-                "canonical_gate_metadata_state": "downgraded",
-                "canonical_gate_metadata_complete": False,
-                "missing_canonical_gate_metadata_keys": [],
-                "malformed_canonical_gate_metadata_keys": [],
-                "unknown_canonical_gate_metadata_keys": [],
-                "canonical_gate_semantic_conflicts": [],
-                "downgraded_canonical_gate_metadata_reasons": [
-                    "degraded_mode_true",
-                    "local_intelligence_status_degraded",
-                    "mode_readiness_state_degraded",
-                ],
-                "canonical_gate_governance_readiness_impact": "degrade",
-                "canonical_gate_contract_diagnosis": "degraded runtime truth",
-                "absorbed_at": 123.0,
-                "reported_at": 120.0,
-                "semantics_age_s": 3.0,
-            },
-        ), patch(
-            "core.android_device_state_store.get_device_snapshot_reconciliation",
-            return_value={"status": "accepted", "reason": "initial_snapshot", "applied": True},
-        ), patch(
-            "core.android_device_state_store.list_recent_execution_events",
-            return_value=[],
+        with (
+            patch(
+                "core.android_device_state_store.get_device_state_snapshot",
+                return_value=state_snapshot,
+            ),
+            patch(
+                "core.android_device_state_store.get_device_capability_report_semantics",
+                return_value={
+                    "canonical_mode": "cross_device",
+                    "reported_mode_state": "cross_device_degraded",
+                    "mode_readiness_state": "degraded",
+                    "cross_device_eligibility": True,
+                    "goal_execution_eligibility": True,
+                    "parallel_execution_eligibility": True,
+                    "local_intelligence_status": "degraded",
+                    "local_inference_ready": False,
+                    "local_inference_available": False,
+                    "canonical_gate_metadata_state": "downgraded",
+                    "canonical_gate_metadata_complete": False,
+                    "missing_canonical_gate_metadata_keys": [],
+                    "malformed_canonical_gate_metadata_keys": [],
+                    "unknown_canonical_gate_metadata_keys": [],
+                    "canonical_gate_semantic_conflicts": [],
+                    "downgraded_canonical_gate_metadata_reasons": [
+                        "degraded_mode_true",
+                        "local_intelligence_status_degraded",
+                        "mode_readiness_state_degraded",
+                    ],
+                    "canonical_gate_governance_readiness_impact": "degrade",
+                    "canonical_gate_contract_diagnosis": "degraded runtime truth",
+                    "absorbed_at": 123.0,
+                    "reported_at": 120.0,
+                    "semantics_age_s": 3.0,
+                },
+            ),
+            patch(
+                "core.android_device_state_store.get_device_snapshot_reconciliation",
+                return_value={"status": "accepted", "reason": "initial_snapshot", "applied": True},
+            ),
+            patch(
+                "core.android_device_state_store.list_recent_execution_events",
+                return_value=[],
+            ),
         ):
             snapshot = get_execution_runtime_snapshot(device_ids=[device_id])
 
@@ -1546,8 +1614,5 @@ class TestExecutionRuntimeSnapshot:
             "mode_readiness_state_degraded",
         ]
         assert device_state["android_semantics_governance_readiness_impact"] == "degrade"
-        assert (
-            device_state["android_semantics_freshness_reason"]
-            == "android_semantics_contract_downgraded"
-        )
+        assert device_state["android_semantics_freshness_reason"] == "android_semantics_contract_downgraded"
         assert device_state["android_runtime_truth_authority"] == "downgraded_to_unknown"

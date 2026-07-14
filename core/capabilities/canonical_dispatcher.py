@@ -52,6 +52,7 @@ Usage
     # Also available as plain dict:
     print(result.to_dict())
 """
+
 from __future__ import annotations
 
 import logging
@@ -87,13 +88,13 @@ CANONICAL_DISPATCHER_SPINE_HARDENED: str = (
 class CapabilityLayer(str, Enum):
     """Classification of a capability invocation by its naming prefix."""
 
-    MCP = "mcp"            # mcp__<server>__<tool>
-    MCP_GW = "mcp_gw"      # mcp__gateway__<tool>
-    SKILL = "skill"        # skill__<id>
-    NODE = "node"          # node__<id>__<action>
-    DEVICE = "device"      # device__<device_id>__<action>
-    GITHUB = "github"      # github__<action>
-    UNKNOWN = "unknown"    # unrecognised prefix
+    MCP = "mcp"  # mcp__<server>__<tool>
+    MCP_GW = "mcp_gw"  # mcp__gateway__<tool>
+    SKILL = "skill"  # skill__<id>
+    NODE = "node"  # node__<id>__<action>
+    DEVICE = "device"  # device__<device_id>__<action>
+    GITHUB = "github"  # github__<action>
+    UNKNOWN = "unknown"  # unrecognised prefix
 
     @classmethod
     def classify(cls, tool_name: str) -> "CapabilityLayer":
@@ -116,6 +117,7 @@ class CapabilityLayer(str, Enum):
 # ---------------------------------------------------------------------------
 # Normalized dispatch result
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class DispatchResult:
@@ -193,6 +195,7 @@ class DispatchResult:
 # ---------------------------------------------------------------------------
 # Canonical dispatcher
 # ---------------------------------------------------------------------------
+
 
 class CanonicalDispatcher:
     """Single canonical execution path for capability/tool invocations.
@@ -277,13 +280,9 @@ class CanonicalDispatcher:
         # --- route to backend ------------------------------------------------
         try:
             if layer in (CapabilityLayer.MCP, CapabilityLayer.MCP_GW):
-                result = await self._dispatch_mcp(
-                    tool_name, arguments, _device_id, _session_id
-                )
+                result = await self._dispatch_mcp(tool_name, arguments, _device_id, _session_id)
             elif layer == CapabilityLayer.SKILL:
-                result = await self._dispatch_skill(
-                    tool_name, arguments, _device_id, _session_id
-                )
+                result = await self._dispatch_skill(tool_name, arguments, _device_id, _session_id)
             elif layer == CapabilityLayer.NODE:
                 result = await self._dispatch_node(tool_name, arguments)
             elif layer == CapabilityLayer.DEVICE:
@@ -351,8 +350,7 @@ class CanonicalDispatcher:
                 return DispatchResult(
                     success=False,
                     error=(
-                        f"操作 [{tool_name}] 需要用户确认"
-                        f"（风险等级: {getattr(check, 'risk_level', 'unknown')}）"
+                        f"操作 [{tool_name}] 需要用户确认" f"（风险等级: {getattr(check, 'risk_level', 'unknown')}）"
                     ),
                     needs_confirmation=True,
                     tool_name=tool_name,
@@ -406,6 +404,7 @@ class CanonicalDispatcher:
         if server_id == "gateway":
             try:
                 from core.mcp_gateway import get_mcp_gateway
+
                 gateway = get_mcp_gateway()
                 raw = await gateway.execute_tool(mcp_tool_name, arguments)
                 metrics.finish()
@@ -423,6 +422,7 @@ class CanonicalDispatcher:
 
         # Standard MCP server tools
         from core.mcp_loader import mcp_loader
+
         try:
             raw = await mcp_loader.call_tool(server_id, mcp_tool_name, arguments)
             metrics.finish()
@@ -450,7 +450,7 @@ class CanonicalDispatcher:
         session_id: str,
     ) -> DispatchResult:
         """Route a ``skill__*`` invocation through the canonical SkillRegistry."""
-        skill_id = tool_name[len("skill__"):]
+        skill_id = tool_name[len("skill__") :]
 
         from core.skill_contract import SkillRequest
         from core.skill_loader import skill_loader as _skill_loader
@@ -460,9 +460,11 @@ class CanonicalDispatcher:
 
         # Lazily register a loader-backed adapter for skills not yet in registry
         if not registry.has_skill(tool_name):
+
             def _make_adapter(_sid: str):
                 async def _adapter(**kwargs: Any) -> Any:
                     return await _skill_loader.execute(_sid, **kwargs)
+
                 return _adapter
 
             registry.register_skill(
@@ -553,7 +555,7 @@ class CanonicalDispatcher:
         arguments: Dict[str, Any],
     ) -> DispatchResult:
         """Route a ``github__*`` invocation to the GitHub installer service."""
-        action = tool_name[len("github__"):]
+        action = tool_name[len("github__") :]
         try:
             from core.github_installer import get_github_installer
 
@@ -595,10 +597,7 @@ class CanonicalDispatcher:
             else:
                 return DispatchResult(
                     success=False,
-                    error=(
-                        f"Unknown github action: '{action}'. "
-                        "Valid actions: install, uninstall, list, status."
-                    ),
+                    error=(f"Unknown github action: '{action}'. " "Valid actions: install, uninstall, list, status."),
                 )
         except Exception as exc:
             logger.warning("CanonicalDispatcher: github__%s failed: %s", action, exc)
@@ -686,11 +685,10 @@ class CanonicalDispatcher:
     # Observability helpers
     # ------------------------------------------------------------------
 
-    def _emit_invoked_event(
-        self, tool_name: str, trace_id: str, session_id: str
-    ) -> None:
+    def _emit_invoked_event(self, tool_name: str, trace_id: str, session_id: str) -> None:
         try:
-            from core.state_event_bus import StateEventType, emit as _emit
+            from core.state_event_bus import StateEventType
+            from core.state_event_bus import emit as _emit
 
             _emit(
                 StateEventType.SKILL_INVOKED,
@@ -702,11 +700,10 @@ class CanonicalDispatcher:
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
 
-    def _emit_failed_event(
-        self, tool_name: str, error: str, trace_id: str, session_id: str
-    ) -> None:
+    def _emit_failed_event(self, tool_name: str, error: str, trace_id: str, session_id: str) -> None:
         try:
-            from core.state_event_bus import StateEventType, emit as _emit
+            from core.state_event_bus import StateEventType
+            from core.state_event_bus import emit as _emit
 
             _emit(
                 StateEventType.SKILL_FAILED,

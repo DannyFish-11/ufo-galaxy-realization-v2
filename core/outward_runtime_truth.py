@@ -459,9 +459,7 @@ def classify_signal(source_name: str, is_canonical: bool) -> TruthSignalClass:
     """
     if is_canonical:
         return TruthSignalClass.PRIMARY
-    logger.debug(
-        "classify_signal: source '%s' classified as LEGACY_COMPAT", source_name
-    )
+    logger.debug("classify_signal: source '%s' classified as LEGACY_COMPAT", source_name)
     return TruthSignalClass.LEGACY_COMPAT
 
 

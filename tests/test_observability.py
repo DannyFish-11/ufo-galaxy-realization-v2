@@ -18,10 +18,10 @@ import time
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-
 # ---------------------------------------------------------------------------
 # 1. core/task_logger.emit_task_log
 # ---------------------------------------------------------------------------
+
 
 class TestEmitTaskLog(unittest.TestCase):
     """emit_task_log must write valid JSON to Galaxy.TaskLifecycle."""
@@ -68,8 +68,13 @@ class TestEmitTaskLog(unittest.TestCase):
         from core.task_logger import emit_task_log
 
         events = [
-            "task_received", "task_dispatched", "task_completed",
-            "task_failed", "task_cancelled", "task_timeout", "aggregation_done",
+            "task_received",
+            "task_dispatched",
+            "task_completed",
+            "task_failed",
+            "task_cancelled",
+            "task_timeout",
+            "aggregation_done",
         ]
         records = []
 
@@ -99,6 +104,7 @@ class TestEmitTaskLog(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 2. OpenClawd.process() includes trace_id
 # ---------------------------------------------------------------------------
+
 
 class TestOpenClawdTraceId(unittest.IsolatedAsyncioTestCase):
     """process() must include trace_id in the top-level result."""
@@ -159,6 +165,7 @@ class TestOpenClawdTraceId(unittest.IsolatedAsyncioTestCase):
 # ---------------------------------------------------------------------------
 # 3. _dispatch_goal_execution propagates trace_id
 # ---------------------------------------------------------------------------
+
 
 class TestDispatchGoalExecutionTraceId(unittest.IsolatedAsyncioTestCase):
 
@@ -231,6 +238,7 @@ class TestDispatchGoalExecutionTraceId(unittest.IsolatedAsyncioTestCase):
 # 4. _dispatch_parallel_goal propagates trace_id (with real devices)
 # ---------------------------------------------------------------------------
 
+
 class TestDispatchParallelGoalTraceId(unittest.IsolatedAsyncioTestCase):
 
     async def test_result_contains_trace_id_when_devices_present(self):
@@ -267,10 +275,7 @@ class TestDispatchParallelGoalTraceId(unittest.IsolatedAsyncioTestCase):
         mock_udm.get_devices_with_capability = MagicMock(return_value=[])
         mock_udm.get_autonomous_devices = MagicMock(return_value=[mock_dev1, mock_dev2])
 
-        with (
-            patch("core.openclawd.OpenClawd._dispatch_parallel_goal",
-                  clawd._dispatch_parallel_goal),
-        ):
+        with (patch("core.openclawd.OpenClawd._dispatch_parallel_goal", clawd._dispatch_parallel_goal),):
             pass  # just to ensure import
 
         # We need to patch the module-level imports inside _dispatch_parallel_goal.
@@ -318,6 +323,7 @@ class TestDispatchParallelGoalTraceId(unittest.IsolatedAsyncioTestCase):
 # ---------------------------------------------------------------------------
 # 5. GalaxyOrchestrator.process_request() uses trace_id from context
 # ---------------------------------------------------------------------------
+
 
 class TestGalaxyOrchestratorTraceId(unittest.IsolatedAsyncioTestCase):
 
@@ -378,13 +384,15 @@ class TestGalaxyOrchestratorTraceId(unittest.IsolatedAsyncioTestCase):
 # 6. /api/v1/chat emits aggregation_done when parallel_result is present
 # ---------------------------------------------------------------------------
 
+
 class TestChatAggregationLog(unittest.IsolatedAsyncioTestCase):
 
     async def test_aggregation_log_emitted_for_parallel_result(self):
         """chat() must call emit_task_log('aggregation_done') when result has parallel_result."""
-        from core.routes.chat import create_router
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
+        from core.routes.chat import create_router
 
         app = FastAPI()
         router = create_router()
@@ -430,6 +438,7 @@ class TestChatAggregationLog(unittest.IsolatedAsyncioTestCase):
         ):
             # Patch openclawd inside the closure by patching the import
             import core.openclawd as _oc_mod
+
             original_get = getattr(_oc_mod, "get_openclawd", None)
             _oc_mod.get_openclawd = lambda: mock_oc
             try:
@@ -445,7 +454,8 @@ class TestChatAggregationLog(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resp.status_code, 200)
         agg_events = [c for c in log_calls if c.get("event") == "aggregation_done"]
         self.assertGreater(
-            len(agg_events), 0,
+            len(agg_events),
+            0,
             "Expected at least one 'aggregation_done' log when parallel_result is present",
         )
         agg = agg_events[0]
@@ -458,10 +468,10 @@ if __name__ == "__main__":
     unittest.main()
 
 
-
 # ---------------------------------------------------------------------------
 # 2. OpenClawd.process() includes trace_id
 # ---------------------------------------------------------------------------
+
 
 class TestOpenClawdTraceId(unittest.IsolatedAsyncioTestCase):
     """process() must include trace_id in the top-level result."""
@@ -522,6 +532,7 @@ class TestOpenClawdTraceId(unittest.IsolatedAsyncioTestCase):
 # ---------------------------------------------------------------------------
 # 3. _dispatch_goal_execution propagates trace_id
 # ---------------------------------------------------------------------------
+
 
 class TestDispatchGoalExecutionTraceId(unittest.IsolatedAsyncioTestCase):
 
@@ -594,6 +605,7 @@ class TestDispatchGoalExecutionTraceId(unittest.IsolatedAsyncioTestCase):
 # 4. _dispatch_parallel_goal propagates trace_id
 # ---------------------------------------------------------------------------
 
+
 class TestDispatchParallelGoalTraceId(unittest.IsolatedAsyncioTestCase):
 
     async def test_subtask_payload_contains_trace_id(self):
@@ -642,6 +654,7 @@ class TestDispatchParallelGoalTraceId(unittest.IsolatedAsyncioTestCase):
                 async def _patched(*args, **kwargs):
                     # Force two devices without external lookups
                     import unittest.mock as _mock
+
                     with _mock.patch(
                         "core.agent.capability_registry.CapabilityRegistry.get_instance",
                         side_effect=Exception("skip"),
@@ -720,6 +733,7 @@ class TestDispatchParallelGoalTraceId(unittest.IsolatedAsyncioTestCase):
 # 5. GalaxyOrchestrator.process_request() uses trace_id from context
 # ---------------------------------------------------------------------------
 
+
 class TestGalaxyOrchestratorTraceId(unittest.IsolatedAsyncioTestCase):
 
     async def test_trace_id_from_context_propagates_to_result(self):
@@ -729,8 +743,10 @@ class TestGalaxyOrchestratorTraceId(unittest.IsolatedAsyncioTestCase):
         orch = GalaxyOrchestrator.__new__(GalaxyOrchestrator)
 
         # Minimal state
+        from dataclasses import dataclass
+        from dataclasses import field as dc_field
+
         from galaxy_gateway.orchestrator.galaxy_orchestrator import TaskStatus
-        from dataclasses import dataclass, field as dc_field
 
         orch.task_queue = []
         orch.task_history = {}
@@ -783,13 +799,15 @@ class TestGalaxyOrchestratorTraceId(unittest.IsolatedAsyncioTestCase):
 # 6. /api/v1/chat emits aggregation_done when parallel_result is present
 # ---------------------------------------------------------------------------
 
+
 class TestChatAggregationLog(unittest.IsolatedAsyncioTestCase):
 
     async def test_aggregation_log_emitted_for_parallel_result(self):
         """chat() must call emit_task_log('aggregation_done') when result has parallel_result."""
-        from core.routes.chat import create_router
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
+        from core.routes.chat import create_router
 
         app = FastAPI()
         router = create_router()
@@ -843,7 +861,8 @@ class TestChatAggregationLog(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resp.status_code, 200)
         agg_events = [c for c in log_calls if c.get("event") == "aggregation_done"]
         self.assertGreater(
-            len(agg_events), 0,
+            len(agg_events),
+            0,
             "Expected at least one 'aggregation_done' log when parallel_result is present",
         )
         agg = agg_events[0]

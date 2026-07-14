@@ -35,7 +35,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -79,26 +78,31 @@ class TestSentinelPresence:
 
     def test_source_dispatch_posture_aware_authority(self):
         from core.source_execution_eligibility import SOURCE_DISPATCH_POSTURE_AWARE_AUTHORITY
+
         assert isinstance(SOURCE_DISPATCH_POSTURE_AWARE_AUTHORITY, str)
         assert len(SOURCE_DISPATCH_POSTURE_AWARE_AUTHORITY) > 10
 
     def test_control_only_ineligible_policy(self):
         from core.source_execution_eligibility import CONTROL_ONLY_SOURCE_INELIGIBLE_FOR_LOCAL_EXECUTION_POLICY
+
         assert isinstance(CONTROL_ONLY_SOURCE_INELIGIBLE_FOR_LOCAL_EXECUTION_POLICY, str)
         assert "control_only" in CONTROL_ONLY_SOURCE_INELIGIBLE_FOR_LOCAL_EXECUTION_POLICY.lower()
 
     def test_join_runtime_eligible_policy(self):
         from core.source_execution_eligibility import JOIN_RUNTIME_SOURCE_ELIGIBLE_FOR_LOCAL_EXECUTION_POLICY
+
         assert isinstance(JOIN_RUNTIME_SOURCE_ELIGIBLE_FOR_LOCAL_EXECUTION_POLICY, str)
         assert "join_runtime" in JOIN_RUNTIME_SOURCE_ELIGIBLE_FOR_LOCAL_EXECUTION_POLICY.lower()
 
     def test_posture_gated_local_execution_policy(self):
         from core.source_execution_eligibility import POSTURE_GATED_LOCAL_EXECUTION_POLICY
+
         assert isinstance(POSTURE_GATED_LOCAL_EXECUTION_POLICY, str)
         assert len(POSTURE_GATED_LOCAL_EXECUTION_POLICY) > 10
 
     def test_posture_aware_dispatch_integrated_sentinel(self):
         from core.source_execution_eligibility import POSTURE_AWARE_DISPATCH_INTEGRATED_SENTINEL
+
         assert isinstance(POSTURE_AWARE_DISPATCH_INTEGRATED_SENTINEL, str)
         assert "PR-2" in POSTURE_AWARE_DISPATCH_INTEGRATED_SENTINEL
 
@@ -113,6 +117,7 @@ class TestSourceExecutionEligibility:
 
     def test_construction_eligible(self):
         from core.source_execution_eligibility import SourceExecutionEligibility
+
         e = SourceExecutionEligibility(eligible=True, posture="join_runtime", reason="test")
         assert e.eligible is True
         assert e.posture == "join_runtime"
@@ -120,18 +125,21 @@ class TestSourceExecutionEligibility:
 
     def test_construction_ineligible(self):
         from core.source_execution_eligibility import SourceExecutionEligibility
+
         e = SourceExecutionEligibility(eligible=False, posture="control_only", reason="blocked")
         assert e.eligible is False
         assert e.posture == "control_only"
 
     def test_frozen_dataclass(self):
         from core.source_execution_eligibility import SourceExecutionEligibility
+
         e = SourceExecutionEligibility(eligible=True, posture="join_runtime", reason="r")
         with pytest.raises((AttributeError, TypeError)):
             e.eligible = False  # type: ignore[misc]
 
     def test_to_dict_keys(self):
         from core.source_execution_eligibility import SourceExecutionEligibility
+
         e = SourceExecutionEligibility(eligible=False, posture="control_only", reason="r")
         d = e.to_dict()
         assert "eligible" in d
@@ -143,9 +151,10 @@ class TestSourceExecutionEligibility:
 
     def test_to_dict_authority_matches_sentinel(self):
         from core.source_execution_eligibility import (
-            SourceExecutionEligibility,
             SOURCE_DISPATCH_POSTURE_AWARE_AUTHORITY,
+            SourceExecutionEligibility,
         )
+
         e = SourceExecutionEligibility(eligible=True, posture="join_runtime", reason="r")
         assert e.to_dict()["authority"] == SOURCE_DISPATCH_POSTURE_AWARE_AUTHORITY
 
@@ -160,32 +169,39 @@ class TestResolvePostureForEligibility:
 
     def test_none_resolves_to_control_only(self):
         from core.source_execution_eligibility import resolve_posture_for_eligibility
+
         assert resolve_posture_for_eligibility(None) == "control_only"
 
     def test_empty_resolves_to_control_only(self):
         from core.source_execution_eligibility import resolve_posture_for_eligibility
+
         assert resolve_posture_for_eligibility("") == "control_only"
 
     def test_control_only_passthrough(self):
         from core.source_execution_eligibility import resolve_posture_for_eligibility
+
         assert resolve_posture_for_eligibility("control_only") == "control_only"
 
     def test_join_runtime_passthrough(self):
         from core.source_execution_eligibility import resolve_posture_for_eligibility
+
         assert resolve_posture_for_eligibility("join_runtime") == "join_runtime"
 
     def test_unknown_resolves_to_control_only(self):
         from core.source_execution_eligibility import resolve_posture_for_eligibility
+
         assert resolve_posture_for_eligibility("executor") == "control_only"
         assert resolve_posture_for_eligibility("UNKNOWN") == "control_only"
 
     def test_case_insensitive(self):
         from core.source_execution_eligibility import resolve_posture_for_eligibility
+
         assert resolve_posture_for_eligibility("JOIN_RUNTIME") == "join_runtime"
         assert resolve_posture_for_eligibility("CONTROL_ONLY") == "control_only"
 
     def test_whitespace_stripped(self):
         from core.source_execution_eligibility import resolve_posture_for_eligibility
+
         assert resolve_posture_for_eligibility("  join_runtime  ") == "join_runtime"
 
 
@@ -199,6 +215,7 @@ class TestCheckSourceExecutionEligibility:
 
     def test_control_only_is_ineligible(self):
         from core.source_execution_eligibility import check_source_execution_eligibility
+
         result = check_source_execution_eligibility("control_only")
         assert result.eligible is False
         assert result.posture == "control_only"
@@ -206,6 +223,7 @@ class TestCheckSourceExecutionEligibility:
 
     def test_join_runtime_is_eligible(self):
         from core.source_execution_eligibility import check_source_execution_eligibility
+
         result = check_source_execution_eligibility("join_runtime")
         assert result.eligible is True
         assert result.posture == "join_runtime"
@@ -213,25 +231,29 @@ class TestCheckSourceExecutionEligibility:
 
     def test_none_defaults_to_ineligible(self):
         from core.source_execution_eligibility import check_source_execution_eligibility
+
         result = check_source_execution_eligibility(None)
         assert result.eligible is False
         assert result.posture == "control_only"
 
     def test_unknown_defaults_to_ineligible(self):
         from core.source_execution_eligibility import check_source_execution_eligibility
+
         result = check_source_execution_eligibility("observer")
         assert result.eligible is False
 
     def test_returns_source_execution_eligibility_type(self):
         from core.source_execution_eligibility import (
-            check_source_execution_eligibility,
             SourceExecutionEligibility,
+            check_source_execution_eligibility,
         )
+
         result = check_source_execution_eligibility("join_runtime")
         assert isinstance(result, SourceExecutionEligibility)
 
     def test_to_dict_round_trip(self):
         from core.source_execution_eligibility import check_source_execution_eligibility
+
         result = check_source_execution_eligibility("join_runtime")
         d = result.to_dict()
         assert d["eligible"] is True
@@ -248,18 +270,22 @@ class TestIsSourceEligibleForLocalExecution:
 
     def test_control_only_returns_false(self):
         from core.source_execution_eligibility import is_source_eligible_for_local_execution
+
         assert is_source_eligible_for_local_execution("control_only") is False
 
     def test_join_runtime_returns_true(self):
         from core.source_execution_eligibility import is_source_eligible_for_local_execution
+
         assert is_source_eligible_for_local_execution("join_runtime") is True
 
     def test_none_returns_false(self):
         from core.source_execution_eligibility import is_source_eligible_for_local_execution
+
         assert is_source_eligible_for_local_execution(None) is False
 
     def test_unknown_returns_false(self):
         from core.source_execution_eligibility import is_source_eligible_for_local_execution
+
         assert is_source_eligible_for_local_execution("something_else") is False
 
 
@@ -273,15 +299,18 @@ class TestSelectDispatchModeControlOnlyWithTarget:
 
     def test_control_only_with_target_returns_remote_handoff(self):
         from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
+
         mode, reason = select_dispatch_mode(
             target_device_id="device_android_01",
             source_runtime_posture="control_only",
         )
         from contracts.source_dispatch import SourceDispatchMode
+
         assert mode == SourceDispatchMode.remote_handoff
 
     def test_control_only_with_target_reason_mentions_posture(self):
         from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
+
         _, reason = select_dispatch_mode(
             target_device_id="device_android_01",
             source_runtime_posture="control_only",
@@ -291,8 +320,9 @@ class TestSelectDispatchModeControlOnlyWithTarget:
 
     def test_control_only_overrides_default_local_when_target_present(self):
         """Without posture gate, explicit target_device_id also returns remote_handoff."""
-        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
+
         # With posture=control_only and target: remote_handoff
         mode_with, _ = select_dispatch_mode(
             target_device_id="device_01",
@@ -310,8 +340,8 @@ class TestSelectDispatchModeControlOnlyNoTarget:
     """Group G: control_only posture without any remote target produces blocked."""
 
     def test_control_only_no_target_returns_blocked(self):
-        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
 
         # No target, no policy overrides, no mesh — default would be local.
         # With posture=control_only, must become blocked.
@@ -322,6 +352,7 @@ class TestSelectDispatchModeControlOnlyNoTarget:
 
     def test_control_only_no_target_reason_mentions_ineligible(self):
         from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
+
         _, reason = select_dispatch_mode(
             source_runtime_posture="control_only",
         )
@@ -329,6 +360,7 @@ class TestSelectDispatchModeControlOnlyNoTarget:
 
     def test_control_only_no_target_reason_mentions_no_remote(self):
         from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
+
         _, reason = select_dispatch_mode(
             source_runtime_posture="control_only",
         )
@@ -344,8 +376,8 @@ class TestSelectDispatchModeJoinRuntime:
     """Group H: join_runtime posture does not block local or remote dispatch."""
 
     def test_join_runtime_no_target_returns_local(self):
-        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
 
         mode, reason = select_dispatch_mode(
             source_runtime_posture="join_runtime",
@@ -354,14 +386,15 @@ class TestSelectDispatchModeJoinRuntime:
 
     def test_join_runtime_no_target_reason_default_local(self):
         from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
+
         _, reason = select_dispatch_mode(
             source_runtime_posture="join_runtime",
         )
         assert "local" in reason
 
     def test_join_runtime_with_target_returns_remote_handoff(self):
-        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
 
         mode, reason = select_dispatch_mode(
             target_device_id="device_01",
@@ -371,8 +404,8 @@ class TestSelectDispatchModeJoinRuntime:
 
     def test_none_posture_preserves_default_local_behavior(self):
         """None posture = no posture gate applied; default_local is preserved."""
-        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
 
         # Without explicit posture, the pre-PR-2 default_local path applies.
         mode, _ = select_dispatch_mode(source_runtime_posture=None)
@@ -389,8 +422,8 @@ class TestSelectDispatchModeForceLocalBypassesPosture:
 
     def test_force_local_with_control_only_returns_local(self):
         """force_local is an explicit canonical exception — bypasses posture gate."""
-        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
 
         mode, reason = select_dispatch_mode(
             force_local=True,
@@ -400,6 +433,7 @@ class TestSelectDispatchModeForceLocalBypassesPosture:
 
     def test_force_local_reason_mentions_force_local(self):
         from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
+
         _, reason = select_dispatch_mode(
             force_local=True,
             source_runtime_posture="control_only",
@@ -416,8 +450,8 @@ class TestBuildSourceDispatchPlanControlOnlyNoTarget:
     """Group J: control_only with no remote target produces a blocked plan."""
 
     def test_plan_is_blocked_when_control_only_no_target(self):
-        from core.runtime.source_dispatch_orchestrator import build_source_dispatch_plan
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import build_source_dispatch_plan
 
         with (
             patch("core.runtime.source_dispatch_orchestrator._try_policy_alignment", return_value=None),
@@ -448,8 +482,8 @@ class TestBuildSourceDispatchPlanControlOnlyNoTarget:
         assert plan.ready is False
 
     def test_plan_readiness_notes_not_empty_when_blocked(self):
-        from core.runtime.source_dispatch_orchestrator import build_source_dispatch_plan
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import build_source_dispatch_plan
 
         with (
             patch("core.runtime.source_dispatch_orchestrator._try_policy_alignment", return_value=None),
@@ -474,8 +508,8 @@ class TestBuildSourceDispatchPlanControlOnlyWithTarget:
     """Group K: control_only with an explicit target produces remote_handoff plan."""
 
     def test_plan_is_remote_handoff_when_control_only_with_target(self):
-        from core.runtime.source_dispatch_orchestrator import build_source_dispatch_plan
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import build_source_dispatch_plan
 
         with (
             patch("core.runtime.source_dispatch_orchestrator._try_policy_alignment", return_value=None),
@@ -500,8 +534,8 @@ class TestBuildSourceDispatchPlanJoinRuntime:
     """Group L: join_runtime without a target produces a local plan."""
 
     def test_plan_is_local_when_join_runtime_no_target(self):
-        from core.runtime.source_dispatch_orchestrator import build_source_dispatch_plan
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import build_source_dispatch_plan
 
         with (
             patch("core.runtime.source_dispatch_orchestrator._try_policy_alignment", return_value=None),
@@ -556,8 +590,8 @@ class TestOrchestrateControlOnlyBlocked:
         assert result.success is False
 
     def test_result_mode_is_blocked_when_control_only_no_target(self):
-        from core.runtime.source_dispatch_orchestrator import orchestrate_source_runtime_dispatch
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import orchestrate_source_runtime_dispatch
 
         with (
             patch("core.runtime.source_dispatch_orchestrator._try_policy_alignment", return_value=None),
@@ -595,9 +629,7 @@ class TestOrchestrateControlOnlyBlocked:
             patch("core.runtime.source_dispatch_orchestrator._try_governance_snapshot", return_value=None),
             patch("core.runtime.source_dispatch_orchestrator._try_mesh_session", return_value=None),
             patch("core.runtime.source_dispatch_orchestrator._try_mesh_memberships", return_value=None),
-            patch(
-                "core.runtime.source_dispatch_orchestrator._try_run_local_execution"
-            ) as mock_local,
+            patch("core.runtime.source_dispatch_orchestrator._try_run_local_execution") as mock_local,
         ):
             orchestrate_source_runtime_dispatch(
                 trace_id="trace_m04",
@@ -656,8 +688,8 @@ class TestOrchestrateJoinRuntimeLocal:
         assert result.success is True
 
     def test_result_mode_is_local_when_join_runtime(self):
-        from core.runtime.source_dispatch_orchestrator import orchestrate_source_runtime_dispatch
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import orchestrate_source_runtime_dispatch
 
         with (
             patch("core.runtime.source_dispatch_orchestrator._try_policy_alignment", return_value=None),
@@ -731,8 +763,8 @@ class TestSourceDispatchOrchestratorPlan:
     """Group P: orchestrator class .plan() accepts and propagates posture."""
 
     def test_plan_control_only_no_target_is_blocked(self):
-        from core.runtime.source_dispatch_orchestrator import SourceDispatchOrchestrator
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import SourceDispatchOrchestrator
 
         handler = SourceDispatchOrchestrator()
         with (
@@ -748,8 +780,8 @@ class TestSourceDispatchOrchestratorPlan:
         assert plan.mode == SourceDispatchMode.blocked
 
     def test_plan_join_runtime_no_target_is_local(self):
-        from core.runtime.source_dispatch_orchestrator import SourceDispatchOrchestrator
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import SourceDispatchOrchestrator
 
         handler = SourceDispatchOrchestrator()
         with (
@@ -775,15 +807,18 @@ class TestDeviceRouterPostureSentinel:
 
     def test_posture_aware_dispatch_sentinel_present(self):
         from galaxy_gateway.device_router import DEVICE_ROUTER_POSTURE_AWARE_DISPATCH
+
         assert isinstance(DEVICE_ROUTER_POSTURE_AWARE_DISPATCH, str)
         assert "PR-2" in DEVICE_ROUTER_POSTURE_AWARE_DISPATCH
 
     def test_posture_aware_dispatch_sentinel_mentions_control_only(self):
         from galaxy_gateway.device_router import DEVICE_ROUTER_POSTURE_AWARE_DISPATCH
+
         assert "control_only" in DEVICE_ROUTER_POSTURE_AWARE_DISPATCH
 
     def test_posture_aware_dispatch_sentinel_mentions_join_runtime(self):
         from galaxy_gateway.device_router import DEVICE_ROUTER_POSTURE_AWARE_DISPATCH
+
         assert "join_runtime" in DEVICE_ROUTER_POSTURE_AWARE_DISPATCH
 
 
@@ -797,19 +832,23 @@ class TestCoreRuntimeReExports:
 
     def test_check_source_execution_eligibility_importable_from_core_runtime(self):
         from core.runtime import check_source_execution_eligibility
+
         assert callable(check_source_execution_eligibility)
 
     def test_is_source_eligible_importable_from_core_runtime(self):
         from core.runtime import is_source_eligible_for_local_execution
+
         assert callable(is_source_eligible_for_local_execution)
 
     def test_source_execution_eligibility_importable_from_core_runtime(self):
         from core.runtime import SourceExecutionEligibility
+
         e = SourceExecutionEligibility(eligible=True, posture="join_runtime", reason="r")
         assert e.eligible is True
 
     def test_posture_aware_sentinel_importable_from_core_runtime(self):
         from core.runtime import POSTURE_AWARE_DISPATCH_INTEGRATED_SENTINEL
+
         assert isinstance(POSTURE_AWARE_DISPATCH_INTEGRATED_SENTINEL, str)
 
 
@@ -823,8 +862,8 @@ class TestBackwardsSafetyNoPosture:
 
     def test_select_dispatch_mode_no_posture_no_target_remains_local(self):
         """No posture arg → no posture gate → pre-PR-2 default_local behavior."""
-        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
 
         # Without explicit posture, the posture gate is not applied; default is local.
         mode, _ = select_dispatch_mode()
@@ -832,16 +871,16 @@ class TestBackwardsSafetyNoPosture:
 
     def test_select_dispatch_mode_no_posture_with_target_becomes_remote_handoff(self):
         """No posture + target → remote_handoff (unchanged from pre-PR-2)."""
-        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
 
         mode, _ = select_dispatch_mode(target_device_id="dev_01")
         assert mode == SourceDispatchMode.remote_handoff
 
     def test_build_source_dispatch_plan_no_posture_graceful(self):
         """build_source_dispatch_plan() without posture does not raise."""
-        from core.runtime.source_dispatch_orchestrator import build_source_dispatch_plan
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import build_source_dispatch_plan
 
         with (
             patch("core.runtime.source_dispatch_orchestrator._try_policy_alignment", return_value=None),
@@ -961,9 +1000,8 @@ class TestCheckSourceEligibilityWithCoordinationRole:
         from core.source_execution_eligibility import (
             check_source_eligibility_with_coordination_role,
         )
-        result = check_source_eligibility_with_coordination_role(
-            "join_runtime", "observer_only"
-        )
+
+        result = check_source_eligibility_with_coordination_role("join_runtime", "observer_only")
         assert result.eligible is False
 
     def test_observer_only_role_overrides_join_runtime_posture(self):
@@ -971,9 +1009,8 @@ class TestCheckSourceEligibilityWithCoordinationRole:
         from core.source_execution_eligibility import (
             check_source_eligibility_with_coordination_role,
         )
-        result = check_source_eligibility_with_coordination_role(
-            "join_runtime", "observer_only"
-        )
+
+        result = check_source_eligibility_with_coordination_role("join_runtime", "observer_only")
         assert "observer_only" in result.reason
 
     def test_observer_only_with_control_only_posture_is_ineligible(self):
@@ -981,9 +1018,8 @@ class TestCheckSourceEligibilityWithCoordinationRole:
         from core.source_execution_eligibility import (
             check_source_eligibility_with_coordination_role,
         )
-        result = check_source_eligibility_with_coordination_role(
-            "control_only", "observer_only"
-        )
+
+        result = check_source_eligibility_with_coordination_role("control_only", "observer_only")
         assert result.eligible is False
 
     def test_joined_runtime_participant_is_eligible(self):
@@ -991,9 +1027,8 @@ class TestCheckSourceEligibilityWithCoordinationRole:
         from core.source_execution_eligibility import (
             check_source_eligibility_with_coordination_role,
         )
-        result = check_source_eligibility_with_coordination_role(
-            "join_runtime", "joined_runtime_participant"
-        )
+
+        result = check_source_eligibility_with_coordination_role("join_runtime", "joined_runtime_participant")
         assert result.eligible is True
 
     def test_joined_runtime_participant_with_control_only_posture_is_eligible(self):
@@ -1001,9 +1036,8 @@ class TestCheckSourceEligibilityWithCoordinationRole:
         from core.source_execution_eligibility import (
             check_source_eligibility_with_coordination_role,
         )
-        result = check_source_eligibility_with_coordination_role(
-            "control_only", "joined_runtime_participant"
-        )
+
+        result = check_source_eligibility_with_coordination_role("control_only", "joined_runtime_participant")
         assert result.eligible is True
 
     def test_source_controller_with_control_only_is_ineligible(self):
@@ -1011,9 +1045,8 @@ class TestCheckSourceEligibilityWithCoordinationRole:
         from core.source_execution_eligibility import (
             check_source_eligibility_with_coordination_role,
         )
-        result = check_source_eligibility_with_coordination_role(
-            "control_only", "source_controller"
-        )
+
+        result = check_source_eligibility_with_coordination_role("control_only", "source_controller")
         assert result.eligible is False
 
     def test_source_controller_with_join_runtime_is_eligible(self):
@@ -1021,9 +1054,8 @@ class TestCheckSourceEligibilityWithCoordinationRole:
         from core.source_execution_eligibility import (
             check_source_eligibility_with_coordination_role,
         )
-        result = check_source_eligibility_with_coordination_role(
-            "join_runtime", "source_controller"
-        )
+
+        result = check_source_eligibility_with_coordination_role("join_runtime", "source_controller")
         assert result.eligible is True
 
     def test_target_only_executor_is_eligible(self):
@@ -1031,9 +1063,8 @@ class TestCheckSourceEligibilityWithCoordinationRole:
         from core.source_execution_eligibility import (
             check_source_eligibility_with_coordination_role,
         )
-        result = check_source_eligibility_with_coordination_role(
-            "control_only", "target_only_executor"
-        )
+
+        result = check_source_eligibility_with_coordination_role("control_only", "target_only_executor")
         assert result.eligible is True
 
     def test_unresolved_role_defers_to_posture_control_only(self):
@@ -1041,9 +1072,8 @@ class TestCheckSourceEligibilityWithCoordinationRole:
         from core.source_execution_eligibility import (
             check_source_eligibility_with_coordination_role,
         )
-        result = check_source_eligibility_with_coordination_role(
-            "control_only", "unresolved"
-        )
+
+        result = check_source_eligibility_with_coordination_role("control_only", "unresolved")
         assert result.eligible is False
 
     def test_unresolved_role_defers_to_posture_join_runtime(self):
@@ -1051,9 +1081,8 @@ class TestCheckSourceEligibilityWithCoordinationRole:
         from core.source_execution_eligibility import (
             check_source_eligibility_with_coordination_role,
         )
-        result = check_source_eligibility_with_coordination_role(
-            "join_runtime", "unresolved"
-        )
+
+        result = check_source_eligibility_with_coordination_role("join_runtime", "unresolved")
         assert result.eligible is True
 
     def test_none_role_defers_to_posture_control_only(self):
@@ -1061,9 +1090,8 @@ class TestCheckSourceEligibilityWithCoordinationRole:
         from core.source_execution_eligibility import (
             check_source_eligibility_with_coordination_role,
         )
-        result = check_source_eligibility_with_coordination_role(
-            "control_only", None
-        )
+
+        result = check_source_eligibility_with_coordination_role("control_only", None)
         assert result.eligible is False
 
     def test_none_role_defers_to_posture_join_runtime(self):
@@ -1071,17 +1099,17 @@ class TestCheckSourceEligibilityWithCoordinationRole:
         from core.source_execution_eligibility import (
             check_source_eligibility_with_coordination_role,
         )
-        result = check_source_eligibility_with_coordination_role(
-            "join_runtime", None
-        )
+
+        result = check_source_eligibility_with_coordination_role("join_runtime", None)
         assert result.eligible is True
 
     def test_result_is_source_execution_eligibility(self):
         """Returns a SourceExecutionEligibility dataclass."""
         from core.source_execution_eligibility import (
-            check_source_eligibility_with_coordination_role,
             SourceExecutionEligibility,
+            check_source_eligibility_with_coordination_role,
         )
+
         result = check_source_eligibility_with_coordination_role("join_runtime", None)
         assert isinstance(result, SourceExecutionEligibility)
 
@@ -1090,9 +1118,8 @@ class TestCheckSourceEligibilityWithCoordinationRole:
         from core.source_execution_eligibility import (
             check_source_eligibility_with_coordination_role,
         )
-        result = check_source_eligibility_with_coordination_role(
-            "join_runtime", "observer_only"
-        )
+
+        result = check_source_eligibility_with_coordination_role("join_runtime", "observer_only")
         d = result.to_dict()
         assert "eligible" in d
         assert "posture" in d
@@ -1104,9 +1131,8 @@ class TestCheckSourceEligibilityWithCoordinationRole:
         from core.source_execution_eligibility import (
             check_source_eligibility_with_coordination_role,
         )
-        result = check_source_eligibility_with_coordination_role(
-            "UNKNOWN_VALUE", "observer_only"
-        )
+
+        result = check_source_eligibility_with_coordination_role("UNKNOWN_VALUE", "observer_only")
         assert result.posture in ("control_only", "join_runtime")
 
     def test_case_insensitive_role_matching(self):
@@ -1114,9 +1140,8 @@ class TestCheckSourceEligibilityWithCoordinationRole:
         from core.source_execution_eligibility import (
             check_source_eligibility_with_coordination_role,
         )
-        result = check_source_eligibility_with_coordination_role(
-            "join_runtime", "OBSERVER_ONLY"
-        )
+
+        result = check_source_eligibility_with_coordination_role("join_runtime", "OBSERVER_ONLY")
         assert result.eligible is False
 
 
@@ -1127,6 +1152,7 @@ class TestCoordinationRoleSentinels:
         from core.source_execution_eligibility import (
             OBSERVER_ONLY_ROLE_BLOCKS_EXECUTION_POLICY,
         )
+
         assert isinstance(OBSERVER_ONLY_ROLE_BLOCKS_EXECUTION_POLICY, str)
         # Policy sentinels must be non-trivial strings (not empty/single-char stubs)
         assert OBSERVER_ONLY_ROLE_BLOCKS_EXECUTION_POLICY  # truthy → non-empty
@@ -1135,22 +1161,26 @@ class TestCoordinationRoleSentinels:
         from core.source_execution_eligibility import (
             OBSERVER_ONLY_ROLE_BLOCKS_EXECUTION_POLICY,
         )
+
         assert "observer_only" in OBSERVER_ONLY_ROLE_BLOCKS_EXECUTION_POLICY
 
     def test_coordination_role_aligned_dispatch_sentinel_present(self):
         from core.source_execution_eligibility import (
             COORDINATION_ROLE_ALIGNED_DISPATCH_SENTINEL,
         )
+
         assert isinstance(COORDINATION_ROLE_ALIGNED_DISPATCH_SENTINEL, str)
         assert "PR-2" in COORDINATION_ROLE_ALIGNED_DISPATCH_SENTINEL
 
     def test_sentinels_importable_from_core_runtime(self):
         import core.runtime as rt
+
         assert hasattr(rt, "OBSERVER_ONLY_ROLE_BLOCKS_EXECUTION_POLICY")
         assert hasattr(rt, "COORDINATION_ROLE_ALIGNED_DISPATCH_SENTINEL")
 
     def test_check_source_eligibility_with_coordination_role_importable_from_core_runtime(self):
         import core.runtime as rt
+
         assert hasattr(rt, "check_source_eligibility_with_coordination_role")
 
 
@@ -1159,8 +1189,8 @@ class TestSelectDispatchModeWithCoordinationRole:
 
     def test_observer_only_with_join_runtime_blocks_without_target(self):
         """observer_only + join_runtime → blocked (no remote target)."""
-        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
 
         mode, reason = select_dispatch_mode(
             source_runtime_posture="join_runtime",
@@ -1170,8 +1200,8 @@ class TestSelectDispatchModeWithCoordinationRole:
 
     def test_observer_only_with_join_runtime_redirects_with_target(self):
         """observer_only + join_runtime → remote_handoff (remote target available)."""
-        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
 
         mode, reason = select_dispatch_mode(
             source_runtime_posture="join_runtime",
@@ -1182,8 +1212,8 @@ class TestSelectDispatchModeWithCoordinationRole:
 
     def test_joined_runtime_participant_allows_local_dispatch(self):
         """joined_runtime_participant + join_runtime → local (no remote target)."""
-        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
 
         mode, reason = select_dispatch_mode(
             source_runtime_posture="join_runtime",
@@ -1193,8 +1223,8 @@ class TestSelectDispatchModeWithCoordinationRole:
 
     def test_source_controller_control_only_blocked_without_target(self):
         """source_controller + control_only → blocked (no remote target)."""
-        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
 
         mode, reason = select_dispatch_mode(
             source_runtime_posture="control_only",
@@ -1204,8 +1234,8 @@ class TestSelectDispatchModeWithCoordinationRole:
 
     def test_source_controller_join_runtime_allows_local(self):
         """source_controller + join_runtime → local (posture-driven eligibility)."""
-        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
 
         mode, reason = select_dispatch_mode(
             source_runtime_posture="join_runtime",
@@ -1215,16 +1245,16 @@ class TestSelectDispatchModeWithCoordinationRole:
 
     def test_no_role_no_posture_backwards_safe(self):
         """No coordination_role and no posture → pre-PR-2 behaviour (local)."""
-        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
 
         mode, reason = select_dispatch_mode()
         assert mode == SourceDispatchMode.local
 
     def test_force_local_bypasses_observer_only_gate(self):
         """force_local bypasses even observer_only coordination role."""
-        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
 
         mode, reason = select_dispatch_mode(
             source_runtime_posture="join_runtime",

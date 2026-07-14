@@ -56,7 +56,7 @@ import logging
 import os
 import sys
 import unittest
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 # ---------------------------------------------------------------------------
 # Source-file helpers (avoid heavy import side-effects for boundary tests)
@@ -81,6 +81,7 @@ WS_HANDLER_SRC = _read_source("galaxy_gateway/websocket_handler.py")
 # 1–15: Sentinel constant existence and shape
 # ===========================================================================
 
+
 class TestUCMSentinel(unittest.TestCase):
     """Tests 1–5: UCM_CONNECTION_AUTHORITY sentinel."""
 
@@ -90,19 +91,23 @@ class TestUCMSentinel(unittest.TestCase):
 
     def test_02_ucm_authority_non_empty_string(self):
         from core.unified.connection_manager import UCM_CONNECTION_AUTHORITY
+
         self.assertIsInstance(UCM_CONNECTION_AUTHORITY, str)
         self.assertTrue(len(UCM_CONNECTION_AUTHORITY) > 0)
 
     def test_03_ucm_authority_contains_ucm(self):
         from core.unified.connection_manager import UCM_CONNECTION_AUTHORITY
+
         self.assertIn("UCM", UCM_CONNECTION_AUTHORITY)
 
     def test_04_ucm_authority_contains_authority(self):
         from core.unified.connection_manager import UCM_CONNECTION_AUTHORITY
+
         self.assertIn("AUTHORITY", UCM_CONNECTION_AUTHORITY)
 
     def test_05_ucm_authority_contains_canonical(self):
         from core.unified.connection_manager import UCM_CONNECTION_AUTHORITY
+
         self.assertIn("CANONICAL", UCM_CONNECTION_AUTHORITY)
 
 
@@ -115,19 +120,23 @@ class TestUDMSentinel(unittest.TestCase):
 
     def test_07_udm_authority_non_empty_string(self):
         from core.unified.device_manager import UDM_DEVICE_STATE_AUTHORITY
+
         self.assertIsInstance(UDM_DEVICE_STATE_AUTHORITY, str)
         self.assertTrue(len(UDM_DEVICE_STATE_AUTHORITY) > 0)
 
     def test_08_udm_authority_contains_udm(self):
         from core.unified.device_manager import UDM_DEVICE_STATE_AUTHORITY
+
         self.assertIn("UDM", UDM_DEVICE_STATE_AUTHORITY)
 
     def test_09_udm_authority_contains_authority(self):
         from core.unified.device_manager import UDM_DEVICE_STATE_AUTHORITY
+
         self.assertIn("AUTHORITY", UDM_DEVICE_STATE_AUTHORITY)
 
     def test_10_udm_authority_contains_canonical(self):
         from core.unified.device_manager import UDM_DEVICE_STATE_AUTHORITY
+
         self.assertIn("CANONICAL", UDM_DEVICE_STATE_AUTHORITY)
 
 
@@ -139,22 +148,26 @@ class TestSSOTSentinel(unittest.TestCase):
 
     def test_12_ssot_authority_non_empty_string(self):
         from galaxy_gateway.ssot import GATEWAY_SSOT_WRITE_AUTHORITY
+
         self.assertIsInstance(GATEWAY_SSOT_WRITE_AUTHORITY, str)
         self.assertTrue(len(GATEWAY_SSOT_WRITE_AUTHORITY) > 0)
 
     def test_13_ssot_authority_contains_write_path(self):
         from galaxy_gateway.ssot import GATEWAY_SSOT_WRITE_AUTHORITY
+
         self.assertIn("WRITE_PATH", GATEWAY_SSOT_WRITE_AUTHORITY)
 
     def test_14_ucm_and_udm_sentinels_distinct(self):
         from core.unified.connection_manager import UCM_CONNECTION_AUTHORITY
         from core.unified.device_manager import UDM_DEVICE_STATE_AUTHORITY
+
         self.assertNotEqual(UCM_CONNECTION_AUTHORITY, UDM_DEVICE_STATE_AUTHORITY)
 
     def test_15_all_three_sentinels_distinct(self):
         from core.unified.connection_manager import UCM_CONNECTION_AUTHORITY
         from core.unified.device_manager import UDM_DEVICE_STATE_AUTHORITY
         from galaxy_gateway.ssot import GATEWAY_SSOT_WRITE_AUTHORITY
+
         sentinels = {UCM_CONNECTION_AUTHORITY, UDM_DEVICE_STATE_AUTHORITY, GATEWAY_SSOT_WRITE_AUTHORITY}
         self.assertEqual(len(sentinels), 3, "All three authority sentinels must be distinct strings")
 
@@ -162,6 +175,7 @@ class TestSSOTSentinel(unittest.TestCase):
 # ===========================================================================
 # 16–22: Source-file content checks
 # ===========================================================================
+
 
 class TestSourceContent(unittest.TestCase):
     """Tests 16–22: Source-file boundary documentation."""
@@ -194,6 +208,7 @@ class TestSourceContent(unittest.TestCase):
 # 23: ssot.py has no SyntaxError (from __future__ placed correctly)
 # ===========================================================================
 
+
 class TestSSOTSyntax(unittest.TestCase):
     """Test 23: ssot.py has valid Python syntax."""
 
@@ -208,6 +223,7 @@ class TestSSOTSyntax(unittest.TestCase):
 # 24–31: SSOT write-through helper behaviour
 # ===========================================================================
 
+
 class TestSSOTHelpers(unittest.TestCase):
     """Tests 24–31: SSOT helpers return True on success, False+warn on failure."""
 
@@ -215,24 +231,32 @@ class TestSSOTHelpers(unittest.TestCase):
 
     def test_24_udm_write_register_returns_true_on_success(self):
         from galaxy_gateway.ssot import udm_write_register
+
         udm = MagicMock()
         with patch("galaxy_gateway.ssot._get_udm", return_value=udm):
             result = udm_write_register(
-                device_id="p2_d1", device_name="PR2 Device",
-                device_type_raw="android", capabilities=[], metadata={},
+                device_id="p2_d1",
+                device_name="PR2 Device",
+                device_type_raw="android",
+                capabilities=[],
+                metadata={},
             )
         self.assertTrue(result)
         udm.register_device.assert_called_once()
 
     def test_25_udm_write_register_returns_false_and_warns_on_failure(self):
         from galaxy_gateway.ssot import udm_write_register
+
         udm = MagicMock()
         udm.register_device.side_effect = RuntimeError("write failed")
         with patch("galaxy_gateway.ssot._get_udm", return_value=udm):
             with self.assertLogs("galaxy_gateway.ssot", level="WARNING") as cm:
                 result = udm_write_register(
-                    device_id="p2_d2", device_name="PR2 Device",
-                    device_type_raw="android", capabilities=[], metadata={},
+                    device_id="p2_d2",
+                    device_name="PR2 Device",
+                    device_type_raw="android",
+                    capabilities=[],
+                    metadata={},
                 )
         self.assertFalse(result)
         self.assertTrue(
@@ -244,6 +268,7 @@ class TestSSOTHelpers(unittest.TestCase):
 
     def test_26_udm_write_heartbeat_returns_true_on_success(self):
         from galaxy_gateway.ssot import udm_write_heartbeat
+
         udm = MagicMock()
         with patch("galaxy_gateway.ssot._get_udm", return_value=udm):
             result = udm_write_heartbeat("p2_hb_ok")
@@ -252,6 +277,7 @@ class TestSSOTHelpers(unittest.TestCase):
 
     def test_27_udm_write_heartbeat_returns_false_and_warns_on_failure(self):
         from galaxy_gateway.ssot import udm_write_heartbeat
+
         udm = MagicMock()
         udm.update_device_status.side_effect = RuntimeError("timeout")
         with patch("galaxy_gateway.ssot._get_udm", return_value=udm):
@@ -266,6 +292,7 @@ class TestSSOTHelpers(unittest.TestCase):
 
     def test_28_udm_write_unregister_returns_true_on_success(self):
         from galaxy_gateway.ssot import udm_write_unregister
+
         udm = MagicMock()
         with patch("galaxy_gateway.ssot._get_udm", return_value=udm):
             result = udm_write_unregister("p2_unreg_ok")
@@ -273,6 +300,7 @@ class TestSSOTHelpers(unittest.TestCase):
 
     def test_29_udm_write_unregister_returns_false_and_warns_on_failure(self):
         from galaxy_gateway.ssot import udm_write_unregister
+
         udm = MagicMock()
         udm.update_device_status.side_effect = RuntimeError("gone")
         udm.unregister_device.side_effect = RuntimeError("gone")
@@ -288,6 +316,7 @@ class TestSSOTHelpers(unittest.TestCase):
 
     def test_30_udm_write_upsert_returns_true_on_success(self):
         from galaxy_gateway.ssot import udm_write_upsert
+
         udm = MagicMock()
         with patch("galaxy_gateway.ssot._get_udm", return_value=udm):
             result = udm_write_upsert("p2_upsert_ok", {"status": "online"})
@@ -296,6 +325,7 @@ class TestSSOTHelpers(unittest.TestCase):
 
     def test_31_udm_write_upsert_returns_false_and_warns_on_failure(self):
         from galaxy_gateway.ssot import udm_write_upsert
+
         udm = MagicMock()
         udm.upsert_device_state.side_effect = RuntimeError("db error")
         with patch("galaxy_gateway.ssot._get_udm", return_value=udm):
@@ -311,12 +341,15 @@ class TestSSOTHelpers(unittest.TestCase):
 # 32–33: GatewayWSManager.disconnect calls UCM and SSOT before local cleanup
 # ===========================================================================
 
+
 class TestGatewayWSManagerDisconnect(unittest.TestCase):
     """Tests 32–33: UCM/SSOT called before local map cleanup on disconnect."""
 
     def _make_manager(self):
         import asyncio
+
         from galaxy_gateway.websocket_handler import GatewayWSManager
+
         mgr = GatewayWSManager.__new__(GatewayWSManager)
         mgr.active_connections = {}
         mgr.device_connections = {}
@@ -328,6 +361,7 @@ class TestGatewayWSManagerDisconnect(unittest.TestCase):
     @staticmethod
     def _run(coro):
         import asyncio
+
         loop = asyncio.new_event_loop()
         try:
             return loop.run_until_complete(coro)
@@ -355,11 +389,12 @@ class TestGatewayWSManagerDisconnect(unittest.TestCase):
             call_order.append(("udm_unregister", did))
             return True
 
-        with patch("galaxy_gateway.websocket_handler.udm_write_unregister",
-                   side_effect=track_udm_unregister), \
-             patch("galaxy_gateway.websocket_handler.device_router") as mock_router, \
-             patch.object(mgr, "_ucm", return_value=ucm), \
-             patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")):
+        with (
+            patch("galaxy_gateway.websocket_handler.udm_write_unregister", side_effect=track_udm_unregister),
+            patch("galaxy_gateway.websocket_handler.device_router") as mock_router,
+            patch.object(mgr, "_ucm", return_value=ucm),
+            patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")),
+        ):
 
             self._run(mgr.disconnect("conn-1"))
 
@@ -382,16 +417,16 @@ class TestGatewayWSManagerDisconnect(unittest.TestCase):
             udm_called.append(did)
             return True
 
-        with patch("galaxy_gateway.websocket_handler.udm_write_unregister",
-                   side_effect=capture_udm), \
-             patch("galaxy_gateway.websocket_handler.device_router"), \
-             patch.object(mgr, "_ucm", return_value=MagicMock(mark_offline=MagicMock())), \
-             patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")):
+        with (
+            patch("galaxy_gateway.websocket_handler.udm_write_unregister", side_effect=capture_udm),
+            patch("galaxy_gateway.websocket_handler.device_router"),
+            patch.object(mgr, "_ucm", return_value=MagicMock(mark_offline=MagicMock())),
+            patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")),
+        ):
 
             self._run(mgr.disconnect("conn-2"))
 
-        self.assertIn("dev-ssot-2", udm_called,
-                      "udm_write_unregister must be called with the device_id")
+        self.assertIn("dev-ssot-2", udm_called, "udm_write_unregister must be called with the device_id")
         # Local map must be cleaned up after the call
         self.assertNotIn("dev-ssot-2", mgr.device_connections)
 
@@ -400,6 +435,7 @@ class TestGatewayWSManagerDisconnect(unittest.TestCase):
 # 34–36: handle_register and handle_heartbeat canonical authority paths
 # ===========================================================================
 
+
 class TestHandleRegisterAndHeartbeat(unittest.TestCase):
     """Tests 34–36: registration and heartbeat route through UCM/UDM."""
 
@@ -407,6 +443,7 @@ class TestHandleRegisterAndHeartbeat(unittest.TestCase):
         """device_router.register_device is only called when UDM write succeeds."""
         # When udm_write_register returns False, device_router must NOT be called.
         import asyncio
+
         from galaxy_gateway.websocket_handler import handle_register
 
         ws = MagicMock()
@@ -418,15 +455,18 @@ class TestHandleRegisterAndHeartbeat(unittest.TestCase):
         aip_msg.device_type = None
         aip_msg.payload = {"device_info": {"device_type": "android", "capabilities": []}}
 
-        with patch("galaxy_gateway.websocket_handler.udm_write_register", return_value=False), \
-             patch("galaxy_gateway.websocket_handler.device_router") as mock_router:
+        with (
+            patch("galaxy_gateway.websocket_handler.udm_write_register", return_value=False),
+            patch("galaxy_gateway.websocket_handler.device_router") as mock_router,
+        ):
             asyncio.run(handle_register("conn-gate", aip_msg, ws))
             mock_router.register_device.assert_not_called()
 
     def test_35_handle_register_calls_ucm_register_after_udm_success(self):
         """UCM register_connection is called after successful UDM write."""
         import asyncio
-        from galaxy_gateway.websocket_handler import handle_register, connection_manager
+
+        from galaxy_gateway.websocket_handler import connection_manager, handle_register
 
         ws = MagicMock()
         ws.send_json = AsyncMock()
@@ -441,9 +481,11 @@ class TestHandleRegisterAndHeartbeat(unittest.TestCase):
         ucm.is_device_connected = MagicMock(return_value=False)
         ucm.register_connection = AsyncMock()
 
-        with patch("galaxy_gateway.websocket_handler.udm_write_register", return_value=True), \
-             patch("galaxy_gateway.websocket_handler.device_router") as mock_router, \
-             patch.object(connection_manager, "_ucm", return_value=ucm):
+        with (
+            patch("galaxy_gateway.websocket_handler.udm_write_register", return_value=True),
+            patch("galaxy_gateway.websocket_handler.device_router") as mock_router,
+            patch.object(connection_manager, "_ucm", return_value=ucm),
+        ):
             mock_router.register_device.return_value = True
             asyncio.run(handle_register("conn-ucm-reg", aip_msg, ws))
 
@@ -452,7 +494,8 @@ class TestHandleRegisterAndHeartbeat(unittest.TestCase):
     def test_36_handle_heartbeat_updates_ucm_heartbeat(self):
         """handle_heartbeat calls UCM update_heartbeat on the presence backbone."""
         import asyncio
-        from galaxy_gateway.websocket_handler import handle_heartbeat, connection_manager
+
+        from galaxy_gateway.websocket_handler import connection_manager, handle_heartbeat
 
         aip_msg = MagicMock()
         aip_msg.device_id = "pr2_hb_ucm"
@@ -461,9 +504,11 @@ class TestHandleRegisterAndHeartbeat(unittest.TestCase):
         ucm = MagicMock()
         ucm.update_heartbeat = MagicMock(return_value=True)
 
-        with patch("galaxy_gateway.websocket_handler.udm_write_heartbeat", return_value=True), \
-             patch("galaxy_gateway.websocket_handler.device_router") as mock_router, \
-             patch("galaxy_gateway.websocket_handler.connection_manager") as mock_cm:
+        with (
+            patch("galaxy_gateway.websocket_handler.udm_write_heartbeat", return_value=True),
+            patch("galaxy_gateway.websocket_handler.device_router") as mock_router,
+            patch("galaxy_gateway.websocket_handler.connection_manager") as mock_cm,
+        ):
             mock_router.get_device.return_value = None
             mock_cm._ucm.return_value = ucm
             mock_cm.send_message = AsyncMock()
@@ -476,13 +521,15 @@ class TestHandleRegisterAndHeartbeat(unittest.TestCase):
 # 37–40: Source-level enforcement documentation checks
 # ===========================================================================
 
+
 class TestSourceEnforcementDocs(unittest.TestCase):
     """Tests 37–40: Source-file enforcement signals and documentation."""
 
     def test_37_ucm_source_documents_not_acceptable_roles(self):
         """UCM source must document which local map roles are NOT acceptable."""
-        self.assertIn("NOT acceptable", UCM_SRC,
-                      "UCM source must document unacceptable roles for external connection maps")
+        self.assertIn(
+            "NOT acceptable", UCM_SRC, "UCM source must document unacceptable roles for external connection maps"
+        )
 
     def test_38_udm_source_documents_compatibility_downstream(self):
         """UDM source must document that downstream structures are compat-only."""
@@ -490,20 +537,25 @@ class TestSourceEnforcementDocs(unittest.TestCase):
         # Must also mention that downstream structures must not act as parallel sources
         udm_lower = UDM_SRC.lower()
         self.assertTrue(
-            "must not act as parallel" in udm_lower or
-            ("must not" in udm_lower and "parallel" in udm_lower),
+            "must not act as parallel" in udm_lower or ("must not" in udm_lower and "parallel" in udm_lower),
             "UDM source must state that downstream structures must not act as parallel truth sources",
         )
 
     def test_39_websocket_handler_routes_disconnect_through_ucm(self):
         """websocket_handler.py must call UCM unregister_connection on disconnect."""
-        self.assertIn("unregister_connection", WS_HANDLER_SRC,
-                      "websocket_handler must route disconnect through UCM.unregister_connection")
+        self.assertIn(
+            "unregister_connection",
+            WS_HANDLER_SRC,
+            "websocket_handler must route disconnect through UCM.unregister_connection",
+        )
 
     def test_40_websocket_handler_routes_registration_through_ucm(self):
         """websocket_handler.py must call UCM register_connection on registration."""
-        self.assertIn("register_connection", WS_HANDLER_SRC,
-                      "websocket_handler must route registration through UCM.register_connection")
+        self.assertIn(
+            "register_connection",
+            WS_HANDLER_SRC,
+            "websocket_handler must route registration through UCM.register_connection",
+        )
 
 
 if __name__ == "__main__":

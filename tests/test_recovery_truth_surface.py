@@ -95,8 +95,8 @@ Group J — Reality audit integration
 """
 
 import json
-import pytest
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # Group A — Module structure and sentinels
@@ -109,26 +109,29 @@ def test_A01_module_importable():
 
 def test_A02_authority_sentinel():
     from core.recovery_truth_surface import RECOVERY_TRUTH_SURFACE_AUTHORITY
+
     assert isinstance(RECOVERY_TRUTH_SURFACE_AUTHORITY, str)
     assert len(RECOVERY_TRUTH_SURFACE_AUTHORITY) > 20
 
 
 def test_A03_pr5_truth_sentinel():
     from core.recovery_truth_surface import RECOVERY_TRUTH_SURFACE_PR5_TRUTH_SENTINEL
+
     assert isinstance(RECOVERY_TRUTH_SURFACE_PR5_TRUTH_SENTINEL, str)
     assert "PR5-TRUTH" in RECOVERY_TRUTH_SURFACE_PR5_TRUTH_SENTINEL
 
 
 def test_A04_all_policy_sentinels_non_empty():
     from core.recovery_truth_surface import (
+        AUTHORITY_ALIGNMENT_REQUIRES_STATE_MATCH_POLICY,
+        DUPLICATE_DISPATCH_AVOIDANCE_REQUIRES_EXPLICIT_EVIDENCE_POLICY,
+        EPHEMERAL_TRANSPORT_BINDING_IS_DEFERRED_TRUTH_POLICY,
+        OFFLINE_QUEUE_REPLAY_ORDERING_IS_DEFERRED_TRUTH_POLICY,
         PARTICIPANT_DISCONNECT_OBSERVED_IS_SEPARATE_FROM_V2_RECOVERY_POLICY,
         RECONNECT_AND_REDISPATCH_ARE_DISTINCT_TRUTH_ATOMS_POLICY,
         TASK_CONTINUITY_IS_DISTINCT_FROM_RECONNECT_SUCCESS_POLICY,
-        DUPLICATE_DISPATCH_AVOIDANCE_REQUIRES_EXPLICIT_EVIDENCE_POLICY,
-        AUTHORITY_ALIGNMENT_REQUIRES_STATE_MATCH_POLICY,
-        OFFLINE_QUEUE_REPLAY_ORDERING_IS_DEFERRED_TRUTH_POLICY,
-        EPHEMERAL_TRANSPORT_BINDING_IS_DEFERRED_TRUTH_POLICY,
     )
+
     sentinels = [
         PARTICIPANT_DISCONNECT_OBSERVED_IS_SEPARATE_FROM_V2_RECOVERY_POLICY,
         RECONNECT_AND_REDISPATCH_ARE_DISTINCT_TRUTH_ATOMS_POLICY,
@@ -144,6 +147,7 @@ def test_A04_all_policy_sentinels_non_empty():
 
 def test_A05_recovery_truth_dimension_has_six_values():
     from core.recovery_truth_surface import RecoveryTruthDimension
+
     dims = RecoveryTruthDimension.all_dimensions()
     assert len(dims) == 6
     expected = {
@@ -159,12 +163,14 @@ def test_A05_recovery_truth_dimension_has_six_values():
 
 def test_A06_recovery_truth_status_has_required_values():
     from core.recovery_truth_surface import RecoveryTruthStatus
+
     required = {"observed", "not_observed", "not_applicable", "deferred", "partial", "unknown"}
     assert {s.value for s in RecoveryTruthStatus} >= required
 
 
 def test_A07_recovery_level_has_four_values():
     from core.recovery_truth_surface import RecoveryLevel
+
     levels = RecoveryLevel.all_levels()
     assert len(levels) == 4
     expected = {
@@ -183,6 +189,7 @@ def test_A07_recovery_level_has_four_values():
 
 def test_B01_entry_default_construction():
     from core.recovery_truth_surface import RecoveryTruthEntry
+
     e = RecoveryTruthEntry()
     assert e.dimension is not None
     assert e.status is not None
@@ -190,7 +197,13 @@ def test_B01_entry_default_construction():
 
 
 def test_B02_entry_to_dict_has_required_keys():
-    from core.recovery_truth_surface import RecoveryTruthEntry, RecoveryTruthDimension, RecoveryTruthStatus, RecoveryLevel
+    from core.recovery_truth_surface import (
+        RecoveryLevel,
+        RecoveryTruthDimension,
+        RecoveryTruthEntry,
+        RecoveryTruthStatus,
+    )
+
     e = RecoveryTruthEntry(
         dimension=RecoveryTruthDimension.reconnect_observed,
         status=RecoveryTruthStatus.partial,
@@ -200,11 +213,17 @@ def test_B02_entry_to_dict_has_required_keys():
     )
     d = e.to_dict()
     required_keys = {
-        "dimension", "status", "recovery_level",
-        "evidence_summary", "policy_reference",
-        "supporting_modules", "deferred_note",
-        "is_v2_internal", "is_participant_reconnect",
-        "is_task_continuity", "is_authority_alignment",
+        "dimension",
+        "status",
+        "recovery_level",
+        "evidence_summary",
+        "policy_reference",
+        "supporting_modules",
+        "deferred_note",
+        "is_v2_internal",
+        "is_participant_reconnect",
+        "is_task_continuity",
+        "is_authority_alignment",
         "evaluated_at",
     }
     assert required_keys <= set(d.keys())
@@ -214,7 +233,13 @@ def test_B02_entry_to_dict_has_required_keys():
 
 
 def test_B03_entry_from_dict_round_trip():
-    from core.recovery_truth_surface import RecoveryTruthEntry, RecoveryTruthDimension, RecoveryTruthStatus, RecoveryLevel
+    from core.recovery_truth_surface import (
+        RecoveryLevel,
+        RecoveryTruthDimension,
+        RecoveryTruthEntry,
+        RecoveryTruthStatus,
+    )
+
     original = RecoveryTruthEntry(
         dimension=RecoveryTruthDimension.redispatch_triggered,
         status=RecoveryTruthStatus.deferred,
@@ -234,7 +259,13 @@ def test_B03_entry_from_dict_round_trip():
 
 
 def test_B04_recovery_level_properties_are_mutually_exclusive():
-    from core.recovery_truth_surface import RecoveryTruthEntry, RecoveryTruthDimension, RecoveryTruthStatus, RecoveryLevel
+    from core.recovery_truth_surface import (
+        RecoveryLevel,
+        RecoveryTruthDimension,
+        RecoveryTruthEntry,
+        RecoveryTruthStatus,
+    )
+
     combos = [
         (RecoveryLevel.v2_internal, "is_v2_internal"),
         (RecoveryLevel.participant_reconnect, "is_participant_reconnect"),
@@ -252,18 +283,15 @@ def test_B04_recovery_level_properties_are_mutually_exclusive():
         # All others must be False
         for _, other_prop in combos:
             if other_prop != prop:
-                assert getattr(e, other_prop) is False, (
-                    f"{other_prop} should be False when level={level}"
-                )
+                assert getattr(e, other_prop) is False, f"{other_prop} should be False when level={level}"
 
 
 def test_B05_status_is_closed_and_is_open_non_overlapping():
     from core.recovery_truth_surface import RecoveryTruthStatus
+
     for s in RecoveryTruthStatus:
         # A status cannot be both closed and open simultaneously
-        assert not (s.is_closed and s.is_open), (
-            f"Status {s!r} is both closed and open — contradiction"
-        )
+        assert not (s.is_closed and s.is_open), f"Status {s!r} is both closed and open — contradiction"
 
 
 # ---------------------------------------------------------------------------
@@ -273,6 +301,7 @@ def test_B05_status_is_closed_and_is_open_non_overlapping():
 
 def test_C01_report_default_construction():
     from core.recovery_truth_surface import RecoveryTruthReport
+
     r = RecoveryTruthReport()
     assert r.report_id
     assert r.generated_at > 0
@@ -281,13 +310,21 @@ def test_C01_report_default_construction():
 
 def test_C02_report_to_dict_required_keys():
     from core.recovery_truth_surface import RecoveryTruthReport
+
     r = RecoveryTruthReport()
     d = r.to_dict()
     required = {
-        "report_id", "generated_at", "authority", "entries",
-        "v2_internal_success", "participant_reconnect_success",
-        "task_continuity_success", "authority_alignment_success",
-        "deferred_dimensions", "open_dimensions", "closed_dimensions",
+        "report_id",
+        "generated_at",
+        "authority",
+        "entries",
+        "v2_internal_success",
+        "participant_reconnect_success",
+        "task_continuity_success",
+        "authority_alignment_success",
+        "deferred_dimensions",
+        "open_dimensions",
+        "closed_dimensions",
         "summary",
     }
     assert required <= set(d.keys())
@@ -295,6 +332,7 @@ def test_C02_report_to_dict_required_keys():
 
 def test_C03_report_to_json_is_valid_json():
     from core.recovery_truth_surface import RecoveryTruthReport
+
     r = RecoveryTruthReport(summary="test summary")
     j = r.to_json()
     parsed = json.loads(j)
@@ -303,7 +341,14 @@ def test_C03_report_to_json_is_valid_json():
 
 
 def test_C04_report_from_dict_round_trip():
-    from core.recovery_truth_surface import RecoveryTruthReport, RecoveryTruthEntry, RecoveryTruthDimension, RecoveryTruthStatus, RecoveryLevel
+    from core.recovery_truth_surface import (
+        RecoveryLevel,
+        RecoveryTruthDimension,
+        RecoveryTruthEntry,
+        RecoveryTruthReport,
+        RecoveryTruthStatus,
+    )
+
     entry = RecoveryTruthEntry(
         dimension=RecoveryTruthDimension.reconnect_observed,
         status=RecoveryTruthStatus.partial,
@@ -328,7 +373,14 @@ def test_C04_report_from_dict_round_trip():
 
 
 def test_C05_report_get_entry():
-    from core.recovery_truth_surface import RecoveryTruthReport, RecoveryTruthEntry, RecoveryTruthDimension, RecoveryTruthStatus, RecoveryLevel
+    from core.recovery_truth_surface import (
+        RecoveryLevel,
+        RecoveryTruthDimension,
+        RecoveryTruthEntry,
+        RecoveryTruthReport,
+        RecoveryTruthStatus,
+    )
+
     entry = RecoveryTruthEntry(
         dimension=RecoveryTruthDimension.duplicate_dispatch_avoided,
         status=RecoveryTruthStatus.observed,
@@ -343,6 +395,7 @@ def test_C05_report_get_entry():
 
 def test_C06_has_deferred_reflects_list():
     from core.recovery_truth_surface import RecoveryTruthReport
+
     r_empty = RecoveryTruthReport(deferred_dimensions=[])
     assert r_empty.has_deferred is False
     r_with = RecoveryTruthReport(deferred_dimensions=["reconnect_observed"])
@@ -351,12 +404,14 @@ def test_C06_has_deferred_reflects_list():
 
 def test_C07_all_closed_false_when_open_dims():
     from core.recovery_truth_surface import RecoveryTruthReport
+
     r = RecoveryTruthReport(open_dimensions=["reconnect_observed"])
     assert r.all_closed is False
 
 
 def test_C08_all_closed_requires_six_entries():
-    from core.recovery_truth_surface import RecoveryTruthReport, RecoveryTruthEntry
+    from core.recovery_truth_surface import RecoveryTruthEntry, RecoveryTruthReport
+
     # With 0 entries and no open dims: all_closed should be False (need 6 entries)
     r_empty = RecoveryTruthReport(open_dimensions=[])
     assert r_empty.all_closed is False
@@ -372,37 +427,38 @@ def test_C08_all_closed_requires_six_entries():
 
 
 def test_D01_build_returns_recovery_truth_report():
-    from core.recovery_truth_surface import build_recovery_truth_report, RecoveryTruthReport
+    from core.recovery_truth_surface import RecoveryTruthReport, build_recovery_truth_report
+
     r = build_recovery_truth_report()
     assert isinstance(r, RecoveryTruthReport)
 
 
 def test_D02_report_has_six_entries():
     from core.recovery_truth_surface import build_recovery_truth_report
+
     r = build_recovery_truth_report()
     assert len(r.entries) == 6
 
 
 def test_D03_every_entry_has_evidence_summary():
     from core.recovery_truth_surface import build_recovery_truth_report
+
     r = build_recovery_truth_report()
     for e in r.entries:
-        assert e.evidence_summary, (
-            f"Entry {e.dimension.value} has empty evidence_summary"
-        )
+        assert e.evidence_summary, f"Entry {e.dimension.value} has empty evidence_summary"
 
 
 def test_D04_every_entry_has_policy_reference():
     from core.recovery_truth_surface import build_recovery_truth_report
+
     r = build_recovery_truth_report()
     for e in r.entries:
-        assert e.policy_reference, (
-            f"Entry {e.dimension.value} has empty policy_reference"
-        )
+        assert e.policy_reference, f"Entry {e.dimension.value} has empty policy_reference"
 
 
 def test_D05_all_six_dimensions_represented():
-    from core.recovery_truth_surface import build_recovery_truth_report, RecoveryTruthDimension
+    from core.recovery_truth_surface import RecoveryTruthDimension, build_recovery_truth_report
+
     r = build_recovery_truth_report()
     dims_in_report = {e.dimension for e in r.entries}
     for dim in RecoveryTruthDimension.all_dimensions():
@@ -410,55 +466,64 @@ def test_D05_all_six_dimensions_represented():
 
 
 def test_D06_all_entries_use_valid_status():
-    from core.recovery_truth_surface import build_recovery_truth_report, RecoveryTruthStatus
+    from core.recovery_truth_surface import RecoveryTruthStatus, build_recovery_truth_report
+
     valid_statuses = set(RecoveryTruthStatus)
     r = build_recovery_truth_report()
     for e in r.entries:
-        assert e.status in valid_statuses, (
-            f"Entry {e.dimension.value} has invalid status {e.status!r}"
-        )
+        assert e.status in valid_statuses, f"Entry {e.dimension.value} has invalid status {e.status!r}"
 
 
 def test_D07_all_entries_use_valid_recovery_level():
-    from core.recovery_truth_surface import build_recovery_truth_report, RecoveryLevel
+    from core.recovery_truth_surface import RecoveryLevel, build_recovery_truth_report
+
     valid_levels = set(RecoveryLevel)
     r = build_recovery_truth_report()
     for e in r.entries:
-        assert e.recovery_level in valid_levels, (
-            f"Entry {e.dimension.value} has invalid recovery_level {e.recovery_level!r}"
-        )
+        assert (
+            e.recovery_level in valid_levels
+        ), f"Entry {e.dimension.value} has invalid recovery_level {e.recovery_level!r}"
 
 
 def test_D08_deferred_dimensions_is_list():
     from core.recovery_truth_surface import build_recovery_truth_report
+
     r = build_recovery_truth_report()
     assert isinstance(r.deferred_dimensions, list)
 
 
 def test_D09_open_dimensions_is_list():
     from core.recovery_truth_surface import build_recovery_truth_report
+
     r = build_recovery_truth_report()
     assert isinstance(r.open_dimensions, list)
 
 
 def test_D10_closed_dimensions_is_list():
     from core.recovery_truth_surface import build_recovery_truth_report
+
     r = build_recovery_truth_report()
     assert isinstance(r.closed_dimensions, list)
 
 
 def test_D11_summary_is_non_empty():
     from core.recovery_truth_surface import build_recovery_truth_report
+
     r = build_recovery_truth_report()
     assert r.summary and len(r.summary) > 20
 
 
 def test_D12_four_level_flags_in_report_dict():
     from core.recovery_truth_surface import build_recovery_truth_report
+
     r = build_recovery_truth_report()
     d = r.to_dict()
-    for key in ("v2_internal_success", "participant_reconnect_success",
-                "task_continuity_success", "authority_alignment_success"):
+    for key in (
+        "v2_internal_success",
+        "participant_reconnect_success",
+        "task_continuity_success",
+        "authority_alignment_success",
+    ):
         assert key in d, f"Key {key!r} missing from report dict"
         assert isinstance(d[key], bool)
 
@@ -470,6 +535,7 @@ def test_D12_four_level_flags_in_report_dict():
 
 def test_E01_v2_internal_does_not_imply_participant_reconnect():
     from core.recovery_truth_surface import build_recovery_truth_report
+
     r = build_recovery_truth_report()
     # We cannot assert a specific value, but we can assert the two flags
     # are independently accessible and have independent values
@@ -483,6 +549,7 @@ def test_E01_v2_internal_does_not_imply_participant_reconnect():
 
 def test_E02_participant_reconnect_does_not_imply_task_continuity():
     from core.recovery_truth_surface import build_recovery_truth_report
+
     r = build_recovery_truth_report()
     assert isinstance(r.participant_reconnect_success, bool)
     assert isinstance(r.task_continuity_success, bool)
@@ -490,6 +557,7 @@ def test_E02_participant_reconnect_does_not_imply_task_continuity():
 
 def test_E03_task_continuity_does_not_imply_authority_alignment():
     from core.recovery_truth_surface import build_recovery_truth_report
+
     r = build_recovery_truth_report()
     assert isinstance(r.task_continuity_success, bool)
     assert isinstance(r.authority_alignment_success, bool)
@@ -497,6 +565,7 @@ def test_E03_task_continuity_does_not_imply_authority_alignment():
 
 def test_E04_all_four_flags_independently_accessible():
     from core.recovery_truth_surface import build_recovery_truth_report
+
     r = build_recovery_truth_report()
     # All four flags must be present and boolean
     flags = [
@@ -510,13 +579,12 @@ def test_E04_all_four_flags_independently_accessible():
 
 
 def test_E05_entries_have_distinct_recovery_levels():
-    from core.recovery_truth_surface import build_recovery_truth_report, RecoveryLevel
+    from core.recovery_truth_surface import RecoveryLevel, build_recovery_truth_report
+
     r = build_recovery_truth_report()
     levels_seen = {e.recovery_level for e in r.entries}
     # There should be at least 2 different recovery levels used across 6 entries
-    assert len(levels_seen) >= 2, (
-        "All entries have the same recovery_level — levels are not separated"
-    )
+    assert len(levels_seen) >= 2, "All entries have the same recovery_level — levels are not separated"
 
 
 # ---------------------------------------------------------------------------
@@ -526,6 +594,7 @@ def test_E05_entries_have_distinct_recovery_levels():
 
 def test_F01_offline_queue_replay_documented_in_sentinel():
     from core.recovery_truth_surface import OFFLINE_QUEUE_REPLAY_ORDERING_IS_DEFERRED_TRUTH_POLICY
+
     # The sentinel must reference offline queue ordering as deferred
     sentinel_lower = OFFLINE_QUEUE_REPLAY_ORDERING_IS_DEFERRED_TRUTH_POLICY.lower()
     assert "offline" in sentinel_lower or "queue" in sentinel_lower
@@ -534,6 +603,7 @@ def test_F01_offline_queue_replay_documented_in_sentinel():
 
 def test_F02_ephemeral_transport_binding_documented_in_sentinel():
     from core.recovery_truth_surface import EPHEMERAL_TRANSPORT_BINDING_IS_DEFERRED_TRUTH_POLICY
+
     sentinel_lower = EPHEMERAL_TRANSPORT_BINDING_IS_DEFERRED_TRUTH_POLICY.lower()
     assert "ephemeral" in sentinel_lower or "transport" in sentinel_lower or "binding" in sentinel_lower
     assert "deferred" in sentinel_lower
@@ -546,7 +616,8 @@ def test_F03_no_entry_claims_fully_observed_without_live_event():
     (no live recovery event), no entry should have status=observed.
     An entry may have partial, not_applicable, deferred, or unknown.
     """
-    from core.recovery_truth_surface import build_recovery_truth_report, RecoveryTruthStatus
+    from core.recovery_truth_surface import RecoveryTruthStatus, build_recovery_truth_report
+
     r = build_recovery_truth_report()
     for e in r.entries:
         assert e.status != RecoveryTruthStatus.observed, (
@@ -557,11 +628,13 @@ def test_F03_no_entry_claims_fully_observed_without_live_event():
 
 def test_F04_offline_queue_sentinel_contains_deferred():
     from core.recovery_truth_surface import OFFLINE_QUEUE_REPLAY_ORDERING_IS_DEFERRED_TRUTH_POLICY
+
     assert "deferred" in OFFLINE_QUEUE_REPLAY_ORDERING_IS_DEFERRED_TRUTH_POLICY.lower()
 
 
 def test_F05_ephemeral_binding_sentinel_contains_deferred():
     from core.recovery_truth_surface import EPHEMERAL_TRANSPORT_BINDING_IS_DEFERRED_TRUTH_POLICY
+
     assert "deferred" in EPHEMERAL_TRANSPORT_BINDING_IS_DEFERRED_TRUTH_POLICY.lower()
 
 
@@ -572,10 +645,11 @@ def test_F05_ephemeral_binding_sentinel_contains_deferred():
 
 def test_G01_get_recovery_truth_surface_returns_report():
     from core.recovery_truth_surface import (
+        RecoveryTruthReport,
         get_recovery_truth_surface,
         reset_recovery_truth_surface,
-        RecoveryTruthReport,
     )
+
     reset_recovery_truth_surface()
     r = get_recovery_truth_surface()
     assert isinstance(r, RecoveryTruthReport)
@@ -583,6 +657,7 @@ def test_G01_get_recovery_truth_surface_returns_report():
 
 def test_G02_singleton_returns_same_object():
     from core.recovery_truth_surface import get_recovery_truth_surface, reset_recovery_truth_surface
+
     reset_recovery_truth_surface()
     r1 = get_recovery_truth_surface()
     r2 = get_recovery_truth_surface()
@@ -591,6 +666,7 @@ def test_G02_singleton_returns_same_object():
 
 def test_G03_reset_causes_fresh_object():
     from core.recovery_truth_surface import get_recovery_truth_surface, reset_recovery_truth_surface
+
     reset_recovery_truth_surface()
     r1 = get_recovery_truth_surface()
     reset_recovery_truth_surface()
@@ -601,6 +677,7 @@ def test_G03_reset_causes_fresh_object():
 
 def test_G04_reset_does_not_raise():
     from core.recovery_truth_surface import reset_recovery_truth_surface
+
     reset_recovery_truth_surface()
     reset_recovery_truth_surface()  # Calling twice is safe
 
@@ -612,12 +689,14 @@ def test_G04_reset_does_not_raise():
 
 def test_H01_acceptance_dimension_has_recovery_truth_surface():
     from core.system_final_acceptance_verdict import AcceptanceDimensionId
+
     assert hasattr(AcceptanceDimensionId, "recovery_truth_surface")
     assert AcceptanceDimensionId.recovery_truth_surface.value == "recovery_truth_surface"
 
 
 def test_H02_all_dimensions_includes_recovery_truth_surface():
     from core.system_final_acceptance_verdict import AcceptanceDimensionId
+
     all_dims = AcceptanceDimensionId.all_dimensions()
     dim_values = [d.value for d in all_dims]
     assert "recovery_truth_surface" in dim_values
@@ -628,6 +707,7 @@ def test_H03_evaluator_includes_recovery_truth_surface_in_checklist():
         SystemFinalAcceptanceEvaluator,
         reset_system_acceptance_evaluator,
     )
+
     reset_system_acceptance_evaluator()
     evaluator = SystemFinalAcceptanceEvaluator()
     report = evaluator.evaluate()
@@ -639,6 +719,7 @@ def test_H04_recovery_truth_surface_item_has_evidence_summary():
         SystemFinalAcceptanceEvaluator,
         reset_system_acceptance_evaluator,
     )
+
     reset_system_acceptance_evaluator()
     evaluator = SystemFinalAcceptanceEvaluator()
     report = evaluator.evaluate()
@@ -650,10 +731,11 @@ def test_H04_recovery_truth_surface_item_has_evidence_summary():
 def test_H05_recovery_truth_surface_not_unresolved():
     """Since core.recovery_truth_surface is available, status must not be unresolved."""
     from core.system_final_acceptance_verdict import (
-        SystemFinalAcceptanceEvaluator,
         DimensionStatus,
+        SystemFinalAcceptanceEvaluator,
         reset_system_acceptance_evaluator,
     )
+
     reset_system_acceptance_evaluator()
     evaluator = SystemFinalAcceptanceEvaluator()
     report = evaluator.evaluate()
@@ -672,29 +754,29 @@ def test_H05_recovery_truth_surface_not_unresolved():
 
 def test_I01_evidence_surface_includes_recovery_truth_surface():
     from core.v2_readiness_governance_evidence_surface import build_evidence_surface_report
+
     report = build_evidence_surface_report()
     dim_ids = [d.dimension_id for d in report.dimensions]
     assert "recovery_truth_surface" in dim_ids, (
-        f"recovery_truth_surface not found in evidence surface; "
-        f"found: {dim_ids!r}"
+        f"recovery_truth_surface not found in evidence surface; " f"found: {dim_ids!r}"
     )
 
 
 def test_I02_evidence_surface_recovery_truth_status_present():
     from core.v2_readiness_governance_evidence_surface import build_evidence_surface_report
+
     report = build_evidence_surface_report()
     entry = next(
         (d for d in report.dimensions if d.dimension_id == "recovery_truth_surface"),
         None,
     )
     assert entry is not None
-    assert entry.evidence_status == "present", (
-        f"Expected evidence_status='present' but got {entry.evidence_status!r}"
-    )
+    assert entry.evidence_status == "present", f"Expected evidence_status='present' but got {entry.evidence_status!r}"
 
 
 def test_I03_evidence_surface_recovery_truth_has_references():
     from core.v2_readiness_governance_evidence_surface import build_evidence_surface_report
+
     report = build_evidence_surface_report()
     entry = next(
         (d for d in report.dimensions if d.dimension_id == "recovery_truth_surface"),
@@ -712,22 +794,19 @@ def test_I03_evidence_surface_recovery_truth_has_references():
 
 def test_J01_reality_audit_includes_truth_surface_in_recovery_evidence():
     from core.dual_repo_system_reality_audit import (
-        DualRepoSystemRealityAuditor,
         AuditDimension,
+        DualRepoSystemRealityAuditor,
     )
+
     auditor = DualRepoSystemRealityAuditor()
     report = auditor.audit()
     dim_entry = next(
-        (d for d in report.dimensions
-         if d.dimension == AuditDimension.recovery_redispatch_reconnect),
+        (d for d in report.dimensions if d.dimension == AuditDimension.recovery_redispatch_reconnect),
         None,
     )
     assert dim_entry is not None
     # The evidence_summary or code_references should mention the truth surface
-    combined = (
-        dim_entry.evidence_summary
-        + " ".join(dim_entry.code_references)
-    )
+    combined = dim_entry.evidence_summary + " ".join(dim_entry.code_references)
     assert "recovery_truth_surface" in combined, (
         f"recovery_truth_surface not mentioned in recovery audit evidence; "
         f"evidence_summary={dim_entry.evidence_summary!r}, "
@@ -737,18 +816,17 @@ def test_J01_reality_audit_includes_truth_surface_in_recovery_evidence():
 
 def test_J02_recovery_audit_probes_truth_surface_module():
     from core.dual_repo_system_reality_audit import (
-        DualRepoSystemRealityAuditor,
         AuditDimension,
+        DualRepoSystemRealityAuditor,
     )
+
     auditor = DualRepoSystemRealityAuditor()
     report = auditor.audit()
     dim_entry = next(
-        (d for d in report.dimensions
-         if d.dimension == AuditDimension.recovery_redispatch_reconnect),
+        (d for d in report.dimensions if d.dimension == AuditDimension.recovery_redispatch_reconnect),
         None,
     )
     assert dim_entry is not None
     assert "core.recovery_truth_surface" in dim_entry.code_references, (
-        f"core.recovery_truth_surface not in code_references; "
-        f"code_refs={dim_entry.code_references!r}"
+        f"core.recovery_truth_surface not in code_references; " f"code_refs={dim_entry.code_references!r}"
     )

@@ -23,11 +23,10 @@ from __future__ import annotations
 
 import pytest
 
-from core.continuum.config import ContinuumConfig, DEFAULT_CONTINUUM_CONFIG, HysteresisConfig
+from core.continuum.config import DEFAULT_CONTINUUM_CONFIG, ContinuumConfig, HysteresisConfig
 from core.continuum.liminal_field import LiminalFieldEngine, LiminalMetrics
 from core.continuum.state_fusion import StateFusion
 from core.continuum.types import ContinuumPhase, HumanFieldState, UnifiedState
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -127,9 +126,7 @@ def _build_history(
 ) -> list[UnifiedState]:
     """Build a history list with linearly changing intent_probability."""
     step = (end_intent - start_intent) / max(n - 1, 1)
-    return [
-        _unified(intent=start_intent + i * step) for i in range(n)
-    ]
+    return [_unified(intent=start_intent + i * step) for i in range(n)]
 
 
 # ===========================================================================
@@ -152,23 +149,29 @@ class TestLiminalMetrics:
 
     def test_frozen(self):
         m = LiminalMetrics(
-            coherence=0.5, ambiguity=0.5,
-            collapse_tendency=0.5, intervention_window=0.5,
+            coherence=0.5,
+            ambiguity=0.5,
+            collapse_tendency=0.5,
+            intervention_window=0.5,
         )
         with pytest.raises((AttributeError, TypeError)):
             m.coherence = 0.9  # type: ignore[misc]
 
     def test_all_zeros_valid(self):
         m = LiminalMetrics(
-            coherence=0.0, ambiguity=0.0,
-            collapse_tendency=0.0, intervention_window=0.0,
+            coherence=0.0,
+            ambiguity=0.0,
+            collapse_tendency=0.0,
+            intervention_window=0.0,
         )
         assert m.coherence == 0.0
 
     def test_all_ones_valid(self):
         m = LiminalMetrics(
-            coherence=1.0, ambiguity=1.0,
-            collapse_tendency=1.0, intervention_window=1.0,
+            coherence=1.0,
+            ambiguity=1.0,
+            collapse_tendency=1.0,
+            intervention_window=1.0,
         )
         assert m.coherence == 1.0
 
@@ -329,28 +332,44 @@ class TestCollapseTendency:
         assert m.collapse_tendency > 0.4
 
     def test_high_sensitivity_suppresses_collapse(self):
-        state_lo_sens = _unified(intent=0.8, attention=0.8, interruption_sensitivity=0.1,
-                                 context_utility=0.7, action_risk=0.1, uncertainty=0.1)
-        state_hi_sens = _unified(intent=0.8, attention=0.8, interruption_sensitivity=0.9,
-                                 context_utility=0.7, action_risk=0.1, uncertainty=0.1)
+        state_lo_sens = _unified(
+            intent=0.8,
+            attention=0.8,
+            interruption_sensitivity=0.1,
+            context_utility=0.7,
+            action_risk=0.1,
+            uncertainty=0.1,
+        )
+        state_hi_sens = _unified(
+            intent=0.8,
+            attention=0.8,
+            interruption_sensitivity=0.9,
+            context_utility=0.7,
+            action_risk=0.1,
+            uncertainty=0.1,
+        )
         m_lo = self.engine.compute(state_lo_sens)
         m_hi = self.engine.compute(state_hi_sens)
         assert m_lo.collapse_tendency > m_hi.collapse_tendency
 
     def test_high_action_risk_suppresses_collapse(self):
-        state_lo_risk = _unified(intent=0.8, attention=0.8, action_risk=0.05,
-                                 interruption_sensitivity=0.2, uncertainty=0.1)
-        state_hi_risk = _unified(intent=0.8, attention=0.8, action_risk=0.9,
-                                 interruption_sensitivity=0.2, uncertainty=0.1)
+        state_lo_risk = _unified(
+            intent=0.8, attention=0.8, action_risk=0.05, interruption_sensitivity=0.2, uncertainty=0.1
+        )
+        state_hi_risk = _unified(
+            intent=0.8, attention=0.8, action_risk=0.9, interruption_sensitivity=0.2, uncertainty=0.1
+        )
         m_lo = self.engine.compute(state_lo_risk)
         m_hi = self.engine.compute(state_hi_risk)
         assert m_lo.collapse_tendency > m_hi.collapse_tendency
 
     def test_urgency_boosts_collapse(self):
-        state_lo_urgency = _unified(intent=0.6, attention=0.6, interruption_sensitivity=0.3,
-                                    urgency=0.0, action_risk=0.1, uncertainty=0.2)
-        state_hi_urgency = _unified(intent=0.6, attention=0.6, interruption_sensitivity=0.3,
-                                    urgency=0.9, action_risk=0.1, uncertainty=0.2)
+        state_lo_urgency = _unified(
+            intent=0.6, attention=0.6, interruption_sensitivity=0.3, urgency=0.0, action_risk=0.1, uncertainty=0.2
+        )
+        state_hi_urgency = _unified(
+            intent=0.6, attention=0.6, interruption_sensitivity=0.3, urgency=0.9, action_risk=0.1, uncertainty=0.2
+        )
         m_lo = self.engine.compute(state_lo_urgency)
         m_hi = self.engine.compute(state_hi_urgency)
         assert m_hi.collapse_tendency > m_lo.collapse_tendency
@@ -370,10 +389,8 @@ class TestInterventionWindow:
         self.engine = LiminalFieldEngine()
 
     def test_speaking_narrows_window(self):
-        state_speak = _unified(intent=0.7, attention=0.7, speaking=True,
-                               interruption_sensitivity=0.3)
-        state_silent = _unified(intent=0.7, attention=0.7, speaking=False,
-                                interruption_sensitivity=0.3)
+        state_speak = _unified(intent=0.7, attention=0.7, speaking=True, interruption_sensitivity=0.3)
+        state_silent = _unified(intent=0.7, attention=0.7, speaking=False, interruption_sensitivity=0.3)
         m_speak = self.engine.compute(state_speak)
         m_silent = self.engine.compute(state_silent)
         assert m_silent.intervention_window > m_speak.intervention_window
@@ -386,10 +403,8 @@ class TestInterventionWindow:
         assert m_lo.intervention_window > m_hi.intervention_window
 
     def test_high_fatigue_narrows_window(self):
-        state_tired = _unified(intent=0.6, attention=0.6, fatigue=0.9,
-                               interruption_sensitivity=0.3)
-        state_fresh = _unified(intent=0.6, attention=0.6, fatigue=0.0,
-                               interruption_sensitivity=0.3)
+        state_tired = _unified(intent=0.6, attention=0.6, fatigue=0.9, interruption_sensitivity=0.3)
+        state_fresh = _unified(intent=0.6, attention=0.6, fatigue=0.0, interruption_sensitivity=0.3)
         m_tired = self.engine.compute(state_tired)
         m_fresh = self.engine.compute(state_fresh)
         assert m_fresh.intervention_window > m_tired.intervention_window
@@ -429,8 +444,12 @@ class TestEnrichUnified:
         cfg = ContinuumConfig(hysteresis=HysteresisConfig(manifest_enter=0.1))
         engine = LiminalFieldEngine(config=cfg)
         state = _unified(
-            intent=0.9, attention=0.9, interruption_sensitivity=0.1,
-            context_utility=0.9, action_risk=0.05, uncertainty=0.05,
+            intent=0.9,
+            attention=0.9,
+            interruption_sensitivity=0.1,
+            context_utility=0.9,
+            action_risk=0.05,
+            uncertainty=0.05,
             phase_candidate=ContinuumPhase.LIMINAL,
         )
         metrics = engine.compute(state)
@@ -467,8 +486,12 @@ class TestEnrichUnified:
         cfg = ContinuumConfig(hysteresis=HysteresisConfig(manifest_enter=0.1))
         engine = LiminalFieldEngine(config=cfg)
         state = _unified(
-            intent=0.9, attention=0.9, interruption_sensitivity=0.05,
-            context_utility=0.9, action_risk=0.05, uncertainty=0.05,
+            intent=0.9,
+            attention=0.9,
+            interruption_sensitivity=0.05,
+            context_utility=0.9,
+            action_risk=0.05,
+            uncertainty=0.05,
             phase_candidate=ContinuumPhase.MANIFEST,
         )
         metrics = engine.compute(state)
@@ -526,17 +549,22 @@ class TestOutputBounds:
     def setup_method(self):
         self.engine = LiminalFieldEngine()
 
-    @pytest.mark.parametrize("intent,attention,risk,uncertainty", [
-        (0.0, 0.0, 0.0, 0.0),
-        (1.0, 1.0, 1.0, 1.0),
-        (0.5, 0.5, 0.5, 0.5),
-        (0.9, 0.1, 0.8, 0.2),
-        (0.3, 0.7, 0.1, 0.9),
-    ])
+    @pytest.mark.parametrize(
+        "intent,attention,risk,uncertainty",
+        [
+            (0.0, 0.0, 0.0, 0.0),
+            (1.0, 1.0, 1.0, 1.0),
+            (0.5, 0.5, 0.5, 0.5),
+            (0.9, 0.1, 0.8, 0.2),
+            (0.3, 0.7, 0.1, 0.9),
+        ],
+    )
     def test_bounds_parametric(self, intent, attention, risk, uncertainty):
         state = _unified(
-            intent=intent, attention=attention,
-            action_risk=risk, uncertainty=uncertainty,
+            intent=intent,
+            attention=attention,
+            action_risk=risk,
+            uncertainty=uncertainty,
         )
         m = self.engine.compute(state)
         for name in ["coherence", "ambiguity", "collapse_tendency", "intervention_window"]:
@@ -545,8 +573,10 @@ class TestOutputBounds:
 
     def test_extreme_speaking_bounds(self):
         state = _unified(
-            intent=1.0, speaking=True,
-            interruption_sensitivity=1.0, fatigue=1.0,
+            intent=1.0,
+            speaking=True,
+            interruption_sensitivity=1.0,
+            fatigue=1.0,
         )
         m = self.engine.compute(state)
         for name in ["coherence", "ambiguity", "collapse_tendency", "intervention_window"]:

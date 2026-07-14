@@ -93,15 +93,11 @@ class DecayController:
     ) -> None:
         self._state = state or get_cognitive_state()
         cfg = self._read_config()
-        self._decay_rate = decay_rate if decay_rate is not None else float(
-            cfg.get("cognitive_decay_rate", 0.10)
+        self._decay_rate = decay_rate if decay_rate is not None else float(cfg.get("cognitive_decay_rate", 0.10))
+        self._step_interval_s = (
+            step_interval_s if step_interval_s is not None else float(cfg.get("cognitive_decay_step_interval_s", 0.5))
         )
-        self._step_interval_s = step_interval_s if step_interval_s is not None else float(
-            cfg.get("cognitive_decay_step_interval_s", 0.5)
-        )
-        self._num_steps = num_steps if num_steps is not None else int(
-            cfg.get("cognitive_decay_steps", 8)
-        )
+        self._num_steps = num_steps if num_steps is not None else int(cfg.get("cognitive_decay_steps", 8))
         self._active_decay_task: Optional[asyncio.Task] = None
         self._subscribed = False
         self._lock = threading.Lock()
@@ -118,7 +114,7 @@ class DecayController:
         if self._subscribed:
             return
         try:
-            from core.state_event_bus import get_state_event_bus, StateEventType
+            from core.state_event_bus import StateEventType, get_state_event_bus
 
             bus = get_state_event_bus()
             bus.subscribe(StateEventType.TASK_DONE, self._on_task_done)
@@ -254,9 +250,7 @@ class DecayController:
             import json
             import pathlib
 
-            return json.loads(
-                (pathlib.Path(__file__).parents[2] / "config.json").read_text()
-            )
+            return json.loads((pathlib.Path(__file__).parents[2] / "config.json").read_text())
         except Exception:
             return {}
 

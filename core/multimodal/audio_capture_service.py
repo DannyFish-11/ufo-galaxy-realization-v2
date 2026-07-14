@@ -19,6 +19,7 @@ If ``sounddevice`` is not installed, :meth:`start` returns immediately
 without raising.  Downstream consumers receive ``DEVICE_UNAVAILABLE``
 quality signals.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -32,16 +33,16 @@ import numpy as np
 if TYPE_CHECKING:  # 仅类型检查:WhisperASR 实际用时在方法内懒导入(见 add_whisper_callback)
     from core.asr import WhisperASR
 
-from .audio_ingest import AudioIngestPipeline, AudioIngestConfig
 from .audio_features import AudioState
-from .signal_quality import SignalQuality
+from .audio_ingest import AudioIngestConfig, AudioIngestPipeline
 from .multimodal_events import (
+    AudioQualityDegradedEvent,
+    AudioStreamErrorEvent,
     AudioStreamStartedEvent,
     AudioStreamStoppedEvent,
-    AudioStreamErrorEvent,
-    AudioQualityDegradedEvent,
     MultimodalEvent,
 )
+from .signal_quality import SignalQuality
 
 logger = logging.getLogger(__name__)
 
@@ -128,18 +129,14 @@ class AudioCaptureService:
         """True if sounddevice is importable on this host."""
         return self._pipeline.is_available
 
-    def add_asr_callback(
-        self, cb: Callable[[AudioState, SignalQuality], None]
-    ) -> None:
+    def add_asr_callback(self, cb: Callable[[AudioState, SignalQuality], None]) -> None:
         """Register a callback invoked with each new :class:`AudioState`.
 
         Suitable for wiring directly into an ASR or agent pipeline.
         """
         self._asr_callbacks.append(cb)
 
-    def add_event_listener(
-        self, listener: Callable[[MultimodalEvent], None]
-    ) -> None:
+    def add_event_listener(self, listener: Callable[[MultimodalEvent], None]) -> None:
         """Register a listener for :class:`MultimodalEvent` objects."""
         self._event_listeners.append(listener)
 
@@ -188,9 +185,7 @@ class AudioCaptureService:
                 buffer_duration += len(state.samples) / state.sample_rate
 
             # Transcribe when buffer is full or speech ends
-            if buffer_duration >= asr_buffer_s or (
-                not state.is_speaking and buffer_duration > 0.5
-            ):
+            if buffer_duration >= asr_buffer_s or (not state.is_speaking and buffer_duration > 0.5):
                 audio_np = np.concatenate(buffer)
                 buffer = []
                 buffer_duration = 0.0
@@ -305,9 +300,7 @@ class AudioCaptureService:
                 self._task.cancel()
             self._task = None
 
-        duration_s = (
-            time.monotonic() - self._start_ts if self._start_ts is not None else 0.0
-        )
+        duration_s = time.monotonic() - self._start_ts if self._start_ts is not None else 0.0
         self._emit_event(
             AudioStreamStoppedEvent(
                 trace_id=self.config.trace_id,
@@ -342,9 +335,7 @@ class AudioCaptureService:
                 )
             )
 
-    def _on_audio_chunk(
-        self, state: AudioState, quality: SignalQuality
-    ) -> None:
+    def _on_audio_chunk(self, state: AudioState, quality: SignalQuality) -> None:
         """Internal callback: update metrics, check latency, forward to ASR."""
         self._chunks_processed += 1
 

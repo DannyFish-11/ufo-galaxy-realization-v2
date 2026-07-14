@@ -95,8 +95,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 STAGED_MESH_ROLE_CONTRACT_AUTHORITY: str = (
-    "STAGED_MESH_ROLE_CONTRACT::"
-    "EXPLICIT_DECLARATION_OF_STAGED_MESH_MAIN_CHAIN_ROLE_AND_LIVE_ENGINE_CONNECTION_V1"
+    "STAGED_MESH_ROLE_CONTRACT::" "EXPLICIT_DECLARATION_OF_STAGED_MESH_MAIN_CHAIN_ROLE_AND_LIVE_ENGINE_CONNECTION_V1"
 )
 
 STAGED_MESH_ROLE_CONTRACT_PR2_SENTINEL: str = (
@@ -230,6 +229,7 @@ def verify_staged_mesh_live_connection() -> Dict[str, Any]:
             LiveMeshRuntimeEngine,
             run_live_mesh_session,
         )
+
         result["live_engine_importable"] = True
         result["run_live_mesh_session_callable"] = callable(run_live_mesh_session)
     except Exception as exc:
@@ -239,6 +239,7 @@ def verify_staged_mesh_live_connection() -> Dict[str, Any]:
         from core.mesh.mesh_session_coordinator import (  # noqa: F401
             coordinate_mesh_session,
         )
+
         result["coordinator_importable"] = True
         result["coordinate_mesh_session_callable"] = callable(coordinate_mesh_session)
     except Exception as exc:
@@ -248,6 +249,7 @@ def verify_staged_mesh_live_connection() -> Dict[str, Any]:
         from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
             orchestrate_source_runtime_dispatch,
         )
+
         result["orchestrator_importable"] = True
     except Exception as exc:
         result["errors"].append(f"orchestrator_import_error:{exc}")

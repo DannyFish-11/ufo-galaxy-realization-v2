@@ -18,61 +18,55 @@ OPENCLAWD_ORCHESTRATION_AUTHORITY = "OPENCLAWD_ORCHESTRATION_AUTHORITY"
 # PR-8: Multi-device plan contracts (original exports — preserved)
 # ============================================================================
 
+from core.orchestration.execution import (
+    EXECUTION_PIPELINE_AUTHORITY,
+    ExecutionPipeline,
+)
+from core.orchestration.helpers import (
+    ORCHESTRATION_HELPERS_AUTHORITY,
+    OrchestrationHelpers,
+)
+from core.orchestration.lifecycle import (
+    _LOCAL_DEVICE_PREFIXES,
+    _LOCAL_HOSTNAME,
+    LIFECYCLE_MANAGER_AUTHORITY,
+    LifecycleManager,
+    ParallelGroupTracker,
+    ParallelResult,
+    _is_local_device,
+    _SubtaskEntry,
+    _SubtaskStatus,
+)
 from core.orchestration.multi_device_plan import (
     OrchestrationDecision,
-    OrchestrationPlan,
     OrchestrationMemberResult,
+    OrchestrationPlan,
     OrchestrationResult,
     build_orchestration_plan,
     build_orchestration_result,
+)
+from core.orchestration.perception import (
+    PERCEPTION_PIPELINE_AUTHORITY,
+    PerceptionPipeline,
+)
+from core.orchestration.planning import (
+    PLANNING_PIPELINE_AUTHORITY,
+    PlanningPipeline,
+)
+from core.orchestration.reflection import (
+    REFLECTION_PIPELINE_AUTHORITY,
+    ReflectionPipeline,
+)
+from core.orchestration.state import (
+    STATE_MANAGER_AUTHORITY,
+    ContinuumStateAdapter,
+    SessionMemoryManager,
 )
 
 # ============================================================================
 # PR-7: Submodule re-exports for convenience
 # ============================================================================
 
-from core.orchestration.lifecycle import (
-    LIFECYCLE_MANAGER_AUTHORITY,
-    LifecycleManager,
-    ParallelGroupTracker,
-    ParallelResult,
-    _SubtaskEntry,
-    _SubtaskStatus,
-    _is_local_device,
-    _LOCAL_DEVICE_PREFIXES,
-    _LOCAL_HOSTNAME,
-)
-
-from core.orchestration.state import (
-    STATE_MANAGER_AUTHORITY,
-    SessionMemoryManager,
-    ContinuumStateAdapter,
-)
-
-from core.orchestration.perception import (
-    PERCEPTION_PIPELINE_AUTHORITY,
-    PerceptionPipeline,
-)
-
-from core.orchestration.planning import (
-    PLANNING_PIPELINE_AUTHORITY,
-    PlanningPipeline,
-)
-
-from core.orchestration.execution import (
-    EXECUTION_PIPELINE_AUTHORITY,
-    ExecutionPipeline,
-)
-
-from core.orchestration.reflection import (
-    REFLECTION_PIPELINE_AUTHORITY,
-    ReflectionPipeline,
-)
-
-from core.orchestration.helpers import (
-    ORCHESTRATION_HELPERS_AUTHORITY,
-    OrchestrationHelpers,
-)
 
 __all__ = [
     # PR-7 sentinel

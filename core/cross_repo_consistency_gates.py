@@ -431,14 +431,11 @@ def run_schema_vocabulary_gate() -> ConsistencyGateResult:
     catalogue = get_protocol_surface_catalogue()
     issues: List[str] = []
 
-    unresolved = [
-        r for r in catalogue if r.surface_class == ProtocolSurfaceClass.unresolved
-    ]
+    unresolved = [r for r in catalogue if r.surface_class == ProtocolSurfaceClass.unresolved]
     if unresolved:
         for r in unresolved:
             issues.append(
-                f"Unresolved surface '{r.surface_id}' in category "
-                f"'{r.category.value}' must be reclassified."
+                f"Unresolved surface '{r.surface_id}' in category " f"'{r.category.value}' must be reclassified."
             )
 
     vocab_canonical = [
@@ -456,8 +453,7 @@ def run_schema_vocabulary_gate() -> ConsistencyGateResult:
         for r in vocab_canonical:
             if not r.center_authority:
                 issues.append(
-                    f"Canonical shared_vocabulary surface '{r.surface_id}' has "
-                    "no center_authority specified."
+                    f"Canonical shared_vocabulary surface '{r.surface_id}' has " "no center_authority specified."
                 )
 
     drift = bool(unresolved)
@@ -508,10 +504,7 @@ def run_session_family_gate() -> ConsistencyGateResult:
 
     for surface_id in _REQUIRED_SESSION_SURFACE_IDS:
         if surface_id not in surface_map:
-            issues.append(
-                f"Required session surface '{surface_id}' is missing from the "
-                "protocol surface catalogue."
-            )
+            issues.append(f"Required session surface '{surface_id}' is missing from the " "protocol surface catalogue.")
             drift = True
             continue
         record = surface_map[surface_id]
@@ -530,14 +523,8 @@ def run_session_family_gate() -> ConsistencyGateResult:
                 )
 
     # Also check session category surfaces not in our required list
-    session_surfaces = [
-        r
-        for r in catalogue
-        if r.category == ProtocolConsistencyCategory.session_identifier
-    ]
-    unresolved_session = [
-        r for r in session_surfaces if r.surface_class == ProtocolSurfaceClass.unresolved
-    ]
+    session_surfaces = [r for r in catalogue if r.category == ProtocolConsistencyCategory.session_identifier]
+    unresolved_session = [r for r in session_surfaces if r.surface_class == ProtocolSurfaceClass.unresolved]
     for r in unresolved_session:
         if r.surface_id not in _REQUIRED_SESSION_SURFACE_IDS:
             issues.append(
@@ -596,8 +583,7 @@ def run_execution_enum_gate() -> ConsistencyGateResult:
     for phase in _REQUIRED_EXECUTION_PHASES:
         if phase not in phase_map:
             issues.append(
-                f"Required execution phase '{phase}' is missing from the "
-                "delegated execution status catalogue."
+                f"Required execution phase '{phase}' is missing from the " "delegated execution status catalogue."
             )
             drift = True
 
@@ -618,8 +604,7 @@ def run_execution_enum_gate() -> ConsistencyGateResult:
     if duplicate_phases:
         for dup in set(duplicate_phases):
             issues.append(
-                f"Execution phase '{dup}' appears multiple times in the "
-                "delegated execution status catalogue."
+                f"Execution phase '{dup}' appears multiple times in the " "delegated execution status catalogue."
             )
         drift = True
 
@@ -676,9 +661,7 @@ def run_terminal_state_gate() -> ConsistencyGateResult:
     # Check for empty state values
     for record in term_catalogue:
         if not record.state_value:
-            issues.append(
-                "Terminal state consistency record has an empty state_value."
-            )
+            issues.append("Terminal state consistency record has an empty state_value.")
             drift = True
 
     # Check closed-set invariant: catalogue must exactly cover CanonicalTerminalState
@@ -704,9 +687,7 @@ def run_terminal_state_gate() -> ConsistencyGateResult:
         drift = True
 
     # Warn about partially inconsistent states (not drift, just noteworthy)
-    partially_inconsistent = [
-        r for r in term_catalogue if not r.is_fully_consistent
-    ]
+    partially_inconsistent = [r for r in term_catalogue if not r.is_fully_consistent]
     warn_messages: List[str] = []
     for r in partially_inconsistent:
         warn_messages.append(
@@ -772,8 +753,7 @@ def run_descriptor_field_gate() -> ConsistencyGateResult:
     for surface_id in _REQUIRED_DESCRIPTOR_SURFACE_IDS:
         if surface_id not in surface_map:
             issues.append(
-                f"Required descriptor surface '{surface_id}' is missing from "
-                "the protocol surface catalogue."
+                f"Required descriptor surface '{surface_id}' is missing from " "the protocol surface catalogue."
             )
             drift = True
             continue
@@ -794,18 +774,11 @@ def run_descriptor_field_gate() -> ConsistencyGateResult:
             )
 
     # Also check runtime_profile surfaces generally
-    profile_surfaces = [
-        r
-        for r in catalogue
-        if r.category == ProtocolConsistencyCategory.runtime_profile
-    ]
-    unresolved_profile = [
-        r for r in profile_surfaces if r.surface_class == ProtocolSurfaceClass.unresolved
-    ]
+    profile_surfaces = [r for r in catalogue if r.category == ProtocolConsistencyCategory.runtime_profile]
+    unresolved_profile = [r for r in profile_surfaces if r.surface_class == ProtocolSurfaceClass.unresolved]
     for r in unresolved_profile:
         issues.append(
-            f"Runtime profile surface '{r.surface_id}' is unresolved. "
-            "Descriptor field surfaces must be classified."
+            f"Runtime profile surface '{r.surface_id}' is unresolved. " "Descriptor field surfaces must be classified."
         )
         drift = True
 
@@ -878,18 +851,11 @@ def run_transitional_marker_gate() -> ConsistencyGateResult:
     duplicate_ids = [aid for aid in allowance_ids if allowance_ids.count(aid) > 1]
     if duplicate_ids:
         for dup in set(duplicate_ids):
-            issues.append(
-                f"Duplicate allowance_id '{dup}' found in the transitional "
-                "allowance catalogue."
-            )
+            issues.append(f"Duplicate allowance_id '{dup}' found in the transitional " "allowance catalogue.")
         drift = True
 
     # Validate transitional surfaces have retirement_pathway
-    transitional_surfaces = [
-        r
-        for r in surface_catalogue
-        if r.surface_class == ProtocolSurfaceClass.transitional
-    ]
+    transitional_surfaces = [r for r in surface_catalogue if r.surface_class == ProtocolSurfaceClass.transitional]
     for r in transitional_surfaces:
         if not r.retirement_pathway:
             issues.append(
@@ -982,14 +948,10 @@ def build_consistency_gate_snapshot() -> ConsistencyGateSnapshot:
         )
     elif warned > 0:
         summary = (
-            f"CROSS-REPO CONSISTENCY GATES: all gates passed. "
-            f"{warned} gate(s) with warnings. No drift detected."
+            f"CROSS-REPO CONSISTENCY GATES: all gates passed. " f"{warned} gate(s) with warnings. No drift detected."
         )
     else:
-        summary = (
-            f"CROSS-REPO CONSISTENCY GATES: all {len(results)} gates PASSED. "
-            "No drift detected."
-        )
+        summary = f"CROSS-REPO CONSISTENCY GATES: all {len(results)} gates PASSED. " "No drift detected."
 
     return ConsistencyGateSnapshot(
         generated_at=time.time(),

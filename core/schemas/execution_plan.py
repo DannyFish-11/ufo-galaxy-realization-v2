@@ -97,6 +97,7 @@ Usage::
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
+
 logger = logging.getLogger(__name__)
 
 
@@ -105,7 +106,6 @@ import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
-
 
 __all__ = [
     "ExecutionStepType",
@@ -119,15 +119,14 @@ __all__ = [
 
 # PR-12: Import lifecycle types (fail-soft — avoids circular-import risk).
 try:
-    from core.schemas.execution_lifecycle import (
-        ExecutionLifecycleState as _ELS,
-        LifecycleTransition as _LT,
-    )
+    from core.schemas.execution_lifecycle import ExecutionLifecycleState as _ELS
+    from core.schemas.execution_lifecycle import LifecycleTransition as _LT
+
     _LIFECYCLE_OK = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
     _ELS = None  # type: ignore[assignment,misc]
-    _LT = None   # type: ignore[assignment,misc]
+    _LT = None  # type: ignore[assignment,misc]
     _LIFECYCLE_OK = False
 
 
@@ -255,10 +254,7 @@ class ExecutionStep:
             "metadata": dict(self.metadata),
             # PR-12: lifecycle
             "lifecycle_state": self.lifecycle_state,
-            "lifecycle_trail": [
-                t.to_dict() if hasattr(t, "to_dict") else t
-                for t in (self.lifecycle_trail or [])
-            ],
+            "lifecycle_trail": [t.to_dict() if hasattr(t, "to_dict") else t for t in (self.lifecycle_trail or [])],
         }
         return d
 
@@ -325,16 +321,13 @@ class ExecutionPlan:
     @property
     def is_local_only(self) -> bool:
         """``True`` when all steps are local-manifestation steps."""
-        return bool(self.steps) and all(
-            s.step_type == ExecutionStepType.LOCAL_MANIFESTATION for s in self.steps
-        )
+        return bool(self.steps) and all(s.step_type == ExecutionStepType.LOCAL_MANIFESTATION for s in self.steps)
 
     @property
     def is_remote(self) -> bool:
         """``True`` when any step targets a remote device."""
         return any(
-            s.step_type in (ExecutionStepType.REMOTE_COMMAND, ExecutionStepType.REMOTE_AGENT)
-            for s in self.steps
+            s.step_type in (ExecutionStepType.REMOTE_COMMAND, ExecutionStepType.REMOTE_AGENT) for s in self.steps
         )
 
     @property
@@ -345,9 +338,7 @@ class ExecutionPlan:
     @property
     def is_observe(self) -> bool:
         """``True`` when the plan is a no-op / observe-only plan."""
-        return bool(self.steps) and all(
-            s.step_type == ExecutionStepType.OBSERVE for s in self.steps
-        )
+        return bool(self.steps) and all(s.step_type == ExecutionStepType.OBSERVE for s in self.steps)
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialise to a JSON-safe dict."""
@@ -362,10 +353,7 @@ class ExecutionPlan:
             "metadata": dict(self.metadata),
             # PR-12: lifecycle
             "lifecycle_state": self.lifecycle_state,
-            "lifecycle_trail": [
-                t.to_dict() if hasattr(t, "to_dict") else t
-                for t in (self.lifecycle_trail or [])
-            ],
+            "lifecycle_trail": [t.to_dict() if hasattr(t, "to_dict") else t for t in (self.lifecycle_trail or [])],
         }
 
 
@@ -441,7 +429,7 @@ def _stamp_plan_lifecycle(plan: "ExecutionPlan") -> None:
             )
             step.lifecycle_state = _ELS.CREATED.value
             step.lifecycle_trail = [step_transition]
-    except Exception as exc:
+    except Exception:
         pass  # lifecycle stamping is always additive / non-breaking
 
 
@@ -711,9 +699,7 @@ def plan_summary(plan: Optional[ExecutionPlan]) -> Dict[str, Any]:
         "lifecycle_state": plan.lifecycle_state,
         "intent_truth": (plan.metadata or {}).get("intent_truth", "planned_not_executed"),
         "tool_invocation_truth": (plan.metadata or {}).get("tool_invocation_truth", "not_invoked_by_plan"),
-        "side_effect_execution_truth": (plan.metadata or {}).get(
-            "side_effect_execution_truth", "not_executed_by_plan"
-        ),
+        "side_effect_execution_truth": (plan.metadata or {}).get("side_effect_execution_truth", "not_executed_by_plan"),
         "repo_mutation_authorization_truth": (plan.metadata or {}).get(
             "repo_mutation_authorization_truth", "not_authorized_by_plan"
         ),

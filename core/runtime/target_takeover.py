@@ -122,8 +122,8 @@ def normalize_handoff_envelope(
     try:
         from contracts.handoff_envelope_v2 import (
             HandoffEnvelopeV2,
-            from_legacy_handoff_contract,
             build_handoff_envelope_v2,
+            from_legacy_handoff_contract,
         )
 
         if payload is None:
@@ -161,11 +161,12 @@ def normalize_handoff_envelope(
         logger.debug("normalize_handoff_envelope: normalisation failed: %s", exc)
         try:
             from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
+
             return build_handoff_envelope_v2(
                 trace_id=str(uuid.uuid4()),
                 task={},
             )
-        except Exception as exc:
+        except Exception:
             return None
 
 
@@ -225,14 +226,13 @@ def adopt_handoff_session(
             # priority; falls back to session_id since DelegatedHandoffContractIdentity
             # maps delegation_transfer_session_id → session_id.
             _delegation_transfer_session_id = (
-                getattr(envelope, "delegation_transfer_session_id", None)
-                or _session_id
-                or None
+                getattr(envelope, "delegation_transfer_session_id", None) or _session_id or None
             )
 
         # Attempt to attach a mesh session ID from PR-33 context
         try:
             from core.mesh.body_mesh_registry import get_body_mesh_registry
+
             _registry = get_body_mesh_registry()
             _mesh_sess = _registry.get_mesh_session(mesh_id="default_mesh")
             if _mesh_sess is not None:
@@ -262,11 +262,12 @@ def adopt_handoff_session(
         logger.debug("adopt_handoff_session: failed: %s", exc)
         try:
             from contracts.local_takeover_result import LocalTakeoverSessionContext
+
             return LocalTakeoverSessionContext(
                 session_id=str(uuid.uuid4()),
                 adopted=False,
             )
-        except Exception as exc:
+        except Exception:
             return None
 
 
@@ -380,9 +381,7 @@ def build_local_takeover_context(
         if session_context is not None:
             _sc_id = getattr(session_context, "session_id", None)
             _rt_sess_id = getattr(session_context, "runtime_session_id", None)
-            _delegation_transfer_session_id = getattr(
-                session_context, "delegation_transfer_session_id", None
-            )
+            _delegation_transfer_session_id = getattr(session_context, "delegation_transfer_session_id", None)
             if _sc_id:
                 _session_dict["session_id"] = _sc_id
 
@@ -452,6 +451,7 @@ def _run_local_execution(
         _openclawd_instance = None
         try:
             from core.openclawd import OpenClawd
+
             # Attempt to get singleton or create minimal instance
             if hasattr(OpenClawd, "get_instance"):
                 _openclawd_instance = OpenClawd.get_instance()
@@ -499,6 +499,7 @@ def _try_governance_snapshot() -> Optional[Dict[str, Any]]:
     """
     try:
         from core.runtime_governance.snapshot import assemble_runtime_governance_snapshot
+
         snap = assemble_runtime_governance_snapshot()
         if snap is not None:
             if hasattr(snap, "to_dict"):
@@ -517,6 +518,7 @@ def _try_policy_alignment() -> Optional[Dict[str, Any]]:
     """
     try:
         from core.routes.projection import _assemble_policy_alignment  # type: ignore[attr-defined]
+
         return _assemble_policy_alignment()
     except Exception as exc:
         logger.debug("Suppressed: %s", exc)
@@ -614,8 +616,8 @@ class TargetTakeoverHandler:
         """
         from contracts.local_takeover_result import (
             LocalTakeoverStatus,
-            from_execution_output,
             failure_result,
+            from_execution_output,
         )
 
         envelope = None
@@ -637,8 +639,7 @@ class TargetTakeoverHandler:
                     _allow = getattr(_policy, "allow_local_takeover", True)
                     if _allow is False:
                         logger.debug(
-                            "TargetTakeoverHandler.handle: takeover disallowed by policy | "
-                            "trace_id=%s",
+                            "TargetTakeoverHandler.handle: takeover disallowed by policy | " "trace_id=%s",
                             _trace_id,
                         )
                         return failure_result(
@@ -710,9 +711,7 @@ class TargetTakeoverHandler:
             )
 
         except Exception as exc:  # noqa: BLE001
-            logger.debug(
-                "TargetTakeoverHandler.handle: unhandled exception: %s", exc
-            )
+            logger.debug("TargetTakeoverHandler.handle: unhandled exception: %s", exc)
             _trace_id2: Optional[str] = None
             _task_id2: Optional[str] = None
             _dcm_fallback: Optional[Dict[str, Any]] = None

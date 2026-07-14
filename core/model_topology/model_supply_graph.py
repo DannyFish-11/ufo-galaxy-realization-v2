@@ -51,8 +51,7 @@ class GraphEdge:
 
     def __repr__(self) -> str:
         return (
-            f"<GraphEdge {self.source_node_id} --[{self.kind.value}]--> "
-            f"{self.target_node_id} w={self.weight:.2f}>"
+            f"<GraphEdge {self.source_node_id} --[{self.kind.value}]--> " f"{self.target_node_id} w={self.weight:.2f}>"
         )
 
 
@@ -82,9 +81,7 @@ class ModelSupplyGraph:
     def add_node(self, node: ModelNode) -> None:
         """Add a node to the registry (overwrites on duplicate node_id)."""
         if node.node_id in self._nodes:
-            logger.warning(
-                "ModelSupplyGraph: duplicate node_id '%s'; overwriting.", node.node_id
-            )
+            logger.warning("ModelSupplyGraph: duplicate node_id '%s'; overwriting.", node.node_id)
         self._nodes[node.node_id] = node
 
     def get_node(self, node_id: str) -> Optional[ModelNode]:
@@ -146,9 +143,7 @@ class ModelSupplyGraph:
             key=lambda n: (-n.base_weight, n.node_id),
         )
 
-    def nodes_by_role(
-        self, role: TopologyRole, available_only: bool = True
-    ) -> List[ModelNode]:
+    def nodes_by_role(self, role: TopologyRole, available_only: bool = True) -> List[ModelNode]:
         """Nodes whose primary topology_role (or role_hints) matches ``role``."""
         pool = self.available_nodes() if available_only else self.all_nodes()
         return sorted(
@@ -156,18 +151,14 @@ class ModelSupplyGraph:
             key=lambda n: (-n.base_weight, n.node_id),
         )
 
-    def nodes_by_category(
-        self, category: ProviderCategory, available_only: bool = True
-    ) -> List[ModelNode]:
+    def nodes_by_category(self, category: ProviderCategory, available_only: bool = True) -> List[ModelNode]:
         pool = self.available_nodes() if available_only else self.all_nodes()
         return sorted(
             [n for n in pool if n.category == category],
             key=lambda n: (-n.base_weight, n.node_id),
         )
 
-    def nodes_by_provider(
-        self, provider_id: str, available_only: bool = True
-    ) -> List[ModelNode]:
+    def nodes_by_provider(self, provider_id: str, available_only: bool = True) -> List[ModelNode]:
         pool = self.available_nodes() if available_only else self.all_nodes()
         return [n for n in pool if n.provider.provider_id == provider_id]
 
@@ -196,9 +187,7 @@ class ModelSupplyGraph:
             node = node_from_entry(inv_entry.entry)
             graph.add_node(node)
 
-        logger.info(
-            "ModelSupplyGraph.from_inventory: %d nodes registered.", len(graph)
-        )
+        logger.info("ModelSupplyGraph.from_inventory: %d nodes registered.", len(graph))
 
         # 2. Infer edges from aggregator hints
         _infer_edges_from_hints(graph, inventory.aggregator_hints)

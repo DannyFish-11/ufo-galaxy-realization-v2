@@ -68,6 +68,7 @@ def _force_legacy_truth_chain(monkeypatch):
     monkeypatch.setattr(uri, "ingest_result_async", _unavailable)
 
     import core.durable_result_idempotency as dri
+
     monkeypatch.setattr(dri, "check_result_idempotency", lambda tid: False)
     monkeypatch.setattr(dri, "record_result_idempotency", lambda tid: None)
 
@@ -77,6 +78,7 @@ def _force_legacy_truth_chain(monkeypatch):
 # ---------------------------------------------------------------------------
 
 try:
+    import galaxy_gateway.android.handlers.task_lifecycle as _tl
     from core.android_execution_signal_reconciler import (
         AndroidSignalKind,
         normalize_android_message_to_signal_kind,
@@ -87,7 +89,6 @@ try:
         DelegatedExecutionTrackingRuntime,
         create_execution_tracking_record,
     )
-    import galaxy_gateway.android.handlers.task_lifecycle as _tl
 
     _CORE_AVAILABLE = True
 except ImportError:
@@ -152,8 +153,10 @@ def _make_reconcile_with_runtime(
     rt: "DelegatedExecutionTrackingRuntime",
 ):
     """Return a reconcile callable that uses an isolated *rt* for test isolation."""
+
     def _reconcile(message: Dict[str, Any]) -> Any:
         return reconcile_inbound_message(message, runtime=rt)
+
     return _reconcile
 
 
@@ -257,8 +260,7 @@ class TestGroupB_HandleCommandResultReconcileWiring:
             _run(_tl.handle_command_result(bridge, None, msg))
 
         assert len(reconcile_calls) >= 1, (
-            "handle_command_result must call _reconcile_inbound_message when "
-            "the message carries contract_id"
+            "handle_command_result must call _reconcile_inbound_message when " "the message carries contract_id"
         )
 
     def test_b02_reconcile_not_called_when_reconciler_absent(self) -> None:
@@ -369,9 +371,9 @@ class TestGroupC_HandleTaskProgressAdvancesPhase:
 
         rec = _find_record(rt, "ctr-c01", "ses-c01")
         assert rec is not None
-        assert rec.phase == DelegatedExecutionPhase.in_progress, (
-            f"progress signal must advance phase to in_progress; got {rec.phase}"
-        )
+        assert (
+            rec.phase == DelegatedExecutionPhase.in_progress
+        ), f"progress signal must advance phase to in_progress; got {rec.phase}"
 
     def test_c02_progress_ack_signal_advances_to_at_least_acknowledged(self) -> None:
         """AC2: task_progress 'pending' (ack kind) advances phase."""
@@ -469,9 +471,9 @@ class TestGroupD_HandleTaskResultAdvancesPhase:
 
         rec = _find_record(rt, "ctr-d01", "ses-d01")
         assert rec is not None
-        assert rec.phase == DelegatedExecutionPhase.completed, (
-            f"RESULT signal must advance phase to completed; got {rec.phase}"
-        )
+        assert (
+            rec.phase == DelegatedExecutionPhase.completed
+        ), f"RESULT signal must advance phase to completed; got {rec.phase}"
 
     def test_d02_failed_result_advances_to_failed(self) -> None:
         """AC3: task_result 'failed' through legacy path advances phase to failed."""
@@ -506,9 +508,9 @@ class TestGroupD_HandleTaskResultAdvancesPhase:
 
         rec = _find_record(rt, "ctr-d02", "ses-d02")
         assert rec is not None
-        assert rec.phase == DelegatedExecutionPhase.failed, (
-            f"failed RESULT signal must advance phase to failed; got {rec.phase}"
-        )
+        assert (
+            rec.phase == DelegatedExecutionPhase.failed
+        ), f"failed RESULT signal must advance phase to failed; got {rec.phase}"
 
 
 # ===========================================================================
@@ -555,9 +557,9 @@ class TestGroupE_HandleGoalExecutionResultAdvancesPhase:
 
         rec = _find_record(rt, "ctr-e01", "ses-e01")
         assert rec is not None
-        assert rec.phase == DelegatedExecutionPhase.completed, (
-            f"goal_execution_result success must advance phase to completed; got {rec.phase}"
-        )
+        assert (
+            rec.phase == DelegatedExecutionPhase.completed
+        ), f"goal_execution_result success must advance phase to completed; got {rec.phase}"
 
     def test_e02_goal_execution_result_failed_advances_to_failed(self) -> None:
         """AC4: goal_execution_result failed through legacy path advances phase to failed."""
@@ -592,9 +594,9 @@ class TestGroupE_HandleGoalExecutionResultAdvancesPhase:
 
         rec = _find_record(rt, "ctr-e02", "ses-e02")
         assert rec is not None
-        assert rec.phase == DelegatedExecutionPhase.failed, (
-            f"failed goal_execution_result must advance phase to failed; got {rec.phase}"
-        )
+        assert (
+            rec.phase == DelegatedExecutionPhase.failed
+        ), f"failed goal_execution_result must advance phase to failed; got {rec.phase}"
 
 
 # ===========================================================================
@@ -631,9 +633,9 @@ class TestGroupF_HandleErrorAdvancesPhase:
 
         rec = _find_record(rt, "ctr-f01", "ses-f01")
         assert rec is not None
-        assert rec.phase == DelegatedExecutionPhase.failed, (
-            f"error signal must advance phase to failed; got {rec.phase}"
-        )
+        assert (
+            rec.phase == DelegatedExecutionPhase.failed
+        ), f"error signal must advance phase to failed; got {rec.phase}"
 
     def test_f02_error_handler_calls_reconcile(self) -> None:
         """AC5: _try_reconcile is invoked inside handle_error."""
@@ -693,9 +695,9 @@ class TestGroupG_HandleTaskEndAdvancesPhase:
 
         rec = _find_record(rt, "ctr-g01", "ses-g01")
         assert rec is not None
-        assert rec.phase == DelegatedExecutionPhase.completed, (
-            f"task_end 'completed' must advance phase to completed; got {rec.phase}"
-        )
+        assert (
+            rec.phase == DelegatedExecutionPhase.completed
+        ), f"task_end 'completed' must advance phase to completed; got {rec.phase}"
 
     def test_g02_task_end_returns_ack_regardless_of_reconcile_outcome(self) -> None:
         """AC6: task_end_ack is always returned (non-disruptive reconcile)."""
@@ -827,9 +829,9 @@ class TestGroupI_FullLifecycleThroughInboundPath:
 
         rec = _find_record(rt, "ctr-i01", "ses-i01")
         assert rec is not None
-        assert rec.phase == DelegatedExecutionPhase.in_progress, (
-            f"after PROGRESS, phase must be in_progress; got {rec.phase}"
-        )
+        assert (
+            rec.phase == DelegatedExecutionPhase.in_progress
+        ), f"after PROGRESS, phase must be in_progress; got {rec.phase}"
 
         # -- Step 3: RESULT (task_result, completed) → completed --
         result_msg = {
@@ -856,9 +858,7 @@ class TestGroupI_FullLifecycleThroughInboundPath:
 
         rec = _find_record(rt, "ctr-i01", "ses-i01")
         assert rec is not None
-        assert rec.phase == DelegatedExecutionPhase.completed, (
-            f"after RESULT, phase must be completed; got {rec.phase}"
-        )
+        assert rec.phase == DelegatedExecutionPhase.completed, f"after RESULT, phase must be completed; got {rec.phase}"
 
     def test_i02_command_result_ack_then_command_result_final_result_closes(
         self,
@@ -893,6 +893,6 @@ class TestGroupI_FullLifecycleThroughInboundPath:
 
         rec = _find_record(rt, "ctr-i02", "ses-i02")
         assert rec is not None
-        assert rec.phase == DelegatedExecutionPhase.completed, (
-            f"command_result 'completed' must close tracking to completed; got {rec.phase}"
-        )
+        assert (
+            rec.phase == DelegatedExecutionPhase.completed
+        ), f"command_result 'completed' must close tracking to completed; got {rec.phase}"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
+
 logger = logging.getLogger(__name__)
 
 
@@ -26,9 +27,7 @@ DECLARED_TYPES_MUST_NOT_IMPLY_OPERATIONAL_SUPPORT_POLICY: str = (
     "must be demoted from dispatch/support surfaces."
 )
 
-NEAR_PEER_OPERATIONAL_TYPES: frozenset[str] = frozenset(
-    {DeviceType.ANDROID.value, DeviceType.WINDOWS.value}
-)
+NEAR_PEER_OPERATIONAL_TYPES: frozenset[str] = frozenset({DeviceType.ANDROID.value, DeviceType.WINDOWS.value})
 OBSERVABLE_BUT_NON_OPERATIONAL_TYPES: frozenset[str] = frozenset(
     {
         DeviceType.MACOS.value,
@@ -139,10 +138,7 @@ def get_device_operational_support(
     if raw_device_type is None and device_record is not None:
         if isinstance(device_record, dict):
             raw_device_type = str(
-                device_record.get("device_type")
-                or device_record.get("platform")
-                or device_record.get("type")
-                or ""
+                device_record.get("device_type") or device_record.get("platform") or device_record.get("type") or ""
             )
         else:
             raw_device_type = str(
@@ -160,9 +156,7 @@ def build_device_support_matrix(
     observed_types: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     declared_types = sorted(t.value for t in DeviceType)
-    observed = {
-        resolve_device_type(str(item or "unknown")).value for item in (observed_types or [])
-    }
+    observed = {resolve_device_type(str(item or "unknown")).value for item in (observed_types or [])}
     matrix: List[Dict[str, Any]] = []
     for device_type in declared_types:
         verdict = classify_device_operational_support(device_type)
@@ -173,11 +167,7 @@ def build_device_support_matrix(
                 "registered": device_type in observed,
                 "observable": device_type in observed,
                 "unsupported_but_declared": not verdict.dispatch_target_capable,
-                "runtime_status": (
-                    "operational"
-                    if verdict.dispatch_target_capable
-                    else verdict.support_tier.value
-                ),
+                "runtime_status": ("operational" if verdict.dispatch_target_capable else verdict.support_tier.value),
             }
         )
         matrix.append(payload)

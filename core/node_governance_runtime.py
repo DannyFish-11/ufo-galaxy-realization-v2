@@ -110,9 +110,7 @@ NODE_GOVERNANCE_IS_RUNTIME_CONSTRAINT_AUTHORITY: str = (
     "canonical path.  Every exclusion decision is diagnostically observable."
 )
 
-NODE_GOVERNANCE_RUNTIME_CONSTRAINT_PR6_SENTINEL: str = (
-    "NODE_GOVERNANCE_RUNTIME::PR6_SENTINEL_V1"
-)
+NODE_GOVERNANCE_RUNTIME_CONSTRAINT_PR6_SENTINEL: str = "NODE_GOVERNANCE_RUNTIME::PR6_SENTINEL_V1"
 
 # ===========================================================================
 # Policy sentinels
@@ -288,7 +286,8 @@ def evaluate_node_governance_eligibility(
     # Rule 1: Architectural class must be CAPABILITY_NODE
     # ------------------------------------------------------------------
     try:
-        from core.nodes.node_fabric_registry import NodeArchitecturalClass, CAPABILITY_SYNC_ELIGIBLE  # noqa: PLC0415
+        from core.nodes.node_fabric_registry import CAPABILITY_SYNC_ELIGIBLE, NodeArchitecturalClass  # noqa: PLC0415
+
         arch = getattr(node_info, "architectural_class", None)
         arch_value = arch.value if hasattr(arch, "value") else str(arch) if arch is not None else "unknown"
         diagnostic["architectural_class"] = arch_value
@@ -298,9 +297,7 @@ def evaluate_node_governance_eligibility(
             diagnostic["architectural_class_rule"] = "excluded: ARCHIVED_NODE"
         elif arch not in CAPABILITY_SYNC_ELIGIBLE:
             exclusion_reasons.append(REASON_NON_CAPABILITY_CLASS)
-            diagnostic["architectural_class_rule"] = (
-                f"excluded: {arch_value} not in CAPABILITY_SYNC_ELIGIBLE"
-            )
+            diagnostic["architectural_class_rule"] = f"excluded: {arch_value} not in CAPABILITY_SYNC_ELIGIBLE"
         else:
             diagnostic["architectural_class_rule"] = "passed: CAPABILITY_NODE"
     except ImportError:
@@ -311,7 +308,7 @@ def evaluate_node_governance_eligibility(
     # ------------------------------------------------------------------
     try:
         healthy = node_info.is_healthy(heartbeat_ttl)
-    except Exception as exc:
+    except Exception:
         try:
             status = getattr(node_info, "status", None)
             healthy = str(status).lower() in {"healthy", "starting"}
@@ -343,9 +340,7 @@ def evaluate_node_governance_eligibility(
     if governor_record is not None:
         if _NodeLifecycleStage is None:
             # Import failed: cannot enforce lifecycle rules; log and skip.
-            diagnostic["lifecycle_rule"] = (
-                f"skipped: NodeLifecycleStage unavailable ({_lifecycle_stage_import_error})"
-            )
+            diagnostic["lifecycle_rule"] = f"skipped: NodeLifecycleStage unavailable ({_lifecycle_stage_import_error})"
         else:
             try:
                 stage = getattr(governor_record, "lifecycle_stage", None)
@@ -361,8 +356,7 @@ def evaluate_node_governance_eligibility(
                 elif stage == _NodeLifecycleStage.REGISTERED:
                     exclusion_reasons.append(REASON_READINESS_GAP)
                     diagnostic["lifecycle_rule"] = (
-                        "excluded: lifecycle_stage=REGISTERED (readiness gap; "
-                        "node has not passed readiness checks)"
+                        "excluded: lifecycle_stage=REGISTERED (readiness gap; " "node has not passed readiness checks)"
                     )
                 else:
                     diagnostic["lifecycle_rule"] = f"passed: lifecycle_stage={stage_value}"
@@ -371,9 +365,7 @@ def evaluate_node_governance_eligibility(
                 diagnostic["lifecycle_rule"] = f"error evaluating lifecycle_stage: {exc}"
                 governor_consulted = False
     else:
-        diagnostic["lifecycle_rule"] = (
-            "skipped: no governor record (fallback mode — arch class + health only)"
-        )
+        diagnostic["lifecycle_rule"] = "skipped: no governor record (fallback mode — arch class + health only)"
 
     eligible = len(exclusion_reasons) == 0
 
@@ -435,9 +427,7 @@ def get_governance_eligible_nodes(
                 gov_record = governor.get_record(node_id)
             except Exception as exc:
                 logger.warning("Exception suppressed: %s", exc)
-        decision = evaluate_node_governance_eligibility(
-            node, governor_record=gov_record, heartbeat_ttl=heartbeat_ttl
-        )
+        decision = evaluate_node_governance_eligibility(node, governor_record=gov_record, heartbeat_ttl=heartbeat_ttl)
         if decision.eligible:
             eligible.append(node)
     return eligible
@@ -490,9 +480,7 @@ def build_governance_exclusion_report(
                 gov_record = governor.get_record(node_id)
             except Exception as exc:
                 logger.warning("Exception suppressed: %s", exc)
-        decision = evaluate_node_governance_eligibility(
-            node, governor_record=gov_record, heartbeat_ttl=heartbeat_ttl
-        )
+        decision = evaluate_node_governance_eligibility(node, governor_record=gov_record, heartbeat_ttl=heartbeat_ttl)
         if decision.eligible:
             eligible_ids.append(node_id)
         else:
@@ -523,6 +511,7 @@ def build_governance_exclusion_report(
 # ===========================================================================
 # Test-isolation helper
 # ===========================================================================
+
 
 def reset_governance_runtime_cache() -> None:
     """No-op reset hook for test isolation.

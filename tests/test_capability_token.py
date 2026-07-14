@@ -3,6 +3,7 @@
 
 Mesh 能力令牌:签名(防篡改)· 作用域(globset)· 过期 · 全局撤销。
 """
+
 from __future__ import annotations
 
 import pytest

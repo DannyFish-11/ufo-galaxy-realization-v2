@@ -531,7 +531,7 @@ class BodyMeshRegistry:
             package is unavailable or no entries match.
         """
         try:
-            from contracts.mesh_session import build_mesh_session, MeshSessionParticipant
+            from contracts.mesh_session import MeshSessionParticipant, build_mesh_session
         except ImportError:
             return None
 
@@ -633,6 +633,7 @@ class BodyMeshRegistry:
         except Exception:
             try:
                 from contracts.mesh_session_coordinator import MeshSessionCoordinatorState
+
                 return MeshSessionCoordinatorState(session_id=session_id, mesh_id=mesh_id)
             except Exception:
                 return None

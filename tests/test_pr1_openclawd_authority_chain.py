@@ -70,6 +70,7 @@ class TestChatRouteNoAgentKernelDirectAccess:
         # Disallow import-style references; docstrings may mention the name for
         # architecture documentation purposes, but must never import or instantiate.
         import re
+
         assert not re.search(r"\bfrom\s+core\.agent(?:\.kernel)?\s+import\b", src), (
             "core/routes/chat.py must not import from core.agent or core.agent.kernel. "
             "AgentKernel is owned exclusively by OpenClawd — routes must "
@@ -117,19 +118,14 @@ class TestChatRouteNoAgentKernelDirectAccess:
     def test_chat_route_no_action_keyword_lists(self):
         """Legacy action-keyword lists used by removed bypass functions must be gone."""
         src = self._chat_source()
-        assert "_ACTION_KEYWORDS_ZH" not in src, (
-            "_ACTION_KEYWORDS_ZH belongs to the removed legacy bypass path."
-        )
-        assert "_ACTION_KEYWORDS_EN" not in src, (
-            "_ACTION_KEYWORDS_EN belongs to the removed legacy bypass path."
-        )
+        assert "_ACTION_KEYWORDS_ZH" not in src, "_ACTION_KEYWORDS_ZH belongs to the removed legacy bypass path."
+        assert "_ACTION_KEYWORDS_EN" not in src, "_ACTION_KEYWORDS_EN belongs to the removed legacy bypass path."
 
     def test_chat_route_declares_no_direct_kernel_authority(self):
         """Module docstring must state AgentKernel is never called directly."""
         src = self._chat_source()
         assert "never called directly" in src or "never called directly from this adapter" in src, (
-            "core/routes/chat.py docstring must state AgentKernel is never "
-            "called directly from this adapter."
+            "core/routes/chat.py docstring must state AgentKernel is never " "called directly from this adapter."
         )
 
 
@@ -148,14 +144,15 @@ class TestOpenClawdKernelLifecycleOwnership:
     def test_openclawd_has_get_kernel_method(self):
         """OpenClawd must have a _get_kernel method."""
         from core.openclawd import OpenClawd
+
         assert hasattr(OpenClawd, "_get_kernel"), (
-            "OpenClawd must have _get_kernel() as the sole kernel creation "
-            "and access point (PR-1)."
+            "OpenClawd must have _get_kernel() as the sole kernel creation " "and access point (PR-1)."
         )
 
     def test_get_kernel_is_the_creation_point(self):
         """_get_kernel source must create AgentKernel internally."""
         from core.openclawd import OpenClawd
+
         src = inspect.getsource(OpenClawd._get_kernel)
         assert "AgentKernel" in src, (
             "OpenClawd._get_kernel() must be responsible for creating the "
@@ -165,13 +162,10 @@ class TestOpenClawdKernelLifecycleOwnership:
     def test_get_kernel_lazy_initialises_kernel(self):
         """_get_kernel must use lazy initialisation (if self._kernel is None)."""
         from core.openclawd import OpenClawd
+
         src = inspect.getsource(OpenClawd._get_kernel)
-        assert "self._kernel" in src, (
-            "_get_kernel must store the kernel as self._kernel."
-        )
-        assert "None" in src, (
-            "_get_kernel must check for None before creating a new instance."
-        )
+        assert "self._kernel" in src, "_get_kernel must store the kernel as self._kernel."
+        assert "None" in src, "_get_kernel must check for None before creating a new instance."
 
     def test_openclawd_source_only_uses_get_kernel_to_access_kernel(self):
         """OpenClawd process() must access the kernel only via _get_kernel()."""
@@ -198,6 +192,7 @@ class TestOpenClawdKernelLifecycleOwnership:
     def test_openclawd_docstring_states_kernel_ownership(self):
         """OpenClawd._get_kernel docstring must describe ownership."""
         from core.openclawd import OpenClawd
+
         doc = OpenClawd._get_kernel.__doc__ or ""
         assert "OpenClawd" in doc or "唯一" in doc or "lifecycle" in doc.lower() or "持有" in doc, (
             "OpenClawd._get_kernel docstring must explain that OpenClawd "
@@ -238,6 +233,7 @@ class TestOpenClawdAuthorityMetadataStamps:
         """OpenClawd.process() runtime output must include authority_role."""
         with patch("core.openclawd.OpenClawd.__init__", return_value=None):
             from core.openclawd import OpenClawd
+
             oc = OpenClawd.__new__(OpenClawd)
 
         oc._continuum_orchestrator = None
@@ -254,8 +250,8 @@ class TestOpenClawdAuthorityMetadataStamps:
         oc._tool_permission_checker = None
         oc._ensure_initialized = lambda: None
 
-        from core.agent.kernel import KernelResponse
         from core.agent.intent_router import IntentResult
+        from core.agent.kernel import KernelResponse
 
         kr = KernelResponse(
             success=True,
@@ -271,33 +267,33 @@ class TestOpenClawdAuthorityMetadataStamps:
         import asyncio
 
         async def _run():
-            with patch.object(oc, "_get_kernel", return_value=mock_kernel), \
-                 patch.object(oc, "_get_router", return_value=None), \
-                 patch.object(oc, "_parse_intent", new_callable=AsyncMock), \
-                 patch.object(oc, "_run_continuum", return_value=None), \
-                 patch.object(oc, "_run_execution", return_value={}), \
-                 patch.object(oc, "_determine_execution_path", return_value="none"), \
-                 patch.object(oc, "_build_execution_plan", return_value=None), \
-                 patch.object(oc, "_finalise_plan_lifecycle", return_value=None), \
-                 patch.object(oc, "_build_unified_control_plan", return_value=None), \
-                 patch.object(oc, "_record_turn", new_callable=AsyncMock), \
-                 patch.object(oc, "sync_device_capabilities", return_value=None):
+            with (
+                patch.object(oc, "_get_kernel", return_value=mock_kernel),
+                patch.object(oc, "_get_router", return_value=None),
+                patch.object(oc, "_parse_intent", new_callable=AsyncMock),
+                patch.object(oc, "_run_continuum", return_value=None),
+                patch.object(oc, "_run_execution", return_value={}),
+                patch.object(oc, "_determine_execution_path", return_value="none"),
+                patch.object(oc, "_build_execution_plan", return_value=None),
+                patch.object(oc, "_finalise_plan_lifecycle", return_value=None),
+                patch.object(oc, "_build_unified_control_plan", return_value=None),
+                patch.object(oc, "_record_turn", new_callable=AsyncMock),
+                patch.object(oc, "sync_device_capabilities", return_value=None),
+            ):
                 return await oc.process(message="hello", session_id="s1")
 
         result = asyncio.new_event_loop().run_until_complete(_run())
         meta = result.get("metadata", {})
-        assert "authority_role" in meta, (
-            "OpenClawd.process() response metadata must contain 'authority_role'."
-        )
+        assert "authority_role" in meta, "OpenClawd.process() response metadata must contain 'authority_role'."
         assert meta["authority_role"] == "subject_decision_authority", (
-            "OpenClawd response metadata.authority_role must be "
-            "'subject_decision_authority'."
+            "OpenClawd response metadata.authority_role must be " "'subject_decision_authority'."
         )
 
     def test_openclawd_process_metadata_has_execution_path_at_runtime(self):
         """OpenClawd.process() runtime output must include execution_path."""
         with patch("core.openclawd.OpenClawd.__init__", return_value=None):
             from core.openclawd import OpenClawd
+
             oc = OpenClawd.__new__(OpenClawd)
 
         oc._continuum_orchestrator = None
@@ -314,8 +310,8 @@ class TestOpenClawdAuthorityMetadataStamps:
         oc._tool_permission_checker = None
         oc._ensure_initialized = lambda: None
 
-        from core.agent.kernel import KernelResponse
         from core.agent.intent_router import IntentResult
+        from core.agent.kernel import KernelResponse
 
         kr = KernelResponse(
             success=True,
@@ -331,24 +327,24 @@ class TestOpenClawdAuthorityMetadataStamps:
         import asyncio
 
         async def _run():
-            with patch.object(oc, "_get_kernel", return_value=mock_kernel), \
-                 patch.object(oc, "_get_router", return_value=None), \
-                 patch.object(oc, "_parse_intent", new_callable=AsyncMock), \
-                 patch.object(oc, "_run_continuum", return_value=None), \
-                 patch.object(oc, "_run_execution", return_value={}), \
-                 patch.object(oc, "_determine_execution_path", return_value="none"), \
-                 patch.object(oc, "_build_execution_plan", return_value=None), \
-                 patch.object(oc, "_finalise_plan_lifecycle", return_value=None), \
-                 patch.object(oc, "_build_unified_control_plan", return_value=None), \
-                 patch.object(oc, "_record_turn", new_callable=AsyncMock), \
-                 patch.object(oc, "sync_device_capabilities", return_value=None):
+            with (
+                patch.object(oc, "_get_kernel", return_value=mock_kernel),
+                patch.object(oc, "_get_router", return_value=None),
+                patch.object(oc, "_parse_intent", new_callable=AsyncMock),
+                patch.object(oc, "_run_continuum", return_value=None),
+                patch.object(oc, "_run_execution", return_value={}),
+                patch.object(oc, "_determine_execution_path", return_value="none"),
+                patch.object(oc, "_build_execution_plan", return_value=None),
+                patch.object(oc, "_finalise_plan_lifecycle", return_value=None),
+                patch.object(oc, "_build_unified_control_plan", return_value=None),
+                patch.object(oc, "_record_turn", new_callable=AsyncMock),
+                patch.object(oc, "sync_device_capabilities", return_value=None),
+            ):
                 return await oc.process(message="hello", session_id="s1")
 
         result = asyncio.new_event_loop().run_until_complete(_run())
         meta = result.get("metadata", {})
-        assert "execution_path" in meta, (
-            "OpenClawd.process() response metadata must contain 'execution_path'."
-        )
+        assert "execution_path" in meta, "OpenClawd.process() response metadata must contain 'execution_path'."
 
 
 # ===========================================================================
@@ -362,16 +358,17 @@ class TestLocalExecutionResultMetadataStamps:
     def test_to_dict_includes_authority_role(self):
         """LocalExecutionResult.to_dict() must include authority_role."""
         from core.local_execution_chain import LocalExecutionResult
+
         r = LocalExecutionResult(task_id="t1", success=True, status="completed")
         d = r.to_dict()
         assert "authority_role" in d, (
-            "LocalExecutionResult.to_dict() must include 'authority_role' for "
-            "normalized metadata stamping (PR-1)."
+            "LocalExecutionResult.to_dict() must include 'authority_role' for " "normalized metadata stamping (PR-1)."
         )
 
     def test_authority_role_is_execution_substrate(self):
         """LocalExecutionResult authority_role must be 'execution_substrate'."""
         from core.local_execution_chain import LocalExecutionResult
+
         r = LocalExecutionResult()
         d = r.to_dict()
         assert d["authority_role"] == "execution_substrate", (
@@ -383,16 +380,17 @@ class TestLocalExecutionResultMetadataStamps:
     def test_to_dict_includes_execution_path(self):
         """LocalExecutionResult.to_dict() must include execution_path."""
         from core.local_execution_chain import LocalExecutionResult
+
         r = LocalExecutionResult(task_id="t2", success=False, status="failed")
         d = r.to_dict()
         assert "execution_path" in d, (
-            "LocalExecutionResult.to_dict() must include 'execution_path' for "
-            "normalized metadata stamping (PR-1)."
+            "LocalExecutionResult.to_dict() must include 'execution_path' for " "normalized metadata stamping (PR-1)."
         )
 
     def test_execution_path_is_local(self):
         """LocalExecutionResult execution_path must be 'local'."""
         from core.local_execution_chain import LocalExecutionResult
+
         r = LocalExecutionResult()
         d = r.to_dict()
         assert d["execution_path"] == "local", (
@@ -403,22 +401,33 @@ class TestLocalExecutionResultMetadataStamps:
     def test_existing_keys_still_present(self):
         """Adding new fields must not remove any existing to_dict() keys."""
         from core.local_execution_chain import LocalExecutionResult
+
         r = LocalExecutionResult(task_id="t3", success=True, status="done")
         d = r.to_dict()
         for key in (
-            "task_id", "chain_step", "success", "status", "payload",
-            "error", "executor_module", "session_id", "result_id",
-            "timestamp", "extra", "openclawd_merged",
+            "task_id",
+            "chain_step",
+            "success",
+            "status",
+            "payload",
+            "error",
+            "executor_module",
+            "session_id",
+            "result_id",
+            "timestamp",
+            "extra",
+            "openclawd_merged",
         ):
             assert key in d, (
-                f"Existing key '{key}' must still be present in "
-                "LocalExecutionResult.to_dict() after PR-1 additions."
+                f"Existing key '{key}' must still be present in " "LocalExecutionResult.to_dict() after PR-1 additions."
             )
 
     def test_to_dict_is_json_serialisable(self):
         """to_dict() including new fields must still be JSON-serialisable."""
         import json
+
         from core.local_execution_chain import LocalExecutionResult
+
         r = LocalExecutionResult(task_id="t4", success=True, status="ok")
         json.dumps(r.to_dict())  # must not raise
 
@@ -478,18 +487,19 @@ class TestCanonicalDispatcherIsPrimaryPath:
         """OpenClawd source must reference CanonicalDispatcher."""
         src = self._openclawd_source()
         assert "CanonicalDispatcher" in src or "canonical_dispatcher" in src, (
-            "OpenClawd must reference CanonicalDispatcher as the primary "
-            "tool/capability execution path (PR-001)."
+            "OpenClawd must reference CanonicalDispatcher as the primary " "tool/capability execution path (PR-001)."
         )
 
     def test_canonical_dispatcher_is_importable(self):
         """CanonicalDispatcher must be importable."""
         from core.capabilities.canonical_dispatcher import CanonicalDispatcher
+
         assert CanonicalDispatcher is not None
 
     def test_canonical_dispatcher_has_dispatch_method(self):
         """CanonicalDispatcher must have a dispatch() method."""
         from core.capabilities.canonical_dispatcher import CanonicalDispatcher
+
         assert hasattr(CanonicalDispatcher, "dispatch"), (
             "CanonicalDispatcher must expose a dispatch() method as the "
             "single canonical execution path for capabilities."
@@ -498,14 +508,15 @@ class TestCanonicalDispatcherIsPrimaryPath:
     def test_canonical_dispatcher_dispatch_result_importable(self):
         """DispatchResult must be importable from canonical_dispatcher."""
         from core.capabilities.canonical_dispatcher import DispatchResult
+
         assert DispatchResult is not None
 
     def test_dispatch_result_has_to_dict(self):
         """DispatchResult must have a to_dict() method for serialisation."""
         from core.capabilities.canonical_dispatcher import DispatchResult
+
         assert hasattr(DispatchResult, "to_dict"), (
-            "DispatchResult must expose to_dict() for a stable, serialisable "
-            "dispatch result contract."
+            "DispatchResult must expose to_dict() for a stable, serialisable " "dispatch result contract."
         )
 
     def test_openclawd_uses_capability_dispatcher_attribute(self):

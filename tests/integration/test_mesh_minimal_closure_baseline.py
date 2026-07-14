@@ -94,10 +94,7 @@ def test_mesh_minimal_closed_loop_is_machine_verifiable() -> None:
         assert canonical_closure["task_id"] == task_id
         assert canonical_closure["closure_authority"] == "canonical_result_ingress"
         assert "merged_result_summary" in canonical_closure
-        assert (
-            topology_after_body["loop_baseline"]["overlay_coordination"]["last_dispatch"]["success"]
-            is True
-        )
+        assert topology_after_body["loop_baseline"]["overlay_coordination"]["last_dispatch"]["success"] is True
 
         projection_resp = client.get("/api/v1/projection/runtime/multi-device")
         assert projection_resp.status_code == 200

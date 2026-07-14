@@ -14,9 +14,7 @@ from galaxy_gateway.routes import websocket as ws_routes
 
 def test_ingress_surface_registry_has_single_canonical_device_ingress():
     canonical_entries = [
-        entry
-        for entry in ws_routes.DEVICE_WS_INGRESS_SURFACE_REGISTRY
-        if entry.get("classification") == "canonical"
+        entry for entry in ws_routes.DEVICE_WS_INGRESS_SURFACE_REGISTRY if entry.get("classification") == "canonical"
     ]
     assert len(canonical_entries) == 1
     assert canonical_entries[0]["path"] == "/ws/device/{device_id}"

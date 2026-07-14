@@ -24,21 +24,24 @@ from __future__ import annotations
 #: Set of normalised (upper-case) device type strings that represent
 #: physical or electronic hardware and therefore require an agent
 #: pre-deploy step before task execution.
-PHYSICAL_DEVICE_TYPES: frozenset[str] = frozenset({
-    "ANDROID",
-    "IOS",
-    "WINDOWS",
-    "MACOS",
-    "LINUX",
-    "IOT",
-    "ROBOT",
-    "DRONE",
-})
+PHYSICAL_DEVICE_TYPES: frozenset[str] = frozenset(
+    {
+        "ANDROID",
+        "IOS",
+        "WINDOWS",
+        "MACOS",
+        "LINUX",
+        "IOT",
+        "ROBOT",
+        "DRONE",
+    }
+)
 
 
 # ============================================================================
 # Policy helpers
 # ============================================================================
+
 
 def is_physical_device(device_type: str) -> bool:
     """Return *True* if *device_type* represents a physical/electronic device.
@@ -120,6 +123,7 @@ def get_device_policy(device_id: str) -> DeviceDispatchPolicy:
     meta = {}
     try:
         from core.unified.device_manager import get_unified_device_manager
+
         device = get_unified_device_manager().get_device(device_id)
         meta = dict(getattr(device, "metadata", None) or {}) if device is not None else {}
     except Exception:  # pragma: no cover - UDM 不可用时按默认允许

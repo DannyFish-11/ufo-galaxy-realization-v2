@@ -31,12 +31,14 @@ import pytest
 
 try:
     import pydantic  # noqa: F401
+
     _PYDANTIC_AVAILABLE = True
 except ImportError:
     _PYDANTIC_AVAILABLE = False
 
 try:
     import fastapi  # noqa: F401
+
     _FASTAPI_AVAILABLE = True
 except ImportError:
     _FASTAPI_AVAILABLE = False
@@ -53,16 +55,18 @@ class TestModuleSentinels:
             LONG_TAIL_COMPAT_SURFACE_IS_AUTHORITY,
             LONG_TAIL_COMPAT_SURFACE_PR8_SENTINEL,
         )
+
         assert "IS_CANONICAL_AUTHORITY_PR8" in LONG_TAIL_COMPAT_SURFACE_IS_AUTHORITY
         assert "PR8_SENTINEL" in LONG_TAIL_COMPAT_SURFACE_PR8_SENTINEL
 
     def test_policy_sentinels_present(self):
         from core.long_tail_compat_surface import (
             GENERIC_FORWARD_IS_TRANSITIONAL_POLICY,
-            MINIMAL_COMPAT_PATHS_MUST_BE_CATALOGUED_POLICY,
             HIGHEST_VALUE_FLOWS_REQUIRE_STATEFUL_HANDLING_POLICY,
             LONG_TAIL_HONESTY_POLICY,
+            MINIMAL_COMPAT_PATHS_MUST_BE_CATALOGUED_POLICY,
         )
+
         assert "TRANSITIONAL" in GENERIC_FORWARD_IS_TRANSITIONAL_POLICY
         assert "CATALOGUED" in MINIMAL_COMPAT_PATHS_MUST_BE_CATALOGUED_POLICY
         assert "HIGHEST_VALUE" in HIGHEST_VALUE_FLOWS_REQUIRE_STATEFUL_HANDLING_POLICY
@@ -77,11 +81,13 @@ class TestModuleSentinels:
 class TestCatalogCoverage:
     def test_catalog_is_non_empty(self):
         from core.long_tail_compat_surface import get_long_tail_catalog
+
         catalog = get_long_tail_catalog()
         assert len(catalog) >= 12, f"Expected ≥12 entries, got {len(catalog)}"
 
     def test_all_expected_message_types_present(self):
         from core.long_tail_compat_surface import get_long_tail_catalog
+
         catalog = get_long_tail_catalog()
         types_in_catalog = {r.message_type for r in catalog}
         expected = {
@@ -119,28 +125,29 @@ class TestHighestValueFlows:
 
     def test_highest_value_flows_are_canonical(self):
         from core.long_tail_compat_surface import (
-            get_long_tail_catalog,
             LongTailTransitionStatus,
             LongTailValueTier,
+            get_long_tail_catalog,
         )
+
         catalog = {r.message_type: r for r in get_long_tail_catalog()}
         for mt in self._HIGHEST_VALUE_TYPES:
             assert mt in catalog, f"Missing: {mt}"
             record = catalog[mt]
-            assert record.value_tier == LongTailValueTier.HIGHEST, (
-                f"{mt} should have tier=HIGHEST, got {record.value_tier}"
-            )
-            assert record.transition_status == LongTailTransitionStatus.CANONICAL, (
-                f"{mt} should be CANONICAL, got {record.transition_status}"
-            )
+            assert (
+                record.value_tier == LongTailValueTier.HIGHEST
+            ), f"{mt} should have tier=HIGHEST, got {record.value_tier}"
+            assert (
+                record.transition_status == LongTailTransitionStatus.CANONICAL
+            ), f"{mt} should be CANONICAL, got {record.transition_status}"
             assert record.is_closed_loop, f"{mt} should be is_closed_loop=True"
             assert record.canonical_handler, f"{mt} should have a canonical_handler"
 
     def test_highest_value_flows_have_pr8_handler_paths(self):
         from core.long_tail_compat_surface import get_long_tail_catalog
+
         catalog = {r.message_type: r for r in get_long_tail_catalog()}
-        assert "file_transfer" in catalog[
-            "file_transfer"].canonical_handler
+        assert "file_transfer" in catalog["file_transfer"].canonical_handler
         assert "peer_exchange" in catalog["peer_announce"].canonical_handler
         assert "peer_exchange" in catalog["peer_exchange"].canonical_handler
         assert "mesh_topology" in catalog["mesh_topology"].canonical_handler
@@ -167,9 +174,10 @@ class TestTransitionalPaths:
 
     def test_transitional_paths_are_generic_forward(self):
         from core.long_tail_compat_surface import (
-            get_long_tail_catalog,
             LongTailTransitionStatus,
+            get_long_tail_catalog,
         )
+
         catalog = {r.message_type: r for r in get_long_tail_catalog()}
         for mt in self._TRANSITIONAL_TYPES:
             assert mt in catalog, f"Missing: {mt}"
@@ -177,12 +185,11 @@ class TestTransitionalPaths:
             assert (
                 record.transition_status == LongTailTransitionStatus.GENERIC_FORWARD
             ), f"{mt} should be GENERIC_FORWARD, got {record.transition_status}"
-            assert not record.is_closed_loop, (
-                f"{mt} should be is_closed_loop=False"
-            )
+            assert not record.is_closed_loop, f"{mt} should be is_closed_loop=False"
 
     def test_transitional_paths_have_notes(self):
         from core.long_tail_compat_surface import get_long_tail_catalog
+
         catalog = {r.message_type: r for r in get_long_tail_catalog()}
         for mt in self._TRANSITIONAL_TYPES:
             assert catalog[mt].notes, f"{mt} should have non-empty notes"
@@ -196,36 +203,36 @@ class TestTransitionalPaths:
 class TestCatalogSummary:
     def test_summary_counts_match_catalog(self):
         from core.long_tail_compat_surface import (
+            LongTailTransitionStatus,
             build_catalog_summary,
             get_long_tail_catalog,
-            LongTailTransitionStatus,
         )
+
         catalog = get_long_tail_catalog()
         summary = build_catalog_summary()
 
         assert summary.total == len(catalog)
         assert summary.closed_loop_count == sum(1 for r in catalog if r.is_closed_loop)
         assert summary.generic_forward_count == sum(
-            1 for r in catalog
-            if r.transition_status == LongTailTransitionStatus.GENERIC_FORWARD
+            1 for r in catalog if r.transition_status == LongTailTransitionStatus.GENERIC_FORWARD
         )
 
     def test_summary_highest_tier_count(self):
         from core.long_tail_compat_surface import (
-            build_catalog_summary,
             LongTailValueTier,
+            build_catalog_summary,
         )
+
         summary = build_catalog_summary()
         # PR-8：原始 4 个 + PR-13 新增 3 个（mesh_join/mesh_result/mesh_leave）= 7
         assert summary.by_tier.get(LongTailValueTier.HIGHEST.value, 0) == 7
 
     def test_summary_canonical_types_include_highest_value(self):
         from core.long_tail_compat_surface import build_catalog_summary
+
         summary = build_catalog_summary()
         for mt in ("file_transfer", "peer_announce", "peer_exchange", "mesh_topology"):
-            assert mt in summary.canonical_message_types, (
-                f"{mt} should be in canonical_message_types"
-            )
+            assert mt in summary.canonical_message_types, f"{mt} should be in canonical_message_types"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -294,10 +301,12 @@ class TestHandleFileTransfer:
         }
 
         mock_orch = MagicMock()
-        mock_orch.transfer_file = AsyncMock(return_value={
-            "status": "success",
-            "elapsed_ms": 120.5,
-        })
+        mock_orch.transfer_file = AsyncMock(
+            return_value={
+                "status": "success",
+                "elapsed_ms": 120.5,
+            }
+        )
 
         with patch(
             "core.device_orchestrator.DeviceOrchestrator",
@@ -391,9 +400,7 @@ class TestHandlePeerAnnounce:
 
         mock_mesh = MagicMock()
         mock_mesh.handle_peer_announce.return_value = mock_peer
-        mock_mesh.build_peer_exchange.return_value = [
-            {"device_id": "dev-03", "local_ip": "10.0.0.2"}
-        ]
+        mock_mesh.build_peer_exchange.return_value = [{"device_id": "dev-03", "local_ip": "10.0.0.2"}]
 
         with patch(
             "galaxy_gateway.android.handlers.peer_exchange._get_mesh_coordinator",
@@ -522,36 +529,32 @@ class TestAndroidBridgeDispatch:
     def test_file_transfer_handler_is_not_generic_forward(self):
         """FILE_TRANSFER must not be routed through handle_generic_forward."""
         import pathlib
+
         src = pathlib.Path(__file__).parent.parent / "galaxy_gateway" / "android_bridge.py"
         text = src.read_text(encoding="utf-8")
         # The dispatch line for FILE_TRANSFER must reference handle_file_transfer
-        assert "handle_file_transfer" in text, (
-            "android_bridge.py should use handle_file_transfer for FILE_TRANSFER"
-        )
+        assert "handle_file_transfer" in text, "android_bridge.py should use handle_file_transfer for FILE_TRANSFER"
 
     def test_peer_announce_handler_is_not_generic_forward(self):
         import pathlib
+
         src = pathlib.Path(__file__).parent.parent / "galaxy_gateway" / "android_bridge.py"
         text = src.read_text(encoding="utf-8")
-        assert "handle_peer_announce" in text, (
-            "android_bridge.py should use handle_peer_announce for PEER_ANNOUNCE"
-        )
+        assert "handle_peer_announce" in text, "android_bridge.py should use handle_peer_announce for PEER_ANNOUNCE"
 
     def test_peer_exchange_handler_is_not_generic_forward(self):
         import pathlib
+
         src = pathlib.Path(__file__).parent.parent / "galaxy_gateway" / "android_bridge.py"
         text = src.read_text(encoding="utf-8")
-        assert "handle_peer_exchange" in text, (
-            "android_bridge.py should use handle_peer_exchange for PEER_EXCHANGE"
-        )
+        assert "handle_peer_exchange" in text, "android_bridge.py should use handle_peer_exchange for PEER_EXCHANGE"
 
     def test_mesh_topology_handler_is_not_generic_forward(self):
         import pathlib
+
         src = pathlib.Path(__file__).parent.parent / "galaxy_gateway" / "android_bridge.py"
         text = src.read_text(encoding="utf-8")
-        assert "handle_mesh_topology" in text, (
-            "android_bridge.py should use handle_mesh_topology for MESH_TOPOLOGY"
-        )
+        assert "handle_mesh_topology" in text, "android_bridge.py should use handle_mesh_topology for MESH_TOPOLOGY"
 
     def test_dispatch_wiring_in_source(self):
         """Verify the dispatch table uses canonical handlers for the 4 types.
@@ -576,9 +579,11 @@ class TestAndroidBridgeDispatch:
             if not isinstance(node, ast.Assign):
                 continue
             for target in node.targets:
-                if not (isinstance(target, ast.Subscript) and
-                        isinstance(target.value, ast.Attribute) and
-                        target.value.attr == "_message_handlers"):
+                if not (
+                    isinstance(target, ast.Subscript)
+                    and isinstance(target.value, ast.Attribute)
+                    and target.value.attr == "_message_handlers"
+                ):
                     continue
                 # Extract key: MessageType.FILE_TRANSFER → "FILE_TRANSFER"
                 key_node = target.slice
@@ -588,10 +593,12 @@ class TestAndroidBridgeDispatch:
                     continue
                 # Extract value: _wrap(handle_file_transfer) → "handle_file_transfer"
                 val_node = node.value
-                if (isinstance(val_node, ast.Call) and
-                        isinstance(val_node.func, ast.Name) and
-                        val_node.func.id == "_wrap" and
-                        val_node.args):
+                if (
+                    isinstance(val_node, ast.Call)
+                    and isinstance(val_node.func, ast.Name)
+                    and val_node.func.id == "_wrap"
+                    and val_node.args
+                ):
                     arg0 = val_node.args[0]
                     if isinstance(arg0, ast.Name):
                         dispatch_map[type_attr] = arg0.id
@@ -605,8 +612,7 @@ class TestAndroidBridgeDispatch:
         for msg_type, expected_handler in expected.items():
             actual = dispatch_map.get(msg_type)
             assert actual == expected_handler, (
-                f"MessageType.{msg_type} should be dispatched to"
-                f" {expected_handler}, got {actual!r}"
+                f"MessageType.{msg_type} should be dispatched to" f" {expected_handler}, got {actual!r}"
             )
 
 
@@ -619,18 +625,18 @@ class TestProjectionSentinel:
     @pytest.mark.skipif(not _FASTAPI_AVAILABLE, reason="fastapi not installed")
     def test_projection_aligned_sentinel_present(self):
         from core.routes.projection import LONG_TAIL_COMPAT_SURFACE_ALIGNED_PR8
+
         assert "PR8" in LONG_TAIL_COMPAT_SURFACE_ALIGNED_PR8
-        assert "UNAVAILABLE" not in LONG_TAIL_COMPAT_SURFACE_ALIGNED_PR8, (
-            "LONG_TAIL_COMPAT_SURFACE_ALIGNED_PR8 should not be the UNAVAILABLE fallback"
-        )
+        assert (
+            "UNAVAILABLE" not in LONG_TAIL_COMPAT_SURFACE_ALIGNED_PR8
+        ), "LONG_TAIL_COMPAT_SURFACE_ALIGNED_PR8 should not be the UNAVAILABLE fallback"
 
     @pytest.mark.skipif(not _FASTAPI_AVAILABLE, reason="fastapi not installed")
     def test_projection_sentinel_mentions_canonical_flows(self):
         from core.routes.projection import LONG_TAIL_COMPAT_SURFACE_ALIGNED_PR8
+
         for flow in ("file_transfer", "peer_announce", "peer_exchange", "mesh_topology"):
-            assert flow in LONG_TAIL_COMPAT_SURFACE_ALIGNED_PR8, (
-                f"Sentinel should mention {flow}"
-            )
+            assert flow in LONG_TAIL_COMPAT_SURFACE_ALIGNED_PR8, f"Sentinel should mention {flow}"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -641,9 +647,10 @@ class TestProjectionSentinel:
 class TestQueryHelpers:
     def test_get_paths_by_tier_highest(self):
         from core.long_tail_compat_surface import (
-            get_paths_by_tier,
             LongTailValueTier,
+            get_paths_by_tier,
         )
+
         highest = get_paths_by_tier(LongTailValueTier.HIGHEST)
         types = {r.message_type for r in highest}
         # PR-8 原始四个高价值类型
@@ -655,6 +662,7 @@ class TestQueryHelpers:
 
     def test_get_generic_forward_paths(self):
         from core.long_tail_compat_surface import get_generic_forward_paths
+
         gf = get_generic_forward_paths()
         types = {r.message_type for r in gf}
         # Canonical paths should NOT appear in generic-forward list
@@ -666,6 +674,7 @@ class TestQueryHelpers:
 
     def test_get_closed_loop_paths(self):
         from core.long_tail_compat_surface import get_closed_loop_paths
+
         cl = get_closed_loop_paths()
         types = {r.message_type for r in cl}
         for mt in ("file_transfer", "peer_announce", "peer_exchange", "mesh_topology"):
@@ -673,17 +682,20 @@ class TestQueryHelpers:
 
     def test_get_transitional_paths(self):
         from core.long_tail_compat_surface import get_transitional_paths
+
         tr = get_transitional_paths()
         types = {r.message_type for r in tr}
         for mt in ("file_transfer", "peer_announce", "peer_exchange", "mesh_topology"):
             assert mt not in types, f"{mt} should not be in transitional list"
 
     def test_get_path_record_returns_correct_record(self):
-        from core.long_tail_compat_surface import get_path_record, LongTailValueTier
+        from core.long_tail_compat_surface import LongTailValueTier, get_path_record
+
         record = get_path_record("file_transfer")
         assert record is not None
         assert record.value_tier == LongTailValueTier.HIGHEST
 
     def test_get_path_record_returns_none_for_unknown(self):
         from core.long_tail_compat_surface import get_path_record
+
         assert get_path_record("nonexistent_type") is None

@@ -21,10 +21,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # SurfaceType tests
 # ---------------------------------------------------------------------------
+
 
 class TestSurfaceType:
     def test_all_expected_values_exist(self):
@@ -50,6 +50,7 @@ class TestSurfaceType:
 # ---------------------------------------------------------------------------
 # SurfaceSpec tests
 # ---------------------------------------------------------------------------
+
 
 class TestSurfaceSpec:
     def test_default_surface_is_chat_panel(self):
@@ -88,17 +89,21 @@ class TestSurfaceSpec:
 # SurfaceSelector — core mapping tests
 # ---------------------------------------------------------------------------
 
+
 class TestSurfaceSelectorMapping:
     """Verify every InteractionMode maps to the expected SurfaceType."""
 
-    @pytest.mark.parametrize("mode,expected_surface", [
-        ("chat", "chat_panel"),
-        ("deep_thinking", "deep_thinking_canvas"),
-        ("control_console", "control_console"),
-        ("field_assistant", "field_assistant_overlay_stub"),
-        ("ambient_companion", "ambient_companion"),
-        ("execution_bridge", "control_console"),
-    ])
+    @pytest.mark.parametrize(
+        "mode,expected_surface",
+        [
+            ("chat", "chat_panel"),
+            ("deep_thinking", "deep_thinking_canvas"),
+            ("control_console", "control_console"),
+            ("field_assistant", "field_assistant_overlay_stub"),
+            ("ambient_companion", "ambient_companion"),
+            ("execution_bridge", "control_console"),
+        ],
+    )
     def test_mode_to_surface_via_string_dict(self, mode: str, expected_surface: str):
         from core.generative_ui.surface_selector import SurfaceSelector
 
@@ -106,14 +111,17 @@ class TestSurfaceSelectorMapping:
         spec = selector.select_surface({"mode": mode})
         assert spec.surface_type.value == expected_surface
 
-    @pytest.mark.parametrize("mode,expected_surface", [
-        ("chat", "chat_panel"),
-        ("deep_thinking", "deep_thinking_canvas"),
-        ("control_console", "control_console"),
-        ("field_assistant", "field_assistant_overlay_stub"),
-        ("ambient_companion", "ambient_companion"),
-        ("execution_bridge", "control_console"),
-    ])
+    @pytest.mark.parametrize(
+        "mode,expected_surface",
+        [
+            ("chat", "chat_panel"),
+            ("deep_thinking", "deep_thinking_canvas"),
+            ("control_console", "control_console"),
+            ("field_assistant", "field_assistant_overlay_stub"),
+            ("ambient_companion", "ambient_companion"),
+            ("execution_bridge", "control_console"),
+        ],
+    )
     def test_mode_to_surface_via_interaction_mode_enum(self, mode: str, expected_surface: str):
         """Test with actual InteractionMode enum values via dataclass envelope."""
         from core.generative_ui.surface_selector import SurfaceSelector
@@ -157,8 +165,14 @@ class TestSurfaceSelectorMapping:
         from core.generative_ui.surface_selector import SurfaceSelector
 
         selector = SurfaceSelector()
-        for mode in ("chat", "deep_thinking", "control_console",
-                     "field_assistant", "ambient_companion", "execution_bridge"):
+        for mode in (
+            "chat",
+            "deep_thinking",
+            "control_console",
+            "field_assistant",
+            "ambient_companion",
+            "execution_bridge",
+        ):
             spec = selector.select_surface({"mode": mode})
             assert spec.title, f"No title for mode={mode!r}"
 
@@ -174,8 +188,14 @@ class TestSurfaceSelectorMapping:
         from core.generative_ui.widget_schema import SurfaceType
 
         selector = SurfaceSelector()
-        for mode in ("chat", "deep_thinking", "control_console",
-                     "field_assistant", "ambient_companion", "execution_bridge"):
+        for mode in (
+            "chat",
+            "deep_thinking",
+            "control_console",
+            "field_assistant",
+            "ambient_companion",
+            "execution_bridge",
+        ):
             spec = selector.select_surface({"mode": mode})
             assert spec.fallback_surface == SurfaceType.CHAT_PANEL
 
@@ -183,6 +203,7 @@ class TestSurfaceSelectorMapping:
 # ---------------------------------------------------------------------------
 # SurfaceSelector — envelope input variants
 # ---------------------------------------------------------------------------
+
 
 class TestSurfaceSelectorInputVariants:
     def test_object_with_mode_attribute(self):
@@ -221,6 +242,7 @@ class TestSurfaceSelectorInputVariants:
 # GenerativeUIRuntime tests
 # ---------------------------------------------------------------------------
 
+
 class TestGenerativeUIRuntime:
     def test_render_surface_returns_surface_spec(self):
         from core.generative_ui.runtime import GenerativeUIRuntime
@@ -237,14 +259,17 @@ class TestGenerativeUIRuntime:
         spec = runtime.render_surface(None)
         assert spec.surface_type.value == "chat_panel"
 
-    @pytest.mark.parametrize("mode,expected_surface", [
-        ("chat", "chat_panel"),
-        ("deep_thinking", "deep_thinking_canvas"),
-        ("control_console", "control_console"),
-        ("field_assistant", "field_assistant_overlay_stub"),
-        ("ambient_companion", "ambient_companion"),
-        ("execution_bridge", "control_console"),
-    ])
+    @pytest.mark.parametrize(
+        "mode,expected_surface",
+        [
+            ("chat", "chat_panel"),
+            ("deep_thinking", "deep_thinking_canvas"),
+            ("control_console", "control_console"),
+            ("field_assistant", "field_assistant_overlay_stub"),
+            ("ambient_companion", "ambient_companion"),
+            ("execution_bridge", "control_console"),
+        ],
+    )
     def test_render_surface_all_modes(self, mode: str, expected_surface: str):
         from core.generative_ui.runtime import GenerativeUIRuntime
 

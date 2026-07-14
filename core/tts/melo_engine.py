@@ -17,6 +17,7 @@ A 档(无卡/离线)"说"的音质档:MeloTTS 是 VITS 系,CPU 秒级合成,中�
 
 缺包/加载失败一律**优雅降级**(available()=False,synthesize 返回 None),绝不抛出。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -58,6 +59,7 @@ class MeloTTSEngine:
             return False
         try:
             import importlib.util
+
             return importlib.util.find_spec("melo") is not None
         except Exception:  # noqa: BLE001
             return False
@@ -72,13 +74,12 @@ class MeloTTSEngine:
             if dev == "auto":
                 try:
                     import torch
+
                     dev = "cuda" if torch.cuda.is_available() else "cpu"
                 except Exception:  # noqa: BLE001
                     dev = "cpu"
             if not os.environ.get("HF_ENDPOINT"):
-                os.environ["HF_ENDPOINT"] = os.environ.get(
-                    "GALAXY_HF_ENDPOINT", "https://hf-mirror.com"
-                )
+                os.environ["HF_ENDPOINT"] = os.environ.get("GALAXY_HF_ENDPOINT", "https://hf-mirror.com")
             self._model = TTS(language=self.language, device=dev)
             spk = self._model.hps.data.spk2id  # {说话人名: id}
             if self.speaker and self.speaker in spk:
@@ -115,17 +116,20 @@ class MeloTTSEngine:
     async def _play_audio(self, wav_path: str) -> None:
         """播放 wav。Linux: aplay/paplay/ffplay;macOS: afplay;Windows: PowerShell。"""
         import sys
+
         if not wav_path or not os.path.exists(wav_path):
             return
         play_cmd: List[str] = []
         if sys.platform == "darwin":
             play_cmd = ["afplay", wav_path]
         elif sys.platform == "win32":
-            play_cmd = ["powershell", "-c",
-                        f"(New-Object Media.SoundPlayer '{wav_path}').PlaySync();"]
+            play_cmd = ["powershell", "-c", f"(New-Object Media.SoundPlayer '{wav_path}').PlaySync();"]
         else:
-            for cand in (["aplay", "-q", wav_path], ["paplay", wav_path],
-                         ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", wav_path]):
+            for cand in (
+                ["aplay", "-q", wav_path],
+                ["paplay", wav_path],
+                ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", wav_path],
+            ):
                 if self._command_exists(cand[0]):
                     play_cmd = cand
                     break
@@ -134,7 +138,8 @@ class MeloTTSEngine:
             return
         try:
             proc = await asyncio.create_subprocess_exec(
-                *play_cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+                *play_cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
+            )
             self._active_proc = proc
             await proc.wait()
         except Exception as exc:  # noqa: BLE001
@@ -165,4 +170,5 @@ class MeloTTSEngine:
     @staticmethod
     def _command_exists(cmd: str) -> bool:
         import shutil
+
         return shutil.which(cmd) is not None

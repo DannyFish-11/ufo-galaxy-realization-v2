@@ -197,6 +197,7 @@ def _get_device_lifecycle_stage_for_contract(device_id: Optional[str]) -> str:
         return "unregistered"
     try:
         from core.device_lifecycle_state import get_lifecycle_record  # noqa: PLC0415
+
         return get_lifecycle_record(device_id).stage.value
     except Exception:
         return "unregistered"
@@ -318,9 +319,7 @@ def build_v2_unified_state_contract(
         and not api_missing
     )
     cross_device_available = (
-        android_attached
-        and capability_visible
-        and session_evidence.get("active_session_count", 0) > 0
+        android_attached and capability_visible and session_evidence.get("active_session_count", 0) > 0
     )
     compat_only_available = not main_chain_available and any(
         getattr(state, "path_tier", "")
@@ -367,9 +366,7 @@ def build_v2_unified_state_contract(
     _participation_blocking: List[str] = []
     _participation_notes: List[str] = []
     _participation_source = "authoritative_unavailable_inline_derivation"
-    _participation_transition_history: List[Dict[str, Any]] = list(
-        participation_evidence.get("transition_history", [])
-    )
+    _participation_transition_history: List[Dict[str, Any]] = list(participation_evidence.get("transition_history", []))
     _participation_last_signal = participation_evidence.get("last_signal")
     _participation_prior_tier = participation_evidence.get("prior_tier")
     _participation_truth_block: Any = None
@@ -399,9 +396,7 @@ def build_v2_unified_state_contract(
                 _participation_blocking = list(_participation_evidence.get("blocking_reasons") or [])
                 _participation_notes = list(_participation_evidence.get("tier_derivation_notes") or [])
                 _participation_source = str(_participation_evidence.get("source") or "core.v2_android_truth_ssot")
-                _participation_transition_history = list(
-                    _participation_evidence.get("transition_history") or []
-                )
+                _participation_transition_history = list(_participation_evidence.get("transition_history") or [])
                 _participation_last_signal = _participation_evidence.get("last_signal")
                 _participation_prior_tier = _participation_evidence.get("prior_tier")
             else:
@@ -409,42 +404,31 @@ def build_v2_unified_state_contract(
                 from core.android_network_participation import (  # noqa: PLC0415
                     derive_android_network_participation_tier,
                 )
+
                 _pe_websocket = android_attached
                 _pe_reg_ack = android_attached
-                _pe_fully_attached = (
-                    android_attached
-                    and device_evidence.get("registration_fully_attached", False)
-                )
+                _pe_fully_attached = android_attached and device_evidence.get("registration_fully_attached", False)
                 _pe_gaps = list(device_evidence.get("registration_gaps", []))
                 _pe_capability_visible = capability_visible
                 _pe_session_count = session_evidence.get("active_session_count", 0)
                 _pe_posture = session_evidence.get("session_posture", "")
-                _pe_cross_device_enabled = (
-                    capability_visible
-                    and session_evidence.get("active_session_count", 0) > 0
-                )
-                _pe_readiness = (
-                    capability_visible
-                    and _pe_session_count > 0
-                    and _pe_posture == "join_runtime"
-                )
+                _pe_cross_device_enabled = capability_visible and session_evidence.get("active_session_count", 0) > 0
+                _pe_readiness = capability_visible and _pe_session_count > 0 and _pe_posture == "join_runtime"
                 _pe_dispatch = cross_device_available and _pe_readiness
                 _pe_execution = task_initiated and not result_closure_established
 
-                _tier, _participation_blocking, _participation_notes = (
-                    derive_android_network_participation_tier(
-                        websocket_connected=_pe_websocket,
-                        registration_ack_success=_pe_reg_ack,
-                        registration_fully_attached=_pe_fully_attached,
-                        registration_gaps=_pe_gaps,
-                        capability_visible=_pe_capability_visible,
-                        active_session_count=_pe_session_count,
-                        session_posture=_pe_posture,
-                        cross_device_enabled=_pe_cross_device_enabled,
-                        readiness_satisfied=_pe_readiness,
-                        dispatch_gate_passed=_pe_dispatch,
-                        execution_active=_pe_execution,
-                    )
+                _tier, _participation_blocking, _participation_notes = derive_android_network_participation_tier(
+                    websocket_connected=_pe_websocket,
+                    registration_ack_success=_pe_reg_ack,
+                    registration_fully_attached=_pe_fully_attached,
+                    registration_gaps=_pe_gaps,
+                    capability_visible=_pe_capability_visible,
+                    active_session_count=_pe_session_count,
+                    session_posture=_pe_posture,
+                    cross_device_enabled=_pe_cross_device_enabled,
+                    readiness_satisfied=_pe_readiness,
+                    dispatch_gate_passed=_pe_dispatch,
+                    execution_active=_pe_execution,
                 )
                 _participation_tier_str = _tier.value
                 _participation_source = "inline_derivation_missing_device_identity"
@@ -479,9 +463,7 @@ def build_v2_unified_state_contract(
             selected_device=target_device_id or None,
             participation_tier=_participation_tier_str,
             device_mode=(
-                getattr(truth_block_for_mode, "device_mode", None)
-                if truth_block_for_mode is not None
-                else active_path
+                getattr(truth_block_for_mode, "device_mode", None) if truth_block_for_mode is not None else active_path
             ),
             mode_readiness_state=(
                 getattr(truth_block_for_mode, "mode_readiness_state", None)
@@ -541,12 +523,8 @@ def build_v2_unified_state_contract(
     }
 
     # gateway_bridge_presence: is the Android gateway/bridge connection present and serving
-    gateway_bridge_present = (
-        android_attached
-        and (
-            device_evidence.get("android_device_count", 0) > 0
-            or android_evidence.get("snapshot_count", 0) > 0
-        )
+    gateway_bridge_present = android_attached and (
+        device_evidence.get("android_device_count", 0) > 0 or android_evidence.get("snapshot_count", 0) > 0
     )
     gateway_bridge_degraded = gateway_bridge_present and capability_degraded
 
@@ -646,11 +624,7 @@ def build_v2_unified_state_contract(
             state=(
                 "not_applicable"
                 if not android_attached
-                else (
-                    "degraded"
-                    if gateway_bridge_degraded
-                    else "present" if gateway_bridge_present else "absent"
-                )
+                else ("degraded" if gateway_bridge_degraded else "present" if gateway_bridge_present else "absent")
             ),
             summary=(
                 "Gateway/bridge presence is not applicable without Android context."
@@ -936,8 +910,11 @@ def build_v2_unified_state_contract(
                 else (
                     "satisfied"
                     if cross_device_available
-                    else "partial" if capability_visible or session_evidence.get("active_session_count", 0) > 0
-                    else "waiting_dependency"
+                    else (
+                        "partial"
+                        if capability_visible or session_evidence.get("active_session_count", 0) > 0
+                        else "waiting_dependency"
+                    )
                 )
             ),
             summary=(
@@ -983,11 +960,7 @@ def build_v2_unified_state_contract(
             state=(
                 "not_applicable"
                 if not android_attached
-                else (
-                    "active"
-                    if dispatch_bound
-                    else "available" if dispatch_available else "unavailable"
-                )
+                else ("active" if dispatch_bound else "available" if dispatch_available else "unavailable")
             ),
             summary=(
                 "Runtime host/dispatch binding is not applicable without Android context."
@@ -1027,8 +1000,7 @@ def build_v2_unified_state_contract(
             label="Android network participation tier (PR-1)",
             state=_participation_tier_str,
             summary=(
-                "Android device is a confirmed active participant in the "
-                "center-distributed runtime network."
+                "Android device is a confirmed active participant in the " "center-distributed runtime network."
                 if _participation_tier_str == "distributed_participant"
                 else (
                     "Android device is eligible for dispatch to the distributed network."
@@ -1041,15 +1013,12 @@ def build_v2_unified_state_contract(
                             "or session conditions are not yet satisfied."
                             if _participation_tier_str == "cross_device_enabled"
                             else (
-                                "Android device is registered with full attachment but "
-                                "cross-device gate is off."
+                                "Android device is registered with full attachment but " "cross-device gate is off."
                                 if _participation_tier_str == "cross_device_capable"
                                 else (
-                                    "Android device is connected but restricted to "
-                                    "control-only mode."
+                                    "Android device is connected but restricted to " "control-only mode."
                                     if _participation_tier_str == "control_only"
-                                    else "Android device has no active connection to the "
-                                    "distributed network."
+                                    else "Android device has no active connection to the " "distributed network."
                                 )
                             )
                         )
@@ -1077,9 +1046,7 @@ def build_v2_unified_state_contract(
                 "active_session_count": session_evidence.get("active_session_count", 0),
             },
             observable=android_attached,
-            acceptable=_participation_tier_str in {
-                "fully_attached", "dispatch_eligible", "distributed_participant"
-            },
+            acceptable=_participation_tier_str in {"fully_attached", "dispatch_eligible", "distributed_participant"},
             eligible=_participation_tier_str in {"dispatch_eligible", "distributed_participant"},
             active=_participation_tier_str == "distributed_participant",
             lifecycle_stage="observation",
@@ -1101,7 +1068,8 @@ def build_v2_unified_state_contract(
             evidence=dict(_unified_mode_model),
             observable=True,
             acceptable=_unified_mode_model.get("governance_state") != "governance_blocked",
-            eligible=_unified_mode_model.get("participation_layer") in {
+            eligible=_unified_mode_model.get("participation_layer")
+            in {
                 "dispatch_eligible",
                 "distributed_participant",
             },
@@ -1146,15 +1114,9 @@ def build_v2_unified_state_contract(
                 "android_attached": android_attached,
             },
             observable=True,
-            acceptable=_lifecycle_stage_str in {
-                "connected", "ready", "participating", "takeover_eligible"
-            },
-            eligible=_lifecycle_stage_str in {
-                "ready", "participating", "takeover_eligible"
-            },
-            active=_lifecycle_stage_str in {
-                "participating", "takeover_eligible"
-            },
+            acceptable=_lifecycle_stage_str in {"connected", "ready", "participating", "takeover_eligible"},
+            eligible=_lifecycle_stage_str in {"ready", "participating", "takeover_eligible"},
+            active=_lifecycle_stage_str in {"participating", "takeover_eligible"},
             lifecycle_stage="readiness",
         ),
     }
@@ -1312,11 +1274,7 @@ def build_v2_unified_state_contract(
             state=(
                 "not_applicable"
                 if not android_attached
-                else (
-                    "complete"
-                    if result_closure_established
-                    else "active" if task_initiated else "idle"
-                )
+                else ("complete" if result_closure_established else "active" if task_initiated else "idle")
             ),
             summary=(
                 "Task execution visibility is not applicable without Android context."
@@ -1519,6 +1477,7 @@ def build_v2_unified_state_contract(
         from core.executable_lifecycle_hardening import (  # noqa: PLC0415
             build_executable_lifecycle_state,
         )
+
         lifecycle_state = build_executable_lifecycle_state(
             validation=validation,
             kind_states=kind_states,

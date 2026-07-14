@@ -17,6 +17,7 @@ import os
 import sys
 import tempfile
 import time
+
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -26,9 +27,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 # 辅助工厂
 # ============================================================================
 
+
 def _make_rag(tmp_dir: str = None):
     """创建使用独立临时目录的 RAGMemory 实例（不影响全局单例）。"""
     from core.rag_memory import RAGMemory
+
     d = tmp_dir or tempfile.mkdtemp()
     return RAGMemory(data_dir=d)
 
@@ -36,6 +39,7 @@ def _make_rag(tmp_dir: str = None):
 def _make_node105_kb(tmp_dir: str = None):
     """创建使用独立临时目录的 UnifiedKnowledgeBase 实例。"""
     from nodes.Node_105_UnifiedKnowledgeBase.main import UnifiedKnowledgeBase
+
     d = tmp_dir or tempfile.mkdtemp()
     return UnifiedKnowledgeBase(persist_dir=d)
 
@@ -43,6 +47,7 @@ def _make_node105_kb(tmp_dir: str = None):
 def _make_node72_kb(tmp_dir: str = None):
     """创建使用独立临时目录的 KnowledgeBaseSystem 实例。"""
     from nodes.Node_72_KnowledgeBase.knowledge_base_system import KnowledgeBaseSystem
+
     d = tmp_dir or tempfile.mkdtemp()
     return KnowledgeBaseSystem(persist_directory=d)
 
@@ -51,21 +56,25 @@ def _make_node72_kb(tmp_dir: str = None):
 # 1. KnowledgeChunk 规范化 schema
 # ============================================================================
 
+
 class TestKnowledgeChunkSchema:
     """验收标准 e): KnowledgeChunk 包含统一的 source_type 和 tags 字段。"""
 
     def test_chunk_has_source_type_field(self):
         from core.rag_memory import KnowledgeChunk
+
         chunk = KnowledgeChunk(content="test", source="Node_105", source_type="node")
         assert chunk.source_type == "node"
 
     def test_chunk_has_tags_field(self):
         from core.rag_memory import KnowledgeChunk
+
         chunk = KnowledgeChunk(content="test", source="Node_72", tags=["ai", "knowledge"])
         assert chunk.tags == ["ai", "knowledge"]
 
     def test_chunk_defaults(self):
         from core.rag_memory import KnowledgeChunk
+
         chunk = KnowledgeChunk()
         assert chunk.chunk_id == ""
         assert chunk.content == ""
@@ -77,6 +86,7 @@ class TestKnowledgeChunkSchema:
 
     def test_chunk_all_fields(self):
         from core.rag_memory import KnowledgeChunk
+
         chunk = KnowledgeChunk(
             chunk_id="c1",
             content="deep learning basics",
@@ -96,17 +106,20 @@ class TestKnowledgeChunkSchema:
 # 2. RAGMemory 作为规范化入口
 # ============================================================================
 
+
 class TestRAGMemoryCanonicalEntryPoint:
     """验收标准 a): RAGMemory 是 OpenClawd 侧规范化知识入口。"""
 
     def test_get_rag_memory_returns_singleton(self):
         from core.rag_memory import get_rag_memory
+
         r1 = get_rag_memory()
         r2 = get_rag_memory()
         assert r1 is r2
 
     def test_get_rag_memory_namespace_isolation(self):
         from core.rag_memory import get_rag_memory
+
         r_global = get_rag_memory()
         r_ns = get_rag_memory(namespace="test_ns_isolation")
         assert r_global is not r_ns
@@ -129,20 +142,24 @@ class TestRAGMemoryCanonicalEntryPoint:
 
     def test_rag_memory_module_docstring_declares_canonical(self):
         import core.rag_memory as m
+
         assert "canonical" in m.__doc__.lower() or "知识访问入口" in m.__doc__
 
     def test_rag_memory_class_docstring_declares_canonical(self):
         from core.rag_memory import RAGMemory
+
         doc = RAGMemory.__doc__ or ""
         assert "Knowledge Core" in doc or "知识访问" in doc
 
     def test_get_rag_memory_for_device(self):
         from core.rag_memory import get_rag_memory_for_device
+
         rag = get_rag_memory_for_device("dev-001")
         assert rag is not None
 
     def test_get_rag_memory_for_worker(self):
         from core.rag_memory import get_rag_memory_for_worker
+
         rag = get_rag_memory_for_worker("worker-001")
         assert rag is not None
 
@@ -150,6 +167,7 @@ class TestRAGMemoryCanonicalEntryPoint:
 # ============================================================================
 # 3. ingest_knowledge — 写入路径测试
 # ============================================================================
+
 
 class TestIngestKnowledge:
     """验收标准 a) + e): ingest_knowledge 是统一写入入口，写入后可通过经验日志检索。"""
@@ -231,11 +249,13 @@ class TestIngestKnowledge:
 # 4. Node_105 — 主后端角色
 # ============================================================================
 
+
 class TestNode105PrimaryBackend:
     """验收标准 b): Node_105 是主多源知识后端/索引器。"""
 
     def test_node105_has_knowledge_core_role(self):
         from nodes.Node_105_UnifiedKnowledgeBase.main import KNOWLEDGE_CORE_ROLE
+
         assert KNOWLEDGE_CORE_ROLE == "primary_backend"
 
     def test_node105_has_ingest_knowledge(self):
@@ -295,6 +315,7 @@ class TestNode105PrimaryBackend:
 
     def test_node105_knowledge_entry_has_source_type(self):
         from nodes.Node_105_UnifiedKnowledgeBase.main import KnowledgeEntry
+
         entry = KnowledgeEntry(
             id="test_id",
             content="test",
@@ -310,15 +331,18 @@ class TestNode105PrimaryBackend:
 # 5. Node_72 — 兼容/回退后端角色
 # ============================================================================
 
+
 class TestNode72FallbackBackend:
     """验收标准 c): Node_72 是兼容/回退后端，不是并行主权威。"""
 
     def test_node72_has_fallback_role(self):
         from nodes.Node_72_KnowledgeBase.knowledge_base_system import KNOWLEDGE_BACKEND_ROLE
+
         assert KNOWLEDGE_BACKEND_ROLE == "fallback"
 
     def test_node72_docstring_declares_fallback(self):
         import nodes.Node_72_KnowledgeBase.knowledge_base_system as m
+
         doc = m.__doc__ or ""
         assert "fallback" in doc.lower() or "回退" in doc
 
@@ -332,6 +356,7 @@ class TestNode72FallbackBackend:
     def test_node72_search_returns_knowledge_entry_objects(self):
         """Node_72.search() 必须返回 KnowledgeEntry dataclass，而非 dict。"""
         from nodes.Node_72_KnowledgeBase.knowledge_base_system import KnowledgeEntry
+
         kb = _make_node72_kb()
         kb.add_knowledge("test entry for type check")
         results = kb.search("test entry")
@@ -363,30 +388,35 @@ class TestNode72FallbackBackend:
 # 6. 自主学习知识回写 (backflow) 测试
 # ============================================================================
 
+
 class TestAutonomousLearningBackflow:
     """验收标准 b): 自主学习知识回写通过统一路径（RAGMemory.ingest_knowledge）。"""
 
     @pytest.mark.asyncio
     async def test_push_to_rag_memory_uses_ingest_knowledge(self, monkeypatch):
         """_push_to_rag_memory 应调用 RAGMemory.ingest_knowledge，而非直接 log_experience。"""
-        from nodes.Node_70_AutonomousLearning.main import AutonomousLearningEngine, KnowledgeItem
         from datetime import datetime
+
+        from nodes.Node_70_AutonomousLearning.main import AutonomousLearningEngine, KnowledgeItem
 
         ingested = []
 
         # mock get_rag_memory to capture ingest_knowledge calls
         class MockRAG:
             def ingest_knowledge(self, content, source, source_type, tags=None, metadata=None):
-                ingested.append({
-                    "content": content,
-                    "source": source,
-                    "source_type": source_type,
-                    "tags": tags or [],
-                    "metadata": metadata or {},
-                })
+                ingested.append(
+                    {
+                        "content": content,
+                        "source": source,
+                        "source_type": source_type,
+                        "tags": tags or [],
+                        "metadata": metadata or {},
+                    }
+                )
                 return "mock_entry_id"
 
         import core.rag_memory as rag_mod
+
         monkeypatch.setattr(rag_mod, "get_rag_memory", lambda: MockRAG())
 
         engine = AutonomousLearningEngine()
@@ -407,8 +437,9 @@ class TestAutonomousLearningBackflow:
     @pytest.mark.asyncio
     async def test_backflow_tags_normalized(self, monkeypatch):
         """回写的 tags 应包含 autonomous_learning 和 category 标签。"""
-        from nodes.Node_70_AutonomousLearning.main import AutonomousLearningEngine, KnowledgeItem
         from datetime import datetime
+
+        from nodes.Node_70_AutonomousLearning.main import AutonomousLearningEngine, KnowledgeItem
 
         captured_tags = []
 
@@ -418,6 +449,7 @@ class TestAutonomousLearningBackflow:
                 return "mock_id"
 
         import core.rag_memory as rag_mod
+
         monkeypatch.setattr(rag_mod, "get_rag_memory", lambda: MockRAG())
 
         engine = AutonomousLearningEngine()
@@ -446,6 +478,7 @@ class TestAutonomousLearningBackflow:
                 return "mock_meta_id"
 
         import core.rag_memory as rag_mod
+
         monkeypatch.setattr(rag_mod, "get_rag_memory", lambda: MockRAG())
 
         engine = AutonomousLearningEngine()
@@ -481,20 +514,24 @@ class TestAutonomousLearningBackflow:
 # 7. 无新增并行主权知识来源
 # ============================================================================
 
+
 class TestNoParallelPrimaryAuthority:
     """验收标准 d): 不引入新的并行主权知识来源。"""
 
     def test_node105_role_is_primary_backend_not_parallel_authority(self):
         from nodes.Node_105_UnifiedKnowledgeBase.main import KNOWLEDGE_CORE_ROLE
+
         # 主后端而非"主权威"（authority 归 RAGMemory）
         assert KNOWLEDGE_CORE_ROLE == "primary_backend"
 
     def test_node72_role_is_fallback(self):
         from nodes.Node_72_KnowledgeBase.knowledge_base_system import KNOWLEDGE_BACKEND_ROLE
+
         assert KNOWLEDGE_BACKEND_ROLE == "fallback"
 
     def test_rag_memory_is_single_singleton(self):
         from core.rag_memory import get_rag_memory
+
         r1 = get_rag_memory()
         r2 = get_rag_memory()
         r3 = get_rag_memory()
@@ -503,6 +540,7 @@ class TestNoParallelPrimaryAuthority:
     def test_node72_not_directly_accessed_for_primary_queries(self):
         """Node_72 的 KNOWLEDGE_BACKEND_ROLE 标记明确表示其非主后端。"""
         from nodes.Node_72_KnowledgeBase.knowledge_base_system import KNOWLEDGE_BACKEND_ROLE
+
         assert KNOWLEDGE_BACKEND_ROLE != "primary_backend"
         assert KNOWLEDGE_BACKEND_ROLE != "authority"
 
@@ -512,10 +550,12 @@ class TestNoParallelPrimaryAuthority:
         通过 mock 验证调用顺序：Node_105 有结果时 Node_72 不会被调用。
         """
         import sys
-        import types
-        import pytest
-        from nodes.Node_105_UnifiedKnowledgeBase.main import KnowledgeEntry
         import time as _time
+        import types
+
+        import pytest
+
+        from nodes.Node_105_UnifiedKnowledgeBase.main import KnowledgeEntry
 
         # 创建 mock Node_105 module
         mock_node105_module = types.ModuleType("nodes.Node_105_UnifiedKnowledgeBase.main")
@@ -524,14 +564,16 @@ class TestNoParallelPrimaryAuthority:
         class MockKB105:
             def search_hybrid(self, query, top_k):
                 node105_called.append(True)
-                return [KnowledgeEntry(
-                    id="mock105",
-                    content="node105 primary result",
-                    source_type="text",
-                    source="mock",
-                    metadata={},
-                    timestamp=_time.time(),
-                )]
+                return [
+                    KnowledgeEntry(
+                        id="mock105",
+                        content="node105 primary result",
+                        source_type="text",
+                        source="mock",
+                        metadata={},
+                        timestamp=_time.time(),
+                    )
+                ]
 
         mock_node105_module.kb = MockKB105()
 
@@ -539,6 +581,7 @@ class TestNoParallelPrimaryAuthority:
 
         # Patch Node_72 to track whether it's called
         import nodes.Node_72_KnowledgeBase.knowledge_base_system as n72_mod
+
         original_class = n72_mod.KnowledgeBaseSystem
 
         class SpyKB72(original_class):
@@ -552,9 +595,7 @@ class TestNoParallelPrimaryAuthority:
         sys.modules["nodes.Node_105_UnifiedKnowledgeBase.main"] = mock_node105_module
         try:
             rag = _make_rag()
-            result = asyncio.new_event_loop().run_until_complete(
-                rag.query_knowledge("test query", top_k=1)
-            )
+            result = asyncio.new_event_loop().run_until_complete(rag.query_knowledge("test query", top_k=1))
             # Node_105 returned 1 result (= top_k), so Node_72 should NOT be called
             assert len(result) >= 1
             assert result[0].source == "Node_105"
@@ -571,6 +612,7 @@ class TestNoParallelPrimaryAuthority:
 # ============================================================================
 # 8. enhance_agent_prompt — 综合 RAG 增强
 # ============================================================================
+
 
 class TestEnhanceAgentPrompt:
     """验收标准 a): enhance_agent_prompt 是 Agent 调用的主链入口。"""
@@ -598,9 +640,7 @@ class TestEnhanceAgentPrompt:
     @pytest.mark.asyncio
     async def test_enhance_agent_prompt_exclude_experience(self):
         rag = _make_rag()
-        result = await rag.enhance_agent_prompt(
-            "test", include_experience=False, include_knowledge=False
-        )
+        result = await rag.enhance_agent_prompt("test", include_experience=False, include_knowledge=False)
         assert result == ""
 
     @pytest.mark.asyncio
@@ -613,6 +653,7 @@ class TestEnhanceAgentPrompt:
 # ============================================================================
 # 9. 持久化与加载
 # ============================================================================
+
 
 class TestPersistenceAndLoad:
     """验收标准 b): 写入的知识在重启后可检索。"""

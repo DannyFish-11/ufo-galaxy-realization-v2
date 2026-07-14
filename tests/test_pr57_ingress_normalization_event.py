@@ -86,10 +86,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_aip_v3_dict(
     *,
@@ -149,27 +149,37 @@ def _make_mock_aip_message(
 # IngressEventKind tests
 # ===========================================================================
 
+
 class TestIngressEventKind:
     """Tests 1–5: IngressEventKind helper."""
 
     def test_01_known_kind_strings_returned_unchanged(self):
         from galaxy_gateway.protocol.normalized_ingress_event import IngressEventKind
+
         for kind in (
-            "device_register", "heartbeat", "device_status",
-            "task_submit", "task_result", "command", "goal_execution",
+            "device_register",
+            "heartbeat",
+            "device_status",
+            "task_submit",
+            "task_result",
+            "command",
+            "goal_execution",
         ):
             assert IngressEventKind.normalise(kind) == kind
 
     def test_02_unknown_string_maps_to_unknown(self):
         from galaxy_gateway.protocol.normalized_ingress_event import IngressEventKind
+
         assert IngressEventKind.normalise("totally_new_type_xyz") == "unknown"
 
     def test_03_none_maps_to_unknown(self):
         from galaxy_gateway.protocol.normalized_ingress_event import IngressEventKind
+
         assert IngressEventKind.normalise(None) == "unknown"
 
     def test_04_aliased_compat_type_strings_normalise(self):
         from galaxy_gateway.protocol.normalized_ingress_event import IngressEventKind
+
         # These are canonical wire-format strings produced after compat normalisation
         assert IngressEventKind.normalise("device_register") == "device_register"
         assert IngressEventKind.normalise("heartbeat") == "heartbeat"
@@ -177,13 +187,23 @@ class TestIngressEventKind:
 
     def test_05_canonical_message_types_known(self):
         from galaxy_gateway.protocol.normalized_ingress_event import IngressEventKind
+
         # These are the actual AIP v3 wire-format values (MessageType enum values)
         canonical = [
-            "device_register", "heartbeat", "device_status", "device_unregister",
-            "task_submit", "task_result", "task_cancel",
-            "command", "command_result",
-            "goal_execution", "parallel_subtask", "parallel_result",
-            "capability_report", "wake_event",
+            "device_register",
+            "heartbeat",
+            "device_status",
+            "device_unregister",
+            "task_submit",
+            "task_result",
+            "task_cancel",
+            "command",
+            "command_result",
+            "goal_execution",
+            "parallel_subtask",
+            "parallel_result",
+            "capability_report",
+            "wake_event",
         ]
         for t in canonical:
             result = IngressEventKind.normalise(t)
@@ -194,13 +214,13 @@ class TestIngressEventKind:
 # NormalizedIngressEvent construction tests
 # ===========================================================================
 
+
 class TestNormalizedIngressEventConstruction:
     """Tests 6–17: Construction and field defaults."""
 
     def test_06_default_construction_with_required_fields(self):
-        from galaxy_gateway.protocol.normalized_ingress_event import (
-            NormalizedIngressEvent, IngressEventKind
-        )
+        from galaxy_gateway.protocol.normalized_ingress_event import IngressEventKind, NormalizedIngressEvent
+
         event = NormalizedIngressEvent(
             kind=IngressEventKind.DEVICE_REGISTER,
             trace_id="trace_001",
@@ -209,40 +229,46 @@ class TestNormalizedIngressEventConstruction:
         assert event.trace_id == "trace_001"
 
     def test_07_all_documented_fields_in_to_dict(self):
-        from galaxy_gateway.protocol.normalized_ingress_event import (
-            NormalizedIngressEvent, IngressEventKind
-        )
+        from galaxy_gateway.protocol.normalized_ingress_event import IngressEventKind, NormalizedIngressEvent
+
         event = NormalizedIngressEvent(kind="device_register", trace_id="t1")
         d = event.to_dict()
         expected_keys = {
-            "event_id", "kind", "device_id", "trace_id", "route_mode",
-            "runtime_session_id", "idempotency_key",
-            "task_id", "message_id", "correlation_id",
-            "aip_version", "original_type",
-            "ingress_ts", "payload", "extra_fields",
+            "event_id",
+            "kind",
+            "device_id",
+            "trace_id",
+            "route_mode",
+            "runtime_session_id",
+            "idempotency_key",
+            "task_id",
+            "message_id",
+            "correlation_id",
+            "aip_version",
+            "original_type",
+            "ingress_ts",
+            "payload",
+            "extra_fields",
         }
         assert expected_keys <= set(d.keys())
 
     def test_08_to_dict_is_json_serialisable(self):
-        from galaxy_gateway.protocol.normalized_ingress_event import (
-            NormalizedIngressEvent
-        )
+        from galaxy_gateway.protocol.normalized_ingress_event import NormalizedIngressEvent
+
         event = NormalizedIngressEvent(kind="task_submit", trace_id="t1", payload={"k": "v"})
         json.dumps(event.to_dict())
 
     def test_09_to_json_returns_valid_json(self):
-        from galaxy_gateway.protocol.normalized_ingress_event import (
-            NormalizedIngressEvent
-        )
+        from galaxy_gateway.protocol.normalized_ingress_event import NormalizedIngressEvent
+
         event = NormalizedIngressEvent(kind="heartbeat", trace_id="t1")
         s = event.to_json()
         parsed = json.loads(s)
         assert parsed["kind"] == "heartbeat"
 
     def test_10_from_dict_round_trip_stable(self):
-        from galaxy_gateway.protocol.normalized_ingress_event import (
-            NormalizedIngressEvent
-        )
+        from galaxy_gateway.protocol.normalized_ingress_event import NormalizedIngressEvent
+
         event = NormalizedIngressEvent(
             kind="task_submit",
             trace_id="trace_rt",
@@ -256,56 +282,50 @@ class TestNormalizedIngressEventConstruction:
         assert restored.device_id == event.device_id
 
     def test_11_event_id_generated_non_empty(self):
-        from galaxy_gateway.protocol.normalized_ingress_event import (
-            NormalizedIngressEvent
-        )
+        from galaxy_gateway.protocol.normalized_ingress_event import NormalizedIngressEvent
+
         event = NormalizedIngressEvent(kind="device_register", trace_id="t1")
         assert isinstance(event.event_id, str)
         assert len(event.event_id) > 0
 
     def test_12_trace_id_preserved(self):
-        from galaxy_gateway.protocol.normalized_ingress_event import (
-            NormalizedIngressEvent
-        )
+        from galaxy_gateway.protocol.normalized_ingress_event import NormalizedIngressEvent
+
         event = NormalizedIngressEvent(kind="device_register", trace_id="my_trace_id")
         assert event.trace_id == "my_trace_id"
 
     def test_13_route_mode_defaults_cross_device(self):
-        from galaxy_gateway.protocol.normalized_ingress_event import (
-            NormalizedIngressEvent
-        )
+        from galaxy_gateway.protocol.normalized_ingress_event import NormalizedIngressEvent
+
         event = NormalizedIngressEvent(kind="device_register", trace_id="t1")
         assert event.route_mode == "cross_device"
 
     def test_14_payload_defaults_empty_dict_not_none(self):
-        from galaxy_gateway.protocol.normalized_ingress_event import (
-            NormalizedIngressEvent
-        )
+        from galaxy_gateway.protocol.normalized_ingress_event import NormalizedIngressEvent
+
         event = NormalizedIngressEvent(kind="device_register", trace_id="t1")
         assert event.payload is not None
         assert isinstance(event.payload, dict)
 
     def test_15_extra_fields_defaults_empty_dict(self):
-        from galaxy_gateway.protocol.normalized_ingress_event import (
-            NormalizedIngressEvent
-        )
+        from galaxy_gateway.protocol.normalized_ingress_event import NormalizedIngressEvent
+
         event = NormalizedIngressEvent(kind="device_register", trace_id="t1")
         assert event.extra_fields == {}
 
     def test_16_ingress_ts_is_positive_float(self):
-        from galaxy_gateway.protocol.normalized_ingress_event import (
-            NormalizedIngressEvent
-        )
         import time
+
+        from galaxy_gateway.protocol.normalized_ingress_event import NormalizedIngressEvent
+
         before = time.time()
         event = NormalizedIngressEvent(kind="device_register", trace_id="t1")
         after = time.time()
         assert before <= event.ingress_ts <= after + 1.0
 
     def test_17aip_version_defaults_3_0(self):
-        from galaxy_gateway.protocol.normalized_ingress_event import (
-            NormalizedIngressEvent
-        )
+        from galaxy_gateway.protocol.normalized_ingress_event import NormalizedIngressEvent
+
         event = NormalizedIngressEvent(kind="device_register", trace_id="t1")
         assert event.aip_version == "3.0"
 
@@ -314,47 +334,55 @@ class TestNormalizedIngressEventConstruction:
 # from_normalized_dict adapter tests
 # ===========================================================================
 
+
 class TestFromNormalizedDict:
     """Tests 18–30: from_normalized_dict adapter."""
 
     def test_18_kind_normalised_from_type_field(self):
         from galaxy_gateway.protocol.normalized_ingress_event import from_normalized_dict
+
         d = _make_aip_v3_dict(msg_type="device_register")
         event = from_normalized_dict(d)
         assert event.kind == "device_register"
 
     def test_19_device_id_extracted(self):
         from galaxy_gateway.protocol.normalized_ingress_event import from_normalized_dict
+
         d = _make_aip_v3_dict(device_id="dev_extract")
         event = from_normalized_dict(d)
         assert event.device_id == "dev_extract"
 
     def test_20_trace_id_extracted(self):
         from galaxy_gateway.protocol.normalized_ingress_event import from_normalized_dict
+
         d = _make_aip_v3_dict(trace_id="trace_extracted")
         event = from_normalized_dict(d)
         assert event.trace_id == "trace_extracted"
 
     def test_21_route_mode_extracted(self):
         from galaxy_gateway.protocol.normalized_ingress_event import from_normalized_dict
+
         d = _make_aip_v3_dict(route_mode="local")
         event = from_normalized_dict(d)
         assert event.route_mode == "local"
 
     def test_22_task_id_extracted(self):
         from galaxy_gateway.protocol.normalized_ingress_event import from_normalized_dict
+
         d = _make_aip_v3_dict(task_id="task_xyz")
         event = from_normalized_dict(d)
         assert event.task_id == "task_xyz"
 
     def test_23_payload_extracted(self):
         from galaxy_gateway.protocol.normalized_ingress_event import from_normalized_dict
+
         d = _make_aip_v3_dict(payload={"command": "click", "x": 10, "y": 20})
         event = from_normalized_dict(d)
         assert event.payload.get("command") == "click"
 
     def test_24_extra_non_schema_fields_in_extra_fields(self):
         from galaxy_gateway.protocol.normalized_ingress_event import from_normalized_dict
+
         d = _make_aip_v3_dict(extra={"platform": "android", "model": "Pixel 7"})
         event = from_normalized_dict(d)
         assert event.extra_fields.get("platform") == "android"
@@ -362,6 +390,7 @@ class TestFromNormalizedDict:
 
     def test_25_missing_trace_id_triggers_generation(self):
         from galaxy_gateway.protocol.normalized_ingress_event import from_normalized_dict
+
         d = {"version": "3.0", "type": "device_register", "device_id": "d"}
         event = from_normalized_dict(d)
         assert event.trace_id is not None
@@ -369,12 +398,14 @@ class TestFromNormalizedDict:
 
     def test_26_version_preserved_inaip_version(self):
         from galaxy_gateway.protocol.normalized_ingress_event import from_normalized_dict
+
         d = _make_aip_v3_dict()
         event = from_normalized_dict(d)
         assert event.aip_version == "3.0"
 
     def test_27_legacy_alias_register_normalises_to_device_register(self):
         from galaxy_gateway.protocol.normalized_ingress_event import from_normalized_dict
+
         # After compat layer, 'register' → 'device_register'
         d = _make_aip_v3_dict(msg_type="device_register")
         event = from_normalized_dict(d)
@@ -382,6 +413,7 @@ class TestFromNormalizedDict:
 
     def test_28_device_heartbeat_normalises_correctly(self):
         from galaxy_gateway.protocol.normalized_ingress_event import from_normalized_dict
+
         # After compat layer, heartbeat aliases map to 'heartbeat' (canonical wire value)
         d = _make_aip_v3_dict(msg_type="heartbeat")
         event = from_normalized_dict(d)
@@ -389,12 +421,14 @@ class TestFromNormalizedDict:
 
     def test_29_task_submit_normalises_correctly(self):
         from galaxy_gateway.protocol.normalized_ingress_event import from_normalized_dict
+
         d = _make_aip_v3_dict(msg_type="task_submit")
         event = from_normalized_dict(d)
         assert event.kind == "task_submit"
 
     def test_30_task_result_normalises_correctly(self):
         from galaxy_gateway.protocol.normalized_ingress_event import from_normalized_dict
+
         d = _make_aip_v3_dict(msg_type="task_result")
         event = from_normalized_dict(d)
         assert event.kind == "task_result"
@@ -404,23 +438,27 @@ class TestFromNormalizedDict:
 # from_aip_message adapter tests
 # ===========================================================================
 
+
 class TestFromAIPMessage:
     """Tests 31–38: from_aip_message adapter."""
 
     def test_31_kind_extracted_from_message_type(self):
         from galaxy_gateway.protocol.normalized_ingress_event import from_aip_message
+
         msg = _make_mock_aip_message(msg_type="device_register")
         event = from_aip_message(msg)
         assert event.kind == "device_register"
 
     def test_32_device_id_extracted(self):
         from galaxy_gateway.protocol.normalized_ingress_event import from_aip_message
+
         msg = _make_mock_aip_message(device_id="aip_dev")
         event = from_aip_message(msg)
         assert event.device_id == "aip_dev"
 
     def test_33_trace_id_extracted_from_payload(self):
         from galaxy_gateway.protocol.normalized_ingress_event import from_aip_message
+
         msg = _make_mock_aip_message(trace_id="", payload={"trace_id": "payload_trace"})
         msg.trace_id = ""
         event = from_aip_message(msg)
@@ -428,18 +466,21 @@ class TestFromAIPMessage:
 
     def test_34_route_mode_extracted(self):
         from galaxy_gateway.protocol.normalized_ingress_event import from_aip_message
+
         msg = _make_mock_aip_message(route_mode="local")
         event = from_aip_message(msg)
         assert event.route_mode == "local"
 
     def test_35_task_id_extracted(self):
         from galaxy_gateway.protocol.normalized_ingress_event import from_aip_message
+
         msg = _make_mock_aip_message(task_id="task_aip")
         event = from_aip_message(msg)
         assert event.task_id == "task_aip"
 
     def test_36_payload_cleaned_of_trace_route_fields(self):
         from galaxy_gateway.protocol.normalized_ingress_event import from_aip_message
+
         msg = _make_mock_aip_message(
             payload={
                 "trace_id": "t1",
@@ -458,12 +499,14 @@ class TestFromAIPMessage:
 
     def test_37_original_type_set(self):
         from galaxy_gateway.protocol.normalized_ingress_event import from_aip_message
+
         msg = _make_mock_aip_message(msg_type="task_submit")
         event = from_aip_message(msg)
         assert event.original_type == "task_submit"
 
     def test_38_graceful_degradation_on_invalid_object(self):
-        from galaxy_gateway.protocol.normalized_ingress_event import from_aip_message, IngressEventKind
+        from galaxy_gateway.protocol.normalized_ingress_event import IngressEventKind, from_aip_message
+
         # Completely invalid input should not raise
         event = from_aip_message(object())
         assert event.kind == IngressEventKind.UNKNOWN
@@ -474,23 +517,27 @@ class TestFromAIPMessage:
 # to_normalized_ingress_event entry point tests
 # ===========================================================================
 
+
 class TestToNormalizedIngressEvent:
     """Tests 39–53: Primary public entry point."""
 
     def test_39_v3_dict_produces_correct_kind(self):
         from galaxy_gateway.protocol.normalized_ingress_event import to_normalized_ingress_event
+
         d = _make_aip_v3_dict(msg_type="task_submit")
         event = to_normalized_ingress_event(d)
         assert event.kind == "task_submit"
 
     def test_40_v1_dict_legacy_type_normalised(self):
         from galaxy_gateway.protocol.normalized_ingress_event import to_normalized_ingress_event
+
         d = {"type": "register", "device_id": "dev_v1"}
         event = to_normalized_ingress_event(d)
         assert event.kind == "device_register"
 
     def test_41_v2_dict_normalised_to_v3(self):
         from galaxy_gateway.protocol.normalized_ingress_event import to_normalized_ingress_event
+
         d = {
             "version": "2.0",
             "type": "device_register",
@@ -502,6 +549,7 @@ class TestToNormalizedIngressEvent:
 
     def test_42_json_string_input_accepted(self):
         from galaxy_gateway.protocol.normalized_ingress_event import to_normalized_ingress_event
+
         d = _make_aip_v3_dict(msg_type="heartbeat", device_id="dev_json")
         s = json.dumps(d)
         event = to_normalized_ingress_event(s)
@@ -510,6 +558,7 @@ class TestToNormalizedIngressEvent:
 
     def test_43_aip_message_like_object_accepted(self):
         from galaxy_gateway.protocol.normalized_ingress_event import to_normalized_ingress_event
+
         msg = _make_mock_aip_message(msg_type="device_status", device_id="dev_msg")
         event = to_normalized_ingress_event(msg)
         assert event.kind == "device_status"
@@ -517,6 +566,7 @@ class TestToNormalizedIngressEvent:
 
     def test_44_strict_false_allows_v1(self):
         from galaxy_gateway.protocol.normalized_ingress_event import to_normalized_ingress_event
+
         d = {"type": "heartbeat", "device_id": "v1_dev"}
         # Should not raise; heartbeat is already canonical after compat layer
         event = to_normalized_ingress_event(d, strict=False)
@@ -524,6 +574,7 @@ class TestToNormalizedIngressEvent:
 
     def test_45_trace_id_always_non_empty(self):
         from galaxy_gateway.protocol.normalized_ingress_event import to_normalized_ingress_event
+
         # No trace_id in input
         d = {"type": "device_register", "device_id": "d"}
         event = to_normalized_ingress_event(d)
@@ -532,21 +583,22 @@ class TestToNormalizedIngressEvent:
 
     def test_46_device_id_preserved(self):
         from galaxy_gateway.protocol.normalized_ingress_event import to_normalized_ingress_event
+
         d = _make_aip_v3_dict(device_id="my_device_id")
         event = to_normalized_ingress_event(d)
         assert event.device_id == "my_device_id"
 
     def test_47_route_mode_injected_when_missing(self):
         from galaxy_gateway.protocol.normalized_ingress_event import to_normalized_ingress_event
+
         d = {"version": "3.0", "type": "device_register", "device_id": "d"}
         event = to_normalized_ingress_event(d)
         assert event.route_mode is not None
         assert len(event.route_mode) > 0
 
     def test_48_malformed_input_returns_unknown_kind(self):
-        from galaxy_gateway.protocol.normalized_ingress_event import (
-            to_normalized_ingress_event, IngressEventKind
-        )
+        from galaxy_gateway.protocol.normalized_ingress_event import IngressEventKind, to_normalized_ingress_event
+
         event = to_normalized_ingress_event("not valid json {{{{}")
         assert event.kind == IngressEventKind.UNKNOWN
         assert len(event.trace_id) > 0
@@ -556,27 +608,33 @@ class TestToNormalizedIngressEvent:
 # Galaxy gateway protocol package export tests
 # ===========================================================================
 
+
 class TestGatewayProtocolPackageExports:
     """Tests 49–53: galaxy_gateway.protocol package exports."""
 
     def test_49_normalized_ingress_event_importable(self):
         from galaxy_gateway.protocol import NormalizedIngressEvent
+
         assert NormalizedIngressEvent is not None
 
     def test_50_ingress_event_kind_importable(self):
         from galaxy_gateway.protocol import IngressEventKind
+
         assert IngressEventKind is not None
 
     def test_51_to_normalized_ingress_event_importable(self):
         from galaxy_gateway.protocol import to_normalized_ingress_event
+
         assert callable(to_normalized_ingress_event)
 
     def test_52_ingress_event_from_aip_message_importable(self):
         from galaxy_gateway.protocol import ingress_event_from_aip_message
+
         assert callable(ingress_event_from_aip_message)
 
     def test_53_ingress_event_from_dict_importable(self):
         from galaxy_gateway.protocol import ingress_event_from_dict
+
         assert callable(ingress_event_from_dict)
 
 
@@ -584,11 +642,13 @@ class TestGatewayProtocolPackageExports:
 # Ingress boundary invariant tests
 # ===========================================================================
 
+
 class TestIngressBoundaryInvariants:
     """Tests 54–60: Semantic boundary invariants."""
 
     def test_54_internal_code_sees_canonical_kind_not_raw_type(self):
         from galaxy_gateway.protocol.normalized_ingress_event import to_normalized_ingress_event
+
         # Input is a v1 message with legacy type alias
         v1_msg = {"type": "registration", "device_id": "d"}
         event = to_normalized_ingress_event(v1_msg)
@@ -599,16 +659,19 @@ class TestIngressBoundaryInvariants:
 
     def test_55_trace_id_non_empty_for_v1(self):
         from galaxy_gateway.protocol.normalized_ingress_event import to_normalized_ingress_event
+
         event = to_normalized_ingress_event({"type": "heartbeat", "device_id": "d"})
         assert len(event.trace_id) > 0
 
     def test_56_route_mode_non_empty_for_v1(self):
         from galaxy_gateway.protocol.normalized_ingress_event import to_normalized_ingress_event
+
         event = to_normalized_ingress_event({"type": "heartbeat", "device_id": "d"})
         assert len(event.route_mode) > 0
 
     def test_57_no_v1_type_strings_in_kind_field(self):
         from galaxy_gateway.protocol.normalized_ingress_event import to_normalized_ingress_event
+
         # These v1 aliases map to different canonical strings after normalization
         alias_to_canonical = {
             "register": "device_register",
@@ -619,12 +682,13 @@ class TestIngressBoundaryInvariants:
         }
         for alias, expected_kind in alias_to_canonical.items():
             event = to_normalized_ingress_event({"type": alias, "device_id": "d"})
-            assert event.kind == expected_kind, (
-                f"Alias {alias!r} should normalise to {expected_kind!r}, got {event.kind!r}"
-            )
+            assert (
+                event.kind == expected_kind
+            ), f"Alias {alias!r} should normalise to {expected_kind!r}, got {event.kind!r}"
 
     def test_58_idempotency_key_injected_when_absent(self):
         from galaxy_gateway.protocol.normalized_ingress_event import to_normalized_ingress_event
+
         d = {"version": "3.0", "type": "task_submit", "device_id": "d"}
         event = to_normalized_ingress_event(d)
         # idempotency_key should be injected (may be in extra_fields or payload)
@@ -634,6 +698,7 @@ class TestIngressBoundaryInvariants:
 
     def test_59_runtime_session_id_injected_when_absent(self):
         from galaxy_gateway.protocol.normalized_ingress_event import to_normalized_ingress_event
+
         d = {"version": "3.0", "type": "device_register", "device_id": "d"}
         event = to_normalized_ingress_event(d)
         # Event is fully formed
@@ -642,6 +707,7 @@ class TestIngressBoundaryInvariants:
 
     def test_60_parallel_result_normalises_to_correct_kind(self):
         from galaxy_gateway.protocol.normalized_ingress_event import to_normalized_ingress_event
+
         d = _make_aip_v3_dict(msg_type="parallel_result")
         event = to_normalized_ingress_event(d)
         assert event.kind == "parallel_result"

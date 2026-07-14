@@ -465,21 +465,11 @@ class StrategyVerdict(str, Enum):
     """
 
     strategy_on_track = "strategy_on_track"
-    strategy_risk_due_to_contract_instability = (
-        "strategy_risk_due_to_contract_instability"
-    )
-    strategy_risk_due_to_governance_regression_trend = (
-        "strategy_risk_due_to_governance_regression_trend"
-    )
-    strategy_risk_due_to_rollout_maturity_gap = (
-        "strategy_risk_due_to_rollout_maturity_gap"
-    )
-    strategy_risk_due_to_cross_subsystem_drift = (
-        "strategy_risk_due_to_cross_subsystem_drift"
-    )
-    strategy_unknown_due_to_missing_program_signal = (
-        "strategy_unknown_due_to_missing_program_signal"
-    )
+    strategy_risk_due_to_contract_instability = "strategy_risk_due_to_contract_instability"
+    strategy_risk_due_to_governance_regression_trend = "strategy_risk_due_to_governance_regression_trend"
+    strategy_risk_due_to_rollout_maturity_gap = "strategy_risk_due_to_rollout_maturity_gap"
+    strategy_risk_due_to_cross_subsystem_drift = "strategy_risk_due_to_cross_subsystem_drift"
+    strategy_unknown_due_to_missing_program_signal = "strategy_unknown_due_to_missing_program_signal"
 
     @classmethod
     def from_string(cls, value: str) -> "StrategyVerdict":
@@ -559,12 +549,8 @@ class DimensionStrategyResult:
     def from_dict(cls, data: Dict[str, Any]) -> "DimensionStrategyResult":
         """Construct from a dict (round-trip complement of ``to_dict``)."""
         return cls(
-            dimension=StrategyDimension.from_string(
-                data.get("dimension", "")
-            ),
-            status=DimensionStrategyStatus.from_string(
-                data.get("status", "")
-            ),
+            dimension=StrategyDimension.from_string(data.get("dimension", "")),
+            status=DimensionStrategyStatus.from_string(data.get("status", "")),
             risk_description=data.get("risk_description", ""),
             evidence=data.get("evidence", {}),
             signal_source=data.get("signal_source", ""),
@@ -627,12 +613,8 @@ class DelegatedFlowStrategyReport:
     """
 
     report_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
-    verdict: StrategyVerdict = (
-        StrategyVerdict.strategy_unknown_due_to_missing_program_signal
-    )
-    dimensions: Dict[str, DimensionStrategyResult] = field(
-        default_factory=dict
-    )
+    verdict: StrategyVerdict = StrategyVerdict.strategy_unknown_due_to_missing_program_signal
+    dimensions: Dict[str, DimensionStrategyResult] = field(default_factory=dict)
     summary: str = ""
     risks: List[Dict[str, str]] = field(default_factory=list)
     is_on_track: bool = False
@@ -646,10 +628,7 @@ class DelegatedFlowStrategyReport:
         return {
             "report_id": self.report_id,
             "verdict": self.verdict.value,
-            "dimensions": {
-                dim_key: dim_result.to_dict()
-                for dim_key, dim_result in self.dimensions.items()
-            },
+            "dimensions": {dim_key: dim_result.to_dict() for dim_key, dim_result in self.dimensions.items()},
             "summary": self.summary,
             "risks": self.risks,
             "is_on_track": self.is_on_track,
@@ -682,9 +661,7 @@ class DelegatedFlowStrategyReport:
             acceptance_report_id=data.get("acceptance_report_id", ""),
         )
 
-    def get_dimension(
-        self, dimension: StrategyDimension
-    ) -> Optional[DimensionStrategyResult]:
+    def get_dimension(self, dimension: StrategyDimension) -> Optional[DimensionStrategyResult]:
         """Return the :class:`DimensionStrategyResult` for *dimension*, or
         ``None`` if not present."""
         return self.dimensions.get(dimension.value)
@@ -708,7 +685,7 @@ def _get_governance_evaluator():  # type: ignore[return]
         )
 
         return get_governance_evaluator()
-    except Exception as exc:
+    except Exception:
         return None
 
 
@@ -722,7 +699,7 @@ def _get_acceptance_gate():  # type: ignore[return]
         from core.delegated_flow_acceptance_gate import get_acceptance_gate
 
         return get_acceptance_gate()
-    except Exception as exc:
+    except Exception:
         return None
 
 
@@ -736,7 +713,7 @@ def _get_readiness_gate():  # type: ignore[return]
         from core.delegated_flow_readiness_gate import get_readiness_gate
 
         return get_readiness_gate()
-    except Exception as exc:
+    except Exception:
         return None
 
 
@@ -750,7 +727,7 @@ def _get_truth_ownership():  # type: ignore[return]
         from core.flow_level_truth_ownership import get_truth_ownership
 
         return get_truth_ownership()
-    except Exception as exc:
+    except Exception:
         return None
 
 
@@ -764,7 +741,7 @@ def _get_result_convergence():  # type: ignore[return]
         from core.flow_aware_result_convergence import get_result_convergence
 
         return get_result_convergence()
-    except Exception as exc:
+    except Exception:
         return None
 
 
@@ -778,7 +755,7 @@ def _get_continuity_coordinator():  # type: ignore[return]
         from core.flow_continuity_coordinator import get_continuity_coordinator
 
         return get_continuity_coordinator()
-    except Exception as exc:
+    except Exception:
         return None
 
 
@@ -794,7 +771,7 @@ def _get_compat_blocking():  # type: ignore[return]
         )
 
         return get_compat_blocking()
-    except Exception as exc:
+    except Exception:
         return None
 
 
@@ -850,17 +827,11 @@ class DelegatedFlowStrategyEvaluator:
         acceptance_report_id: str = ""
 
         # --- Obtain the primary program signals (governance + acceptance) ---
-        governance_report, governance_report_id = (
-            self._fetch_governance_report()
-        )
-        acceptance_report, acceptance_report_id = (
-            self._fetch_acceptance_report()
-        )
+        governance_report, governance_report_id = self._fetch_governance_report()
+        acceptance_report, acceptance_report_id = self._fetch_acceptance_report()
 
         # --- 1. contract_stability -----------------------------------------
-        dim_contract = self._evaluate_contract_stability(
-            governance_report, acceptance_report
-        )
+        dim_contract = self._evaluate_contract_stability(governance_report, acceptance_report)
         dimensions[dim_contract.dimension.value] = dim_contract
 
         # --- 2. governance_trend -------------------------------------------
@@ -868,9 +839,7 @@ class DelegatedFlowStrategyEvaluator:
         dimensions[dim_gov_trend.dimension.value] = dim_gov_trend
 
         # --- 3. rollout_maturity -------------------------------------------
-        dim_rollout = self._evaluate_rollout_maturity(
-            governance_report, acceptance_report
-        )
+        dim_rollout = self._evaluate_rollout_maturity(governance_report, acceptance_report)
         dimensions[dim_rollout.dimension.value] = dim_rollout
 
         # --- 4. regression_pressure ----------------------------------------
@@ -878,9 +847,7 @@ class DelegatedFlowStrategyEvaluator:
         dimensions[dim_regression.dimension.value] = dim_regression
 
         # --- 5. cross_subsystem_coupling -----------------------------------
-        dim_coupling = self._evaluate_cross_subsystem_coupling(
-            governance_report
-        )
+        dim_coupling = self._evaluate_cross_subsystem_coupling(governance_report)
         dimensions[dim_coupling.dimension.value] = dim_coupling
 
         verdict = self._compute_verdict(dimensions)
@@ -927,7 +894,7 @@ class DelegatedFlowStrategyEvaluator:
             report = gov_evaluator.evaluate()
             report_id: str = getattr(report, "report_id", "")
             return report, report_id
-        except Exception as exc:
+        except Exception:
             return None, ""
 
     def _fetch_acceptance_report(
@@ -948,7 +915,7 @@ class DelegatedFlowStrategyEvaluator:
             report = acceptance_gate.evaluate()
             report_id: str = getattr(report, "report_id", "")
             return report, report_id
-        except Exception as exc:
+        except Exception:
             return None, ""
 
     # ------------------------------------------------------------------
@@ -993,9 +960,7 @@ class DelegatedFlowStrategyEvaluator:
 
         # Check acceptance baseline
         if acceptance_report is not None:
-            is_accepted = getattr(
-                acceptance_report, "is_accepted_for_graduation", None
-            )
+            is_accepted = getattr(acceptance_report, "is_accepted_for_graduation", None)
             if is_accepted is False:
                 at_risk = True
                 verdict_val = ""
@@ -1042,13 +1007,10 @@ class DelegatedFlowStrategyEvaluator:
         truth_obj = _get_truth_ownership()
         if truth_obj is not None:
             try:
-                if hasattr(truth_obj, "has_unresolved_contracts") and bool(
-                    truth_obj.has_unresolved_contracts()
-                ):
+                if hasattr(truth_obj, "has_unresolved_contracts") and bool(truth_obj.has_unresolved_contracts()):
                     at_risk = True
                     risk_parts.append(
-                        "FlowLevelTruthOwnership reports unresolved truth "
-                        "contracts (contract stability at risk)."
+                        "FlowLevelTruthOwnership reports unresolved truth " "contracts (contract stability at risk)."
                     )
             except Exception as exc:
                 logger.debug("Suppressed: %s", exc)
@@ -1057,8 +1019,10 @@ class DelegatedFlowStrategyEvaluator:
             return DimensionStrategyResult(
                 dimension=dimension,
                 status=DimensionStrategyStatus.at_risk,
-                risk_description=" | ".join(risk_parts) if risk_parts else (
-                    "Canonical contract stability at risk (unspecified signal)."
+                risk_description=(
+                    " | ".join(risk_parts)
+                    if risk_parts
+                    else ("Canonical contract stability at risk (unspecified signal).")
                 ),
                 evidence=evidence,
                 signal_source=signal_source,
@@ -1088,10 +1052,7 @@ class DelegatedFlowStrategyEvaluator:
             return DimensionStrategyResult(
                 dimension=dimension,
                 status=DimensionStrategyStatus.unknown,
-                risk_description=(
-                    "Governance report unavailable; cannot assess governance "
-                    "compliance trend."
-                ),
+                risk_description=("Governance report unavailable; cannot assess governance " "compliance trend."),
                 signal_source=signal_source,
             )
 
@@ -1108,16 +1069,13 @@ class DelegatedFlowStrategyEvaluator:
                 dimension=dimension,
                 status=DimensionStrategyStatus.unknown,
                 risk_description=(
-                    "Governance report verdict field is absent; cannot assess "
-                    "governance compliance trend."
+                    "Governance report verdict field is absent; cannot assess " "governance compliance trend."
                 ),
                 evidence=evidence,
                 signal_source=signal_source,
             )
 
-        verdict_value: str = (
-            verdict.value if hasattr(verdict, "value") else str(verdict)
-        )
+        verdict_value: str = verdict.value if hasattr(verdict, "value") else str(verdict)
 
         if verdict_value == "governance_compliant":
             return DimensionStrategyResult(
@@ -1183,14 +1141,11 @@ class DelegatedFlowStrategyEvaluator:
         # Check acceptance gate
         if acceptance_report is not None:
             any_signal = True
-            is_accepted = getattr(
-                acceptance_report, "is_accepted_for_graduation", None
-            )
+            is_accepted = getattr(acceptance_report, "is_accepted_for_graduation", None)
             if is_accepted is False:
                 at_risk = True
                 risk_parts.append(
-                    "Acceptance gate has not graduated the delegated path; "
-                    "rollout maturity baseline is absent."
+                    "Acceptance gate has not graduated the delegated path; " "rollout maturity baseline is absent."
                 )
             if hasattr(acceptance_report, "to_dict"):
                 try:
@@ -1208,8 +1163,7 @@ class DelegatedFlowStrategyEvaluator:
                 if is_ready is False:
                     at_risk = True
                     risk_parts.append(
-                        "DelegatedFlowReadinessGate verdict is not ready; "
-                        "delegated path is not cleared for rollout."
+                        "DelegatedFlowReadinessGate verdict is not ready; " "delegated path is not cleared for rollout."
                     )
                 if hasattr(readiness_report, "to_dict"):
                     try:
@@ -1253,8 +1207,8 @@ class DelegatedFlowStrategyEvaluator:
             return DimensionStrategyResult(
                 dimension=dimension,
                 status=DimensionStrategyStatus.at_risk,
-                risk_description=" | ".join(risk_parts) if risk_parts else (
-                    "Rollout maturity at risk (unspecified signal)."
+                risk_description=(
+                    " | ".join(risk_parts) if risk_parts else ("Rollout maturity at risk (unspecified signal).")
                 ),
                 evidence=evidence,
                 signal_source=signal_source,
@@ -1285,10 +1239,7 @@ class DelegatedFlowStrategyEvaluator:
             return DimensionStrategyResult(
                 dimension=dimension,
                 status=DimensionStrategyStatus.unknown,
-                risk_description=(
-                    "Governance report unavailable; cannot assess accumulated "
-                    "regression pressure."
-                ),
+                risk_description=("Governance report unavailable; cannot assess accumulated " "regression pressure."),
                 signal_source=signal_source,
             )
 
@@ -1305,8 +1256,7 @@ class DelegatedFlowStrategyEvaluator:
                 dimension=dimension,
                 status=DimensionStrategyStatus.unknown,
                 risk_description=(
-                    "Governance report violations field is absent; cannot "
-                    "assess accumulated regression pressure."
+                    "Governance report violations field is absent; cannot " "assess accumulated regression pressure."
                 ),
                 evidence=evidence,
                 signal_source=signal_source,
@@ -1441,9 +1391,7 @@ class DelegatedFlowStrategyEvaluator:
         if compat_obj is not None:
             any_signal = True
             try:
-                if hasattr(compat_obj, "has_active_bypass") and bool(
-                    compat_obj.has_active_bypass()
-                ):
+                if hasattr(compat_obj, "has_active_bypass") and bool(compat_obj.has_active_bypass()):
                     at_risk = True
                     risk_parts.append(
                         "CompatLegacyPathBlockingCanonicalization reports an "
@@ -1469,8 +1417,10 @@ class DelegatedFlowStrategyEvaluator:
             return DimensionStrategyResult(
                 dimension=dimension,
                 status=DimensionStrategyStatus.at_risk,
-                risk_description=" | ".join(risk_parts) if risk_parts else (
-                    "Cross-subsystem coupling risk detected (unspecified signal)."
+                risk_description=(
+                    " | ".join(risk_parts)
+                    if risk_parts
+                    else ("Cross-subsystem coupling risk detected (unspecified signal).")
                 ),
                 evidence=evidence,
                 signal_source=signal_source,
@@ -1503,28 +1453,20 @@ class DelegatedFlowStrategyEvaluator:
         5. ``cross_subsystem_coupling`` at_risk → ``strategy_risk_due_to_cross_subsystem_drift``
         6. All on_track → ``strategy_on_track``
         """
-        dim_statuses: Dict[str, str] = {
-            k: v.status.value for k, v in dimensions.items()
-        }
+        dim_statuses: Dict[str, str] = {k: v.status.value for k, v in dimensions.items()}
 
         # Rule 1: any unknown → unknown verdict
         if DimensionStrategyStatus.unknown.value in dim_statuses.values():
             return StrategyVerdict.strategy_unknown_due_to_missing_program_signal
 
         # Rule 2: contract_stability at_risk
-        contract_status = dim_statuses.get(
-            StrategyDimension.contract_stability.value
-        )
+        contract_status = dim_statuses.get(StrategyDimension.contract_stability.value)
         if contract_status == DimensionStrategyStatus.at_risk.value:
             return StrategyVerdict.strategy_risk_due_to_contract_instability
 
         # Rule 3: governance_trend or regression_pressure at_risk
-        gov_trend_status = dim_statuses.get(
-            StrategyDimension.governance_trend.value
-        )
-        regression_status = dim_statuses.get(
-            StrategyDimension.regression_pressure.value
-        )
+        gov_trend_status = dim_statuses.get(StrategyDimension.governance_trend.value)
+        regression_status = dim_statuses.get(StrategyDimension.regression_pressure.value)
         if (
             gov_trend_status == DimensionStrategyStatus.at_risk.value
             or regression_status == DimensionStrategyStatus.at_risk.value
@@ -1532,16 +1474,12 @@ class DelegatedFlowStrategyEvaluator:
             return StrategyVerdict.strategy_risk_due_to_governance_regression_trend
 
         # Rule 4: rollout_maturity at_risk
-        rollout_status = dim_statuses.get(
-            StrategyDimension.rollout_maturity.value
-        )
+        rollout_status = dim_statuses.get(StrategyDimension.rollout_maturity.value)
         if rollout_status == DimensionStrategyStatus.at_risk.value:
             return StrategyVerdict.strategy_risk_due_to_rollout_maturity_gap
 
         # Rule 5: cross_subsystem_coupling at_risk
-        coupling_status = dim_statuses.get(
-            StrategyDimension.cross_subsystem_coupling.value
-        )
+        coupling_status = dim_statuses.get(StrategyDimension.cross_subsystem_coupling.value)
         if coupling_status == DimensionStrategyStatus.at_risk.value:
             return StrategyVerdict.strategy_risk_due_to_cross_subsystem_drift
 

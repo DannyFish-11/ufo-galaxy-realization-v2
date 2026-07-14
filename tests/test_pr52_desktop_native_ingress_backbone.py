@@ -660,8 +660,7 @@ def test_android_nl_context_changes_context_strategy_and_execution_planning():
     assert canonical_perception2["multimodal_context_strategy"]["android_state_snapshot_present"] is True
     assert canonical_perception2["multimodal_context_strategy"]["android_cognition_unified"] is True
     assert (
-        ingress_for_plan2["mainline_path"]["execution_planning"]["android_context_plan_mode"]
-        == "android_state_aware"
+        ingress_for_plan2["mainline_path"]["execution_planning"]["android_context_plan_mode"] == "android_state_aware"
     )
     assert (
         ingress_for_plan2["mainline_path"]["execution_planning"]["android_cognition_plan_mode"]

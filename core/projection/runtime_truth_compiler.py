@@ -114,9 +114,7 @@ __all__ = [
 #: Any code path that assembles runtime status by importing directly from
 #: subsystem modules (multi_llm_router, system_resource, oneapi_system_position,
 #: etc.) is operating *outside* the canonical projection path.
-RUNTIME_TRUTH_COMPILER_AUTHORITY: str = (
-    "core.projection.runtime_truth_compiler.compile_runtime_truth"
-)
+RUNTIME_TRUTH_COMPILER_AUTHORITY: str = "core.projection.runtime_truth_compiler.compile_runtime_truth"
 
 
 # ---------------------------------------------------------------------------
@@ -212,10 +210,7 @@ class RuntimeTruthSnapshot:
     @property
     def has_canonical_topology(self) -> bool:
         """``True`` when topology routing is available and authoritative."""
-        return (
-            self.topology is not None
-            and self.topology.get("routing_authority_source") == "topology_router"
-        )
+        return self.topology is not None and self.topology.get("routing_authority_source") == "topology_router"
 
     @property
     def tri_state_phase(self) -> Optional[str]:
@@ -391,8 +386,12 @@ def _safe_continuum_dict(state: Any) -> Dict[str, Any]:
         phase_val = getattr(state, "phase", None) or getattr(state, "tri_state_phase", None)
         domain_val = getattr(state, "runtime_domain", None) or getattr(state, "domain", None)
         return {
-            "tri_state_phase": phase_val.value if hasattr(phase_val, "value") else str(phase_val) if phase_val else None,
-            "runtime_domain": domain_val.value if hasattr(domain_val, "value") else str(domain_val) if domain_val else None,
+            "tri_state_phase": (
+                phase_val.value if hasattr(phase_val, "value") else str(phase_val) if phase_val else None
+            ),
+            "runtime_domain": (
+                domain_val.value if hasattr(domain_val, "value") else str(domain_val) if domain_val else None
+            ),
             "coherence": getattr(state, "coherence", None),
             "presence_intensity": getattr(state, "presence_intensity", None),
             "collapse_tendency": getattr(state, "collapse_tendency", None),
@@ -409,7 +408,7 @@ def _compile_topology(continuum: Optional[Dict[str, Any]]) -> Optional[Dict[str,
     requires a phase/domain to route against).
     """
     try:
-        from core.model_topology import TopologyRouter, ProviderInventory
+        from core.model_topology import ProviderInventory, TopologyRouter
         from core.model_topology.topology_router import CANONICAL_ROUTING_AUTHORITY
 
         inventory = ProviderInventory.from_env()
@@ -497,7 +496,7 @@ def _compile_system_resource() -> Optional[Dict[str, Any]]:
 def _compile_device_presence() -> Dict[str, Any]:
     """Source #5: Device presence counts from shared route state."""
     try:
-        from core.routes._shared import registered_devices, connection_manager
+        from core.routes._shared import connection_manager, registered_devices
 
         registered_count = len(registered_devices)
         online_count = len(connection_manager.online_device_ids())
@@ -569,8 +568,8 @@ def _compile_multimodal_readiness() -> Optional[Dict[str, Any]]:
     """Compile multimodal readiness truth (default/conditional/degraded semantics)."""
     try:
         from core.multimodal_runtime_profile import (
-            build_multimodal_runtime_profile_summary,
             MultimodalRuntimeProfile,
+            build_multimodal_runtime_profile_summary,
         )
 
         profile = build_multimodal_runtime_profile_summary()
@@ -623,16 +622,8 @@ def _compile_dispatch_semantics() -> Optional[Dict[str, Any]]:
         plan = build_source_dispatch_plan()
         mode_val = getattr(plan, "mode", None)
         selected_target = getattr(plan, "selected_target", None)
-        target_device_id = (
-            getattr(selected_target, "target_device_id", None)
-            if selected_target is not None
-            else None
-        )
-        selection_reason = (
-            getattr(selected_target, "selection_reason", None)
-            if selected_target is not None
-            else None
-        )
+        target_device_id = getattr(selected_target, "target_device_id", None) if selected_target is not None else None
+        selection_reason = getattr(selected_target, "selection_reason", None) if selected_target is not None else None
         readiness_notes = list(getattr(plan, "readiness_notes", []) or [])
         decision_reason = None
         metadata = getattr(plan, "metadata", None)

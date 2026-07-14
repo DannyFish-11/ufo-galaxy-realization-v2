@@ -91,7 +91,6 @@ from core.failure_domains import (
     classify_from_exception,
 )
 
-
 __all__ = [
     "RetryPolicy",
     "FallbackPolicy",
@@ -305,6 +304,7 @@ class FailureRecord:
 # Policy derivation helpers
 # ---------------------------------------------------------------------------
 
+
 def _derive_retry_policy(
     classification: FailureClassification,
 ) -> RetryPolicy:
@@ -509,7 +509,5 @@ def failure_record_summary(
         "retry_max_attempts": record.retry_policy.max_attempts,
         "fallback_allow_remote_to_local": record.fallback_policy.allow_remote_to_local,
         "fallback_allow_alternate_target": record.fallback_policy.allow_alternate_target,
-        "fallback_allow_agent_to_command_downgrade": (
-            record.fallback_policy.allow_agent_to_command_downgrade
-        ),
+        "fallback_allow_agent_to_command_downgrade": (record.fallback_policy.allow_agent_to_command_downgrade),
     }

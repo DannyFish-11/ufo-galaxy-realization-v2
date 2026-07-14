@@ -29,31 +29,35 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # 1. ConcurrencyManager 测试
 # =============================================================================
 
+
 class TestConcurrencyManager(unittest.TestCase):
     """测试并发管理器增强"""
 
     def test_import(self):
         from core.concurrency_manager import ConcurrencyManager, get_concurrency_manager
+
         mgr = ConcurrencyManager(global_max_concurrency=10)
         self.assertIsNotNone(mgr._tracked_tasks)
         self.assertEqual(mgr._max_tracked_tasks, 200)
 
     def test_task_slot_expiry(self):
         from core.concurrency_manager import TaskSlot
+
         slot = TaskSlot(task_id="t1", category="test", timeout=0.01)
         time.sleep(0.02)
         self.assertTrue(slot.is_expired)
 
     def test_lock_expiry(self):
         from core.concurrency_manager import LockInfo, LockType
+
         lock = LockInfo(
-            resource_id="r1", lock_type=LockType.EXCLUSIVE,
-            holder_id="h1", acquired_at=time.time() - 100, timeout=1.0
+            resource_id="r1", lock_type=LockType.EXCLUSIVE, holder_id="h1", acquired_at=time.time() - 100, timeout=1.0
         )
         self.assertTrue(lock.is_expired)
 
     def test_retry_policy_delay(self):
         from core.concurrency_manager import RetryPolicy
+
         policy = RetryPolicy(max_retries=3, base_delay=1.0, max_delay=10.0)
         self.assertAlmostEqual(policy.get_delay(0), 1.0)
         self.assertAlmostEqual(policy.get_delay(1), 2.0)
@@ -63,10 +67,12 @@ class TestConcurrencyManager(unittest.TestCase):
     def test_cleanup_done_callback(self):
         """测试清理任务异常退出回调"""
         from core.concurrency_manager import ConcurrencyManager
+
         mgr = ConcurrencyManager(global_max_concurrency=5)
 
         # 模拟一个失败的任务
         loop = asyncio.new_event_loop()
+
         async def failing():
             raise RuntimeError("test")
 
@@ -84,11 +90,13 @@ class TestConcurrencyManager(unittest.TestCase):
 # 2. Startup 依赖图测试
 # =============================================================================
 
+
 class TestStartupDeps(unittest.TestCase):
     """测试启动依赖图验证"""
 
     def test_circular_dep_detection(self):
         from core.startup import _check_circular_deps
+
         # 无环
         deps = {"a": ["b"], "b": ["c"], "c": []}
         cycles = _check_circular_deps(deps)
@@ -101,17 +109,20 @@ class TestStartupDeps(unittest.TestCase):
 
     def test_validate_startup_deps_no_errors(self):
         from core.startup import _validate_startup_deps
+
         errors = _validate_startup_deps()
         self.assertEqual(len(errors), 0, f"启动依赖图有问题: {errors}")
 
     def test_subsystem_deps_defined(self):
         from core.startup import _SUBSYSTEM_DEPS
+
         self.assertIn("cache", _SUBSYSTEM_DEPS)
         self.assertIn("event_bridge", _SUBSYSTEM_DEPS)
         self.assertIn("health_integration", _SUBSYSTEM_DEPS)
 
     def test_circular_dep_self_reference(self):
         from core.startup import _check_circular_deps
+
         deps = {"a": ["a"]}
         cycles = _check_circular_deps(deps)
         self.assertGreater(len(cycles), 0)
@@ -121,11 +132,13 @@ class TestStartupDeps(unittest.TestCase):
 # 3. ErrorFramework 统一响应格式测试
 # =============================================================================
 
+
 class TestErrorFramework(unittest.TestCase):
     """测试统一 API 响应和错误码"""
 
     def test_api_response_success(self):
         from core.error_framework import api_response
+
         resp = api_response(data={"items": [1, 2, 3]})
         self.assertTrue(resp["ok"])
         self.assertEqual(resp["data"]["items"], [1, 2, 3])
@@ -133,6 +146,7 @@ class TestErrorFramework(unittest.TestCase):
 
     def test_api_response_error(self):
         from core.error_framework import api_response
+
         resp = api_response(
             error={"code": "E0001", "message": "test"},
             message="something failed",
@@ -144,6 +158,7 @@ class TestErrorFramework(unittest.TestCase):
 
     def test_error_codes_defined(self):
         from core.error_framework import ErrorCode
+
         self.assertEqual(ErrorCode.INTERNAL_ERROR, "E0001")
         self.assertEqual(ErrorCode.AUTH_REQUIRED, "E1001")
         self.assertEqual(ErrorCode.DEVICE_OFFLINE, "E2001")
@@ -154,7 +169,8 @@ class TestErrorFramework(unittest.TestCase):
         self.assertEqual(ErrorCode.CONFIG_INVALID, "E7001")
 
     def test_ufo_error_to_dict(self):
-        from core.error_framework import GalaxyError, ErrorCategory
+        from core.error_framework import ErrorCategory, GalaxyError
+
         err = GalaxyError("test error", category=ErrorCategory.NETWORK)
         d = err.to_dict()
         self.assertIn("error_id", d)
@@ -162,7 +178,8 @@ class TestErrorFramework(unittest.TestCase):
         self.assertEqual(d["message"], "test error")
 
     def test_error_tracker_recording(self):
-        from core.error_framework import ErrorTracker, GalaxyError, ErrorCategory
+        from core.error_framework import ErrorCategory, ErrorTracker, GalaxyError
+
         tracker = ErrorTracker(max_records=50)
         for i in range(60):
             tracker.record(GalaxyError(f"err {i}", category=ErrorCategory.INTERNAL))
@@ -173,6 +190,7 @@ class TestErrorFramework(unittest.TestCase):
 # =============================================================================
 # 4. ConfigHotReload 原子保存测试
 # =============================================================================
+
 
 class TestConfigHotReload(unittest.TestCase):
     """测试配置热更新原子性"""
@@ -237,6 +255,7 @@ class TestConfigHotReload(unittest.TestCase):
 
     def test_config_version_tracking(self):
         from core.config_hot_reload import HotReloadConfigManager
+
         mgr = HotReloadConfigManager()
         mgr._config = {"v": 1}
         mgr.set("v", 2, source="test")
@@ -245,6 +264,7 @@ class TestConfigHotReload(unittest.TestCase):
 
     def test_config_validation(self):
         from core.config_hot_reload import HotReloadConfigManager
+
         mgr = HotReloadConfigManager()
         mgr.validator.add_rule("port", type_=int, min_val=1, max_val=65535)
         mgr._config = {"port": 8080}
@@ -256,28 +276,33 @@ class TestConfigHotReload(unittest.TestCase):
 # 5. NodeRegistry 故障转移测试
 # =============================================================================
 
+
 class TestNodeFailover(unittest.TestCase):
     """测试节点故障转移"""
 
     def test_failover_method_exists(self):
         from core.node_registry import NodeRegistry
+
         registry = NodeRegistry.__new__(NodeRegistry)
         registry._initialized = False
         registry.__init__()
-        self.assertTrue(hasattr(registry, '_failover_call'))
-        self.assertTrue(hasattr(registry, 'call_node'))
+        self.assertTrue(hasattr(registry, "_failover_call"))
+        self.assertTrue(hasattr(registry, "call_node"))
 
     def test_call_node_signature(self):
         """call_node 应支持 allow_failover 参数"""
         import inspect
+
         from core.node_registry import NodeRegistry
+
         sig = inspect.signature(NodeRegistry.call_node)
-        self.assertIn('allow_failover', sig.parameters)
+        self.assertIn("allow_failover", sig.parameters)
 
 
 # =============================================================================
 # 6. 缓冲区边界测试
 # =============================================================================
+
 
 class TestBufferBounds(unittest.TestCase):
     """测试各模块的缓冲区大小限制"""
@@ -294,6 +319,7 @@ class TestBufferBounds(unittest.TestCase):
         传输实现)。
         """
         from core.adapters.mqtt_adapter import MQTTAdapter
+
         adapter = MQTTAdapter()
         self.assertEqual(adapter.transport_type, "mqtt")
         # 节点形态确已退役,不得复活
@@ -304,6 +330,7 @@ class TestBufferBounds(unittest.TestCase):
         """EventBus 事件队列应有最大容量"""
         try:
             from integration.event_bus import EventBus
+
             # Reset singleton for testing
             EventBus._instance = None
             bus = EventBus()
@@ -317,6 +344,7 @@ class TestBufferBounds(unittest.TestCase):
         """EventBus 历史记录应使用有界 deque"""
         try:
             from integration.event_bus import EventBus
+
             EventBus._instance = None
             bus = EventBus()
             self.assertIsInstance(bus._event_history, deque)
@@ -327,9 +355,11 @@ class TestBufferBounds(unittest.TestCase):
     def test_node_comm_pending_max(self):
         """NodeCommunication pending 消息应有上限"""
         try:
-            from core.node_communication import NodeCommunication
             # Check class has the attribute in source
             import inspect
+
+            from core.node_communication import NodeCommunication
+
             source = inspect.getsource(NodeCommunication.__init__)
             self.assertIn("_max_pending", source)
         except Exception:
@@ -340,38 +370,56 @@ class TestBufferBounds(unittest.TestCase):
 # 7. 集成：确保各模块可以正常导入
 # =============================================================================
 
+
 class TestImports(unittest.TestCase):
     """确保所有修改的模块可以正常导入"""
 
     def test_import_concurrency_manager(self):
         from core.concurrency_manager import (
-            ConcurrencyManager, LockManager, ConcurrencyLimiter,
-            ResourceQueue, RetryPolicy, get_concurrency_manager,
+            ConcurrencyLimiter,
+            ConcurrencyManager,
+            LockManager,
+            ResourceQueue,
+            RetryPolicy,
+            get_concurrency_manager,
         )
 
     def test_import_startup(self):
         from core.startup import (
-            bootstrap_subsystems, shutdown_subsystems,
-            _check_circular_deps, _validate_startup_deps,
             _SUBSYSTEM_DEPS,
+            _check_circular_deps,
+            _validate_startup_deps,
+            bootstrap_subsystems,
+            shutdown_subsystems,
         )
 
     def test_import_error_framework(self):
         from core.error_framework import (
-            GalaxyError, ErrorCategory, ErrorSeverity, ErrorCode,
-            api_response, create_error_handlers, get_error_tracker,
+            ErrorCategory,
+            ErrorCode,
+            ErrorSeverity,
+            GalaxyError,
+            api_response,
+            create_error_handlers,
+            get_error_tracker,
         )
 
     def test_import_config_hot_reload(self):
         from core.config_hot_reload import (
-            HotReloadConfigManager, ConfigValidator, ConfigVersionStore,
+            ConfigValidator,
+            ConfigVersionStore,
+            HotReloadConfigManager,
             get_config_manager,
         )
 
     def test_import_node_registry(self):
         from core.node_registry import (
-            NodeRegistry, NodeStatus, NodeCategory,
-            get_registry, call_node, call_capability,
+            NodeCategory,
+            NodeRegistry,
+            NodeStatus,
+            call_capability,
+            call_node,
+            get_registry,
         )
 
 

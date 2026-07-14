@@ -4,6 +4,7 @@ core.nats_server — 内置NATS服务器
 PR-NATS-CORE: NATS是核心组件，系统启动时自动启动。
 不需要额外部署NATS服务器。
 """
+
 import asyncio
 import logging
 import os
@@ -31,8 +32,10 @@ class EmbeddedNATSServer:
         if not shutil.which("nats-server"):
             logger.info("nats-server not found, attempting auto-install...")
             if not await self._install():
-                logger.warning("nats-server not available — cross-device bus disabled. "
-                               "Install nats-server manually or set GALAXY_NATS_ENABLED=false")
+                logger.warning(
+                    "nats-server not available — cross-device bus disabled. "
+                    "Install nats-server manually or set GALAXY_NATS_ENABLED=false"
+                )
                 return False
 
         # 启动
@@ -40,9 +43,18 @@ class EmbeddedNATSServer:
             # PR-NATS-ARGS: v2.10.x uses JetStream — remove legacy --max_memory_store/--max_file_store flags
             # PR-NATS-PIPE: redirect stdout/stderr to DEVNULL to prevent pipe buffer deadlock
             self.process = subprocess.Popen(
-                ["nats-server", "--addr", self.host, "--port", str(self.port),
-                 "--jetstream", "--store_dir", str(self.data_dir)],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                [
+                    "nats-server",
+                    "--addr",
+                    self.host,
+                    "--port",
+                    str(self.port),
+                    "--jetstream",
+                    "--store_dir",
+                    str(self.data_dir),
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
             )
 
             # 等待启动
@@ -55,6 +67,7 @@ class EmbeddedNATSServer:
                 # 测试连接
                 try:
                     import nats
+
                     await nats.connect(f"nats://localhost:{self.port}", connect_timeout=1)
                     break
                 except Exception:
@@ -74,17 +87,31 @@ class EmbeddedNATSServer:
     async def _install(self) -> bool:
         """自动安装nats-server"""
         import platform
+
         system = platform.system().lower()
 
         try:
             if system == "linux":
-                subprocess.run(["sh", "-c", "curl -sf https://get-nats.io | sh"],
-                             check=True, timeout=120, capture_output=True, encoding="utf-8", errors="replace")
+                subprocess.run(
+                    ["sh", "-c", "curl -sf https://get-nats.io | sh"],
+                    check=True,
+                    timeout=120,
+                    capture_output=True,
+                    encoding="utf-8",
+                    errors="replace",
+                )
             elif system == "darwin":
-                subprocess.run(["brew", "install", "nats-server"],
-                             check=True, timeout=120, capture_output=True, encoding="utf-8", errors="replace")
+                subprocess.run(
+                    ["brew", "install", "nats-server"],
+                    check=True,
+                    timeout=120,
+                    capture_output=True,
+                    encoding="utf-8",
+                    errors="replace",
+                )
             elif system == "windows":
                 import urllib.request
+
                 nats_dir = Path.home() / ".lumiv" / "bin"
                 nats_dir.mkdir(parents=True, exist_ok=True)
                 nats_exe = nats_dir / "nats-server.exe"
@@ -93,7 +120,6 @@ class EmbeddedNATSServer:
                 # 镜像源列表（按优先级）
                 mirrors = [
                     "https://mirror.ghproxy.com/https://github.com",  # 2025 verified
-
                     "https://mirror.ghproxy.com/https://github.com",
                     "https://github.com",  # 直连兜底
                 ]
@@ -116,7 +142,8 @@ class EmbeddedNATSServer:
                 if downloaded:
                     try:
                         import zipfile
-                        with zipfile.ZipFile(zip_path, 'r') as z:
+
+                        with zipfile.ZipFile(zip_path, "r") as z:
                             for name in z.namelist():
                                 if name.endswith("nats-server.exe"):
                                     z.extract(name, nats_dir)

@@ -62,7 +62,6 @@ from core.unified_execution_governance import (
     record_state_uplink,
 )
 
-
 # ---------------------------------------------------------------------------
 # Shared fixture — reset all governance runtime state between tests.
 # ---------------------------------------------------------------------------
@@ -136,9 +135,9 @@ class TestGroupA_CrossModeTerminalClosure:
             f"FAILED A: canonical_terminal_outcome mismatch. "
             f"Expected {expected_outcome!r}, got {truth['canonical_terminal_outcome']!r}."
         )
-        assert truth["terminal_truth_authoritative_source"] == "center_lifecycle", (
-            "FAILED A: terminal truth authority must be center_lifecycle."
-        )
+        assert (
+            truth["terminal_truth_authoritative_source"] == "center_lifecycle"
+        ), "FAILED A: terminal truth authority must be center_lifecycle."
 
     def test_A09_goal_execution_full_lifecycle_closure(self):
         """A09: goal_execution with uplink records closes deterministically."""
@@ -147,22 +146,27 @@ class TestGroupA_CrossModeTerminalClosure:
 
         for phase in [ExecutionLifecyclePhase.created, ExecutionLifecyclePhase.running]:
             record_execution_lifecycle_event(
-                execution_id=eid, device_id=did,
-                execution_type=ExecutionType.goal_execution, phase=phase,
+                execution_id=eid,
+                device_id=did,
+                execution_type=ExecutionType.goal_execution,
+                phase=phase,
                 enforce_transition=False,
             )
         record_state_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             payload={"progress": 0.9, "stage": "finalizing"},
         )
         record_result_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             payload={"status": "ok"},
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.succeeded,
         )
@@ -181,18 +185,24 @@ class TestGroupA_CrossModeTerminalClosure:
 
         with _patch_mode_gate_pass():
             verdict = evaluate_execution_governance(
-                ExecutionType.delegated_execution, did,
-                execution_id=eid, register_if_accepted=True,
+                ExecutionType.delegated_execution,
+                did,
+                execution_id=eid,
+                register_if_accepted=True,
             )
         assert verdict.accepted is True
 
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.delegated_execution,
-            phase=ExecutionLifecyclePhase.running, enforce_transition=False,
+            phase=ExecutionLifecyclePhase.running,
+            enforce_transition=False,
         )
         notify_execution_completed(
-            did, ExecutionType.delegated_execution, eid,
+            did,
+            ExecutionType.delegated_execution,
+            eid,
             completion_phase=ExecutionLifecyclePhase.succeeded,
         )
 
@@ -217,17 +227,23 @@ class TestGroupB_InterruptRetryReplay:
         phases = [
             (ExecutionLifecyclePhase.created, {}),
             (ExecutionLifecyclePhase.running, {}),
-            (ExecutionLifecyclePhase.interrupted, {
-                "interruption_reason": InterruptionReason.operator_interrupt,
-            }),
+            (
+                ExecutionLifecyclePhase.interrupted,
+                {
+                    "interruption_reason": InterruptionReason.operator_interrupt,
+                },
+            ),
             (ExecutionLifecyclePhase.retrying, {}),
             (ExecutionLifecyclePhase.succeeded, {}),
         ]
         for phase, kwargs in phases:
             record_execution_lifecycle_event(
-                execution_id=eid, device_id=did,
+                execution_id=eid,
+                device_id=did,
                 execution_type=ExecutionType.goal_execution,
-                phase=phase, enforce_transition=False, **kwargs,
+                phase=phase,
+                enforce_transition=False,
+                **kwargs,
             )
 
         truth = get_uplink_truth_state(eid)
@@ -243,18 +259,27 @@ class TestGroupB_InterruptRetryReplay:
         for phase, kwargs in [
             (ExecutionLifecyclePhase.created, {}),
             (ExecutionLifecyclePhase.running, {}),
-            (ExecutionLifecyclePhase.failed, {
-                "failure_semantic": FailureSemantic.reject_with_reason,
-            }),
-            (ExecutionLifecyclePhase.replayed, {
-                "replay_reason": ReplayReason.failure_replay,
-            }),
+            (
+                ExecutionLifecyclePhase.failed,
+                {
+                    "failure_semantic": FailureSemantic.reject_with_reason,
+                },
+            ),
+            (
+                ExecutionLifecyclePhase.replayed,
+                {
+                    "replay_reason": ReplayReason.failure_replay,
+                },
+            ),
             (ExecutionLifecyclePhase.succeeded, {}),
         ]:
             record_execution_lifecycle_event(
-                execution_id=eid, device_id=did,
+                execution_id=eid,
+                device_id=did,
                 execution_type=ExecutionType.goal_execution,
-                phase=phase, enforce_transition=False, **kwargs,
+                phase=phase,
+                enforce_transition=False,
+                **kwargs,
             )
 
         truth = get_uplink_truth_state(eid)
@@ -273,18 +298,18 @@ class TestGroupB_InterruptRetryReplay:
             ExecutionLifecyclePhase.timed_out,
         ]:
             record_execution_lifecycle_event(
-                execution_id=eid, device_id=did,
+                execution_id=eid,
+                device_id=did,
                 execution_type=ExecutionType.goal_execution,
-                phase=phase, enforce_transition=False,
+                phase=phase,
+                enforce_transition=False,
             )
 
         history = get_execution_lifecycle_history(eid)
         phases = [e["phase"] for e in history]
         assert "failed" in phases
         assert "retrying" in phases
-        attempt_at_retry = next(
-            e["attempt"] for e in history if e["phase"] == "retrying"
-        )
+        attempt_at_retry = next(e["attempt"] for e in history if e["phase"] == "retrying")
         assert attempt_at_retry == 2
 
     def test_B04_interrupted_by_takeover_preemption_reason_recorded(self):
@@ -293,12 +318,15 @@ class TestGroupB_InterruptRetryReplay:
         did = "device-pr11-b04"
 
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
-            phase=ExecutionLifecyclePhase.running, enforce_transition=False,
+            phase=ExecutionLifecyclePhase.running,
+            enforce_transition=False,
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.interrupted,
             interruption_reason=InterruptionReason.takeover_preempted,
@@ -323,31 +351,34 @@ class TestGroupC_DelayedConflictingObservations:
         eid = "exec-pr11-c01-late-success-vs-timeout"
         did = "device-pr11-c01"
 
-        with patch("core.unified_execution_governance.time.time",
-                   side_effect=[100.0, 101.0, 110.0]):
+        with patch("core.unified_execution_governance.time.time", side_effect=[100.0, 101.0, 110.0]):
             # t=100: created lifecycle event
             # t=101: timed_out lifecycle event (terminal — center authority set)
             # t=110: result uplink arrives late (after terminal — delayed conflict)
             record_execution_lifecycle_event(
-                execution_id=eid, device_id=did,
+                execution_id=eid,
+                device_id=did,
                 execution_type=ExecutionType.goal_execution,
                 phase=ExecutionLifecyclePhase.created,
             )
             record_execution_lifecycle_event(
-                execution_id=eid, device_id=did,
+                execution_id=eid,
+                device_id=did,
                 execution_type=ExecutionType.goal_execution,
-                phase=ExecutionLifecyclePhase.timed_out, enforce_transition=False,
+                phase=ExecutionLifecyclePhase.timed_out,
+                enforce_transition=False,
             )
             record_result_uplink(
-                execution_id=eid, device_id=did,
+                execution_id=eid,
+                device_id=did,
                 execution_type=ExecutionType.goal_execution,
                 payload={"status": "success"},
             )
 
         truth = get_uplink_truth_state(eid)
-        assert truth["canonical_terminal_outcome"] == "timeout", (
-            "REGRESSION C01: center timeout must not be overridden by late success report."
-        )
+        assert (
+            truth["canonical_terminal_outcome"] == "timeout"
+        ), "REGRESSION C01: center timeout must not be overridden by late success report."
         assert truth["terminal_truth_authoritative_source"] == "center_lifecycle"
         assert truth["reconciliation_conflict"] is True
         assert truth["reconciliation_delayed_observation"] is True
@@ -358,26 +389,28 @@ class TestGroupC_DelayedConflictingObservations:
         eid = "exec-pr11-c02-late-failure-vs-success"
         did = "device-pr11-c02"
 
-        with patch("core.unified_execution_governance.time.time",
-                   side_effect=[200.0, 201.0, 210.0]):
+        with patch("core.unified_execution_governance.time.time", side_effect=[200.0, 201.0, 210.0]):
             # t=200: succeeded lifecycle event (terminal — center authority set)
             # t=201: (unused; reserved for potential future events)
             # t=210: result uplink arrives late (after terminal — delayed conflict)
             record_execution_lifecycle_event(
-                execution_id=eid, device_id=did,
+                execution_id=eid,
+                device_id=did,
                 execution_type=ExecutionType.delegated_execution,
-                phase=ExecutionLifecyclePhase.succeeded, enforce_transition=False,
+                phase=ExecutionLifecyclePhase.succeeded,
+                enforce_transition=False,
             )
             record_result_uplink(
-                execution_id=eid, device_id=did,
+                execution_id=eid,
+                device_id=did,
                 execution_type=ExecutionType.delegated_execution,
                 payload={"status": "failed", "error": "stale_observation"},
             )
 
         truth = get_uplink_truth_state(eid)
-        assert truth["canonical_terminal_outcome"] == "success", (
-            "REGRESSION C02: center success must not be overridden by delayed failure report."
-        )
+        assert (
+            truth["canonical_terminal_outcome"] == "success"
+        ), "REGRESSION C02: center success must not be overridden by delayed failure report."
         assert truth["reconciliation_conflict"] is True
         assert truth["reconciliation_delayed_observation"] is True
 
@@ -387,17 +420,21 @@ class TestGroupC_DelayedConflictingObservations:
         did = "device-pr11-c03"
 
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.parallel_subtask,
-            phase=ExecutionLifecyclePhase.running, enforce_transition=False,
+            phase=ExecutionLifecyclePhase.running,
+            enforce_transition=False,
         )
         record_result_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.parallel_subtask,
             payload={"status": "failed"},
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.parallel_subtask,
             phase=ExecutionLifecyclePhase.succeeded,
         )
@@ -412,28 +449,30 @@ class TestGroupC_DelayedConflictingObservations:
         eid = "exec-pr11-c04-multi-conflict"
         did = "device-pr11-c04"
 
-        with patch("core.unified_execution_governance.time.time",
-                   side_effect=[300.0, 301.0, 305.0, 310.0, 315.0]):
+        with patch("core.unified_execution_governance.time.time", side_effect=[300.0, 301.0, 305.0, 310.0, 315.0]):
             # t=300: succeeded lifecycle event (terminal — center authority set)
             # t=301, 305, 310: three successive late conflicting uplinks (failed/timeout/failed)
             # t=315: (reserved for any additional uplink if needed)
             record_execution_lifecycle_event(
-                execution_id=eid, device_id=did,
+                execution_id=eid,
+                device_id=did,
                 execution_type=ExecutionType.goal_execution,
-                phase=ExecutionLifecyclePhase.succeeded, enforce_transition=False,
+                phase=ExecutionLifecyclePhase.succeeded,
+                enforce_transition=False,
             )
             # Send three conflicting late uplinks
             for status in ["failed", "timeout", "failed"]:
                 record_result_uplink(
-                    execution_id=eid, device_id=did,
+                    execution_id=eid,
+                    device_id=did,
                     execution_type=ExecutionType.goal_execution,
                     payload={"status": status},
                 )
 
         truth = get_uplink_truth_state(eid)
-        assert truth["canonical_terminal_outcome"] == "success", (
-            "REGRESSION C04: multiple conflicting late uplinks must not shift center truth."
-        )
+        assert (
+            truth["canonical_terminal_outcome"] == "success"
+        ), "REGRESSION C04: multiple conflicting late uplinks must not shift center truth."
         assert truth["terminal_truth_authoritative_source"] == "center_lifecycle"
 
 
@@ -451,7 +490,8 @@ class TestGroupD_PartialAndDegradedObservations:
         did = "device-pr11-d01"
 
         record_result_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.delegated_execution,
             payload={"status": "success"},
         )
@@ -471,7 +511,8 @@ class TestGroupD_PartialAndDegradedObservations:
         did = "device-pr11-d02"
 
         record_state_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.parallel_subtask,
             payload={"phase": "running", "progress": 0.5},
         )
@@ -486,12 +527,15 @@ class TestGroupD_PartialAndDegradedObservations:
         did = "device-pr11-d03"
 
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
-            phase=ExecutionLifecyclePhase.succeeded, enforce_transition=False,
+            phase=ExecutionLifecyclePhase.succeeded,
+            enforce_transition=False,
         )
         record_result_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             payload={"status": "ok"},
         )
@@ -506,12 +550,14 @@ class TestGroupD_PartialAndDegradedObservations:
         did = "device-pr11-d04"
 
         record_result_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.parallel_subtask,
             payload={"status": "success"},
         )
         record_state_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.parallel_subtask,
             payload={"status": "failed", "reason": "partial_node_failure"},
         )
@@ -525,12 +571,15 @@ class TestGroupD_PartialAndDegradedObservations:
         did = "device-pr11-d05"
 
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.delegated_execution,
-            phase=ExecutionLifecyclePhase.running, enforce_transition=False,
+            phase=ExecutionLifecyclePhase.running,
+            enforce_transition=False,
         )
         record_state_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.delegated_execution,
             payload={"phase": "running", "degraded": True, "reason": "high_latency"},
         )
@@ -555,12 +604,15 @@ class TestGroupE_RecoveryPathCanonicalStability:
         did = "device-pr11-e01"
 
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.delegated_execution,
-            phase=ExecutionLifecyclePhase.succeeded, enforce_transition=False,
+            phase=ExecutionLifecyclePhase.succeeded,
+            enforce_transition=False,
         )
         record_state_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.delegated_execution,
             payload={"phase": "succeeded", "degraded": True, "reason": "network_pressure"},
         )
@@ -570,15 +622,16 @@ class TestGroupE_RecoveryPathCanonicalStability:
         assert degraded_truth["canonical_runtime_health"] == "degraded"
 
         record_state_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.delegated_execution,
             payload={"phase": "succeeded", "recovered": True, "reason": "link_restored"},
         )
 
         recovered_truth = get_uplink_truth_state(eid)
-        assert recovered_truth["canonical_terminal_outcome"] == "success", (
-            "REGRESSION E01: recovery must not change canonical terminal outcome."
-        )
+        assert (
+            recovered_truth["canonical_terminal_outcome"] == "success"
+        ), "REGRESSION E01: recovery must not change canonical terminal outcome."
         assert recovered_truth["canonical_runtime_health"] == "recovered"
         assert recovered_truth["terminal_truth_authoritative_source"] == "center_lifecycle"
 
@@ -588,22 +641,25 @@ class TestGroupE_RecoveryPathCanonicalStability:
         did = "device-pr11-e02"
 
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
-            phase=ExecutionLifecyclePhase.succeeded, enforce_transition=False,
+            phase=ExecutionLifecyclePhase.succeeded,
+            enforce_transition=False,
         )
 
         for reason in ["packet_loss", "high_latency", "reconnect"]:
             record_state_uplink(
-                execution_id=eid, device_id=did,
+                execution_id=eid,
+                device_id=did,
                 execution_type=ExecutionType.goal_execution,
                 payload={"degraded": True, "reason": reason},
             )
 
         truth = get_uplink_truth_state(eid)
-        assert truth["canonical_terminal_outcome"] == "success", (
-            "REGRESSION E02: multiple degraded observations must not shift center success."
-        )
+        assert (
+            truth["canonical_terminal_outcome"] == "success"
+        ), "REGRESSION E02: multiple degraded observations must not shift center success."
 
     def test_E03_recovery_after_interrupt_preserves_interrupted_terminal_if_not_overridden(self):
         """E03: Interrupted execution with recovery uplink — center interrupted outcome holds."""
@@ -611,22 +667,24 @@ class TestGroupE_RecoveryPathCanonicalStability:
         did = "device-pr11-e03"
 
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.interrupted,
             interruption_reason=InterruptionReason.device_disconnect,
             enforce_transition=False,
         )
         record_state_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             payload={"recovered": True, "reason": "device_reconnected"},
         )
 
         truth = get_uplink_truth_state(eid)
-        assert truth["canonical_terminal_outcome"] == "interrupted", (
-            "REGRESSION E03: interrupted center truth must not be overridden by recovery uplink."
-        )
+        assert (
+            truth["canonical_terminal_outcome"] == "interrupted"
+        ), "REGRESSION E03: interrupted center truth must not be overridden by recovery uplink."
 
     def test_E04_failed_then_recovered_canonical_outcome_is_failure(self):
         """E04: Failed center phase + recovered uplink — terminal outcome stays failure."""
@@ -634,20 +692,23 @@ class TestGroupE_RecoveryPathCanonicalStability:
         did = "device-pr11-e04"
 
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.delegated_execution,
-            phase=ExecutionLifecyclePhase.failed, enforce_transition=False,
+            phase=ExecutionLifecyclePhase.failed,
+            enforce_transition=False,
         )
         record_state_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.delegated_execution,
             payload={"recovered": True, "reason": "failover_activated"},
         )
 
         truth = get_uplink_truth_state(eid)
-        assert truth["canonical_terminal_outcome"] == "failure", (
-            "REGRESSION E04: failed center truth must not be overridden by recovery state."
-        )
+        assert (
+            truth["canonical_terminal_outcome"] == "failure"
+        ), "REGRESSION E04: failed center truth must not be overridden by recovery state."
 
 
 # ===========================================================================
@@ -666,23 +727,25 @@ class TestGroupF_CrossDeviceGovernanceIsolation:
         did_b = "device-pr11-f01-b"
 
         record_execution_lifecycle_event(
-            execution_id=eid_a, device_id=did_a,
+            execution_id=eid_a,
+            device_id=did_a,
             execution_type=ExecutionType.goal_execution,
-            phase=ExecutionLifecyclePhase.succeeded, enforce_transition=False,
+            phase=ExecutionLifecyclePhase.succeeded,
+            enforce_transition=False,
         )
         record_execution_lifecycle_event(
-            execution_id=eid_b, device_id=did_b,
+            execution_id=eid_b,
+            device_id=did_b,
             execution_type=ExecutionType.goal_execution,
-            phase=ExecutionLifecyclePhase.running, enforce_transition=False,
+            phase=ExecutionLifecyclePhase.running,
+            enforce_transition=False,
         )
 
         truth_a = get_uplink_truth_state(eid_a)
         truth_b = get_uplink_truth_state(eid_b)
 
         assert truth_a["is_terminal"] is True
-        assert truth_b["is_terminal"] is False, (
-            "REGRESSION F01: device B must not inherit device A's terminal state."
-        )
+        assert truth_b["is_terminal"] is False, "REGRESSION F01: device B must not inherit device A's terminal state."
 
     def test_F02_takeover_on_device_a_does_not_block_device_b_delegated(self):
         """F02: takeover on device A must not block delegated_execution on device B."""
@@ -691,18 +754,22 @@ class TestGroupF_CrossDeviceGovernanceIsolation:
 
         with _patch_mode_gate_pass():
             takeover = evaluate_execution_governance(
-                ExecutionType.takeover_request, did_a,
-                execution_id="tkv-pr11-f02", register_if_accepted=True,
+                ExecutionType.takeover_request,
+                did_a,
+                execution_id="tkv-pr11-f02",
+                register_if_accepted=True,
             )
             delegated = evaluate_execution_governance(
-                ExecutionType.delegated_execution, did_b,
-                execution_id="del-pr11-f02", register_if_accepted=False,
+                ExecutionType.delegated_execution,
+                did_b,
+                execution_id="del-pr11-f02",
+                register_if_accepted=False,
             )
 
         assert takeover.accepted is True
-        assert delegated.accepted is True, (
-            "REGRESSION F02: takeover on device A must not block device B's delegated execution."
-        )
+        assert (
+            delegated.accepted is True
+        ), "REGRESSION F02: takeover on device A must not block device B's delegated execution."
 
 
 # ===========================================================================
@@ -733,9 +800,11 @@ class TestGroupG_MissionCompletionDeterminism:
         did = f"device-pr11-g-{terminal_phase.value}"
 
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
-            phase=terminal_phase, enforce_transition=False,
+            phase=terminal_phase,
+            enforce_transition=False,
         )
 
         truth = get_uplink_truth_state(eid)
@@ -753,13 +822,17 @@ class TestGroupG_MissionCompletionDeterminism:
 
         with _patch_mode_gate_pass():
             verdict = evaluate_execution_governance(
-                ExecutionType.goal_execution, did,
-                execution_id=eid, register_if_accepted=True,
+                ExecutionType.goal_execution,
+                did,
+                execution_id=eid,
+                register_if_accepted=True,
             )
         assert verdict.accepted is True
 
         removed = notify_execution_completed(
-            did, ExecutionType.goal_execution, eid,
+            did,
+            ExecutionType.goal_execution,
+            eid,
             completion_phase=ExecutionLifecyclePhase.succeeded,
         )
         assert removed is True
@@ -774,17 +847,15 @@ class TestGroupG_MissionCompletionDeterminism:
         execution_types = matrix["execution_types"]
 
         required_types = {
-            "goal_execution", "parallel_subtask",
-            "takeover_request", "delegated_execution",
+            "goal_execution",
+            "parallel_subtask",
+            "takeover_request",
+            "delegated_execution",
         }
         for et in required_types:
-            assert et in execution_types, (
-                f"REGRESSION G07: execution type {et!r} missing from lifecycle matrix."
-            )
+            assert et in execution_types, f"REGRESSION G07: execution type {et!r} missing from lifecycle matrix."
 
         semantics = matrix["governance_semantics"]
         required_semantics = {"failure", "timeout", "retry", "replay", "interruption"}
         for sem in required_semantics:
-            assert sem in semantics, (
-                f"REGRESSION G07: governance semantic {sem!r} missing from lifecycle matrix."
-            )
+            assert sem in semantics, f"REGRESSION G07: governance semantic {sem!r} missing from lifecycle matrix."

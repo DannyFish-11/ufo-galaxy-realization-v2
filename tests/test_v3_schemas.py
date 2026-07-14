@@ -17,8 +17,8 @@ import json
 import os
 import pathlib
 
-import pytest
 import jsonschema
+import pytest
 from jsonschema import Draft202012Validator, ValidationError
 
 # ---------------------------------------------------------------------------
@@ -53,14 +53,13 @@ def assert_invalid(schema: dict, instance: dict):
     """Assert that *instance* does NOT conform to *schema*."""
     validator = Draft202012Validator(schema)
     errors = list(validator.iter_errors(instance))
-    assert errors, (
-        f"Expected validation failure but schema accepted the instance:\n{json.dumps(instance, indent=2)}"
-    )
+    assert errors, f"Expected validation failure but schema accepted the instance:\n{json.dumps(instance, indent=2)}"
 
 
 # ---------------------------------------------------------------------------
 # 1. Schema files load without error
 # ---------------------------------------------------------------------------
+
 
 class TestSchemaFilesLoad:
     @pytest.mark.parametrize("name", list(SCHEMA_FILES))
@@ -84,6 +83,7 @@ class TestSchemaFilesLoad:
 # 2. Embedded examples are accepted (positive tests)
 # ---------------------------------------------------------------------------
 
+
 class TestEmbeddedExamplesValid:
     @pytest.mark.parametrize("name", list(SCHEMA_FILES))
     def test_examples_pass_validation(self, name):
@@ -95,46 +95,54 @@ class TestEmbeddedExamplesValid:
             try:
                 validate(schema, example)
             except ValidationError as exc:
-                pytest.fail(
-                    f"Schema '{name}' example[{i}] failed validation:\n{exc.message}"
-                )
+                pytest.fail(f"Schema '{name}' example[{i}] failed validation:\n{exc.message}")
 
 
 # ---------------------------------------------------------------------------
 # 3. Positive tests – well-formed v3 payloads
 # ---------------------------------------------------------------------------
 
+
 class TestDeviceRegisterValid:
     def setup_method(self):
         self.schema = load_schema("device_register")
 
     def test_minimal_v3(self):
-        validate(self.schema, {
-            "version": "3.0",
-            "type": "device_register",
-            "device_id": "dev-001",
-        })
+        validate(
+            self.schema,
+            {
+                "version": "3.0",
+                "type": "device_register",
+                "device_id": "dev-001",
+            },
+        )
 
     def test_full_v3(self):
-        validate(self.schema, {
-            "version": "3.0",
-            "type": "device_register",
-            "device_id": "android-abc123",
-            "device_type": "android_phone",
-            "platform": "android",
-            "name": "My Phone",
-            "model": "Pixel 7",
-            "os_version": "Android 14",
-            "sdk_version": 34,
-            "capabilities": 1023,
-        })
+        validate(
+            self.schema,
+            {
+                "version": "3.0",
+                "type": "device_register",
+                "device_id": "android-abc123",
+                "device_type": "android_phone",
+                "platform": "android",
+                "name": "My Phone",
+                "model": "Pixel 7",
+                "os_version": "Android 14",
+                "sdk_version": 34,
+                "capabilities": 1023,
+            },
+        )
 
     def test_v3_1_version_accepted(self):
-        validate(self.schema, {
-            "version": "3.1",
-            "type": "device_register",
-            "device_id": "dev-002",
-        })
+        validate(
+            self.schema,
+            {
+                "version": "3.1",
+                "type": "device_register",
+                "device_id": "dev-002",
+            },
+        )
 
 
 class TestHeartbeatValid:
@@ -142,20 +150,26 @@ class TestHeartbeatValid:
         self.schema = load_schema("heartbeat")
 
     def test_minimal_v3(self):
-        validate(self.schema, {
-            "version": "3.0",
-            "type": "heartbeat",
-            "device_id": "dev-001",
-        })
+        validate(
+            self.schema,
+            {
+                "version": "3.0",
+                "type": "heartbeat",
+                "device_id": "dev-001",
+            },
+        )
 
     def test_with_trace_metadata(self):
-        validate(self.schema, {
-            "version": "3.0",
-            "type": "heartbeat",
-            "device_id": "dev-001",
-            "trace_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
-            "route_mode": "cross_device",
-        })
+        validate(
+            self.schema,
+            {
+                "version": "3.0",
+                "type": "heartbeat",
+                "device_id": "dev-001",
+                "trace_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+                "route_mode": "cross_device",
+            },
+        )
 
 
 class TestCapabilityReportValid:
@@ -163,31 +177,40 @@ class TestCapabilityReportValid:
         self.schema = load_schema("capability_report")
 
     def test_minimal_v3(self):
-        validate(self.schema, {
-            "version": "3.0",
-            "type": "capability_report",
-            "device_id": "android-abc123",
-            "platform": "android",
-            "supported_actions": ["tap", "swipe", "screenshot"],
-        })
+        validate(
+            self.schema,
+            {
+                "version": "3.0",
+                "type": "capability_report",
+                "device_id": "android-abc123",
+                "platform": "android",
+                "supported_actions": ["tap", "swipe", "screenshot"],
+            },
+        )
 
     def test_with_capability_schemas(self):
-        validate(self.schema, {
-            "version": "3.0",
-            "type": "capability_report",
-            "device_id": "android-abc123",
-            "platform": "android",
-            "supported_actions": ["tap"],
-            "capability_version": "1.0",
-            "capability_schemas": [
-                {
-                    "action": "tap",
-                    "params": {"type": "object", "properties": {"x": {"type": "integer"}, "y": {"type": "integer"}}},
-                    "exec_mode": "remote",
-                    "tags": ["ui", "touch"],
-                }
-            ],
-        })
+        validate(
+            self.schema,
+            {
+                "version": "3.0",
+                "type": "capability_report",
+                "device_id": "android-abc123",
+                "platform": "android",
+                "supported_actions": ["tap"],
+                "capability_version": "1.0",
+                "capability_schemas": [
+                    {
+                        "action": "tap",
+                        "params": {
+                            "type": "object",
+                            "properties": {"x": {"type": "integer"}, "y": {"type": "integer"}},
+                        },
+                        "exec_mode": "remote",
+                        "tags": ["ui", "touch"],
+                    }
+                ],
+            },
+        )
 
 
 class TestTaskAssignValid:
@@ -195,29 +218,33 @@ class TestTaskAssignValid:
         self.schema = load_schema("task_assign")
 
     def test_minimal_v3(self):
-        validate(self.schema, {
-            "version": "3.0",
-            "type": "task_assign",
-            "device_id": "android-abc123",
-            "task_id": "task-001",
-            "task_type": "ui_automation",
-            "payload": {"action": "tap", "x": 100, "y": 200},
-        })
+        validate(
+            self.schema,
+            {
+                "version": "3.0",
+                "type": "task_assign",
+                "device_id": "android-abc123",
+                "task_id": "task-001",
+                "task_type": "ui_automation",
+                "payload": {"action": "tap", "x": 100, "y": 200},
+            },
+        )
 
     def test_with_commands(self):
-        validate(self.schema, {
-            "version": "3.0",
-            "type": "task_assign",
-            "device_id": "android-abc123",
-            "task_id": "task-002",
-            "task_type": "screenshot",
-            "payload": {},
-            "priority": 8,
-            "timeout": 10,
-            "commands": [
-                {"command_id": "cmd-1", "tool_name": "screenshot", "parameters": {}}
-            ],
-        })
+        validate(
+            self.schema,
+            {
+                "version": "3.0",
+                "type": "task_assign",
+                "device_id": "android-abc123",
+                "task_id": "task-002",
+                "task_type": "screenshot",
+                "payload": {},
+                "priority": 8,
+                "timeout": 10,
+                "commands": [{"command_id": "cmd-1", "tool_name": "screenshot", "parameters": {}}],
+            },
+        )
 
 
 class TestCommandResultValid:
@@ -225,57 +252,73 @@ class TestCommandResultValid:
         self.schema = load_schema("command_result")
 
     def test_minimal_v3(self):
-        validate(self.schema, {
-            "version": "3.0",
-            "type": "command_result",
-            "device_id": "android-abc123",
-        })
+        validate(
+            self.schema,
+            {
+                "version": "3.0",
+                "type": "command_result",
+                "device_id": "android-abc123",
+            },
+        )
 
     def test_with_results(self):
-        validate(self.schema, {
-            "version": "3.0",
-            "type": "command_result",
-            "device_id": "android-abc123",
-            "task_id": "task-001",
-            "task_status": "completed",
-            "results": [
-                {
-                    "command_id": "cmd-1",
-                    "status": "success",
-                    "result": {"screenshot_path": "/sdcard/shot.png"},
-                    "execution_time": 0.5,
-                }
-            ],
-        })
+        validate(
+            self.schema,
+            {
+                "version": "3.0",
+                "type": "command_result",
+                "device_id": "android-abc123",
+                "task_id": "task-001",
+                "task_status": "completed",
+                "results": [
+                    {
+                        "command_id": "cmd-1",
+                        "status": "success",
+                        "result": {"screenshot_path": "/sdcard/shot.png"},
+                        "execution_time": 0.5,
+                    }
+                ],
+            },
+        )
 
     def test_failure_result(self):
-        validate(self.schema, {
-            "version": "3.0",
-            "type": "command_result",
-            "device_id": "android-abc123",
-            "task_id": "task-002",
-            "task_status": "failed",
-            "results": [
-                {
-                    "command_id": "cmd-2",
-                    "status": "failure",
-                    "error": "Element not found",
-                    "execution_time": 1.2,
-                }
-            ],
-            "error": "Task failed: element not found",
-        })
+        validate(
+            self.schema,
+            {
+                "version": "3.0",
+                "type": "command_result",
+                "device_id": "android-abc123",
+                "task_id": "task-002",
+                "task_status": "failed",
+                "results": [
+                    {
+                        "command_id": "cmd-2",
+                        "status": "failure",
+                        "error": "Element not found",
+                        "execution_time": 1.2,
+                    }
+                ],
+                "error": "Task failed: element not found",
+            },
+        )
 
 
 # ---------------------------------------------------------------------------
 # 4. Negative tests – missing required fields are rejected
 # ---------------------------------------------------------------------------
 
+
 class TestMissingVersionRejected:
-    @pytest.mark.parametrize("name", [
-        "device_register", "heartbeat", "capability_report",
-        "task_assign", "command_result",
-    ])
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "device_register",
+            "heartbeat",
+            "capability_report",
+            "task_assign",
+            "command_result",
+        ],
+    )
     def test_missing_version_rejected(self, name):
         schema = load_schema(name)
         base = {
@@ -291,10 +334,16 @@ class TestMissingVersionRejected:
         instance = {k: v for k, v in base.items() if k != del_key}
         assert_invalid(schema, instance)
 
-    @pytest.mark.parametrize("name", [
-        "device_register", "heartbeat", "capability_report",
-        "task_assign", "command_result",
-    ])
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "device_register",
+            "heartbeat",
+            "capability_report",
+            "task_assign",
+            "command_result",
+        ],
+    )
     def test_legacy_version_rejected(self, name):
         """Version '2.0' must fail the pattern ^3[.] check (version field must start with '3.')."""
         schema = load_schema(name)

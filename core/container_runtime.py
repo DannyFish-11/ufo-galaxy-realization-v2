@@ -92,11 +92,10 @@ def interactive_select(avail: List[str]) -> str:
         return f"{color}{t}{Colors.ENDC}" if r._use_color() else t
 
     print()
-    print("  " + _c("选择容器运行时", Colors.BOLD + Colors.CYAN)
-          + _c("  (后台拉取并运行节点基础设施)", Colors.DIM))
+    print("  " + _c("选择容器运行时", Colors.BOLD + Colors.CYAN) + _c("  (后台拉取并运行节点基础设施)", Colors.DIM))
     r.rule()
     for i, rt in enumerate(avail, 1):
-        is_first = (i == 1)
+        is_first = i == 1
         marker = _c("▸", Colors.GREEN) if is_first else " "
         num = _c(f"[{i}]", Colors.BOLD if is_first else Colors.DIM)
         name = r.pad_display(rt.capitalize(), 10)
@@ -148,8 +147,16 @@ def _install_command(rt: str) -> Optional[List[str]]:
     if sys.platform == "win32":
         wg = shutil.which("winget")
         if wg and rt in _WINGET_ID:
-            return [wg, "install", "--id", _WINGET_ID[rt], "-e", "--silent",
-                    "--accept-package-agreements", "--accept-source-agreements"]
+            return [
+                wg,
+                "install",
+                "--id",
+                _WINGET_ID[rt],
+                "-e",
+                "--silent",
+                "--accept-package-agreements",
+                "--accept-source-agreements",
+            ]
         return None
     if sys.platform == "darwin":
         brew = shutil.which("brew")
@@ -160,10 +167,12 @@ def _install_command(rt: str) -> Optional[List[str]]:
     # Linux:优先 apt,其次 dnf/pacman/zypper。docker 用发行版包名 docker.io / docker;
     # 无 sudo 时会失败(尽力而为)。Podman 在各发行版包名统一为 podman。
     pkg = "podman" if rt == "podman" else ("docker.io" if shutil.which("apt-get") else "docker")
-    for pm, args in (("apt-get", ["install", "-y", pkg]),
-                     ("dnf", ["install", "-y", pkg]),
-                     ("pacman", ["-S", "--noconfirm", pkg]),
-                     ("zypper", ["install", "-y", pkg])):
+    for pm, args in (
+        ("apt-get", ["install", "-y", pkg]),
+        ("dnf", ["install", "-y", pkg]),
+        ("pacman", ["-S", "--noconfirm", pkg]),
+        ("zypper", ["install", "-y", pkg]),
+    ):
         if shutil.which(pm):
             base = ["sudo", pm] if shutil.which("sudo") else [pm]
             return base + args
@@ -215,8 +224,11 @@ def interactive_install_guide() -> str:
         return f"{color}{t}{Colors.ENDC}" if r._use_color() else t
 
     print()
-    print("  " + _c("选择容器运行时", Colors.BOLD + Colors.CYAN)
-          + _c("  (节点基础设施需要;两者都未检测到,先选一个偏好并安装)", Colors.DIM))
+    print(
+        "  "
+        + _c("选择容器运行时", Colors.BOLD + Colors.CYAN)
+        + _c("  (节点基础设施需要;两者都未检测到,先选一个偏好并安装)", Colors.DIM)
+    )
     r.rule()
     for i, rt in enumerate(_RUNTIMES, 1):
         marker = _c("▸", Colors.GREEN) if i == 1 else " "
@@ -245,8 +257,14 @@ def interactive_install_guide() -> str:
     # 无法完全静默,属 OS 安全约束);装好后下次启动自动采用并后台拉取节点镜像。
     if can_auto_install():
         if background_install(pick):
-            print("  " + _c(f"  正在【后台自动安装】{pick.capitalize()}…(日志 logs/container_runtime_install.log;"
-                            f"Windows 会弹一次 UAC 确认)。装好后重跑即自动启用。", Colors.CYAN))
+            print(
+                "  "
+                + _c(
+                    f"  正在【后台自动安装】{pick.capitalize()}…(日志 logs/container_runtime_install.log;"
+                    f"Windows 会弹一次 UAC 确认)。装好后重跑即自动启用。",
+                    Colors.CYAN,
+                )
+            )
         else:
             print("  " + _c(f"  安装(手动): {_INSTALL_HINTS.get(pick, '')}", Colors.DIM))
     else:
@@ -288,6 +306,7 @@ def resolve_runtime(interactive: bool = True) -> str:
 
 # ── 统一 CLI 抽象:docker / podman 命令基本同名 ──────────────────────────────
 
+
 def runtime_binary(rt: str) -> Optional[str]:
     return shutil.which(rt) if rt in _RUNTIMES else None
 
@@ -298,10 +317,17 @@ def daemon_up(rt: str) -> bool:
     if not bin_:
         return False
     try:
-        return subprocess.run(
-            [bin_, "info"], capture_output=True, text=True,
-            encoding="utf-8", errors="replace", timeout=15,
-        ).returncode == 0
+        return (
+            subprocess.run(
+                [bin_, "info"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=15,
+            ).returncode
+            == 0
+        )
     except Exception:  # noqa: BLE001
         return False
 
@@ -315,10 +341,17 @@ def compose_base(rt: str) -> Optional[List[str]]:
     bin_ = runtime_binary(rt)
     if bin_:
         try:
-            if subprocess.run(
-                [bin_, "compose", "version"], capture_output=True, text=True,
-                encoding="utf-8", errors="replace", timeout=15,
-            ).returncode == 0:
+            if (
+                subprocess.run(
+                    [bin_, "compose", "version"],
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=15,
+                ).returncode
+                == 0
+            ):
                 return [bin_, "compose"]
         except Exception:  # noqa: BLE001
             pass

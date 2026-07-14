@@ -22,27 +22,27 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from core.cross_device_integration_reality import (
+    CROSS_DEVICE_INTEGRATION_REALITY,
+    INFLIGHT_TASK_LOSS_ON_DISCONNECT,
+    INFLIGHT_TASK_LOSS_RESIDUAL_RISK_ANDROID_TERMINAL_RECONNECT,
+    INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART,
+    PENDING_DELIVERY_BUFFER_MAX_QUEUE_PER_DEVICE,
+    PENDING_DELIVERY_BUFFER_PRESENT,
+    PENDING_DELIVERY_BUFFER_TTL_S,
+    RESULT_INGESTION_ERROR_COUNTERS_PRESENT,
+    RESULT_INGESTION_HAS_SILENT_FAILURE_PATHS,
+    assert_known_gaps_are_documented,
+)
 from galaxy_gateway.pending_delivery_buffer import (
     PendingDeliveryBuffer,
     pending_delivery_buffer,
 )
-from core.cross_device_integration_reality import (
-    CROSS_DEVICE_INTEGRATION_REALITY,
-    INFLIGHT_TASK_LOSS_ON_DISCONNECT,
-    PENDING_DELIVERY_BUFFER_PRESENT,
-    PENDING_DELIVERY_BUFFER_TTL_S,
-    PENDING_DELIVERY_BUFFER_MAX_QUEUE_PER_DEVICE,
-    RESULT_INGESTION_HAS_SILENT_FAILURE_PATHS,
-    RESULT_INGESTION_ERROR_COUNTERS_PRESENT,
-    INFLIGHT_TASK_LOSS_RESIDUAL_RISK_ANDROID_TERMINAL_RECONNECT,
-    INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART,
-    assert_known_gaps_are_documented,
-)
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _msg(msg_type: str = "task_assign", task_id: str = "t1") -> Dict[str, Any]:
     return {"type": msg_type, "task_id": task_id, "payload": {}}
@@ -51,6 +51,7 @@ def _msg(msg_type: str = "task_assign", task_id: str = "t1") -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Basic enqueue / flush
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_enqueue_and_flush_delivers_message():
@@ -107,6 +108,7 @@ async def test_multiple_messages_delivered_in_order():
 # TTL expiry
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_expired_messages_skipped_on_flush():
     buf = PendingDeliveryBuffer(ttl_seconds=0.001)  # 1 ms TTL
@@ -144,6 +146,7 @@ async def test_non_expired_messages_delivered():
 # Capacity eviction
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_capacity_evicts_oldest_on_overflow():
     buf = PendingDeliveryBuffer(max_queue_per_device=3, ttl_seconds=60.0)
@@ -168,6 +171,7 @@ async def test_capacity_evicts_oldest_on_overflow():
 # Multi-device isolation
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_flush_does_not_affect_other_devices():
     buf = PendingDeliveryBuffer()
@@ -186,6 +190,7 @@ async def test_flush_does_not_affect_other_devices():
 # ---------------------------------------------------------------------------
 # discard_device
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_discard_device_removes_all_messages():
@@ -209,6 +214,7 @@ async def test_discard_nonexistent_device_returns_zero():
 # purge_expired
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_purge_expired_removes_stale_messages():
     buf = PendingDeliveryBuffer(ttl_seconds=0.001)
@@ -228,6 +234,7 @@ async def test_purge_expired_removes_stale_messages():
 # ---------------------------------------------------------------------------
 # Stats
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_stats_reflect_operations():
@@ -256,6 +263,7 @@ async def test_stats_reflect_operations():
 # Module-level singleton is a PendingDeliveryBuffer instance
 # ---------------------------------------------------------------------------
 
+
 def test_module_singleton_is_buffer_instance():
     assert isinstance(pending_delivery_buffer, PendingDeliveryBuffer)
 
@@ -264,11 +272,11 @@ def test_module_singleton_is_buffer_instance():
 # Integration reality surface tests
 # ---------------------------------------------------------------------------
 
+
 def test_inflight_task_loss_sentinel_is_false():
     """Pending-delivery buffer must be present → loss sentinel is False."""
     assert INFLIGHT_TASK_LOSS_ON_DISCONNECT is False, (
-        "INFLIGHT_TASK_LOSS_ON_DISCONNECT should be False now that the "
-        "pending-delivery buffer is in place."
+        "INFLIGHT_TASK_LOSS_ON_DISCONNECT should be False now that the " "pending-delivery buffer is in place."
     )
 
 
@@ -278,9 +286,10 @@ def test_pending_delivery_buffer_sentinel_is_true():
 
 def test_buffer_ttl_and_capacity_match_module():
     from galaxy_gateway.pending_delivery_buffer import (
-        PENDING_DELIVERY_TTL_SECONDS,
         PENDING_DELIVERY_MAX_QUEUE_PER_DEVICE,
+        PENDING_DELIVERY_TTL_SECONDS,
     )
+
     assert PENDING_DELIVERY_BUFFER_TTL_S == PENDING_DELIVERY_TTL_SECONDS
     assert PENDING_DELIVERY_BUFFER_MAX_QUEUE_PER_DEVICE == PENDING_DELIVERY_MAX_QUEUE_PER_DEVICE
 
@@ -300,11 +309,12 @@ def test_result_ingestion_error_counters_present():
 def test_observable_error_counters_importable():
     """The four observable error counters in task_lifecycle must be importable."""
     from galaxy_gateway.android.handlers.task_lifecycle import (
-        RESULT_RECONCILE_ERRORS,
-        RESULT_TRUTH_INGRESS_ERRORS,
         RESULT_DEVICE_ROUTER_ERRORS,
         RESULT_MEMORY_BACKFLOW_ERRORS,
+        RESULT_RECONCILE_ERRORS,
+        RESULT_TRUTH_INGRESS_ERRORS,
     )
+
     # They start at 0 in a fresh module load
     assert isinstance(RESULT_RECONCILE_ERRORS, int)
     assert isinstance(RESULT_TRUTH_INGRESS_ERRORS, int)
@@ -317,6 +327,7 @@ def test_get_result_ingestion_error_counts_snapshot():
     from galaxy_gateway.android.handlers.task_lifecycle import (
         get_result_ingestion_error_counts,
     )
+
     counts = get_result_ingestion_error_counts()
     expected_keys = {
         "reconcile_errors",

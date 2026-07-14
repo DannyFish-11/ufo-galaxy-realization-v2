@@ -2,6 +2,7 @@
 
 No heavy ASR or neural networks — intentionally minimal.
 """
+
 from __future__ import annotations
 
 import time
@@ -16,10 +17,10 @@ import numpy as np
 class VADConfig:
     """Configuration for the VAD."""
 
-    energy_threshold: float = 0.01       # RMS threshold for activity
-    frame_duration_ms: int = 20           # Duration of each VAD frame (ms)
-    window_duration_ms: int = 300         # Rolling window for ratio metrics (ms)
-    min_speech_frames: int = 3            # Consecutive active frames to confirm speech
+    energy_threshold: float = 0.01  # RMS threshold for activity
+    frame_duration_ms: int = 20  # Duration of each VAD frame (ms)
+    window_duration_ms: int = 300  # Rolling window for ratio metrics (ms)
+    min_speech_frames: int = 3  # Consecutive active frames to confirm speech
 
 
 @dataclass
@@ -28,8 +29,8 @@ class VADState:
 
     is_speaking: bool = False
     energy: float = 0.0
-    speaking_ratio: float = 0.0     # Fraction of recent frames with activity
-    pause_density: float = 0.0      # Fraction of speech→silence transitions
+    speaking_ratio: float = 0.0  # Fraction of recent frames with activity
+    pause_density: float = 0.0  # Fraction of speech→silence transitions
     last_speech_ts: Optional[float] = None
 
 
@@ -58,7 +59,7 @@ class VoiceActivityDetector:
     def process_frame(self, audio_chunk: np.ndarray) -> VADState:
         """Process one chunk of PCM audio and return a VADState."""
         samples = audio_chunk.astype(np.float32).flatten()
-        energy = float(np.sqrt(np.mean(samples ** 2))) if samples.size else 0.0
+        energy = float(np.sqrt(np.mean(samples**2))) if samples.size else 0.0
         is_active = energy > self.config.energy_threshold
 
         if is_active:
@@ -66,9 +67,7 @@ class VoiceActivityDetector:
         else:
             self._consecutive_speech = 0
 
-        is_speech = (
-            is_active and self._consecutive_speech >= self.config.min_speech_frames
-        )
+        is_speech = is_active and self._consecutive_speech >= self.config.min_speech_frames
 
         if is_speech:
             self._last_speech_ts = time.monotonic()
@@ -80,11 +79,7 @@ class VoiceActivityDetector:
 
         # Pause density: proportion of speech→silence transitions in the window
         recent_list = list(self._recent)
-        transitions = sum(
-            1
-            for i in range(1, len(recent_list))
-            if recent_list[i - 1] and not recent_list[i]
-        )
+        transitions = sum(1 for i in range(1, len(recent_list)) if recent_list[i - 1] and not recent_list[i])
         pause_density = transitions / max(n - 1, 1)
 
         return VADState(

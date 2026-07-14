@@ -54,8 +54,8 @@ logger = logging.getLogger("Galaxy.Policy.HITL")
 class HITLMode(str, Enum):
     """Operating mode for the HITL policy gate."""
 
-    AUTO = "auto"    # No human confirmation required
-    SEMI = "semi"    # Confirmation for high-risk only
+    AUTO = "auto"  # No human confirmation required
+    SEMI = "semi"  # Confirmation for high-risk only
     MANUAL = "manual"  # All gated actions require confirmation
 
 
@@ -323,9 +323,7 @@ class HITLPolicy:
         # NOTE: we do NOT set req.decision here — the request remains truly pending
         # until a human calls decide() or the timeout expires.
         default_outcome = (
-            HITLDecisionOutcome.APPROVED
-            if self._timeout_default_approve
-            else HITLDecisionOutcome.REJECTED
+            HITLDecisionOutcome.APPROVED if self._timeout_default_approve else HITLDecisionOutcome.REJECTED
         )
         decision = HITLDecision(
             request_id=req.request_id,
@@ -429,7 +427,8 @@ class HITLPolicy:
         trace_id: Optional[str],
     ) -> None:
         try:
-            from core.state_event_bus import get_state_event_bus, StateEventType
+            from core.state_event_bus import StateEventType, get_state_event_bus
+
             bus = get_state_event_bus()
             event_type = StateEventType.HITL_EVALUATED
             bus.publish(

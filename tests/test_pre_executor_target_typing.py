@@ -17,8 +17,8 @@ Coverage:
 from __future__ import annotations
 
 import asyncio
-import pytest
 
+import pytest
 
 from core.schemas.remote_execution import ExecutorTargetType, RemoteExecutionMode
 from core.schemas.task_envelope import TaskEnvelope
@@ -31,14 +31,15 @@ def _bypass_dispatch_gates(monkeypatch):
     分流之前把裸测试环境里的目标全部拒掉(本文件此前基线红的根因)。按
     test_pr2_task_envelope_pipeline 的既定钉法放行这两道门。"""
     import core.capability_aware_routing_default as card
+
     monkeypatch.setattr(card, "infer_dispatch_capabilities", lambda tool: [])
 
+    import core.canonical_dispatch_slot_authority as _slot_mod
     from core.canonical_dispatch_slot_authority import (
         CanonicalDispatchSlot,
-        CanonicalDispatchSlotStatus,
         CanonicalDispatchSlotsResult,
+        CanonicalDispatchSlotStatus,
     )
-    import core.canonical_dispatch_slot_authority as _slot_mod
 
     def _approve_all(device_ids, execution_mode, **_kw):
         slots = [
@@ -60,7 +61,6 @@ def _bypass_dispatch_gates(monkeypatch):
         )
 
     monkeypatch.setattr(_slot_mod, "get_canonical_dispatch_slots", _approve_all)
-
 
 
 # ---------------------------------------------------------------------------
@@ -305,17 +305,37 @@ class TestRouteEnvelopeGoWorker:
 
         async def _fake_cross_device(envelope, command_id, request_id):
             cross_device_called.append(True)
-            return {"success": True, "task_id": envelope.task_id, "trace_id": envelope.trace_id,
-                    "command_id": command_id, "request_id": request_id,
-                    "command": envelope.tool_name, "via": "cross_device", "device_id": "",
-                    "result": None, "error_code": None, "error_message": None, "latency_ms": 0.0}
+            return {
+                "success": True,
+                "task_id": envelope.task_id,
+                "trace_id": envelope.trace_id,
+                "command_id": command_id,
+                "request_id": request_id,
+                "command": envelope.tool_name,
+                "via": "cross_device",
+                "device_id": "",
+                "result": None,
+                "error_code": None,
+                "error_message": None,
+                "latency_ms": 0.0,
+            }
 
         async def _fake_worker(envelope, command_id, request_id):
             worker_called.append(True)
-            return {"success": True, "task_id": envelope.task_id, "trace_id": envelope.trace_id,
-                    "command_id": command_id, "request_id": request_id,
-                    "command": envelope.tool_name, "via": "worker", "device_id": "",
-                    "result": None, "error_code": None, "error_message": None, "latency_ms": 0.0}
+            return {
+                "success": True,
+                "task_id": envelope.task_id,
+                "trace_id": envelope.trace_id,
+                "command_id": command_id,
+                "request_id": request_id,
+                "command": envelope.tool_name,
+                "via": "worker",
+                "device_id": "",
+                "result": None,
+                "error_code": None,
+                "error_message": None,
+                "latency_ms": 0.0,
+            }
 
         router._route_cross_device_envelope = _fake_cross_device
         router._route_worker_envelope = _fake_worker

@@ -84,41 +84,41 @@ from typing import Any, Dict, Optional
 
 import pytest
 
+from core.android_delegated_signal_ingress import (
+    INGRESS_GUARD_REJECTED_SIGNAL_IS_DROPPED_POLICY,
+    INGRESS_RECOVERY_GUARD_IS_MANDATORY_POLICY,
+    ingest_delegated_execution_signal,
+)
 from core.attached_runtime_recovery_readiness import (
+    ACCEPTED_SIGNAL_IS_RECORDED_POLICY,
     ATTACHED_RUNTIME_RECOVERY_READINESS_AUTHORITY,
     ATTACHED_RUNTIME_RECOVERY_READINESS_PR15_SENTINEL,
-    GUARD_MUST_PRECEDE_RECONCILE_POLICY,
     DUPLICATE_SIGNAL_ID_IS_REJECTED_POLICY,
-    REPLAY_AT_SAME_SEQ_IS_REJECTED_POLICY,
-    STALE_EMISSION_SEQ_IS_REJECTED_POLICY,
-    OUT_OF_ORDER_EMISSION_SEQ_IS_REJECTED_POLICY,
-    ACCEPTED_SIGNAL_IS_RECORDED_POLICY,
     GUARD_DECISION_IS_OBSERVABLE_POLICY,
-    RING_BUFFER_IS_BOUNDED_POLICY,
+    GUARD_MUST_PRECEDE_RECONCILE_POLICY,
     IDEMPOTENCY_KEY_USES_SIGNAL_ID_AND_CONTEXT_POLICY,
-    SEQ_INDEX_TRACKS_MAX_PER_CONTEXT_POLICY,
-    REJECTED_SIGNAL_MUST_NOT_REACH_TRACKER_POLICY,
+    OUT_OF_ORDER_EMISSION_SEQ_IS_REJECTED_POLICY,
     RECOVERY_READINESS_RING_BUFFER_SIZE,
+    REJECTED_SIGNAL_MUST_NOT_REACH_TRACKER_POLICY,
+    REPLAY_AT_SAME_SEQ_IS_REJECTED_POLICY,
+    RING_BUFFER_IS_BOUNDED_POLICY,
+    SEQ_INDEX_TRACKS_MAX_PER_CONTEXT_POLICY,
+    STALE_EMISSION_SEQ_IS_REJECTED_POLICY,
     STALE_EMISSION_SEQ_THRESHOLD,
-    SignalGuardDecision,
-    RecoveryReadinessStatus,
     IdempotencyKey,
-    SeenSignalRecord,
-    SignalGuardOutcome,
-    RecoveryReadinessSnapshot,
     RecoveryReadinessRuntime,
+    RecoveryReadinessSnapshot,
+    RecoveryReadinessStatus,
+    SeenSignalRecord,
+    SignalGuardDecision,
+    SignalGuardOutcome,
     build_idempotency_key,
-    check_signal_guard,
-    record_seen_signal,
-    guard_inbound_signal,
     build_recovery_readiness_snapshot,
+    check_signal_guard,
     get_recovery_readiness_runtime,
+    guard_inbound_signal,
+    record_seen_signal,
     reset_recovery_readiness_runtime,
-)
-from core.android_delegated_signal_ingress import (
-    INGRESS_RECOVERY_GUARD_IS_MANDATORY_POLICY,
-    INGRESS_GUARD_REJECTED_SIGNAL_IS_DROPPED_POLICY,
-    ingest_delegated_execution_signal,
 )
 from core.delegated_runtime_execution_tracker import (
     DelegatedExecutionPhase,
@@ -581,9 +581,7 @@ def test_L03_snapshot_degraded_with_majority_rejections():
 
 
 def test_M01_build_idempotency_key_all_fields():
-    key = build_idempotency_key(
-        signal_id="sig-1", contract_id="ctr-1", session_id="ses-1"
-    )
+    key = build_idempotency_key(signal_id="sig-1", contract_id="ctr-1", session_id="ses-1")
     assert key.signal_id == "sig-1"
     assert key.contract_id == "ctr-1"
     assert key.session_id == "ses-1"
@@ -1120,9 +1118,7 @@ def test_AF01_empty_signal_id_skips_duplicate_check():
 
 
 def test_AG01_accept_path_reconciles_ack():
-    record, tracker_rt = _make_tracking_record(
-        contract_id="ctr-ag-001", session_id="ses-ag-001"
-    )
+    record, tracker_rt = _make_tracking_record(contract_id="ctr-ag-001", session_id="ses-ag-001")
     guard_rt = _fresh_guard_runtime()
     msg = _make_signal_message(
         contract_id="ctr-ag-001",
@@ -1131,18 +1127,14 @@ def test_AG01_accept_path_reconciles_ack():
         signal_id=str(uuid.uuid4()),
         emission_seq=0,
     )
-    outcome = ingest_delegated_execution_signal(
-        msg, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    outcome = ingest_delegated_execution_signal(msg, runtime=tracker_rt, guard_runtime=guard_rt)
     assert outcome.was_updated
     assert outcome.record is not None
     assert outcome.record.phase is DelegatedExecutionPhase.acknowledged
 
 
 def test_AG02_accept_path_reconciles_progress():
-    record, tracker_rt = _make_tracking_record(
-        contract_id="ctr-ag-002", session_id="ses-ag-002"
-    )
+    record, tracker_rt = _make_tracking_record(contract_id="ctr-ag-002", session_id="ses-ag-002")
     guard_rt = _fresh_guard_runtime()
     # First ack to set phase
     ack_msg = _make_signal_message(
@@ -1161,9 +1153,7 @@ def test_AG02_accept_path_reconciles_progress():
         signal_id=str(uuid.uuid4()),
         emission_seq=1,
     )
-    outcome = ingest_delegated_execution_signal(
-        progress_msg, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    outcome = ingest_delegated_execution_signal(progress_msg, runtime=tracker_rt, guard_runtime=guard_rt)
     assert outcome.was_updated
     assert outcome.record.phase is DelegatedExecutionPhase.in_progress
 
@@ -1174,9 +1164,7 @@ def test_AG02_accept_path_reconciles_progress():
 
 
 def test_AH01_duplicate_returns_not_updated():
-    record, tracker_rt = _make_tracking_record(
-        contract_id="ctr-ah-001", session_id="ses-ah-001"
-    )
+    record, tracker_rt = _make_tracking_record(contract_id="ctr-ah-001", session_id="ses-ah-001")
     guard_rt = _fresh_guard_runtime()
     sig_id = str(uuid.uuid4())
     msg = _make_signal_message(
@@ -1188,17 +1176,13 @@ def test_AH01_duplicate_returns_not_updated():
     )
     ingest_delegated_execution_signal(msg, runtime=tracker_rt, guard_runtime=guard_rt)
     # Send duplicate
-    outcome = ingest_delegated_execution_signal(
-        msg, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    outcome = ingest_delegated_execution_signal(msg, runtime=tracker_rt, guard_runtime=guard_rt)
     assert not outcome.was_updated
     assert "duplicate" in outcome.reject_reason
 
 
 def test_AH02_duplicate_does_not_change_tracker_phase():
-    record, tracker_rt = _make_tracking_record(
-        contract_id="ctr-ah-002", session_id="ses-ah-002"
-    )
+    record, tracker_rt = _make_tracking_record(contract_id="ctr-ah-002", session_id="ses-ah-002")
     guard_rt = _fresh_guard_runtime()
     sig_id = str(uuid.uuid4())
     ack_msg = _make_signal_message(
@@ -1212,9 +1196,7 @@ def test_AH02_duplicate_does_not_change_tracker_phase():
     # Phase is now acknowledged. Send duplicate progress (same signal_id but progress)
     # The guard rejects based on signal_id, so tracker stays at acknowledged.
     dup_msg = dict(ack_msg)  # same message (same signal_id)
-    outcome = ingest_delegated_execution_signal(
-        dup_msg, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    outcome = ingest_delegated_execution_signal(dup_msg, runtime=tracker_rt, guard_runtime=guard_rt)
     assert not outcome.was_updated
     # Tracker record phase should still be acknowledged
     rec = get_execution_tracking_record("ses-ah-002", runtime=tracker_rt)
@@ -1228,9 +1210,7 @@ def test_AH02_duplicate_does_not_change_tracker_phase():
 
 
 def test_AI01_replay_returns_not_updated():
-    record, tracker_rt = _make_tracking_record(
-        contract_id="ctr-ai-001", session_id="ses-ai-001"
-    )
+    record, tracker_rt = _make_tracking_record(contract_id="ctr-ai-001", session_id="ses-ai-001")
     guard_rt = _fresh_guard_runtime()
     # First signal at seq=5
     msg1 = _make_signal_message(
@@ -1249,9 +1229,7 @@ def test_AI01_replay_returns_not_updated():
         signal_id=str(uuid.uuid4()),  # different signal_id
         emission_seq=5,  # same seq → replay
     )
-    outcome = ingest_delegated_execution_signal(
-        msg2, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    outcome = ingest_delegated_execution_signal(msg2, runtime=tracker_rt, guard_runtime=guard_rt)
     assert not outcome.was_updated
     assert "replay" in outcome.reject_reason
 
@@ -1262,9 +1240,7 @@ def test_AI01_replay_returns_not_updated():
 
 
 def test_AJ01_stale_returns_not_updated():
-    record, tracker_rt = _make_tracking_record(
-        contract_id="ctr-aj-001", session_id="ses-aj-001"
-    )
+    record, tracker_rt = _make_tracking_record(contract_id="ctr-aj-001", session_id="ses-aj-001")
     guard_rt = _fresh_guard_runtime()
     # First: set high seq
     high_seq = STALE_EMISSION_SEQ_THRESHOLD + 5  # = 15
@@ -1284,9 +1260,7 @@ def test_AJ01_stale_returns_not_updated():
         signal_id=str(uuid.uuid4()),
         emission_seq=0,
     )
-    outcome = ingest_delegated_execution_signal(
-        msg_stale, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    outcome = ingest_delegated_execution_signal(msg_stale, runtime=tracker_rt, guard_runtime=guard_rt)
     assert not outcome.was_updated
     assert "stale" in outcome.reject_reason
 
@@ -1297,9 +1271,7 @@ def test_AJ01_stale_returns_not_updated():
 
 
 def test_AK01_out_of_order_returns_not_updated():
-    record, tracker_rt = _make_tracking_record(
-        contract_id="ctr-ak-001", session_id="ses-ak-001"
-    )
+    record, tracker_rt = _make_tracking_record(contract_id="ctr-ak-001", session_id="ses-ak-001")
     guard_rt = _fresh_guard_runtime()
     # First: accept at seq=5
     msg_5 = _make_signal_message(
@@ -1318,9 +1290,7 @@ def test_AK01_out_of_order_returns_not_updated():
         signal_id=str(uuid.uuid4()),
         emission_seq=3,
     )
-    outcome = ingest_delegated_execution_signal(
-        msg_3, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    outcome = ingest_delegated_execution_signal(msg_3, runtime=tracker_rt, guard_runtime=guard_rt)
     assert not outcome.was_updated
     assert "out_of_order" in outcome.reject_reason
 
@@ -1331,9 +1301,7 @@ def test_AK01_out_of_order_returns_not_updated():
 
 
 def test_AL01_reject_reason_encodes_guard_prefix():
-    record, tracker_rt = _make_tracking_record(
-        contract_id="ctr-al-001", session_id="ses-al-001"
-    )
+    record, tracker_rt = _make_tracking_record(contract_id="ctr-al-001", session_id="ses-al-001")
     guard_rt = _fresh_guard_runtime()
     sig_id = str(uuid.uuid4())
     msg = _make_signal_message(
@@ -1342,9 +1310,7 @@ def test_AL01_reject_reason_encodes_guard_prefix():
         emission_seq=0,
     )
     ingest_delegated_execution_signal(msg, runtime=tracker_rt, guard_runtime=guard_rt)
-    outcome = ingest_delegated_execution_signal(
-        msg, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    outcome = ingest_delegated_execution_signal(msg, runtime=tracker_rt, guard_runtime=guard_rt)
     assert outcome.reject_reason.startswith("guard:")
 
 
@@ -1354,9 +1320,7 @@ def test_AL01_reject_reason_encodes_guard_prefix():
 
 
 def test_AM01_rejected_signal_does_not_change_tracker():
-    record, tracker_rt = _make_tracking_record(
-        contract_id="ctr-am-001", session_id="ses-am-001"
-    )
+    record, tracker_rt = _make_tracking_record(contract_id="ctr-am-001", session_id="ses-am-001")
     guard_rt = _fresh_guard_runtime()
     # Accept ack
     ack_msg = _make_signal_message(
@@ -1374,9 +1338,7 @@ def test_AM01_rejected_signal_does_not_change_tracker():
         signal_id=str(uuid.uuid4()),
         emission_seq=0,  # same as max_seen → but different signal_id → replay
     )
-    outcome = ingest_delegated_execution_signal(
-        rej_msg, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    outcome = ingest_delegated_execution_signal(rej_msg, runtime=tracker_rt, guard_runtime=guard_rt)
     assert not outcome.was_updated
     # Tracker should still be at acknowledged (not completed)
     rec = get_execution_tracking_record("ses-am-001", runtime=tracker_rt)
@@ -1390,9 +1352,7 @@ def test_AM01_rejected_signal_does_not_change_tracker():
 
 
 def test_AN01_full_lifecycle_ack_progress_result_completed():
-    record, tracker_rt = _make_tracking_record(
-        contract_id="ctr-an-001", session_id="ses-an-001"
-    )
+    record, tracker_rt = _make_tracking_record(contract_id="ctr-an-001", session_id="ses-an-001")
     guard_rt = _fresh_guard_runtime()
 
     # Ack
@@ -1445,9 +1405,7 @@ def test_AN01_full_lifecycle_ack_progress_result_completed():
 
 
 def test_AO01_duplicate_second_attempt_rejected_tracker_not_mutated():
-    record, tracker_rt = _make_tracking_record(
-        contract_id="ctr-ao-001", session_id="ses-ao-001"
-    )
+    record, tracker_rt = _make_tracking_record(contract_id="ctr-ao-001", session_id="ses-ao-001")
     guard_rt = _fresh_guard_runtime()
     sig_id = str(uuid.uuid4())
     ack_msg = _make_signal_message(
@@ -1456,16 +1414,12 @@ def test_AO01_duplicate_second_attempt_rejected_tracker_not_mutated():
         signal_id=sig_id,
         emission_seq=0,
     )
-    outcome1 = ingest_delegated_execution_signal(
-        ack_msg, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    outcome1 = ingest_delegated_execution_signal(ack_msg, runtime=tracker_rt, guard_runtime=guard_rt)
     assert outcome1.was_updated
     assert outcome1.record.phase is DelegatedExecutionPhase.acknowledged
 
     # Send exact same message again
-    outcome2 = ingest_delegated_execution_signal(
-        ack_msg, runtime=tracker_rt, guard_runtime=guard_rt
-    )
+    outcome2 = ingest_delegated_execution_signal(ack_msg, runtime=tracker_rt, guard_runtime=guard_rt)
     assert not outcome2.was_updated
     assert "duplicate" in outcome2.reject_reason
 
@@ -1480,9 +1434,7 @@ def test_AO01_duplicate_second_attempt_rejected_tracker_not_mutated():
 
 
 def test_AP01_out_of_order_skipped_next_in_order_accepted():
-    record, tracker_rt = _make_tracking_record(
-        contract_id="ctr-ap-001", session_id="ses-ap-001"
-    )
+    record, tracker_rt = _make_tracking_record(contract_id="ctr-ap-001", session_id="ses-ap-001")
     guard_rt = _fresh_guard_runtime()
 
     # Accept ack at seq=2
@@ -1531,9 +1483,7 @@ def test_AP01_out_of_order_skipped_next_in_order_accepted():
 
 
 def test_AQ01_stale_signal_rejected():
-    record, tracker_rt = _make_tracking_record(
-        contract_id="ctr-aq-001", session_id="ses-aq-001"
-    )
+    record, tracker_rt = _make_tracking_record(contract_id="ctr-aq-001", session_id="ses-aq-001")
     guard_rt = _fresh_guard_runtime()
     high_seq = STALE_EMISSION_SEQ_THRESHOLD + 5
     ingest_delegated_execution_signal(
@@ -1566,9 +1516,7 @@ def test_AQ01_stale_signal_rejected():
 
 
 def test_AR01_replay_signal_rejected():
-    record, tracker_rt = _make_tracking_record(
-        contract_id="ctr-ar-001", session_id="ses-ar-001"
-    )
+    record, tracker_rt = _make_tracking_record(contract_id="ctr-ar-001", session_id="ses-ar-001")
     guard_rt = _fresh_guard_runtime()
     ingest_delegated_execution_signal(
         _make_signal_message(
@@ -1600,9 +1548,7 @@ def test_AR01_replay_signal_rejected():
 
 
 def test_AS01_two_contracts_independent_guard_state():
-    _, tracker_rt = _make_tracking_record(
-        contract_id="ctr-as-001", session_id="ses-as-001"
-    )
+    _, tracker_rt = _make_tracking_record(contract_id="ctr-as-001", session_id="ses-as-001")
     create_execution_tracking_record(
         session_id="ses-as-002",
         contract_id="ctr-as-002",
@@ -1768,6 +1714,7 @@ def test_AW02_core_runtime_exports_pr15_sentinel():
 def test_AX01_projection_sentinel_present_and_not_unavailable():
     try:
         from core.routes.projection import INGRESS_RECOVERY_GUARD_ALIGNED_PR18
+
         assert INGRESS_RECOVERY_GUARD_ALIGNED_PR18
         assert "UNAVAILABLE" not in INGRESS_RECOVERY_GUARD_ALIGNED_PR18
         assert "PR18" in INGRESS_RECOVERY_GUARD_ALIGNED_PR18

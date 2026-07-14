@@ -133,9 +133,7 @@ NODE_ACTIVATION_CONTEXT_IS_AUTHORITY: str = (
     "context only for TOPOLOGY_CONDITIONAL nodes."
 )
 
-NODE_ACTIVATION_CONTEXT_PR15_SENTINEL: str = (
-    "NODE_ACTIVATION_CONTEXT::PR15_SENTINEL_V1"
-)
+NODE_ACTIVATION_CONTEXT_PR15_SENTINEL: str = "NODE_ACTIVATION_CONTEXT::PR15_SENTINEL_V1"
 
 # ===========================================================================
 # Policy sentinels
@@ -340,9 +338,7 @@ def evaluate_node_activation_context(
     # ALWAYS_ACTIVE — unconditionally ready
     # ------------------------------------------------------------------
     if policy_kind == NodeActivationPolicyKind.ALWAYS_ACTIVE:
-        logger.debug(
-            "activation context: READY (always_active) | node_id=%s", node_id
-        )
+        logger.debug("activation context: READY (always_active) | node_id=%s", node_id)
         return NodeActivationReadinessDecision(
             node_id=node_id,
             policy_kind=policy_kind,
@@ -361,9 +357,7 @@ def evaluate_node_activation_context(
     # DORMANT — blocked regardless of governance state
     # ------------------------------------------------------------------
     if policy_kind == NodeActivationPolicyKind.DORMANT:
-        logger.warning(
-            "activation context: BLOCKED (dormant) | node_id=%s", node_id
-        )
+        logger.warning("activation context: BLOCKED (dormant) | node_id=%s", node_id)
         return NodeActivationReadinessDecision(
             node_id=node_id,
             policy_kind=policy_kind,
@@ -475,6 +469,7 @@ def evaluate_node_activation_context(
             # Check the topology node's connection state
             try:
                 from core.network_topology_runtime import TopologyConnectionState  # noqa: PLC0415
+
                 state = getattr(topo_node, "state", None)
                 unreachable_states = {
                     TopologyConnectionState.UNAVAILABLE,
@@ -625,8 +620,7 @@ def get_activation_policy_kind_for_node(node_info: Any) -> NodeActivationPolicyK
         return NodeActivationPolicyKind(raw_policy)
     except ValueError:
         logger.warning(
-            "get_activation_policy_kind_for_node: unrecognised activation_policy=%r; "
-            "defaulting to ALWAYS_ACTIVE",
+            "get_activation_policy_kind_for_node: unrecognised activation_policy=%r; " "defaulting to ALWAYS_ACTIVE",
             raw_policy,
         )
         return NodeActivationPolicyKind.ALWAYS_ACTIVE

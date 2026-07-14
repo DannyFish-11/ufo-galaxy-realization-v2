@@ -48,7 +48,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional
 
-from .execution_policy import ExecutionPolicy, DEFAULT_CONSERVATIVE_POLICY
+from .execution_policy import DEFAULT_CONSERVATIVE_POLICY, ExecutionPolicy
 from .policy_band import PolicyBand
 
 logger = logging.getLogger("Galaxy.ExecutionPolicy.Summary")

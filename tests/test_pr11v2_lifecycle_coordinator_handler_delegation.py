@@ -37,16 +37,16 @@ if _PROJECT_ROOT not in sys.path:
 
 _HANDLERS_DIR = os.path.join(
     _PROJECT_ROOT,
-    "galaxy_gateway", "android", "handlers",
+    "galaxy_gateway",
+    "android",
+    "handlers",
 )
 
 
 def _load_handler_module(filename: str):
     """Load a handler module by filename, bypassing the package __init__.py."""
     path = os.path.join(_HANDLERS_DIR, filename)
-    spec = importlib.util.spec_from_file_location(
-        f"_test_handler_{filename[:-3]}", path
-    )
+    spec = importlib.util.spec_from_file_location(f"_test_handler_{filename[:-3]}", path)
     if spec is None or spec.loader is None:
         return None
     m = importlib.util.module_from_spec(spec)
@@ -67,6 +67,7 @@ try:
         get_lifecycle_coordinator,
         reset_lifecycle_coordinator,
     )
+
     _LC_AVAILABLE = True
 except ImportError:
     _LC_AVAILABLE = False
@@ -78,7 +79,9 @@ _takeover_mod = _load_handler_module("takeover_response.py")
 _TAKEOVER_HANDLER_AVAILABLE = _takeover_mod is not None and hasattr(_takeover_mod, "handle_takeover_response")
 
 _delegated_mod = _load_handler_module("delegated_signal.py")
-_DELEGATED_HANDLER_AVAILABLE = _delegated_mod is not None and hasattr(_delegated_mod, "handle_delegated_execution_signal")
+_DELEGATED_HANDLER_AVAILABLE = _delegated_mod is not None and hasattr(
+    _delegated_mod, "handle_delegated_execution_signal"
+)
 
 
 if _RECON_HANDLER_AVAILABLE:
@@ -94,6 +97,7 @@ if _DELEGATED_HANDLER_AVAILABLE:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_bridge() -> MagicMock:
     return MagicMock()
@@ -125,6 +129,7 @@ def _mock_outcome(event_type: str = "test", was_handled: bool = True, extra: dic
 # ===========================================================================
 # Group A: reconciliation_signal handler delegation
 # ===========================================================================
+
 
 @pytest.mark.skipif(
     not _RECON_HANDLER_AVAILABLE or not _LC_AVAILABLE,
@@ -200,6 +205,7 @@ class TestReconciliationSignalDelegation:
 # ===========================================================================
 # Group B: takeover_response handler delegation
 # ===========================================================================
+
 
 @pytest.mark.skipif(
     not _TAKEOVER_HANDLER_AVAILABLE or not _LC_AVAILABLE,
@@ -299,6 +305,7 @@ class TestTakeoverResponseDelegation:
 # Group C: delegated_signal handler delegation
 # ===========================================================================
 
+
 @pytest.mark.skipif(
     not _DELEGATED_HANDLER_AVAILABLE or not _LC_AVAILABLE,
     reason="delegated_signal handler or coordinator unavailable",
@@ -391,6 +398,7 @@ class TestDelegatedSignalDelegation:
 # Group D: Coordinator on_execution_signal — device_id parameter
 # ===========================================================================
 
+
 @pytest.mark.skipif(not _LC_AVAILABLE, reason="coordinator unavailable")
 class TestCoordinatorExecutionSignalDeviceId:
 
@@ -431,6 +439,7 @@ class TestCoordinatorExecutionSignalDeviceId:
 # Group E: Coordinator on_execution_signal — PR-5A result consumer
 # ===========================================================================
 
+
 @pytest.mark.skipif(not _LC_AVAILABLE, reason="coordinator unavailable")
 class TestCoordinatorPR5AResultConsumer:
 
@@ -458,15 +467,19 @@ class TestCoordinatorPR5AResultConsumer:
         mock_consumer = MagicMock()
         mock_consumer.consume_android_behavioral_result = MagicMock(return_value={})
 
-        with patch(
-            "core.android_delegated_runtime_lifecycle_coordinator._ingest_execution_signal",
-            return_value=mock_ingress_outcome,
-        ), patch(
-            "core.android_delegated_runtime_lifecycle_coordinator._android_result_consumer",
-            mock_consumer,
-        ), patch(
-            "core.android_delegated_runtime_lifecycle_coordinator._RESULT_CONSUMER_AVAILABLE",
-            True,
+        with (
+            patch(
+                "core.android_delegated_runtime_lifecycle_coordinator._ingest_execution_signal",
+                return_value=mock_ingress_outcome,
+            ),
+            patch(
+                "core.android_delegated_runtime_lifecycle_coordinator._android_result_consumer",
+                mock_consumer,
+            ),
+            patch(
+                "core.android_delegated_runtime_lifecycle_coordinator._RESULT_CONSUMER_AVAILABLE",
+                True,
+            ),
         ):
             outcome = lc.on_execution_signal(
                 message=message,
@@ -497,15 +510,19 @@ class TestCoordinatorPR5AResultConsumer:
 
         mock_consumer = MagicMock()
 
-        with patch(
-            "core.android_delegated_runtime_lifecycle_coordinator._ingest_execution_signal",
-            return_value=mock_ingress_outcome,
-        ), patch(
-            "core.android_delegated_runtime_lifecycle_coordinator._android_result_consumer",
-            mock_consumer,
-        ), patch(
-            "core.android_delegated_runtime_lifecycle_coordinator._RESULT_CONSUMER_AVAILABLE",
-            True,
+        with (
+            patch(
+                "core.android_delegated_runtime_lifecycle_coordinator._ingest_execution_signal",
+                return_value=mock_ingress_outcome,
+            ),
+            patch(
+                "core.android_delegated_runtime_lifecycle_coordinator._android_result_consumer",
+                mock_consumer,
+            ),
+            patch(
+                "core.android_delegated_runtime_lifecycle_coordinator._RESULT_CONSUMER_AVAILABLE",
+                True,
+            ),
         ):
             outcome = lc.on_execution_signal(message=message)
 
@@ -529,15 +546,19 @@ class TestCoordinatorPR5AResultConsumer:
 
         mock_consumer = MagicMock()
 
-        with patch(
-            "core.android_delegated_runtime_lifecycle_coordinator._ingest_execution_signal",
-            return_value=mock_ingress_outcome,
-        ), patch(
-            "core.android_delegated_runtime_lifecycle_coordinator._android_result_consumer",
-            mock_consumer,
-        ), patch(
-            "core.android_delegated_runtime_lifecycle_coordinator._RESULT_CONSUMER_AVAILABLE",
-            True,
+        with (
+            patch(
+                "core.android_delegated_runtime_lifecycle_coordinator._ingest_execution_signal",
+                return_value=mock_ingress_outcome,
+            ),
+            patch(
+                "core.android_delegated_runtime_lifecycle_coordinator._android_result_consumer",
+                mock_consumer,
+            ),
+            patch(
+                "core.android_delegated_runtime_lifecycle_coordinator._RESULT_CONSUMER_AVAILABLE",
+                True,
+            ),
         ):
             outcome = lc.on_execution_signal(message=message)
 
@@ -562,15 +583,19 @@ class TestCoordinatorPR5AResultConsumer:
         mock_consumer = MagicMock()
         mock_consumer.consume_android_behavioral_result.side_effect = RuntimeError("consumer exploded")
 
-        with patch(
-            "core.android_delegated_runtime_lifecycle_coordinator._ingest_execution_signal",
-            return_value=mock_ingress_outcome,
-        ), patch(
-            "core.android_delegated_runtime_lifecycle_coordinator._android_result_consumer",
-            mock_consumer,
-        ), patch(
-            "core.android_delegated_runtime_lifecycle_coordinator._RESULT_CONSUMER_AVAILABLE",
-            True,
+        with (
+            patch(
+                "core.android_delegated_runtime_lifecycle_coordinator._ingest_execution_signal",
+                return_value=mock_ingress_outcome,
+            ),
+            patch(
+                "core.android_delegated_runtime_lifecycle_coordinator._android_result_consumer",
+                mock_consumer,
+            ),
+            patch(
+                "core.android_delegated_runtime_lifecycle_coordinator._RESULT_CONSUMER_AVAILABLE",
+                True,
+            ),
         ):
             outcome = lc.on_execution_signal(message=message)
 
@@ -582,6 +607,7 @@ class TestCoordinatorPR5AResultConsumer:
 # ===========================================================================
 # Group F: ACK response shapes
 # ===========================================================================
+
 
 @pytest.mark.skipif(
     not (_RECON_HANDLER_AVAILABLE and _TAKEOVER_HANDLER_AVAILABLE and _DELEGATED_HANDLER_AVAILABLE),
@@ -631,6 +657,7 @@ class TestAckResponseShapes:
 # Group G: Handler imports — coordinator importable from each handler module
 # ===========================================================================
 
+
 class TestHandlerImports:
 
     def test_G01_reconciliation_signal_module_imports_coordinator(self):
@@ -638,27 +665,27 @@ class TestHandlerImports:
         m = _load_handler_module("reconciliation_signal.py")
         if m is None:
             pytest.skip("reconciliation_signal handler not loadable")
-        assert hasattr(m, "_get_lifecycle_coordinator"), (
-            "reconciliation_signal handler must expose _get_lifecycle_coordinator"
-        )
+        assert hasattr(
+            m, "_get_lifecycle_coordinator"
+        ), "reconciliation_signal handler must expose _get_lifecycle_coordinator"
 
     def test_G02_takeover_response_module_imports_coordinator(self):
         """takeover_response module exposes _get_lifecycle_coordinator."""
         m = _load_handler_module("takeover_response.py")
         if m is None:
             pytest.skip("takeover_response handler not loadable")
-        assert hasattr(m, "_get_lifecycle_coordinator"), (
-            "takeover_response handler must expose _get_lifecycle_coordinator"
-        )
+        assert hasattr(
+            m, "_get_lifecycle_coordinator"
+        ), "takeover_response handler must expose _get_lifecycle_coordinator"
 
     def test_G03_delegated_signal_module_imports_coordinator(self):
         """delegated_signal module exposes _get_lifecycle_coordinator."""
         m = _load_handler_module("delegated_signal.py")
         if m is None:
             pytest.skip("delegated_signal handler not loadable")
-        assert hasattr(m, "_get_lifecycle_coordinator"), (
-            "delegated_signal handler must expose _get_lifecycle_coordinator"
-        )
+        assert hasattr(
+            m, "_get_lifecycle_coordinator"
+        ), "delegated_signal handler must expose _get_lifecycle_coordinator"
 
     def test_G04_reconciliation_signal_module_no_longer_imports_individual_ingress(self):
         """reconciliation_signal handler must NOT directly import participant truth ingress."""
@@ -676,8 +703,7 @@ class TestHandlerImports:
         if m is None:
             pytest.skip("takeover_response handler not loadable")
         assert not hasattr(m, "_record_takeover_response"), (
-            "takeover_response handler must delegate to coordinator, "
-            "not directly import _record_takeover_response"
+            "takeover_response handler must delegate to coordinator, " "not directly import _record_takeover_response"
         )
 
     def test_G06_delegated_signal_module_no_longer_imports_individual_ingress(self):
@@ -686,6 +712,5 @@ class TestHandlerImports:
         if m is None:
             pytest.skip("delegated_signal handler not loadable")
         assert not hasattr(m, "_ingest_delegated_signal"), (
-            "delegated_signal handler must delegate to coordinator, "
-            "not directly import _ingest_delegated_signal"
+            "delegated_signal handler must delegate to coordinator, " "not directly import _ingest_delegated_signal"
         )

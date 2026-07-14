@@ -167,13 +167,17 @@ class LLMRouteDecision:
             "alternatives": list(self.alternatives),
             "authority": self.authority,
             "is_canonical": self.is_canonical,
-            "source_request": {
-                "task_type": self.source_request.task_type,
-                "complexity": self.source_request.complexity,
-                "preferred_provider": self.source_request.preferred_provider,
-                "feature_context": self.source_request.feature_context,
-                "mode": self.source_request.mode,
-            } if self.source_request else None,
+            "source_request": (
+                {
+                    "task_type": self.source_request.task_type,
+                    "complexity": self.source_request.complexity,
+                    "preferred_provider": self.source_request.preferred_provider,
+                    "feature_context": self.source_request.feature_context,
+                    "mode": self.source_request.mode,
+                }
+                if self.source_request
+                else None
+            ),
         }
 
 
@@ -245,6 +249,7 @@ class LLMRouteAuthority:
         """
         if self._router is None:
             from core.multi_llm_router import get_llm_router
+
             self._router = get_llm_router()
         return self._router
 
@@ -335,12 +340,14 @@ class LLMRouteAuthority:
         **kwargs:
             Extra keyword arguments forwarded to ``MultiLLMRouter.chat()``.
         """
-        self.resolve(LLMRouteRequest(
-            task_type=task_type,
-            complexity=complexity,
-            preferred_provider=preferred_provider,
-            feature_context=feature_context,
-        ))
+        self.resolve(
+            LLMRouteRequest(
+                task_type=task_type,
+                complexity=complexity,
+                preferred_provider=preferred_provider,
+                feature_context=feature_context,
+            )
+        )
         return await self.execution_router.chat(
             messages=messages,
             task_type=task_type,
@@ -376,12 +383,14 @@ class LLMRouteAuthority:
         **kwargs:
             Extra keyword arguments forwarded to the execution router.
         """
-        self.resolve(LLMRouteRequest(
-            task_type=task_type,
-            complexity=complexity,
-            preferred_provider=preferred_provider,
-            feature_context=feature_context,
-        ))
+        self.resolve(
+            LLMRouteRequest(
+                task_type=task_type,
+                complexity=complexity,
+                preferred_provider=preferred_provider,
+                feature_context=feature_context,
+            )
+        )
         router = self.execution_router
         if hasattr(router, "chat_with_tools"):
             return await router.chat_with_tools(
@@ -423,12 +432,14 @@ class LLMRouteAuthority:
         **kwargs:
             Extra keyword arguments forwarded to the execution router.
         """
-        self.resolve(LLMRouteRequest(
-            task_type=task_type,
-            complexity=complexity,
-            preferred_provider=preferred_provider,
-            feature_context=feature_context,
-        ))
+        self.resolve(
+            LLMRouteRequest(
+                task_type=task_type,
+                complexity=complexity,
+                preferred_provider=preferred_provider,
+                feature_context=feature_context,
+            )
+        )
         return await self.execution_router.chat_json(
             messages=messages,
             task_type=task_type,

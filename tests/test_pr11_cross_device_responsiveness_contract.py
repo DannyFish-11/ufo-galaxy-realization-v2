@@ -62,27 +62,24 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 _MODULE_AVAILABLE = False
 try:
-    from core.cross_device_responsiveness_contract import (
-        # Authority / policy sentinels
+    from core.cross_device_responsiveness_contract import (  # Authority / policy sentinels; Enumerations; Data classes; Functions
         CROSS_DEVICE_RESPONSIVENESS_CONTRACT_AUTHORITY,
         CROSS_DEVICE_RESPONSIVENESS_CONTRACT_PR11_SENTINEL,
-        RESPONSIVENESS_IS_FIRST_CLASS_OPERATIONAL_DIMENSION_POLICY,
-        MISSING_PARTICIPANT_MUST_NOT_CLAIM_NEAR_INTERACTIVE_POLICY,
-        STALE_PARTICIPANT_MUST_DOWNGRADE_POLICY,
+        DEGRADED_MUST_NOT_BE_REPORTED_AS_BOUNDED_NEAR_REAL_TIME_POLICY,
         EVIDENCE_ABSENCE_BLOCKS_NEAR_INTERACTIVE_POLICY,
         LOCAL_VS_REMOTE_DOMAIN_MUST_BE_DISTINGUISHED_POLICY,
-        DEGRADED_MUST_NOT_BE_REPORTED_AS_BOUNDED_NEAR_REAL_TIME_POLICY,
-        # Enumerations
-        ResponsivenessLevel,
-        ParticipantReadinessState,
+        MISSING_PARTICIPANT_MUST_NOT_CLAIM_NEAR_INTERACTIVE_POLICY,
+        RESPONSIVENESS_IS_FIRST_CLASS_OPERATIONAL_DIMENSION_POLICY,
+        STALE_PARTICIPANT_MUST_DOWNGRADE_POLICY,
         ExecutionDomain,
-        # Data classes
-        ResponsivenessInput,
+        ParticipantReadinessState,
         ResponsivenessContract,
-        # Functions
+        ResponsivenessInput,
+        ResponsivenessLevel,
         classify_responsiveness,
         responsiveness_for_participant,
     )
+
     _MODULE_AVAILABLE = True
 except ImportError:
     pass
@@ -215,9 +212,9 @@ class TestNearInteractiveRemote(unittest.TestCase):
             is_stale=False,
         )
         contract = classify_responsiveness(inp)
-        assert contract.level is ResponsivenessLevel.near_interactive, (
-            f"Expected near_interactive, got {contract.level}"
-        )
+        assert (
+            contract.level is ResponsivenessLevel.near_interactive
+        ), f"Expected near_interactive, got {contract.level}"
 
     @_skip_if_unavailable
     def test_C02_health_exactly_0_8_yields_near_interactive(self):
@@ -424,9 +421,9 @@ class TestEventualEvidenceAbsent(unittest.TestCase):
             is_stale=False,
         )
         contract = classify_responsiveness(inp)
-        assert contract.level is ResponsivenessLevel.eventual, (
-            f"Expected eventual when evidence absent, got {contract.level}"
-        )
+        assert (
+            contract.level is ResponsivenessLevel.eventual
+        ), f"Expected eventual when evidence absent, got {contract.level}"
 
     @_skip_if_unavailable
     def test_G02_no_evidence_cannot_be_near_interactive(self):
@@ -462,10 +459,9 @@ class TestEventualEvidenceAbsent(unittest.TestCase):
             evidence_available=False,
         )
         contract = classify_responsiveness(inp)
-        assert any("evidence" in r for r in contract.downgrade_reasons), (
-            "Expected evidence-related downgrade reason, got: "
-            + str(contract.downgrade_reasons)
-        )
+        assert any(
+            "evidence" in r for r in contract.downgrade_reasons
+        ), "Expected evidence-related downgrade reason, got: " + str(contract.downgrade_reasons)
 
 
 # ===========================================================================

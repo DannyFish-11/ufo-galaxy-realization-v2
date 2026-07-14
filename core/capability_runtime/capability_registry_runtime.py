@@ -63,8 +63,8 @@ from typing import Any, Dict, List, Optional
 
 from .capability_state import CapabilityAvailability, CapabilityRuntimeState
 from .capability_summary import (
-    CapabilityRuntimeSummary,
     UNKNOWN_CAPABILITY_SUMMARY,
+    CapabilityRuntimeSummary,
 )
 
 logger = logging.getLogger("Galaxy.CapabilityRuntime.Registry")
@@ -194,7 +194,8 @@ class CapabilityRuntimeRegistry:
                 else:
                     logger.debug(
                         "CapabilityRuntimeRegistry.update: unknown field '%s' for '%s' — ignored",
-                        key, name,
+                        key,
+                        name,
                     )
             state_dict["last_updated"] = time.time()
             updated = CapabilityRuntimeState.from_dict(state_dict)
@@ -202,7 +203,8 @@ class CapabilityRuntimeRegistry:
 
         logger.debug(
             "Updated capability runtime state: %s (fields=%s)",
-            name, list(fields.keys()),
+            name,
+            list(fields.keys()),
             extra={
                 "event": "capability_runtime_updated",
                 "capability_name": name,
@@ -295,11 +297,7 @@ class CapabilityRuntimeRegistry:
         states = self.list_states()
         availability_counts: Dict[str, int] = {}
         for s in states:
-            key = (
-                s.availability.value
-                if isinstance(s.availability, CapabilityAvailability)
-                else str(s.availability)
-            )
+            key = s.availability.value if isinstance(s.availability, CapabilityAvailability) else str(s.availability)
             availability_counts[key] = availability_counts.get(key, 0) + 1
 
         return {

@@ -253,24 +253,16 @@ def build_subject_facing_foreground(
     lifecycle = action_lifecycle_surface or {}
 
     # ── 1. Subject state (presence mode) ───────────────────────────────────
-    subject_state = (
-        str(visible_action_surface.get("current_presence_mode", "")).strip()
-        or "unknown"
-    )
+    subject_state = str(visible_action_surface.get("current_presence_mode", "")).strip() or "unknown"
 
     # ── 2. Action phase ─────────────────────────────────────────────────────
     action_phase = (
-        str(
-            visible_action_surface.get("lifecycle_phase", "")
-            or lifecycle.get("phase", "")
-        ).strip()
-        or "unknown"
+        str(visible_action_surface.get("lifecycle_phase", "") or lifecycle.get("phase", "")).strip() or "unknown"
     )
 
     # ── 3. Blocker (primary event — evaluated before action/result) ─────────
     blocker_reason = str(
-        visible_action_surface.get("blocker_summary", "")
-        or lifecycle.get("blocker_reason", "")
+        visible_action_surface.get("blocker_summary", "") or lifecycle.get("blocker_reason", "")
     ).strip()
     _raw_blocker: Any = visible_action_surface.get("blocker") or lifecycle.get("blocker")
     if _raw_blocker is not None and not isinstance(_raw_blocker, dict):
@@ -315,9 +307,7 @@ def build_subject_facing_foreground(
         ).strip()
     elif action_state == "failed":
         result = "failed"
-        result_summary = str(
-            visible_action_surface.get("lightweight_status_feedback", "")
-        ).strip()
+        result_summary = str(visible_action_surface.get("lightweight_status_feedback", "")).strip()
     else:
         result = ""
         result_summary = ""
@@ -396,11 +386,7 @@ def _active_continuous_families(canonical_continuous_ingress: Dict[str, Any]) ->
     families = canonical_continuous_ingress.get("families")
     if not isinstance(families, dict):
         return list(canonical_continuous_ingress.get("active_families") or [])
-    return [
-        name
-        for name, item in families.items()
-        if isinstance(item, dict) and bool(item.get("is_present"))
-    ]
+    return [name for name, item in families.items() if isinstance(item, dict) and bool(item.get("is_present"))]
 
 
 def build_subject_unified_lineage(
@@ -468,12 +454,12 @@ def build_subject_unified_lineage(
         "authority_boundary": {
             "orchestration_authority": "v2_center",
             "semantic_authority": str(carrier.get("semantic_authority") or "v2_openclawd"),
-            "participant_autonomy": (
-                "bounded_android_participation" if android_roles else "none_observed"
+            "participant_autonomy": ("bounded_android_participation" if android_roles else "none_observed"),
+            "local_execution_authority": (
+                "android_device_bounded_local_execution"
+                if "execution_runtime_participant" in android_roles
+                else "v2_or_local_runtime"
             ),
-            "local_execution_authority": "android_device_bounded_local_execution"
-            if "execution_runtime_participant" in android_roles
-            else "v2_or_local_runtime",
             "path_kind": path_kind,
         },
         "temporal_alignment": {
@@ -495,9 +481,7 @@ def build_subject_unified_lineage(
             "session_id": str(lifecycle.get("session_id") or carrier.get("session_id") or ""),
             "control_session_id": str(carrier.get("control_session_id") or ""),
             "replay_provenance_anchor": canonical_lineage_id,
-            "android_presence_record_count": int(
-                android_presence.get("presence_participant_count") or 0
-            ),
+            "android_presence_record_count": int(android_presence.get("presence_participant_count") or 0),
             "continuous_ingress_families": active_families,
         },
     }

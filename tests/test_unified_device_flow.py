@@ -10,19 +10,22 @@
   G  AIP v3 GOAL_EXECUTION / PARALLEL_SUBTASK message types；compat 层正确归一化
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 
 def _reset_udm():
     """重置 UnifiedDeviceManager 单例，确保测试隔离。"""
     from core.unified import device_manager as _udm_mod
+
     _udm_mod.UnifiedDeviceManager._instance = None
 
 
 def _reset_cap_registry():
     """重置 CapabilityRegistry 单例。"""
     from core.agent.capability_registry import CapabilityRegistry
+
     CapabilityRegistry._instance = None
 
 
@@ -30,31 +33,37 @@ def _reset_cap_registry():
 # Priority G — AIP v3 新消息类型
 # ---------------------------------------------------------------------------
 
+
 class TestAIPv3NewMessageTypes:
     """GOAL_EXECUTION / PARALLEL_SUBTASK message types in AIP v3."""
 
     def test_goal_execution_message_type_exists(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert hasattr(MessageType, "GOAL_EXECUTION")
         assert MessageType.GOAL_EXECUTION.value == "goal_execution"
 
     def test_parallel_subtask_message_type_exists(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert hasattr(MessageType, "PARALLEL_SUBTASK")
         assert MessageType.PARALLEL_SUBTASK.value == "parallel_subtask"
 
     def test_parallel_result_message_type_exists(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert hasattr(MessageType, "PARALLEL_RESULT")
         assert MessageType.PARALLEL_RESULT.value == "parallel_result"
 
     def test_goal_execution_result_message_type_exists(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert hasattr(MessageType, "GOAL_EXECUTION_RESULT")
         assert MessageType.GOAL_EXECUTION_RESULT.value == "goal_execution_result"
 
     def test_aip_message_has_task_type_field(self):
         from galaxy_gateway.protocol.aip_v3 import AIPMessage, MessageType
+
         msg = AIPMessage(
             type=MessageType.TASK_ASSIGN,
             device_id="dev_001",
@@ -64,6 +73,7 @@ class TestAIPv3NewMessageTypes:
 
     def test_aip_message_task_type_optional(self):
         from galaxy_gateway.protocol.aip_v3 import AIPMessage, MessageType
+
         msg = AIPMessage(type=MessageType.DEVICE_HEARTBEAT, device_id="dev_001")
         assert msg.task_type is None
 
@@ -72,31 +82,37 @@ class TestCompatLayerNewTypes:
     """compat.parse_message_compat handles new high-level type aliases."""
 
     def test_goal_alias_normalised(self):
-        from galaxy_gateway.protocol.compat import parse_message_compat
         from galaxy_gateway.protocol.aip_v3 import MessageType
+        from galaxy_gateway.protocol.compat import parse_message_compat
+
         msg = parse_message_compat({"type": "goal", "device_id": "d1"})
         assert msg.type == MessageType.GOAL_EXECUTION
 
     def test_goal_execute_alias_normalised(self):
-        from galaxy_gateway.protocol.compat import parse_message_compat
         from galaxy_gateway.protocol.aip_v3 import MessageType
+        from galaxy_gateway.protocol.compat import parse_message_compat
+
         msg = parse_message_compat({"type": "goal_execute", "device_id": "d1"})
         assert msg.type == MessageType.GOAL_EXECUTION
 
     def test_parallel_task_alias_normalised(self):
-        from galaxy_gateway.protocol.compat import parse_message_compat
         from galaxy_gateway.protocol.aip_v3 import MessageType
+        from galaxy_gateway.protocol.compat import parse_message_compat
+
         msg = parse_message_compat({"type": "parallel_task", "device_id": "d1"})
         assert msg.type == MessageType.PARALLEL_SUBTASK
 
     def test_v3_goal_execution_passes_through(self):
-        from galaxy_gateway.protocol.compat import parse_message_compat
         from galaxy_gateway.protocol.aip_v3 import MessageType
-        msg = parse_message_compat({
-            "version": "3.0",
-            "type": "goal_execution",
-            "device_id": "d1",
-        })
+        from galaxy_gateway.protocol.compat import parse_message_compat
+
+        msg = parse_message_compat(
+            {
+                "version": "3.0",
+                "type": "goal_execution",
+                "device_id": "d1",
+            }
+        )
         assert msg.type == MessageType.GOAL_EXECUTION
 
 
@@ -104,16 +120,19 @@ class TestCompatLayerNewTypes:
 # Priority A — UnifiedDeviceManager as SSOT
 # ---------------------------------------------------------------------------
 
+
 class TestUnifiedDeviceManagerSSOT:
     """UnifiedDeviceManager 是唯一设备事实来源。"""
 
     def setup_method(self):
         _reset_udm()
         from core.unified.device_manager import UnifiedDeviceManager
+
         self.udm = UnifiedDeviceManager()
 
     def test_register_and_retrieve_device(self):
         from core.unified.models import UnifiedDevice, UnifiedDeviceType
+
         device = UnifiedDevice(device_id="test_ssot_01", device_type=UnifiedDeviceType.ANDROID)
         self.udm.register_device(device)
         retrieved = self.udm.get_device("test_ssot_01")
@@ -121,11 +140,14 @@ class TestUnifiedDeviceManagerSSOT:
         assert retrieved.device_id == "test_ssot_01"
 
     def test_register_from_dict(self):
-        dev = self.udm.register_device_from_dict("dict_dev_01", {
-            "device_name": "My Phone",
-            "device_type": "android",
-            "capabilities": ["touch", "screen"],
-        })
+        dev = self.udm.register_device_from_dict(
+            "dict_dev_01",
+            {
+                "device_name": "My Phone",
+                "device_type": "android",
+                "capabilities": ["touch", "screen"],
+            },
+        )
         assert dev.device_id == "dict_dev_01"
         assert "touch" in dev.capabilities
         stored = self.udm.get_device("dict_dev_01")
@@ -133,6 +155,7 @@ class TestUnifiedDeviceManagerSSOT:
 
     def test_unregister_removes_device(self):
         from core.unified.models import UnifiedDevice
+
         device = UnifiedDevice(device_id="test_unreg_01")
         self.udm.register_device(device)
         self.udm.unregister_device("test_unreg_01")
@@ -140,6 +163,7 @@ class TestUnifiedDeviceManagerSSOT:
 
     def test_get_autonomous_devices_returns_only_autonomous(self):
         from core.unified.models import UnifiedDevice, UnifiedDeviceStatus
+
         normal = UnifiedDevice(device_id="normal_01")
         normal.status = UnifiedDeviceStatus.ONLINE
         self.udm.register_device(normal)
@@ -158,6 +182,7 @@ class TestUnifiedDeviceManagerSSOT:
 
     def test_get_devices_with_capability(self):
         from core.unified.models import UnifiedDevice, UnifiedDeviceStatus
+
         dev = UnifiedDevice(
             device_id="cap_dev_01",
             capabilities=["touch", "camera"],
@@ -171,6 +196,7 @@ class TestUnifiedDeviceManagerSSOT:
 
     def test_get_devices_with_autonomous_metadata_capability(self):
         from core.unified.models import UnifiedDevice, UnifiedDeviceStatus
+
         dev = UnifiedDevice(
             device_id="auto_cap_01",
             metadata={"parallel_execution_enabled": True},
@@ -187,6 +213,7 @@ class TestUnifiedDeviceManagerSSOT:
 # Priority C — CapabilityRegistry autonomous capabilities
 # ---------------------------------------------------------------------------
 
+
 class TestCapabilityRegistryAutonomous:
     """CapabilityRegistry 加载高层自治能力。"""
 
@@ -196,9 +223,9 @@ class TestCapabilityRegistryAutonomous:
 
     @pytest.mark.asyncio
     async def test_load_autonomous_caps_from_udm(self):
+        from core.agent.capability_registry import CapabilityRegistry
         from core.unified.device_manager import UnifiedDeviceManager
         from core.unified.models import UnifiedDevice, UnifiedDeviceStatus
-        from core.agent.capability_registry import CapabilityRegistry
 
         udm = UnifiedDeviceManager()
         dev = UnifiedDevice(
@@ -222,9 +249,9 @@ class TestCapabilityRegistryAutonomous:
 
     @pytest.mark.asyncio
     async def test_load_gateway_caps_from_udm(self):
+        from core.agent.capability_registry import CapabilityRegistry
         from core.unified.device_manager import UnifiedDeviceManager
         from core.unified.models import UnifiedDevice, UnifiedDeviceStatus
-        from core.agent.capability_registry import CapabilityRegistry
 
         udm = UnifiedDeviceManager()
         dev = UnifiedDevice(
@@ -248,6 +275,7 @@ class TestCapabilityRegistryAutonomous:
 # Priority A — OpenClawd.sync_device_capabilities uses UnifiedDeviceManager
 # ---------------------------------------------------------------------------
 
+
 class TestOpenClawdSyncUsesUDM:
     """OpenClawd.sync_device_capabilities 使用 UnifiedDeviceManager 作为 SSOT。"""
 
@@ -256,9 +284,9 @@ class TestOpenClawdSyncUsesUDM:
         _reset_cap_registry()
 
     def test_sync_device_capabilities_counts_low_level(self):
+        from core.openclawd import OpenClawd
         from core.unified.device_manager import UnifiedDeviceManager
         from core.unified.models import UnifiedDevice, UnifiedDeviceStatus
-        from core.openclawd import OpenClawd
 
         udm = UnifiedDeviceManager()
         dev = UnifiedDevice(
@@ -274,9 +302,9 @@ class TestOpenClawdSyncUsesUDM:
         assert count >= 2  # at least touch + gps
 
     def test_sync_device_capabilities_counts_autonomous(self):
+        from core.openclawd import OpenClawd
         from core.unified.device_manager import UnifiedDeviceManager
         from core.unified.models import UnifiedDevice, UnifiedDeviceStatus
-        from core.openclawd import OpenClawd
 
         udm = UnifiedDeviceManager()
         dev = UnifiedDevice(
@@ -295,6 +323,7 @@ class TestOpenClawdSyncUsesUDM:
 # ---------------------------------------------------------------------------
 # Priority D — OpenClawd._dispatch_goal_execution
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_dispatch_goal_execution_with_device():
@@ -370,6 +399,7 @@ async def test_dispatch_goal_execution_falls_back_to_agent_when_no_device():
 # Priority E — OpenClawd._dispatch_parallel_goal
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_dispatch_parallel_goal_distributes_to_all_devices():
     """parallel_goal dispatches to all devices that support parallel_execution_enabled."""
@@ -409,9 +439,9 @@ async def test_dispatch_parallel_goal_falls_back_to_goal_execution_when_no_devic
     message and avoid parallel path.'
     """
     _reset_udm()
+    import core.agent.capability_registry as cap_reg_mod
     from core.openclawd import OpenClawd
     from core.unified.device_manager import UnifiedDeviceManager
-    import core.agent.capability_registry as cap_reg_mod
 
     UnifiedDeviceManager()  # empty
 
@@ -470,14 +500,15 @@ async def test_dispatch_parallel_goal_partial_failure_still_succeeds():
 # Priority B — Websocket disconnect syncs UnifiedDeviceManager
 # ---------------------------------------------------------------------------
 
+
 class TestWebSocketDisconnectSync:
     """断联时正确更新 UnifiedDeviceManager 状态。"""
 
     async def test_disconnect_updates_unified_device_manager(self):
         _reset_udm()
-        from galaxy_gateway.websocket_handler import GatewayWSManager
         from core.unified.device_manager import UnifiedDeviceManager
         from core.unified.models import UnifiedDevice, UnifiedDeviceStatus
+        from galaxy_gateway.websocket_handler import GatewayWSManager
 
         udm = UnifiedDeviceManager()
 
@@ -492,6 +523,7 @@ class TestWebSocketDisconnectSync:
         manager.device_connections["ws_dev_01"] = "conn_1"
 
         from galaxy_gateway.device_router import device_router
+
         with patch.object(device_router, "unregister_device"):
             # disconnect 已是 async(B4 锁保护),同步调用只会产生未执行的协程
             await manager.disconnect("conn_1")
@@ -509,6 +541,7 @@ class TestWebSocketDisconnectSync:
 # SSOT 全链路闭环：REST 注册 → UDM → CapabilityRegistry
 # ---------------------------------------------------------------------------
 
+
 class TestRESTRegistrationWritesToUDM:
     """REST 注册路径必须写入 UnifiedDeviceManager（SSOT）。"""
 
@@ -519,6 +552,7 @@ class TestRESTRegistrationWritesToUDM:
     def _make_request(self, device_id: str, capabilities=None, metadata=None):
         """构造 DeviceRegisterRequest 风格字典，直接调用 devices.py 内部逻辑。"""
         from core.routes._models import DeviceRegisterRequest
+
         data = {
             "device_id": device_id,
             "device_type": "android",
@@ -537,24 +571,29 @@ class TestRESTRegistrationWritesToUDM:
         # 确保 devices 模块使用隔离的 UDM 单例
         _reset_udm()
         from core.unified.device_manager import get_unified_device_manager
+
         udm = get_unified_device_manager()
 
-        from core.routes.devices import create_router
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
+        from core.routes.devices import create_router
 
         app = FastAPI()
         app.include_router(create_router())
 
         with TestClient(app) as client:
-            resp = client.post("/api/v1/devices/register", json={
-                "device_id": "rest_ssot_01",
-                "device_type": "android",
-                "device_name": "SSoT Phone",
-                "capabilities": ["touch", "camera"],
-                "os_version": "Android 14",
-                "app_version": "2.1.0",
-            })
+            resp = client.post(
+                "/api/v1/devices/register",
+                json={
+                    "device_id": "rest_ssot_01",
+                    "device_type": "android",
+                    "device_name": "SSoT Phone",
+                    "capabilities": ["touch", "camera"],
+                    "os_version": "Android 14",
+                    "app_version": "2.1.0",
+                },
+            )
             assert resp.status_code == 200
             assert resp.json()["success"] is True
 
@@ -570,9 +609,11 @@ class TestRESTRegistrationWritesToUDM:
         _reset_udm()
         _reset_cap_registry()
         from core.unified.device_manager import get_unified_device_manager
+
         udm = get_unified_device_manager()
 
         from core.routes.devices import _sync_device_to_capability_registry
+
         device_info = {
             "device_id": "cap_reg_test_01",
             "device_name": "CapRegPhone",
@@ -588,6 +629,7 @@ class TestRESTRegistrationWritesToUDM:
         assert count >= 2, "至少应同步 screen 和 keyboard 两个能力"
 
         from core.agent.capability_registry import CapabilityRegistry
+
         reg = CapabilityRegistry.get_instance()
         items = reg.list_tools(source="gateway")
         names = [i.name for i in items]
@@ -598,20 +640,24 @@ class TestRESTRegistrationWritesToUDM:
     async def test_rest_unregister_removes_from_udm(self):
         """REST DELETE /devices/{id} 注销后设备应从 UDM 中移除。"""
         _reset_udm()
-        from core.unified.device_manager import get_unified_device_manager
-        from core.routes.devices import create_router
-        from core.routes._shared import registered_devices
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
+        from core.routes._shared import registered_devices
+        from core.routes.devices import create_router
+        from core.unified.device_manager import get_unified_device_manager
 
         udm = get_unified_device_manager()
 
         # 先在 UDM 和兼容缓存中预注册
-        udm.register_device_from_dict("del_test_01", {
-            "device_id": "del_test_01",
-            "device_type": "android",
-            "capabilities": [],
-        })
+        udm.register_device_from_dict(
+            "del_test_01",
+            {
+                "device_id": "del_test_01",
+                "device_type": "android",
+                "capabilities": [],
+            },
+        )
         registered_devices["del_test_01"] = {
             "device_id": "del_test_01",
             "device_type": "android",
@@ -631,14 +677,17 @@ class TestRESTRegistrationWritesToUDM:
     def test_rest_heartbeat_updates_udm(self):
         """REST POST /heartbeat 应更新 UDM 中的 last_heartbeat。"""
         _reset_udm()
-        from core.unified.device_manager import get_unified_device_manager
         from core.routes._shared import registered_devices
+        from core.unified.device_manager import get_unified_device_manager
 
         udm = get_unified_device_manager()
-        udm.register_device_from_dict("hb_test_01", {
-            "device_id": "hb_test_01",
-            "device_type": "android",
-        })
+        udm.register_device_from_dict(
+            "hb_test_01",
+            {
+                "device_id": "hb_test_01",
+                "device_type": "android",
+            },
+        )
         # 在兼容缓存中预置（heartbeat 端点检查 registered_devices 存在性）
         registered_devices["hb_test_01"] = {
             "device_id": "hb_test_01",

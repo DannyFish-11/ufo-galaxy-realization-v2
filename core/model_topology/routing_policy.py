@@ -83,9 +83,7 @@ def _select_primary_node(
     available = graph.available_nodes()
     if not available:
         if config.allow_unavailable_fallback:
-            available = sorted(
-                graph.all_nodes(), key=lambda n: (-n.base_weight, n.node_id)
-            )
+            available = sorted(graph.all_nodes(), key=lambda n: (-n.base_weight, n.node_id))
         else:
             return None
 
@@ -93,9 +91,7 @@ def _select_primary_node(
 
     if phase in (TriStatePhase.SILENT, TriStatePhase.LIMINAL):
         if config.require_multimodal_primary:
-            mm_pairs = [
-                (n, wf) for n, wf in weighted_available if n.is_multimodal_native
-            ]
+            mm_pairs = [(n, wf) for n, wf in weighted_available if n.is_multimodal_native]
             if mm_pairs:
                 return mm_pairs[0]
 
@@ -120,11 +116,7 @@ def _select_support_nodes(
     if phase == TriStatePhase.MANIFEST and domain == RuntimeDomain.CROSS_DEVICE:
         cd_nodes = {n.node_id for n in graph.cross_device_capable_nodes()}
         # Ensure cross-device nodes appear in the support list if not already
-        extra = [
-            (n, wf)
-            for n, wf in weighted
-            if n.node_id in cd_nodes
-        ]
+        extra = [(n, wf) for n, wf in weighted if n.node_id in cd_nodes]
         rest = [(n, wf) for n, wf in weighted if n.node_id not in cd_nodes]
         weighted = extra + rest
 

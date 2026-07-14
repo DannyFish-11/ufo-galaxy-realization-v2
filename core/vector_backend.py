@@ -42,6 +42,7 @@ logger = logging.getLogger("Galaxy.VectorBackend")
 @dataclass
 class SearchResult:
     """统一搜索结果"""
+
     doc_id: str
     content: str
     score: float
@@ -59,6 +60,7 @@ class SearchResult:
 # ---------------------------------------------------------------------------
 # 本地关键词后端（无依赖，始终可用）
 # ---------------------------------------------------------------------------
+
 
 class _LocalKeywordBackend:
     """本地 Jaccard 关键词搜索后端（零外部依赖）"""
@@ -85,12 +87,14 @@ class _LocalKeywordBackend:
             union = query_words | doc["words"]
             score = len(intersection) / max(len(union), 1)
             if score > 0:
-                scores.append(SearchResult(
-                    doc_id=doc_id,
-                    content=doc["content"],
-                    score=score,
-                    metadata=doc["metadata"],
-                ))
+                scores.append(
+                    SearchResult(
+                        doc_id=doc_id,
+                        content=doc["content"],
+                        score=score,
+                        metadata=doc["metadata"],
+                    )
+                )
         scores.sort(key=lambda x: x.score, reverse=True)
         return scores[:top_k]
 
@@ -109,6 +113,7 @@ class _LocalKeywordBackend:
 # ---------------------------------------------------------------------------
 # ChromaDB 后端
 # ---------------------------------------------------------------------------
+
 
 class _ChromaBackend:
     """ChromaDB 向量后端"""
@@ -143,10 +148,12 @@ class _ChromaBackend:
                     # 否则多语言模型在国内常常下不动。设 GALAXY_HF_MIRROR=0 可关闭。
                     try:
                         from core.memory._hf_mirror import ensure_hf_mirror
+
                         ensure_hf_mirror()
                     except Exception:
                         pass
                     from chromadb.utils import embedding_functions
+
                     _kwargs["embedding_function"] = embedding_functions.SentenceTransformerEmbeddingFunction(
                         model_name=_model
                     )
@@ -195,12 +202,14 @@ class _ChromaBackend:
             for doc, meta, dist in zip(docs, metas, dists):
                 score = max(0.0, 1.0 - dist)
                 doc_id = meta.pop("_doc_id", "") if meta else ""
-                output.append(SearchResult(
-                    doc_id=doc_id,
-                    content=doc,
-                    score=score,
-                    metadata=meta or {},
-                ))
+                output.append(
+                    SearchResult(
+                        doc_id=doc_id,
+                        content=doc,
+                        score=score,
+                        metadata=meta or {},
+                    )
+                )
             return output
         except Exception as exc:
             logger.warning(f"ChromaDB search 失败: {exc}，使用本地搜索")
@@ -232,6 +241,7 @@ class _ChromaBackend:
 # ---------------------------------------------------------------------------
 # Qdrant 后端
 # ---------------------------------------------------------------------------
+
 
 class _QdrantBackend:
     """Qdrant 向量后端"""
@@ -288,13 +298,16 @@ class _QdrantBackend:
             return
         try:
             from qdrant_client.models import PointStruct  # type: ignore
+
             self._client.upsert(
                 collection_name=self._collection_name,
-                points=[PointStruct(
-                    id=_int_id(doc_id),
-                    vector=vector,
-                    payload={"doc_id": doc_id, "content": content, **(metadata or {})},
-                )],
+                points=[
+                    PointStruct(
+                        id=_int_id(doc_id),
+                        vector=vector,
+                        payload={"doc_id": doc_id, "content": content, **(metadata or {})},
+                    )
+                ],
             )
         except Exception as exc:
             logger.warning(f"Qdrant upsert 失败: {exc}，写入本地索引")
@@ -332,6 +345,7 @@ class _QdrantBackend:
         if self._ready and self._client:
             try:
                 from qdrant_client.models import PointIdsList  # type: ignore
+
                 self._client.delete(
                     collection_name=self._collection_name,
                     points_selector=PointIdsList(points=[_int_id(doc_id)]),
@@ -351,6 +365,7 @@ class _QdrantBackend:
 # ---------------------------------------------------------------------------
 # 辅助函数
 # ---------------------------------------------------------------------------
+
 
 def _stable_id(doc_id: str) -> str:
     """为 ChromaDB 生成稳定字符串 ID"""
@@ -386,6 +401,7 @@ def _int_id(doc_id: str) -> int:
 # ---------------------------------------------------------------------------
 # 工厂函数
 # ---------------------------------------------------------------------------
+
 
 def create_vector_backend(
     backend: Optional[str] = None,

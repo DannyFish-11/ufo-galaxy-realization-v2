@@ -90,9 +90,7 @@ _logger = logging.getLogger("Galaxy.Projection.DesktopConsumptionAdapter")
 #: canonical client-side adapter layer.  Downstream desktop consumers can
 #: check this value to confirm the view-model was produced by the canonical
 #: adapter rather than assembled ad-hoc.
-DESKTOP_CONSUMPTION_ADAPTER_AUTHORITY: str = (
-    "core.desktop_consumption_adapter.adapt_integration_payload"
-)
+DESKTOP_CONSUMPTION_ADAPTER_AUTHORITY: str = "core.desktop_consumption_adapter.adapt_integration_payload"
 
 
 # ---------------------------------------------------------------------------
@@ -180,10 +178,7 @@ class DesktopOneAPIHorizonSummary:
         }
 
     def __repr__(self) -> str:  # pragma: no cover
-        return (
-            f"DesktopOneAPIHorizonSummary(system_layer={self.system_layer!r}, "
-            f"available={self.available})"
-        )
+        return f"DesktopOneAPIHorizonSummary(system_layer={self.system_layer!r}, " f"available={self.available})"
 
 
 # ---------------------------------------------------------------------------
@@ -232,16 +227,10 @@ class DesktopProviderRoutingSummary:
         self.selected_provider: Optional[str] = _r.get("selected_provider")
         self.primary_model_id: Optional[str] = _r.get("primary_model_id")
         self.vendor_source: Optional[str] = _r.get("vendor_source")
-        self.routing_authority_source: Optional[str] = _r.get(
-            "routing_authority_source"
-        )
-        self.legacy_routing_fallback_active: bool = bool(
-            _r.get("legacy_routing_fallback_active", False)
-        )
+        self.routing_authority_source: Optional[str] = _r.get("routing_authority_source")
+        self.legacy_routing_fallback_active: bool = bool(_r.get("legacy_routing_fallback_active", False))
         self.route_reason: Optional[str] = _r.get("route_reason")
-        self.provider_available: bool = bool(
-            _h.get("provider_available", _h.get("available", False))
-        )
+        self.provider_available: bool = bool(_h.get("provider_available", _h.get("available", False)))
         self.raw_routing: Dict[str, Any] = _r
         self.raw_health: Dict[str, Any] = _h
 
@@ -398,9 +387,7 @@ class DesktopClientViewModel:
             "view_model_id": self.view_model_id,
             "adapted_at": self.adapted_at,
             "readiness_state": (
-                self.readiness_state.value
-                if hasattr(self.readiness_state, "value")
-                else str(self.readiness_state)
+                self.readiness_state.value if hasattr(self.readiness_state, "value") else str(self.readiness_state)
             ),
             "is_canonical": self.is_canonical,
             "is_degraded": self.is_degraded,
@@ -437,6 +424,7 @@ class DesktopClientViewModel:
 # adapt_integration_payload — main adapter function
 # ---------------------------------------------------------------------------
 
+
 def _resolve_readiness_state(
     authority_indicators: Dict[str, Any],
     topology_projection: Any,
@@ -462,11 +450,7 @@ def _resolve_readiness_state(
         if pq is not None:
             pq_readiness = getattr(pq, "readiness", None)
             if pq_readiness is not None:
-                raw = (
-                    pq_readiness.value
-                    if hasattr(pq_readiness, "value")
-                    else str(pq_readiness)
-                )
+                raw = pq_readiness.value if hasattr(pq_readiness, "value") else str(pq_readiness)
                 try:
                     return DesktopReadinessState(raw)
                 except ValueError:
@@ -518,13 +502,9 @@ def adapt_integration_payload(payload: Any) -> "DesktopClientViewModel":
         integration_health_str = "unknown"
 
         if payload is not None:
-            authority_indicators = dict(
-                getattr(payload, "authority_indicators", {}) or {}
-            )
+            authority_indicators = dict(getattr(payload, "authority_indicators", {}) or {})
             topology_projection = getattr(payload, "topology_projection", None)
-            model_routing_summary = dict(
-                getattr(payload, "model_routing_summary", {}) or {}
-            )
+            model_routing_summary = dict(getattr(payload, "model_routing_summary", {}) or {})
             _ph = getattr(payload, "provider_health_summary", None)
             provider_health_summary = dict(_ph) if _ph else None
             _oa = getattr(payload, "oneapi_integration", None)
@@ -537,8 +517,8 @@ def adapt_integration_payload(payload: Any) -> "DesktopClientViewModel":
                     oneapi_raw = {}
             _ih = getattr(payload, "integration_health", None)
             integration_health_str = (
-                _ih.value if hasattr(_ih, "value") else str(_ih)
-            ) if _ih is not None else "unknown"
+                (_ih.value if hasattr(_ih, "value") else str(_ih)) if _ih is not None else "unknown"
+            )
 
             # PR-436/PR-8 shorthand properties: supplement authority_indicators
             # when the compact shorthand is present on the payload (introduced
@@ -555,9 +535,7 @@ def adapt_integration_payload(payload: Any) -> "DesktopClientViewModel":
                     authority_indicators["topology_authoritative"] = _pr8_is_canonical
 
         # --- Readiness state -----------------------------------------------
-        readiness_state = _resolve_readiness_state(
-            authority_indicators, topology_projection
-        )
+        readiness_state = _resolve_readiness_state(authority_indicators, topology_projection)
 
         # --- Boolean readiness flags ----------------------------------------
         is_canonical = readiness_state == DesktopReadinessState.canonical
@@ -582,9 +560,7 @@ def adapt_integration_payload(payload: Any) -> "DesktopClientViewModel":
             readiness_state = DesktopReadinessState.degraded
 
         # --- Legacy fallback flags ------------------------------------------
-        topology_legacy_fallback_active: bool = bool(
-            authority_indicators.get("topology_legacy_fallback_active", False)
-        )
+        topology_legacy_fallback_active: bool = bool(authority_indicators.get("topology_legacy_fallback_active", False))
         routing_legacy_fallback_active: bool = bool(
             authority_indicators.get("model_routing_legacy_fallback_active", False)
         )
@@ -596,9 +572,7 @@ def adapt_integration_payload(payload: Any) -> "DesktopClientViewModel":
 
         if topology_projection is not None:
             topology_provider_id = getattr(topology_projection, "provider_id", None)
-            topology_primary_model_id = getattr(
-                topology_projection, "primary_model_id", None
-            )
+            topology_primary_model_id = getattr(topology_projection, "primary_model_id", None)
             topology_route_reason = getattr(topology_projection, "route_reason", None)
 
         # Routing summary may also carry provider_id / primary_model_id
@@ -610,9 +584,7 @@ def adapt_integration_payload(payload: Any) -> "DesktopClientViewModel":
             topology_route_reason = model_routing_summary.get("route_reason")
 
         # --- Sub-summaries --------------------------------------------------
-        provider_routing = DesktopProviderRoutingSummary(
-            model_routing_summary, provider_health_summary
-        )
+        provider_routing = DesktopProviderRoutingSummary(model_routing_summary, provider_health_summary)
         oneapi_horizon = DesktopOneAPIHorizonSummary(oneapi_raw)
 
         return DesktopClientViewModel(
@@ -628,9 +600,7 @@ def adapt_integration_payload(payload: Any) -> "DesktopClientViewModel":
             topology_provider_id=topology_provider_id,
             topology_primary_model_id=topology_primary_model_id,
             topology_route_reason=topology_route_reason,
-            routing_authority_source=model_routing_summary.get(
-                "routing_authority_source"
-            ),
+            routing_authority_source=model_routing_summary.get("routing_authority_source"),
             provider_routing=provider_routing,
             oneapi_horizon=oneapi_horizon,
             integration_health=integration_health_str,
@@ -639,9 +609,7 @@ def adapt_integration_payload(payload: Any) -> "DesktopClientViewModel":
         )
 
     except Exception as _err:
-        _logger.warning(
-            "adapt_integration_payload failed, returning minimal view-model: %s", _err
-        )
+        _logger.warning("adapt_integration_payload failed, returning minimal view-model: %s", _err)
         return DesktopClientViewModel(
             view_model_id=f"dcvm_{uuid.uuid4().hex[:12]}",
             adapted_at=time.time(),

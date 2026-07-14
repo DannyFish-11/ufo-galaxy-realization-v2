@@ -13,8 +13,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 def _reset_capability_state() -> None:
     from core.agent.capability_registry import CapabilityRegistry
-    from core.capability_runtime.capability_registry_runtime import CapabilityRuntimeRegistry
     from core.capability_orchestrator import CapabilityOrchestrator
+    from core.capability_runtime.capability_registry_runtime import CapabilityRuntimeRegistry
     from core.unified.capability_authority import CapabilityAuthority
     from core.unified.capability_resolver import reset_capability_resolver
     from galaxy_gateway.capability_registry import GatewayCapabilityRegistry
@@ -56,8 +56,8 @@ def test_gateway_capability_registry_uses_canonical_capability_authority():
 
 
 def test_canonical_gateway_capability_projection_reads_from_resolver():
-    from galaxy_gateway.capability_registry import GatewayCapabilityRegistry
     from core.unified.gateway_capability_projection import query_gateway_capabilities
+    from galaxy_gateway.capability_registry import GatewayCapabilityRegistry
 
     _reset_capability_state()
     GatewayCapabilityRegistry().upsert(
@@ -80,9 +80,9 @@ def test_canonical_gateway_capability_projection_reads_from_resolver():
 
 
 def test_canonical_gateway_capability_projection_purge_removes_capability():
-    from galaxy_gateway.capability_registry import GatewayCapabilityRegistry
     from core.unified.capability_resolver import get_capability_resolver
     from core.unified.gateway_capability_projection import purge_gateway_capabilities_for_device
+    from galaxy_gateway.capability_registry import GatewayCapabilityRegistry
 
     _reset_capability_state()
     GatewayCapabilityRegistry().upsert(
@@ -100,9 +100,9 @@ def test_canonical_gateway_capability_projection_purge_removes_capability():
 
 @pytest.mark.asyncio
 async def test_android_capability_report_writes_directly_to_canonical_capability_authority():
-    from galaxy_gateway.android.handlers.capability_report import handle_capability_report
     from core.capability_runtime.capability_state import CapabilityAvailability
     from core.unified.capability_resolver import get_capability_resolver
+    from galaxy_gateway.android.handlers.capability_report import handle_capability_report
 
     _reset_capability_state()
     bridge = SimpleNamespace(

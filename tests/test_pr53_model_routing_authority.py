@@ -97,16 +97,18 @@ def _make_minimal_inventory():
 
     bridge = ConfigBridge()
     snapshots = [
-        LegacyLLMProviderSnapshot.from_dict({
-            "provider": "openai",
-            "model": "gpt-4o",
-            "models": ["gpt-4o"],
-            "speed_score": 8,
-            "quality_score": 9,
-            "available": True,
-            "multimodal": True,
-            "env_keys": ["OPENAI_API_KEY"],
-        }),
+        LegacyLLMProviderSnapshot.from_dict(
+            {
+                "provider": "openai",
+                "model": "gpt-4o",
+                "models": ["gpt-4o"],
+                "speed_score": 8,
+                "quality_score": 9,
+                "available": True,
+                "multimodal": True,
+                "env_keys": ["OPENAI_API_KEY"],
+            }
+        ),
     ]
     return bridge.build_inventory(snapshots)
 
@@ -213,8 +215,8 @@ def test_10_build_runtime_projection_without_route_plan_sets_none_authority():
 
 
 def test_11_runtime_projection_routing_authority_field_exists():
-    from core.projection.runtime_projection import RuntimeProjection
     from core.continuum.types import TriStatePhase
+    from core.projection.runtime_projection import RuntimeProjection
 
     proj = RuntimeProjection(tri_state_phase=TriStatePhase.SILENT)
     assert hasattr(proj, "routing_authority")
@@ -525,11 +527,7 @@ def test_40_multi_llm_router_pr_guardrail_is_routing_authority():
 def test_41_legacy_registry_has_three_routing_authority_entries():
     from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
 
-    count = sum(
-        1
-        for e in LEGACY_PATH_REGISTRY.values()
-        if e.pr_guardrail_added == "PR-routing-authority"
-    )
+    count = sum(1 for e in LEGACY_PATH_REGISTRY.values() if e.pr_guardrail_added == "PR-routing-authority")
     assert count >= 3
 
 

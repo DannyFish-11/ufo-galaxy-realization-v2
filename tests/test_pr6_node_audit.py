@@ -79,29 +79,28 @@ from pathlib import Path
 
 import pytest
 
+from scripts.node_audit import (  # PR-2 check category constants; PR-2 check result constants
+    CHECK_FAIL,
+    CHECK_HYGIENE,
+    CHECK_PACKAGING,
+    CHECK_PASS,
+    CHECK_REGISTRY_GOVERNANCE,
+    CHECK_RUNTIME_CONTRACT,
+    CHECK_SOURCE_COMPLETENESS,
+    CHECK_SYNTAX_SAFETY,
+    CHECK_UNKNOWN,
+    CHECK_WARN,
+    NodeAuditEntry,
+    NodeAuditReport,
+    NodeTier,
+    RecommendedAction,
+    run_audit,
+)
+
 # ---------------------------------------------------------------------------
 # Import under test
 # ---------------------------------------------------------------------------
 
-from scripts.node_audit import (
-    NodeTier,
-    RecommendedAction,
-    NodeAuditEntry,
-    NodeAuditReport,
-    run_audit,
-    # PR-2 check category constants
-    CHECK_SOURCE_COMPLETENESS,
-    CHECK_SYNTAX_SAFETY,
-    CHECK_PACKAGING,
-    CHECK_REGISTRY_GOVERNANCE,
-    CHECK_RUNTIME_CONTRACT,
-    CHECK_HYGIENE,
-    # PR-2 check result constants
-    CHECK_PASS,
-    CHECK_WARN,
-    CHECK_FAIL,
-    CHECK_UNKNOWN,
-)
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -125,6 +124,7 @@ def nodes_by_name(audit_report: NodeAuditReport):
 # 1–4: NodeTier constants
 # ---------------------------------------------------------------------------
 
+
 def test_01_node_tier_has_nominal():
     assert NodeTier.NOMINAL == "nominal"
 
@@ -145,6 +145,7 @@ def test_04_node_tier_has_stub():
 # 5–8: RecommendedAction constants
 # ---------------------------------------------------------------------------
 
+
 def test_05_recommended_action_has_keep():
     assert RecommendedAction.KEEP == "keep"
 
@@ -164,6 +165,7 @@ def test_08_recommended_action_has_delete():
 # ---------------------------------------------------------------------------
 # 9–17: NodeAuditEntry dataclass
 # ---------------------------------------------------------------------------
+
 
 def test_09_node_audit_entry_instantiates_with_name_and_path():
     e = NodeAuditEntry(name="Node_99_Test", path="nodes/Node_99_Test")
@@ -214,6 +216,7 @@ def test_17_node_audit_entry_to_dict_contains_notes_as_list():
 # 18–25: NodeAuditReport dataclass
 # ---------------------------------------------------------------------------
 
+
 def test_18_node_audit_report_instantiates():
     r = NodeAuditReport(generated_at="2026-01-01T00:00:00Z", project_root="/tmp")
     assert r.generated_at == "2026-01-01T00:00:00Z"
@@ -257,15 +260,13 @@ def test_25_report_to_dict_contains_nodes_key(audit_report):
 # 26–60: run_audit() integration tests
 # ---------------------------------------------------------------------------
 
+
 def test_26_run_audit_returns_node_audit_report(audit_report):
     assert isinstance(audit_report, NodeAuditReport)
 
 
 def test_27_run_audit_nominal_count_matches_disk(audit_report):
-    disk_count = sum(
-        1 for d in (_PROJECT_ROOT / "nodes").iterdir()
-        if d.is_dir() and d.name.startswith("Node_")
-    )
+    disk_count = sum(1 for d in (_PROJECT_ROOT / "nodes").iterdir() if d.is_dir() and d.name.startswith("Node_"))
     assert audit_report.nominal_count == disk_count
 
 
@@ -282,12 +283,7 @@ def test_30_run_audit_stub_count_non_negative(audit_report):
 
 
 def test_31_run_audit_action_counts_sum_to_nominal(audit_report):
-    total = (
-        audit_report.keep_count
-        + audit_report.repair_count
-        + audit_report.archive_count
-        + audit_report.delete_count
-    )
+    total = audit_report.keep_count + audit_report.repair_count + audit_report.archive_count + audit_report.delete_count
     assert total == audit_report.nominal_count
 
 
@@ -297,9 +293,7 @@ def test_32_run_audit_every_entry_has_non_empty_name(audit_report):
 
 
 def test_33_run_audit_every_entry_has_valid_tier(audit_report):
-    valid_tiers = {
-        NodeTier.NOMINAL, NodeTier.RUNNABLE, NodeTier.ORCHESTRATED, NodeTier.STUB
-    }
+    valid_tiers = {NodeTier.NOMINAL, NodeTier.RUNNABLE, NodeTier.ORCHESTRATED, NodeTier.STUB}
     for entry in audit_report.nodes:
         assert entry.tier in valid_tiers, f"{entry.name} has unexpected tier {entry.tier!r}"
 
@@ -312,9 +306,7 @@ def test_34_run_audit_every_entry_has_valid_action(audit_report):
         RecommendedAction.DELETE,
     }
     for entry in audit_report.nodes:
-        assert entry.action in valid_actions, (
-            f"{entry.name} has unexpected action {entry.action!r}"
-        )
+        assert entry.action in valid_actions, f"{entry.name} has unexpected action {entry.action!r}"
 
 
 def test_35_run_audit_nominal_count_gte_130(audit_report):
@@ -384,17 +376,13 @@ def test_48_node01_has_config_port(nodes_by_name):
 def test_49_all_orchestrated_nodes_in_config(audit_report):
     for entry in audit_report.nodes:
         if entry.tier == NodeTier.ORCHESTRATED:
-            assert entry.in_node_dependencies, (
-                f"{entry.name} tier=orchestrated but in_node_dependencies=False"
-            )
+            assert entry.in_node_dependencies, f"{entry.name} tier=orchestrated but in_node_dependencies=False"
 
 
 def test_50_all_reserved_nodes_not_keep(audit_report, nodes_by_name):
     for name in audit_report.reserved_nodes:
         entry = nodes_by_name[name]
-        assert entry.action != RecommendedAction.KEEP, (
-            f"Reserved node {name} unexpectedly has action=keep"
-        )
+        assert entry.action != RecommendedAction.KEEP, f"Reserved node {name} unexpectedly has action=keep"
 
 
 def test_51_node130_autonomous_coding_is_in_config_post_pr7(audit_report):
@@ -460,6 +448,7 @@ def test_60_keep_count_gte_80(audit_report):
 
 # ── Check category constants ──────────────────────────────────────────────
 
+
 def test_61_check_source_completeness_constant():
     assert CHECK_SOURCE_COMPLETENESS == "source_completeness"
 
@@ -501,6 +490,7 @@ def test_70_check_unknown_constant():
 
 
 # ── NodeAuditEntry new PR-2 fields ───────────────────────────────────────
+
 
 def test_71_node_audit_entry_has_syntax_ok_field():
     e = NodeAuditEntry(name="Node_99_Test", path="nodes/Node_99_Test")
@@ -553,13 +543,21 @@ def test_78_node_audit_entry_has_checks_field():
 def test_79_node_audit_entry_to_dict_contains_new_fields():
     e = NodeAuditEntry(name="Node_99_Test", path="nodes/Node_99_Test")
     d = e.to_dict()
-    for key in ("syntax_ok", "fusion_syntax_ok", "config_startup_policy",
-                "policy_valid", "has_health_endpoint", "has_status_endpoint",
-                "hygiene_violations", "checks"):
+    for key in (
+        "syntax_ok",
+        "fusion_syntax_ok",
+        "config_startup_policy",
+        "policy_valid",
+        "has_health_endpoint",
+        "has_status_endpoint",
+        "hygiene_violations",
+        "checks",
+    ):
         assert key in d, f"to_dict() missing key '{key}'"
 
 
 # ── NodeAuditReport new PR-2 fields ──────────────────────────────────────
+
 
 def test_80_report_has_port_conflicts_field(audit_report):
     assert hasattr(audit_report, "port_conflicts")
@@ -593,20 +591,23 @@ def test_85_report_has_missing_required_files_nodes_field(audit_report):
 
 # ── Integration: PR-2 check results on real nodes ────────────────────────
 
+
 def test_86_all_entries_have_all_six_checks(audit_report):
     """Every node entry must have all six check categories populated."""
     required = {
-        CHECK_SOURCE_COMPLETENESS, CHECK_SYNTAX_SAFETY, CHECK_PACKAGING,
-        CHECK_REGISTRY_GOVERNANCE, CHECK_RUNTIME_CONTRACT, CHECK_HYGIENE,
+        CHECK_SOURCE_COMPLETENESS,
+        CHECK_SYNTAX_SAFETY,
+        CHECK_PACKAGING,
+        CHECK_REGISTRY_GOVERNANCE,
+        CHECK_RUNTIME_CONTRACT,
+        CHECK_HYGIENE,
     }
     valid_values = {CHECK_PASS, CHECK_WARN, CHECK_FAIL, CHECK_UNKNOWN}
     for entry in audit_report.nodes:
         missing = required - set(entry.checks)
         assert not missing, f"{entry.name} missing checks: {missing}"
         for cat, val in entry.checks.items():
-            assert val in valid_values, (
-                f"{entry.name} check '{cat}' has invalid value '{val}'"
-            )
+            assert val in valid_values, f"{entry.name} check '{cat}' has invalid value '{val}'"
 
 
 def test_87_orchestrated_nodes_pass_registry_governance(audit_report):
@@ -614,30 +615,24 @@ def test_87_orchestrated_nodes_pass_registry_governance(audit_report):
     for entry in audit_report.nodes:
         if entry.tier == NodeTier.ORCHESTRATED:
             result = entry.checks.get(CHECK_REGISTRY_GOVERNANCE)
-            assert result == CHECK_PASS, (
-                f"{entry.name} tier=orchestrated but registry_governance={result}"
-            )
+            assert result == CHECK_PASS, f"{entry.name} tier=orchestrated but registry_governance={result}"
 
 
 def test_88_no_syntax_errors_in_repo(audit_report):
     """No node should have a Python syntax error — all files must compile."""
-    assert audit_report.syntax_error_nodes == [], (
-        f"Nodes with syntax errors: {audit_report.syntax_error_nodes}"
-    )
+    assert audit_report.syntax_error_nodes == [], f"Nodes with syntax errors: {audit_report.syntax_error_nodes}"
 
 
 def test_89_no_port_conflicts_in_registry(audit_report):
     """node_dependencies.json must not assign the same port to two nodes."""
-    assert audit_report.port_conflicts == [], (
-        f"Port conflicts detected: {audit_report.port_conflicts}"
-    )
+    assert audit_report.port_conflicts == [], f"Port conflicts detected: {audit_report.port_conflicts}"
 
 
 def test_90_no_policy_violations(audit_report):
     """No node should have an invalid startup_policy value."""
-    assert audit_report.policy_violation_nodes == [], (
-        f"Nodes with invalid policy: {audit_report.policy_violation_nodes}"
-    )
+    assert (
+        audit_report.policy_violation_nodes == []
+    ), f"Nodes with invalid policy: {audit_report.policy_violation_nodes}"
 
 
 def test_91_node95_has_hygiene_violation(audit_report, nodes_by_name):
@@ -646,8 +641,7 @@ def test_91_node95_has_hygiene_violation(audit_report, nodes_by_name):
     assert entry is not None
     # The .pid file that previously existed was cleaned up; the node is now clean.
     assert not entry.hygiene_violations, (
-        f"Unexpected hygiene violations on Node_95_WebRTC_Receiver: "
-        f"{entry.hygiene_violations}"
+        f"Unexpected hygiene violations on Node_95_WebRTC_Receiver: " f"{entry.hygiene_violations}"
     )
     assert entry.checks.get(CHECK_HYGIENE) == CHECK_PASS
 
@@ -677,9 +671,9 @@ def test_95_missing_required_files_contains_nodes_without_main(audit_report):
     """missing_required_files_nodes must include every node that has no main.py."""
     for entry in audit_report.nodes:
         if not entry.has_main_py:
-            assert entry.name in audit_report.missing_required_files_nodes, (
-                f"{entry.name} has no main.py but not in missing_required_files_nodes"
-            )
+            assert (
+                entry.name in audit_report.missing_required_files_nodes
+            ), f"{entry.name} has no main.py but not in missing_required_files_nodes"
 
 
 def test_96_checks_dict_is_json_serialisable(audit_report):
@@ -691,8 +685,11 @@ def test_96_checks_dict_is_json_serialisable(audit_report):
 def test_97_report_to_dict_contains_pr2_aggregate_fields(audit_report):
     d = audit_report.to_dict()
     for key in (
-        "port_conflicts", "syntax_error_nodes", "missing_packaging_nodes",
-        "hygiene_violation_nodes", "policy_violation_nodes",
+        "port_conflicts",
+        "syntax_error_nodes",
+        "missing_packaging_nodes",
+        "hygiene_violation_nodes",
+        "policy_violation_nodes",
         "missing_required_files_nodes",
     ):
         assert key in d, f"report.to_dict() missing key '{key}'"
@@ -701,14 +698,22 @@ def test_97_report_to_dict_contains_pr2_aggregate_fields(audit_report):
 def test_98_core_module_exports_check_constants():
     """core/node_audit.py must re-export all PR-2 check constants."""
     from core.node_audit import (
-        CHECK_SOURCE_COMPLETENESS as CSC,
-        CHECK_SYNTAX_SAFETY as CSS,
-        CHECK_PACKAGING as CPK,
-        CHECK_REGISTRY_GOVERNANCE as CRG,
-        CHECK_RUNTIME_CONTRACT as CRC,
-        CHECK_HYGIENE as CHY,
-        CHECK_PASS, CHECK_WARN, CHECK_FAIL, CHECK_UNKNOWN,
+        CHECK_FAIL,
     )
+    from core.node_audit import CHECK_HYGIENE as CHY
+    from core.node_audit import CHECK_PACKAGING as CPK
+    from core.node_audit import (
+        CHECK_PASS,
+    )
+    from core.node_audit import CHECK_REGISTRY_GOVERNANCE as CRG
+    from core.node_audit import CHECK_RUNTIME_CONTRACT as CRC
+    from core.node_audit import CHECK_SOURCE_COMPLETENESS as CSC
+    from core.node_audit import CHECK_SYNTAX_SAFETY as CSS
+    from core.node_audit import (
+        CHECK_UNKNOWN,
+        CHECK_WARN,
+    )
+
     assert CSC == "source_completeness"
     assert CSS == "syntax_safety"
     assert CPK == "packaging"
@@ -727,15 +732,11 @@ def test_99_nodes_without_fusion_entry_have_source_completeness_warn_or_fail(aud
         if not entry.has_fusion_entry:
             result = entry.checks.get(CHECK_SOURCE_COMPLETENESS)
             assert result in (CHECK_WARN, CHECK_FAIL, CHECK_UNKNOWN), (
-                f"{entry.name} missing fusion_entry.py but has "
-                f"source_completeness={result}"
+                f"{entry.name} missing fusion_entry.py but has " f"source_completeness={result}"
             )
 
 
 def test_100_hygiene_violation_nodes_list_consistent_with_entry_violations(audit_report):
     """hygiene_violation_nodes aggregate must be consistent with per-entry data."""
-    from_entries = sorted(
-        e.name for e in audit_report.nodes if e.hygiene_violations
-    )
+    from_entries = sorted(e.name for e in audit_report.nodes if e.hygiene_violations)
     assert audit_report.hygiene_violation_nodes == from_entries
-

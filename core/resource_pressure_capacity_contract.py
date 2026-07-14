@@ -579,9 +579,7 @@ class CapacityEvidence:
     def to_dict(self) -> Dict[str, Any]:
         """Return a JSON-serialisable dict representation."""
         return {
-            "resource_pressure_within_normal_bounds": (
-                self.resource_pressure_within_normal_bounds
-            ),
+            "resource_pressure_within_normal_bounds": (self.resource_pressure_within_normal_bounds),
             "all_admission_gates_open": self.all_admission_gates_open,
             "throughput_at_nominal_level": self.throughput_at_nominal_level,
             "no_backpressure_active": self.no_backpressure_active,
@@ -609,31 +607,17 @@ class CapacityEvidence:
         except ValueError:
             pressure_level = ResourcePressureLevel.unknown
         return cls(
-            resource_pressure_within_normal_bounds=bool(
-                data.get("resource_pressure_within_normal_bounds", False)
-            ),
-            all_admission_gates_open=bool(
-                data.get("all_admission_gates_open", False)
-            ),
-            throughput_at_nominal_level=bool(
-                data.get("throughput_at_nominal_level", False)
-            ),
-            no_backpressure_active=bool(
-                data.get("no_backpressure_active", False)
-            ),
+            resource_pressure_within_normal_bounds=bool(data.get("resource_pressure_within_normal_bounds", False)),
+            all_admission_gates_open=bool(data.get("all_admission_gates_open", False)),
+            throughput_at_nominal_level=bool(data.get("throughput_at_nominal_level", False)),
+            no_backpressure_active=bool(data.get("no_backpressure_active", False)),
             no_shed_load_active=bool(data.get("no_shed_load_active", False)),
             admission_gate_active=bool(data.get("admission_gate_active", False)),
-            degraded_throughput_observed=bool(
-                data.get("degraded_throughput_observed", False)
-            ),
+            degraded_throughput_observed=bool(data.get("degraded_throughput_observed", False)),
             backpressure_active=bool(data.get("backpressure_active", False)),
             shed_load_active=bool(data.get("shed_load_active", False)),
-            best_effort_mode_active=bool(
-                data.get("best_effort_mode_active", False)
-            ),
-            resource_pressure_observed=bool(
-                data.get("resource_pressure_observed", False)
-            ),
+            best_effort_mode_active=bool(data.get("best_effort_mode_active", False)),
+            resource_pressure_observed=bool(data.get("resource_pressure_observed", False)),
             capacity_uncertainty=bool(data.get("capacity_uncertainty", False)),
             explicit_unavailable=bool(data.get("explicit_unavailable", False)),
             pressure_level=pressure_level,
@@ -852,47 +836,30 @@ def _classify(evidence: CapacityEvidence) -> CapacityVerdict:
 
     # Collect degradation signals for rules 4 and 5
     if evidence.resource_pressure_observed:
-        downgrade_reasons.append(
-            "resource_pressure_observed=True: resource pressure is present."
-        )
+        downgrade_reasons.append("resource_pressure_observed=True: resource pressure is present.")
     if evidence.degraded_throughput_observed:
-        downgrade_reasons.append(
-            "degraded_throughput_observed=True: throughput is below nominal."
-        )
+        downgrade_reasons.append("degraded_throughput_observed=True: throughput is below nominal.")
     if evidence.backpressure_active:
-        downgrade_reasons.append(
-            "backpressure_active=True: backpressure signals are present."
-        )
+        downgrade_reasons.append("backpressure_active=True: backpressure signals are present.")
     if evidence.shed_load_active:
-        downgrade_reasons.append(
-            "shed_load_active=True: load shedding is occurring."
-        )
+        downgrade_reasons.append("shed_load_active=True: load shedding is occurring.")
     if not evidence.resource_pressure_within_normal_bounds and any(positive_signals):
         # Only flag if there's some evidence (not pure zero-evidence case)
         if not evidence.resource_pressure_within_normal_bounds:
             downgrade_reasons.append(
-                "resource_pressure_within_normal_bounds=False: resource "
-                "pressure is not within normal bounds."
+                "resource_pressure_within_normal_bounds=False: resource " "pressure is not within normal bounds."
             )
     if not evidence.throughput_at_nominal_level and any(positive_signals):
         if not evidence.throughput_at_nominal_level:
-            downgrade_reasons.append(
-                "throughput_at_nominal_level=False: throughput is not nominal."
-            )
+            downgrade_reasons.append("throughput_at_nominal_level=False: throughput is not nominal.")
     if not evidence.no_backpressure_active and any(positive_signals):
         if not evidence.no_backpressure_active:
-            downgrade_reasons.append(
-                "no_backpressure_active=False: backpressure may be active."
-            )
+            downgrade_reasons.append("no_backpressure_active=False: backpressure may be active.")
     if not evidence.no_shed_load_active and any(positive_signals):
         if not evidence.no_shed_load_active:
-            downgrade_reasons.append(
-                "no_shed_load_active=False: load shedding may be active."
-            )
+            downgrade_reasons.append("no_shed_load_active=False: load shedding may be active.")
     if evidence.capacity_uncertainty:
-        downgrade_reasons.append(
-            "capacity_uncertainty=True: capacity state is uncertain."
-        )
+        downgrade_reasons.append("capacity_uncertainty=True: capacity state is uncertain.")
 
     # Collect unique reasons
     seen: set = set()
@@ -1014,8 +981,7 @@ def classify_capacity(evidence: CapacityEvidence) -> CapacityVerdict:
         return _classify(evidence)
     except Exception as exc:
         logger.warning(
-            "classify_capacity raised unexpectedly: %r — "
-            "defaulting to unavailable",
+            "classify_capacity raised unexpectedly: %r — " "defaulting to unavailable",
             exc,
         )
         return CapacityVerdict(

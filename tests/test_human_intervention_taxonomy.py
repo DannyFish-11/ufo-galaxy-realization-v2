@@ -64,20 +64,21 @@ _ACCEPTANCE_AVAILABLE = False
 
 try:
     from core.human_intervention_taxonomy import (
-        HUMAN_INTERVENTION_TAXONOMY_AUTHORITY,
-        HUMAN_INTERVENTION_TAXONOMY_PR08_SENTINEL,
         AUTONOMOUS_CLOSURE_REQUIRES_NO_HUMAN_ACTION_POLICY,
-        OPERATOR_ASSISTED_IS_NOT_AUTONOMOUS_CLOSURE_POLICY,
-        HUMAN_CONFIRMATION_DOES_NOT_IMPLY_SYSTEM_COMPLETE_POLICY,
-        MANUAL_OVERRIDE_MUST_NOT_BE_OPTIMISTICALLY_RECLASSIFIED_POLICY,
         ESCALATION_REQUIRED_BLOCKS_CLOSURE_VERDICT_POLICY,
         EVIDENCE_ABSENT_DEFAULTS_TO_ESCALATION_REQUIRED_POLICY,
+        HUMAN_CONFIRMATION_DOES_NOT_IMPLY_SYSTEM_COMPLETE_POLICY,
+        HUMAN_INTERVENTION_TAXONOMY_AUTHORITY,
+        HUMAN_INTERVENTION_TAXONOMY_PR08_SENTINEL,
+        MANUAL_OVERRIDE_MUST_NOT_BE_OPTIMISTICALLY_RECLASSIFIED_POLICY,
+        OPERATOR_ASSISTED_IS_NOT_AUTONOMOUS_CLOSURE_POLICY,
         HumanInterventionClass,
         HumanInterventionEvidence,
         HumanInterventionVerdict,
         build_human_intervention_verdict,
         classify_autonomy_level,
     )
+
     _TAXONOMY_AVAILABLE = True
 except ImportError:
     pass
@@ -88,6 +89,7 @@ try:
         SystemFinalAcceptanceEvaluator,
         reset_system_acceptance_evaluator,
     )
+
     _ACCEPTANCE_AVAILABLE = True
 except ImportError:
     pass
@@ -167,9 +169,7 @@ class TestSentinels:
             ESCALATION_REQUIRED_BLOCKS_CLOSURE_VERDICT_POLICY,
             EVIDENCE_ABSENT_DEFAULTS_TO_ESCALATION_REQUIRED_POLICY,
         ]:
-            assert sentinel.startswith("POLICY::"), (
-                f"Expected POLICY:: prefix: {sentinel!r}"
-            )
+            assert sentinel.startswith("POLICY::"), f"Expected POLICY:: prefix: {sentinel!r}"
 
 
 # ===========================================================================
@@ -212,22 +212,15 @@ class TestHumanInterventionClassOrdering:
     @_skip_taxonomy
     def test_C01_rank_ordering_highest_to_lowest(self):
         # autonomous_closure has highest rank
-        assert (
-            HumanInterventionClass.autonomous_closure.rank
-            > HumanInterventionClass.operator_assisted_closure.rank
-        )
+        assert HumanInterventionClass.autonomous_closure.rank > HumanInterventionClass.operator_assisted_closure.rank
         assert (
             HumanInterventionClass.operator_assisted_closure.rank
             > HumanInterventionClass.human_confirmed_system_incomplete.rank
         )
         assert (
-            HumanInterventionClass.human_confirmed_system_incomplete.rank
-            > HumanInterventionClass.manual_override.rank
+            HumanInterventionClass.human_confirmed_system_incomplete.rank > HumanInterventionClass.manual_override.rank
         )
-        assert (
-            HumanInterventionClass.manual_override.rank
-            > HumanInterventionClass.escalation_required.rank
-        )
+        assert HumanInterventionClass.manual_override.rank > HumanInterventionClass.escalation_required.rank
 
     @_skip_taxonomy
     def test_C02_is_at_least_self(self):
@@ -250,17 +243,13 @@ class TestHumanInterventionClassOrdering:
 
     @_skip_taxonomy
     def test_C05_is_positive_closure_false_for_escalation_required(self):
-        assert (
-            HumanInterventionClass.escalation_required.is_positive_closure is False
-        )
+        assert HumanInterventionClass.escalation_required.is_positive_closure is False
 
     @_skip_taxonomy
     def test_C06_is_positive_closure_true_for_closure_classes(self):
         for cls in HumanInterventionClass:
             if cls != HumanInterventionClass.escalation_required:
-                assert cls.is_positive_closure is True, (
-                    f"{cls.value} should be positive_closure"
-                )
+                assert cls.is_positive_closure is True, f"{cls.value} should be positive_closure"
 
 
 # ===========================================================================
@@ -675,10 +664,7 @@ class TestKeyBoundaries:
             system_incomplete_without_human=True,
         )
         v = build_human_intervention_verdict(ev)
-        assert (
-            v.intervention_class
-            == HumanInterventionClass.human_confirmed_system_incomplete
-        )
+        assert v.intervention_class == HumanInterventionClass.human_confirmed_system_incomplete
         assert v.intervention_class != HumanInterventionClass.operator_assisted_closure
 
     @_skip_taxonomy
@@ -690,10 +676,7 @@ class TestKeyBoundaries:
         )
         v = build_human_intervention_verdict(ev)
         assert v.intervention_class == HumanInterventionClass.manual_override
-        assert (
-            v.intervention_class
-            != HumanInterventionClass.human_confirmed_system_incomplete
-        )
+        assert v.intervention_class != HumanInterventionClass.human_confirmed_system_incomplete
 
 
 # ===========================================================================
@@ -752,6 +735,7 @@ class TestAcceptanceDimensionIntegration:
         # zero-evidence returned autonomous_closure, which violates the policy).
         # It should be pending (module present, contract wired, no live evidence).
         from core.system_final_acceptance_verdict import DimensionStatus
+
         assert item.status != DimensionStatus.unresolved, (
             "human_intervention dimension is unresolved — this likely means the "
             "zero-evidence probe returned autonomous_closure (contract "
@@ -792,10 +776,7 @@ class TestFullScenarios:
             system_incomplete_without_human=True,
         )
         v = build_human_intervention_verdict(ev)
-        assert (
-            v.intervention_class
-            == HumanInterventionClass.human_confirmed_system_incomplete
-        )
+        assert v.intervention_class == HumanInterventionClass.human_confirmed_system_incomplete
         assert v.is_autonomous is False
         assert v.is_positive_closure is True
 

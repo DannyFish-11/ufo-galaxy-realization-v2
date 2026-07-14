@@ -4,6 +4,7 @@ Wraps WebRTCCameraSession and VideoFeatureExtractor to produce VideoState
 frames every ~200–500 ms.  Handles camera unavailable / permission errors
 gracefully: the pipeline degrades without breaking the main flow.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -14,9 +15,9 @@ from typing import AsyncIterator, Callable, List, Optional
 
 import numpy as np
 
-from .webrtc_session import WebRTCCameraSession, WebRTCSessionConfig
-from .video_features import VideoFeatureExtractor, VideoState
 from .signal_quality import SignalQuality
+from .video_features import VideoFeatureExtractor, VideoState
+from .webrtc_session import WebRTCCameraSession, WebRTCSessionConfig
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +26,8 @@ logger = logging.getLogger(__name__)
 class VideoIngestConfig:
     """Configuration for the camera ingest pipeline."""
 
-    sample_interval_ms: int = 300         # Feature extraction interval (~3.3 fps)
-    enable_face_detection: bool = False   # Optional Haar-cascade face detection
+    sample_interval_ms: int = 300  # Feature extraction interval (~3.3 fps)
+    enable_face_detection: bool = False  # Optional Haar-cascade face detection
     scene_change_threshold: float = 0.35
     no_frame_degraded_threshold_ms: float = 5000.0  # Mark degraded after this
     webrtc_config: Optional[WebRTCSessionConfig] = None
@@ -67,9 +68,7 @@ class VideoIngestPipeline:
         """True if aiortc is installed."""
         return self._session.is_available
 
-    def add_callback(
-        self, cb: Callable[[VideoState, SignalQuality], None]
-    ) -> None:
+    def add_callback(self, cb: Callable[[VideoState, SignalQuality], None]) -> None:
         """Register a callback invoked with each new VideoState."""
         self._callbacks.append(cb)
 
@@ -81,9 +80,7 @@ class VideoIngestPipeline:
         """Signal the run loop to stop."""
         self._running = False
 
-    async def connect(
-        self, offer_sdp: str, offer_type: str = "offer"
-    ) -> Optional[str]:
+    async def connect(self, offer_sdp: str, offer_type: str = "offer") -> Optional[str]:
         """Establish a WebRTC session.  Returns answer SDP or None on failure."""
         return await self._session.connect(offer_sdp=offer_sdp, offer_type=offer_type)
 
@@ -97,9 +94,7 @@ class VideoIngestPipeline:
 
         Returns the extracted VideoState.
         """
-        state = self._extractor.process_frame(
-            frame, enable_face=self.config.enable_face_detection
-        )
+        state = self._extractor.process_frame(frame, enable_face=self.config.enable_face_detection)
         self._latest_state = state
         quality = SignalQuality.ok(freshness_ms=state.video_freshness_ms)
         self._quality = quality
@@ -121,22 +116,16 @@ class VideoIngestPipeline:
             self._quality = SignalQuality.device_unavailable()
             logger.warning("aiortc not available; video ingest running in stub mode")
 
-        logger.info(
-            "Video ingest loop started (interval=%d ms)", self.config.sample_interval_ms
-        )
+        logger.info("Video ingest loop started (interval=%d ms)", self.config.sample_interval_ms)
 
         while self._running:
             try:
                 frame, frame_quality = self._session.get_latest_frame()
 
                 if frame is not None and frame_quality.is_usable:
-                    state = self._extractor.process_frame(
-                        frame, enable_face=self.config.enable_face_detection
-                    )
+                    state = self._extractor.process_frame(frame, enable_face=self.config.enable_face_detection)
                     self._latest_state = state
-                    self._quality = SignalQuality.ok(
-                        freshness_ms=state.video_freshness_ms
-                    )
+                    self._quality = SignalQuality.ok(freshness_ms=state.video_freshness_ms)
                     for cb in list(self._callbacks):
                         try:
                             cb(state, self._quality)
@@ -145,13 +134,9 @@ class VideoIngestPipeline:
                 else:
                     # No usable frame — update staleness quality
                     if self._latest_state is not None:
-                        age_ms = (
-                            time.monotonic() - self._latest_state.timestamp
-                        ) * 1000.0
+                        age_ms = (time.monotonic() - self._latest_state.timestamp) * 1000.0
                         if age_ms > self.config.no_frame_degraded_threshold_ms:
-                            self._quality = SignalQuality.degraded(
-                                "no new frames received"
-                            )
+                            self._quality = SignalQuality.degraded("no new frames received")
 
                 await asyncio.sleep(self.config.sample_interval_ms / 1000.0)
 

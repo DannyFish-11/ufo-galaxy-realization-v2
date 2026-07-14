@@ -17,9 +17,7 @@ from typing import Dict, List, Tuple
 PERIPHERAL_CAPABILITY_BOUNDARY_AUTHORITY: str = (
     "core.peripheral_capability_boundary::PR10V2::outer-capability-ingress-boundary"
 )
-PERIPHERAL_CAPABILITY_BOUNDARY_PR10V2_SENTINEL: str = (
-    "peripheral_capability_boundary_pr10v2_boundary_locked"
-)
+PERIPHERAL_CAPABILITY_BOUNDARY_PR10V2_SENTINEL: str = "peripheral_capability_boundary_pr10v2_boundary_locked"
 
 PERIPHERAL_LAYERS_ARE_INGRESS_NOT_RUNTIME_AUTHORITY_POLICY: str = (
     "desktop/shell/multimodal/continuation/bridge-adapter layers are ingress or "

@@ -30,7 +30,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -109,9 +108,7 @@ class TestDelegateSingleRemoteUsesOrchestratorDispatch:
     directly when action_taken == "android_bridge_dispatch"."""
 
     @pytest.mark.asyncio
-    async def test_returns_orchestrator_result_when_android_bridge_handles(
-        self, monkeypatch
-    ):
+    async def test_returns_orchestrator_result_when_android_bridge_handles(self, monkeypatch):
         """When orchestrator dispatch succeeds with android_bridge_dispatch,
         _delegate_single_remote returns without calling _dispatch_remote_agent."""
         from core.openclawd import OpenClawd
@@ -167,9 +164,7 @@ class TestDelegateSingleRemoteUsesOrchestratorDispatch:
         assert remote_agent_call_count["n"] == 0
 
     @pytest.mark.asyncio
-    async def test_falls_through_when_orchestrator_does_not_handle_android(
-        self, monkeypatch
-    ):
+    async def test_falls_through_when_orchestrator_does_not_handle_android(self, monkeypatch):
         """When orchestrator dispatch does not produce android_bridge_dispatch
         (e.g., device not in bridge), _dispatch_remote_agent is called."""
         from core.openclawd import OpenClawd
@@ -253,9 +248,7 @@ class TestDelegateSingleRemoteUsesOrchestratorDispatch:
 
 class TestOrchestratorMetadataAttached:
     @pytest.mark.asyncio
-    async def test_orchestrator_metadata_in_response_on_android_bridge(
-        self, monkeypatch
-    ):
+    async def test_orchestrator_metadata_in_response_on_android_bridge(self, monkeypatch):
         from core.openclawd import OpenClawd
 
         oc = OpenClawd.__new__(OpenClawd)
@@ -273,9 +266,7 @@ class TestOrchestratorMetadataAttached:
         mock_sdo_cls.return_value.dispatch.return_value = mock_result
         fake_sdo_mod = MagicMock()
         fake_sdo_mod.SourceDispatchOrchestrator = mock_sdo_cls
-        monkeypatch.setitem(
-            sys.modules, "core.runtime.source_dispatch_orchestrator", fake_sdo_mod
-        )
+        monkeypatch.setitem(sys.modules, "core.runtime.source_dispatch_orchestrator", fake_sdo_mod)
 
         result = await oc._delegate_single_remote(  # type: ignore[attr-defined]
             message="test",
@@ -289,9 +280,7 @@ class TestOrchestratorMetadataAttached:
         assert meta.get("orchestrator_action_taken") == "android_bridge_dispatch"
 
     @pytest.mark.asyncio
-    async def test_orchestrator_metadata_in_response_on_fallthrough(
-        self, monkeypatch
-    ):
+    async def test_orchestrator_metadata_in_response_on_fallthrough(self, monkeypatch):
         from core.openclawd import OpenClawd
 
         oc = OpenClawd.__new__(OpenClawd)
@@ -314,9 +303,7 @@ class TestOrchestratorMetadataAttached:
         mock_sdo_cls.return_value.dispatch.return_value = mock_result
         fake_sdo_mod = MagicMock()
         fake_sdo_mod.SourceDispatchOrchestrator = mock_sdo_cls
-        monkeypatch.setitem(
-            sys.modules, "core.runtime.source_dispatch_orchestrator", fake_sdo_mod
-        )
+        monkeypatch.setitem(sys.modules, "core.runtime.source_dispatch_orchestrator", fake_sdo_mod)
 
         result = await oc._delegate_single_remote(  # type: ignore[attr-defined]
             message="test",
@@ -403,13 +390,11 @@ class TestMessageBuilderTaskAssignTraceId:
 
 class TestAndroidBridgeAssignTaskTraceId:
     @pytest.mark.asyncio
-    async def test_assign_task_extracts_trace_id_from_payload_to_message_builder(
-        self, monkeypatch
-    ):
+    async def test_assign_task_extracts_trace_id_from_payload_to_message_builder(self, monkeypatch):
         """AndroidBridge.assign_task extracts trace_id from payload and passes
         it to MessageBuilder.task_assign as a keyword argument."""
-        from galaxy_gateway.android_bridge import AndroidBridge
         from galaxy_gateway.android.message_builder import MessageBuilder
+        from galaxy_gateway.android_bridge import AndroidBridge
 
         bridge = AndroidBridge.__new__(AndroidBridge)
         bridge._devices = {"dev_trace": MagicMock()}
@@ -446,9 +431,7 @@ class TestAndroidBridgeAssignTaskTraceId:
 
         fake_dr_mod = MagicMock()
         fake_dr_mod.device_router.devices.get = MagicMock(return_value=None)
-        monkeypatch.setitem(
-            sys.modules, "galaxy_gateway.device_router", fake_dr_mod
-        )
+        monkeypatch.setitem(sys.modules, "galaxy_gateway.device_router", fake_dr_mod)
 
         # Patch MessageBuilder.task_assign to capture kwargs
         monkeypatch.setattr(
@@ -476,13 +459,11 @@ class TestAndroidBridgeAssignTaskTraceId:
         assert captured_task_assign_kwargs.get("trace_id") == "trace_from_payload"
 
     @pytest.mark.asyncio
-    async def test_assign_task_no_trace_id_in_payload_passes_none(
-        self, monkeypatch
-    ):
+    async def test_assign_task_no_trace_id_in_payload_passes_none(self, monkeypatch):
         """When payload has no trace_id, MessageBuilder.task_assign is called
         with trace_id=None."""
-        from galaxy_gateway.android_bridge import AndroidBridge
         from galaxy_gateway.android.message_builder import MessageBuilder
+        from galaxy_gateway.android_bridge import AndroidBridge
 
         bridge = AndroidBridge.__new__(AndroidBridge)
         bridge._devices = {"dev_no_trace": MagicMock()}
@@ -495,9 +476,7 @@ class TestAndroidBridgeAssignTaskTraceId:
         @classmethod  # type: ignore[misc]
         def _capture(cls, dev_id, task_id, task_type, payload, priority=5, timeout=300, trace_id=None):
             captured_trace_id["value"] = trace_id
-            return original_task_assign.__func__(
-                cls, dev_id, task_id, task_type, payload, priority, timeout, trace_id
-            )
+            return original_task_assign.__func__(cls, dev_id, task_id, task_type, payload, priority, timeout, trace_id)
 
         import sys
 
@@ -547,9 +526,7 @@ class TestDispatchViaField:
         mock_sdo_cls.return_value.dispatch.return_value = mock_result
         fake_sdo_mod = MagicMock()
         fake_sdo_mod.SourceDispatchOrchestrator = mock_sdo_cls
-        monkeypatch.setitem(
-            sys.modules, "core.runtime.source_dispatch_orchestrator", fake_sdo_mod
-        )
+        monkeypatch.setitem(sys.modules, "core.runtime.source_dispatch_orchestrator", fake_sdo_mod)
 
         result = await oc._delegate_single_remote(  # type: ignore[attr-defined]
             message="screenshot",
@@ -577,9 +554,7 @@ class TestDispatchViaField:
         mock_sdo_cls.return_value.dispatch.return_value = mock_result
         fake_sdo_mod = MagicMock()
         fake_sdo_mod.SourceDispatchOrchestrator = mock_sdo_cls
-        monkeypatch.setitem(
-            sys.modules, "core.runtime.source_dispatch_orchestrator", fake_sdo_mod
-        )
+        monkeypatch.setitem(sys.modules, "core.runtime.source_dispatch_orchestrator", fake_sdo_mod)
 
         result = await oc._delegate_single_remote(  # type: ignore[attr-defined]
             message="run",
@@ -621,9 +596,7 @@ class TestRemoteAgentNotCalledForAndroid:
         mock_sdo_cls.return_value.dispatch.return_value = mock_result
         fake_sdo_mod = MagicMock()
         fake_sdo_mod.SourceDispatchOrchestrator = mock_sdo_cls
-        monkeypatch.setitem(
-            sys.modules, "core.runtime.source_dispatch_orchestrator", fake_sdo_mod
-        )
+        monkeypatch.setitem(sys.modules, "core.runtime.source_dispatch_orchestrator", fake_sdo_mod)
 
         result = await oc._delegate_single_remote(  # type: ignore[attr-defined]
             message="android task",
@@ -633,6 +606,5 @@ class TestRemoteAgentNotCalledForAndroid:
 
         assert result["success"] is True
         assert was_called["remote_agent"] is False, (
-            "_dispatch_remote_agent should NOT be called when "
-            "orchestrator handles Android dispatch"
+            "_dispatch_remote_agent should NOT be called when " "orchestrator handles Android dispatch"
         )

@@ -54,11 +54,11 @@ logger = logging.getLogger("Galaxy.Unified.DeviceHealth")
 # Constants
 # ---------------------------------------------------------------------------
 
-_DEFAULT_WINDOW = 20          # Samples kept per device
-_LATENCY_GOOD_MS = 50.0       # Latency ≤ this is scored as 1.0
-_LATENCY_BAD_MS = 2000.0     # Latency ≥ this is scored as 0.0
-_JITTER_GOOD_MS = 20.0       # Jitter ≤ this is scored as 1.0
-_JITTER_BAD_MS = 500.0      # Jitter ≥ this is scored as 0.0
+_DEFAULT_WINDOW = 20  # Samples kept per device
+_LATENCY_GOOD_MS = 50.0  # Latency ≤ this is scored as 1.0
+_LATENCY_BAD_MS = 2000.0  # Latency ≥ this is scored as 0.0
+_JITTER_GOOD_MS = 20.0  # Jitter ≤ this is scored as 1.0
+_JITTER_BAD_MS = 500.0  # Jitter ≥ this is scored as 0.0
 
 # Component weights (must sum to 1.0)
 _W_LATENCY = 0.35
@@ -237,8 +237,7 @@ class DeviceHealthScorer:
             sample_count=sample_count,
         )
         logger.debug(
-            "DeviceHealthScorer: device=%s score=%.3f latency=%.3f error=%.3f "
-            "jitter=%.3f heartbeat=%.3f",
+            "DeviceHealthScorer: device=%s score=%.3f latency=%.3f error=%.3f " "jitter=%.3f heartbeat=%.3f",
             device_id,
             hs.total_score,
             hs.latency_score,
@@ -268,9 +267,7 @@ class DeviceHealthScorer:
         if avg >= _LATENCY_BAD_MS:
             return 0.0
         # Logarithmic interpolation
-        return 1.0 - math.log(avg / _LATENCY_GOOD_MS) / math.log(
-            _LATENCY_BAD_MS / _LATENCY_GOOD_MS
-        )
+        return 1.0 - math.log(avg / _LATENCY_GOOD_MS) / math.log(_LATENCY_BAD_MS / _LATENCY_GOOD_MS)
 
     @staticmethod
     def _score_error_rate(s: _DeviceSamples) -> float:

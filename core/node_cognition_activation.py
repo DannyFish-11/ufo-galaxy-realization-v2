@@ -160,9 +160,7 @@ NODE_COGNITION_ACTIVATION_IS_AUTHORITY: str = (
     "executor or canonical runtime registry."
 )
 
-NODE_COGNITION_ACTIVATION_PR14_SENTINEL: str = (
-    "NODE_COGNITION_ACTIVATION::PR14_SENTINEL_V1"
-)
+NODE_COGNITION_ACTIVATION_PR14_SENTINEL: str = "NODE_COGNITION_ACTIVATION::PR14_SENTINEL_V1"
 
 # ===========================================================================
 # Policy sentinels
@@ -475,9 +473,7 @@ class NodeActivationContext:
             "role": self.role.value,
             "activation_reason": self.activation_reason,
             "last_transition_reason": (
-                self.last_transition_reason.value
-                if self.last_transition_reason is not None
-                else None
+                self.last_transition_reason.value if self.last_transition_reason is not None else None
             ),
             "governance_cleared": self.governance_cleared,
             "eligible_at": self.eligible_at,
@@ -594,12 +590,8 @@ class NodeActivationTransitionResult:
             "to_state": self.to_state.value,
             "transition_allowed": self.transition_allowed,
             "rejection_reason": self.rejection_reason,
-            "applied_reason": (
-                self.applied_reason.value if self.applied_reason is not None else None
-            ),
-            "updated_context": (
-                self.updated_context.to_dict() if self.updated_context is not None else None
-            ),
+            "applied_reason": (self.applied_reason.value if self.applied_reason is not None else None),
+            "updated_context": (self.updated_context.to_dict() if self.updated_context is not None else None),
             "diagnostic_context": self.diagnostic_context,
         }
 
@@ -727,9 +719,7 @@ class NodeActivationPolicy:
             "max_active_per_role": self.max_active_per_role,
             "require_governance_clearance": self.require_governance_clearance,
             "excluded_node_ids": list(self.excluded_node_ids),
-            "allowed_roles_for_unregistered": [
-                r.value for r in self.allowed_roles_for_unregistered
-            ],
+            "allowed_roles_for_unregistered": [r.value for r in self.allowed_roles_for_unregistered],
             "policy_label": self.policy_label,
         }
 
@@ -818,9 +808,7 @@ def evaluate_activation_eligibility(
     # -----------------------------------------------------------------------
     if node_id in policy.excluded_node_ids:
         denial_reasons.append(f"node_id '{node_id}' is in policy.excluded_node_ids")
-        policy_notes.append(
-            f"policy_label={policy.policy_label!r}: node explicitly excluded"
-        )
+        policy_notes.append(f"policy_label={policy.policy_label!r}: node explicitly excluded")
         return NodeActivationEligibilityDecision(
             node_id=node_id,
             outcome=ActivationEligibilityOutcome.POLICY_EXCLUDED,
@@ -846,8 +834,7 @@ def evaluate_activation_eligibility(
             node_record = _get_node_record(resolved_registry, node_id)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                "evaluate_activation_eligibility: error fetching node record for "
-                "node_id=%s: %s",
+                "evaluate_activation_eligibility: error fetching node record for " "node_id=%s: %s",
                 node_id,
                 exc,
             )
@@ -900,9 +887,7 @@ def evaluate_activation_eligibility(
             if not getattr(gov_decision, "eligible", True):
                 denial_reasons.append(
                     "node is governance-ineligible: "
-                    + ", ".join(
-                        str(r) for r in getattr(gov_decision, "exclusion_reasons", [])
-                    )
+                    + ", ".join(str(r) for r in getattr(gov_decision, "exclusion_reasons", []))
                 )
                 return NodeActivationEligibilityDecision(
                     node_id=node_id,
@@ -914,9 +899,7 @@ def evaluate_activation_eligibility(
                     diagnostic_context={},
                 )
         elif policy.require_governance_clearance:
-            policy_notes.append(
-                "governance evaluation unavailable; proceeding without clearance check"
-            )
+            policy_notes.append("governance evaluation unavailable; proceeding without clearance check")
 
     # -----------------------------------------------------------------------
     # 5. Per-role capacity check
@@ -925,18 +908,14 @@ def evaluate_activation_eligibility(
         cap = policy.max_active_per_role.get(role.value)
         if cap is not None:
             current_active_for_role = sum(
-                1
-                for ctx in active_contexts
-                if ctx.role == role and ctx.state == NodeActivationState.ACTIVE
+                1 for ctx in active_contexts if ctx.role == role and ctx.state == NodeActivationState.ACTIVE
             )
             if current_active_for_role >= cap:
                 denial_reasons.append(
-                    f"role '{role.value}' capacity cap ({cap}) reached; "
-                    f"currently active: {current_active_for_role}"
+                    f"role '{role.value}' capacity cap ({cap}) reached; " f"currently active: {current_active_for_role}"
                 )
                 policy_notes.append(
-                    f"policy_label={policy.policy_label!r}: "
-                    f"max_active_per_role[{role.value!r}]={cap}"
+                    f"policy_label={policy.policy_label!r}: " f"max_active_per_role[{role.value!r}]={cap}"
                 )
                 return NodeActivationEligibilityDecision(
                     node_id=node_id,
@@ -954,10 +933,7 @@ def evaluate_activation_eligibility(
     # -----------------------------------------------------------------------
     # 6. Eligible
     # -----------------------------------------------------------------------
-    policy_notes.append(
-        f"node_id '{node_id}' passed all activation eligibility checks for "
-        f"role '{role.value}'"
-    )
+    policy_notes.append(f"node_id '{node_id}' passed all activation eligibility checks for " f"role '{role.value}'")
     return NodeActivationEligibilityDecision(
         node_id=node_id,
         outcome=ActivationEligibilityOutcome.ELIGIBLE,
@@ -1013,8 +989,7 @@ def transition_activation_state(
             to_state=target_state,
             transition_allowed=False,
             rejection_reason=(
-                f"transition {from_state.value!r} -> {target_state.value!r} "
-                "is not in VALID_ACTIVATION_TRANSITIONS"
+                f"transition {from_state.value!r} -> {target_state.value!r} " "is not in VALID_ACTIVATION_TRANSITIONS"
             ),
             applied_reason=reason,
             updated_context=context,
@@ -1171,9 +1146,7 @@ def _resolve_registry(registry: Any) -> Any:
     try:
         _get_reg = get_node_fabric_registry
         if _get_reg is None:
-            from core.nodes.node_fabric_registry import (  # noqa: PLC0415
-                get_node_fabric_registry as _get_reg,
-            )
+            from core.nodes.node_fabric_registry import get_node_fabric_registry as _get_reg  # noqa: PLC0415
         if callable(_get_reg):
             return _get_reg()
     except Exception as exc:  # noqa: BLE001
@@ -1215,9 +1188,7 @@ def _evaluate_governance(node_record: Any, governor: Any = None) -> Any:
             evaluate_node_governance_eligibility,
         )
 
-        return evaluate_node_governance_eligibility(
-            node_record, governor_record=governor
-        )
+        return evaluate_node_governance_eligibility(node_record, governor_record=governor)
     except Exception as exc:  # noqa: BLE001
         logger.debug("_evaluate_governance: governance evaluation unavailable: %s", exc)
     return None

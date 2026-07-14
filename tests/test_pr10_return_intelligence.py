@@ -100,19 +100,23 @@ _MANIFEST_PROJECTION: Dict[str, Any] = {
 # A) ReturnMode enum
 # ===========================================================================
 
+
 class TestReturnMode:
     def test_all_values_present(self):
         from core.return_intelligence import ReturnMode
+
         values = {m.value for m in ReturnMode}
         assert values == {"none", "hold", "soft_decay", "step_down", "return_to_formless"}
 
     def test_string_coercion(self):
         from core.return_intelligence import ReturnMode
+
         assert ReturnMode("none") == ReturnMode.NONE
         assert ReturnMode("soft_decay") == ReturnMode.SOFT_DECAY
 
     def test_suppress_manifest_frozenset(self):
-        from core.return_intelligence import ReturnMode, MODES_THAT_SUPPRESS_MANIFEST
+        from core.return_intelligence import MODES_THAT_SUPPRESS_MANIFEST, ReturnMode
+
         assert ReturnMode.STEP_DOWN in MODES_THAT_SUPPRESS_MANIFEST
         assert ReturnMode.RETURN_TO_FORMLESS in MODES_THAT_SUPPRESS_MANIFEST
         assert ReturnMode.SOFT_DECAY not in MODES_THAT_SUPPRESS_MANIFEST
@@ -120,7 +124,8 @@ class TestReturnMode:
         assert ReturnMode.NONE not in MODES_THAT_SUPPRESS_MANIFEST
 
     def test_soften_liminal_frozenset(self):
-        from core.return_intelligence import ReturnMode, MODES_THAT_SOFTEN_LIMINAL
+        from core.return_intelligence import MODES_THAT_SOFTEN_LIMINAL, ReturnMode
+
         assert ReturnMode.SOFT_DECAY in MODES_THAT_SOFTEN_LIMINAL
         assert ReturnMode.STEP_DOWN in MODES_THAT_SOFTEN_LIMINAL
         assert ReturnMode.RETURN_TO_FORMLESS in MODES_THAT_SOFTEN_LIMINAL
@@ -128,7 +133,8 @@ class TestReturnMode:
         assert ReturnMode.NONE not in MODES_THAT_SOFTEN_LIMINAL
 
     def test_active_return_modes_frozenset(self):
-        from core.return_intelligence import ReturnMode, ACTIVE_RETURN_MODES
+        from core.return_intelligence import ACTIVE_RETURN_MODES, ReturnMode
+
         assert ReturnMode.SOFT_DECAY in ACTIVE_RETURN_MODES
         assert ReturnMode.STEP_DOWN in ACTIVE_RETURN_MODES
         assert ReturnMode.RETURN_TO_FORMLESS in ACTIVE_RETURN_MODES
@@ -140,9 +146,11 @@ class TestReturnMode:
 # B) ReturnSummary
 # ===========================================================================
 
+
 class TestReturnSummary:
     def test_default_construction(self):
-        from core.return_intelligence import ReturnSummary, ReturnMode
+        from core.return_intelligence import ReturnMode, ReturnSummary
+
         s = ReturnSummary()
         assert s.is_returning is False
         assert s.return_mode == ReturnMode.NONE
@@ -154,7 +162,8 @@ class TestReturnSummary:
         assert s.affects_liminal is False
 
     def test_to_dict_round_trip(self):
-        from core.return_intelligence import ReturnSummary, ReturnMode
+        from core.return_intelligence import ReturnMode, ReturnSummary
+
         s = ReturnSummary(
             is_returning=True,
             return_mode=ReturnMode.SOFT_DECAY,
@@ -176,8 +185,10 @@ class TestReturnSummary:
         assert d["affects_liminal"] is True
 
     def test_to_dict_has_no_enum_objects(self):
-        from core.return_intelligence import ReturnSummary, ReturnMode
         import json
+
+        from core.return_intelligence import ReturnMode, ReturnSummary
+
         s = ReturnSummary(return_mode=ReturnMode.STEP_DOWN)
         d = s.to_dict()
         # Should be JSON-serialisable without errors.
@@ -186,18 +197,21 @@ class TestReturnSummary:
 
     def test_idle_return_summary_constant(self):
         from core.return_intelligence import IDLE_RETURN_SUMMARY, ReturnMode
+
         assert IDLE_RETURN_SUMMARY.is_returning is False
         assert IDLE_RETURN_SUMMARY.return_mode == ReturnMode.NONE
         assert IDLE_RETURN_SUMMARY.decay_amount == 0.0
 
     def test_frozen(self):
         from core.return_intelligence import ReturnSummary
+
         s = ReturnSummary()
         with pytest.raises((AttributeError, TypeError)):
             s.is_returning = True  # type: ignore[misc]
 
     def test_repr_contains_mode(self):
-        from core.return_intelligence import ReturnSummary, ReturnMode
+        from core.return_intelligence import ReturnMode, ReturnSummary
+
         s = ReturnSummary(return_mode=ReturnMode.STEP_DOWN)
         assert "step_down" in repr(s)
 
@@ -206,12 +220,14 @@ class TestReturnSummary:
 # C) build_return_summary
 # ===========================================================================
 
+
 class TestBuildReturnSummary:
     """Uses ReturnEngine to produce real ReturnResult objects."""
 
     def _make_result(self, **kwargs):
         from core.continuum.return_engine import ReturnEngine
         from core.continuum.types import ContinuumPhase, ContinuumState
+
         state = ContinuumState(
             phase=kwargs.pop("phase", ContinuumPhase.MANIFEST),
             presence_intensity=kwargs.pop("presence_intensity", 0.7),
@@ -221,14 +237,16 @@ class TestBuildReturnSummary:
         return engine.evaluate(state, **kwargs)
 
     def test_no_return_gives_none_mode(self):
-        from core.return_intelligence import build_return_summary, ReturnMode
+        from core.return_intelligence import ReturnMode, build_return_summary
+
         result = self._make_result()  # healthy state, no triggers
         summary = build_return_summary(result)
         assert summary.return_mode == ReturnMode.NONE
         assert summary.is_returning is False
 
     def test_user_cancel_gives_return_to_formless(self):
-        from core.return_intelligence import build_return_summary, ReturnMode
+        from core.return_intelligence import ReturnMode, build_return_summary
+
         result = self._make_result(user_cancel=True)
         summary = build_return_summary(result)
         assert summary.return_mode == ReturnMode.RETURN_TO_FORMLESS
@@ -236,7 +254,8 @@ class TestBuildReturnSummary:
         assert summary.return_trigger == "user_cancel"
 
     def test_finished_gives_step_down(self):
-        from core.return_intelligence import build_return_summary, ReturnMode
+        from core.return_intelligence import ReturnMode, build_return_summary
+
         result = self._make_result(finished=True)
         summary = build_return_summary(result)
         assert summary.return_mode == ReturnMode.STEP_DOWN
@@ -246,8 +265,9 @@ class TestBuildReturnSummary:
         assert summary.affects_liminal is True
 
     def test_timeout_gives_step_down(self):
-        from core.return_intelligence import build_return_summary, ReturnMode
         from core.continuum.config import DEFAULT_CONTINUUM_CONFIG
+        from core.return_intelligence import ReturnMode, build_return_summary
+
         # Use a very large elapsed_ms to guarantee timeout.
         timeout_ms = float(DEFAULT_CONTINUUM_CONFIG.timeout_receding_ms)
         result = self._make_result(elapsed_ms=timeout_ms + 1000.0)
@@ -257,7 +277,8 @@ class TestBuildReturnSummary:
         assert summary.return_trigger == "timeout"
 
     def test_low_value_gives_soft_decay(self):
-        from core.return_intelligence import build_return_summary, ReturnMode
+        from core.return_intelligence import ReturnMode, build_return_summary
+
         result = self._make_result(decision_score=0.01)
         summary = build_return_summary(result)
         assert summary.return_mode == ReturnMode.SOFT_DECAY
@@ -268,10 +289,11 @@ class TestBuildReturnSummary:
         assert summary.decay_amount > 0.0
 
     def test_high_uncertainty_gives_return_to_formless(self):
-        from core.return_intelligence import build_return_summary, ReturnMode
-        from core.continuum.types import ContinuumPhase, ContinuumState
         # Low stability → high effective_uncertainty → high_uncertainty trigger.
         from core.continuum.return_engine import ReturnEngine
+        from core.continuum.types import ContinuumPhase, ContinuumState
+        from core.return_intelligence import ReturnMode, build_return_summary
+
         state = ContinuumState(
             phase=ContinuumPhase.MANIFEST,
             presence_intensity=0.7,
@@ -285,13 +307,15 @@ class TestBuildReturnSummary:
         assert summary.return_trigger == "high_uncertainty"
 
     def test_none_input_returns_idle(self):
-        from core.return_intelligence import build_return_summary, IDLE_RETURN_SUMMARY
+        from core.return_intelligence import IDLE_RETURN_SUMMARY, build_return_summary
+
         summary = build_return_summary(None)
         assert summary == IDLE_RETURN_SUMMARY
 
     def test_dict_input(self):
         """build_return_summary must handle a plain dict (duck-typed ReturnResult)."""
-        from core.return_intelligence import build_return_summary, ReturnMode
+        from core.return_intelligence import ReturnMode, build_return_summary
+
         d = {
             "should_return": True,
             "return_action": "step_down",
@@ -306,12 +330,14 @@ class TestBuildReturnSummary:
 
     def test_decay_amount_propagated(self):
         from core.return_intelligence import build_return_summary
+
         result = self._make_result(decision_score=0.01)
         summary = build_return_summary(result)
         assert summary.decay_amount == pytest.approx(0.05, abs=1e-3)
 
     def test_reason_propagated(self):
         from core.return_intelligence import build_return_summary
+
         result = self._make_result(user_cancel=True)
         summary = build_return_summary(result)
         assert "user_cancel" in summary.reason
@@ -321,16 +347,19 @@ class TestBuildReturnSummary:
 # D) attach_return_summary
 # ===========================================================================
 
+
 class TestAttachReturnSummary:
     def test_does_not_mutate_original(self):
-        from core.return_intelligence import attach_return_summary, IDLE_RETURN_SUMMARY
+        from core.return_intelligence import IDLE_RETURN_SUMMARY, attach_return_summary
+
         original = dict(_MINIMAL_PROJECTION)
         enriched = attach_return_summary(original, IDLE_RETURN_SUMMARY)
         assert "return_intelligence" not in original
         assert "return_intelligence" in enriched
 
     def test_return_intelligence_key_added(self):
-        from core.return_intelligence import attach_return_summary, IDLE_RETURN_SUMMARY
+        from core.return_intelligence import IDLE_RETURN_SUMMARY, attach_return_summary
+
         enriched = attach_return_summary(_MINIMAL_PROJECTION, IDLE_RETURN_SUMMARY)
         ri = enriched["return_intelligence"]
         assert isinstance(ri, dict)
@@ -340,18 +369,25 @@ class TestAttachReturnSummary:
         assert "affects_liminal" in ri
 
     def test_all_summary_fields_present(self):
-        from core.return_intelligence import attach_return_summary, IDLE_RETURN_SUMMARY
+        from core.return_intelligence import IDLE_RETURN_SUMMARY, attach_return_summary
+
         enriched = attach_return_summary(_MANIFEST_PROJECTION, IDLE_RETURN_SUMMARY)
         ri = enriched["return_intelligence"]
         expected_keys = {
-            "is_returning", "return_mode", "return_action",
-            "return_trigger", "decay_amount", "reason",
-            "affects_manifest", "affects_liminal",
+            "is_returning",
+            "return_mode",
+            "return_action",
+            "return_trigger",
+            "decay_amount",
+            "reason",
+            "affects_manifest",
+            "affects_liminal",
         }
         assert expected_keys.issubset(set(ri.keys()))
 
     def test_backward_compatible_existing_fields(self):
-        from core.return_intelligence import attach_return_summary, IDLE_RETURN_SUMMARY
+        from core.return_intelligence import IDLE_RETURN_SUMMARY, attach_return_summary
+
         enriched = attach_return_summary(_MANIFEST_PROJECTION, IDLE_RETURN_SUMMARY)
         # Existing fields must be unchanged.
         assert enriched["tri_state_phase"] == "manifest"
@@ -359,7 +395,8 @@ class TestAttachReturnSummary:
         assert enriched["coherence"] == 0.61
 
     def test_attach_step_down_summary(self):
-        from core.return_intelligence import attach_return_summary, ReturnSummary, ReturnMode
+        from core.return_intelligence import ReturnMode, ReturnSummary, attach_return_summary
+
         summary = ReturnSummary(
             is_returning=True,
             return_mode=ReturnMode.STEP_DOWN,
@@ -381,9 +418,11 @@ class TestAttachReturnSummary:
 # E) get_return_hints
 # ===========================================================================
 
+
 class TestGetReturnHints:
     def test_idle_hints_all_false(self):
-        from core.return_intelligence import get_return_hints, IDLE_RETURN_SUMMARY
+        from core.return_intelligence import IDLE_RETURN_SUMMARY, get_return_hints
+
         hints = get_return_hints(IDLE_RETURN_SUMMARY)
         assert hints["is_returning"] is False
         assert hints["suppresses_manifest"] is False
@@ -392,7 +431,8 @@ class TestGetReturnHints:
         assert hints["return_mode"] == "none"
 
     def test_step_down_hints(self):
-        from core.return_intelligence import get_return_hints, ReturnSummary, ReturnMode
+        from core.return_intelligence import ReturnMode, ReturnSummary, get_return_hints
+
         summary = ReturnSummary(
             is_returning=True,
             return_mode=ReturnMode.STEP_DOWN,
@@ -406,7 +446,8 @@ class TestGetReturnHints:
         assert hints["return_mode"] == "step_down"
 
     def test_soft_decay_hints(self):
-        from core.return_intelligence import get_return_hints, ReturnSummary, ReturnMode
+        from core.return_intelligence import ReturnMode, ReturnSummary, get_return_hints
+
         summary = ReturnSummary(
             is_returning=True,
             return_mode=ReturnMode.SOFT_DECAY,
@@ -420,7 +461,8 @@ class TestGetReturnHints:
         assert hints["decay_amount"] == pytest.approx(0.05)
 
     def test_hints_return_mode_is_string(self):
-        from core.return_intelligence import get_return_hints, ReturnSummary, ReturnMode
+        from core.return_intelligence import ReturnMode, ReturnSummary, get_return_hints
+
         summary = ReturnSummary(return_mode=ReturnMode.RETURN_TO_FORMLESS)
         hints = get_return_hints(summary)
         assert isinstance(hints["return_mode"], str)
@@ -431,13 +473,16 @@ class TestGetReturnHints:
 # F) None / non-return edge cases
 # ===========================================================================
 
+
 class TestEdgeCases:
     def test_none_result_returns_idle(self):
-        from core.return_intelligence import build_return_summary, IDLE_RETURN_SUMMARY
+        from core.return_intelligence import IDLE_RETURN_SUMMARY, build_return_summary
+
         assert build_return_summary(None) == IDLE_RETURN_SUMMARY
 
     def test_hold_action_with_should_return_false(self):
-        from core.return_intelligence import build_return_summary, ReturnMode
+        from core.return_intelligence import ReturnMode, build_return_summary
+
         d = {
             "should_return": False,
             "return_action": "hold",
@@ -450,16 +495,19 @@ class TestEdgeCases:
         assert summary.is_returning is False
 
     def test_decay_amount_clamped_to_zero_on_idle(self):
-        from core.return_intelligence import build_return_summary, IDLE_RETURN_SUMMARY
+        from core.return_intelligence import IDLE_RETURN_SUMMARY, build_return_summary
+
         assert IDLE_RETURN_SUMMARY.decay_amount == 0.0
 
     def test_affects_flags_false_on_idle(self):
         from core.return_intelligence import IDLE_RETURN_SUMMARY
+
         assert IDLE_RETURN_SUMMARY.affects_manifest is False
         assert IDLE_RETURN_SUMMARY.affects_liminal is False
 
     def test_attach_to_empty_dict(self):
-        from core.return_intelligence import attach_return_summary, IDLE_RETURN_SUMMARY
+        from core.return_intelligence import IDLE_RETURN_SUMMARY, attach_return_summary
+
         enriched = attach_return_summary({}, IDLE_RETURN_SUMMARY)
         assert "return_intelligence" in enriched
         assert enriched["return_intelligence"]["return_mode"] == "none"
@@ -469,11 +517,13 @@ class TestEdgeCases:
 # G) Downstream helper stability
 # ===========================================================================
 
+
 class TestDownstreamHelperStability:
     def test_build_return_summary_idempotent(self):
-        from core.return_intelligence import build_return_summary
         from core.continuum.return_engine import ReturnEngine
         from core.continuum.types import ContinuumPhase, ContinuumState
+        from core.return_intelligence import build_return_summary
+
         state = ContinuumState(phase=ContinuumPhase.MANIFEST, presence_intensity=0.7)
         engine = ReturnEngine()
         result = engine.evaluate(state, finished=True)
@@ -483,21 +533,24 @@ class TestDownstreamHelperStability:
         assert s1 == s2
 
     def test_attach_return_summary_minimal_dict(self):
-        from core.return_intelligence import attach_return_summary, IDLE_RETURN_SUMMARY
+        from core.return_intelligence import IDLE_RETURN_SUMMARY, attach_return_summary
+
         enriched = attach_return_summary({"tri_state_phase": "silent"}, IDLE_RETURN_SUMMARY)
         assert enriched["tri_state_phase"] == "silent"
         assert "return_intelligence" in enriched
 
     def test_return_surface_render_non_empty(self):
         from windows_client.status_board_v2.return_surface import ReturnSurface
+
         surface = ReturnSurface()
         result = surface.render(_MINIMAL_PROJECTION)
         assert isinstance(result, str)
         assert len(result) > 0
 
     def test_return_surface_render_with_return_intelligence(self):
-        from core.return_intelligence import attach_return_summary, ReturnSummary, ReturnMode
+        from core.return_intelligence import ReturnMode, ReturnSummary, attach_return_summary
         from windows_client.status_board_v2.return_surface import ReturnSurface
+
         summary = ReturnSummary(
             is_returning=True,
             return_mode=ReturnMode.STEP_DOWN,
@@ -516,6 +569,7 @@ class TestDownstreamHelperStability:
     def test_return_surface_render_without_return_intelligence_key(self):
         """Surface must render gracefully when return_intelligence key is absent."""
         from windows_client.status_board_v2.return_surface import ReturnSurface
+
         # _MINIMAL_PROJECTION has no return_intelligence key.
         surface = ReturnSurface()
         result = surface.render(_MINIMAL_PROJECTION)
@@ -524,6 +578,7 @@ class TestDownstreamHelperStability:
 
     def test_return_surface_contains_expected_labels(self):
         from windows_client.status_board_v2.return_surface import ReturnSurface
+
         surface = ReturnSurface()
         result = surface.render(_MINIMAL_PROJECTION)
         assert "Return Intelligence" in result
@@ -535,11 +590,12 @@ class TestDownstreamHelperStability:
 # H) Integration: ReturnEngine → build_return_summary pipeline
 # ===========================================================================
 
+
 class TestReturnEngineIntegration:
     def test_finished_state_gives_step_down_summary(self):
         from core.continuum.return_engine import ReturnEngine
         from core.continuum.types import ContinuumPhase, ContinuumState
-        from core.return_intelligence import build_return_summary, ReturnMode
+        from core.return_intelligence import ReturnMode, build_return_summary
 
         state = ContinuumState(phase=ContinuumPhase.MANIFEST, presence_intensity=0.7)
         engine = ReturnEngine()
@@ -553,7 +609,7 @@ class TestReturnEngineIntegration:
     def test_healthy_state_gives_none_summary(self):
         from core.continuum.return_engine import ReturnEngine
         from core.continuum.types import ContinuumPhase, ContinuumState
-        from core.return_intelligence import build_return_summary, ReturnMode
+        from core.return_intelligence import ReturnMode, build_return_summary
 
         state = ContinuumState(phase=ContinuumPhase.MANIFEST, presence_intensity=0.7)
         engine = ReturnEngine()
@@ -566,7 +622,7 @@ class TestReturnEngineIntegration:
     def test_force_return_gives_return_to_formless_summary(self):
         from core.continuum.return_engine import ReturnEngine
         from core.continuum.types import ContinuumPhase, ContinuumState
-        from core.return_intelligence import build_return_summary, ReturnMode
+        from core.return_intelligence import ReturnMode, build_return_summary
 
         state = ContinuumState(phase=ContinuumPhase.MANIFEST, presence_intensity=0.7)
         engine = ReturnEngine()
@@ -603,10 +659,10 @@ class TestReturnEngineIntegration:
 
     def test_all_trigger_types_produce_valid_summaries(self):
         """Each trigger type must produce a non-error summary with expected fields."""
+        from core.continuum.config import DEFAULT_CONTINUUM_CONFIG
         from core.continuum.return_engine import ReturnEngine, ReturnTrigger
         from core.continuum.types import ContinuumPhase, ContinuumState
-        from core.return_intelligence import build_return_summary, ReturnMode
-        from core.continuum.config import DEFAULT_CONTINUUM_CONFIG
+        from core.return_intelligence import ReturnMode, build_return_summary
 
         engine = ReturnEngine()
         timeout_ms = float(DEFAULT_CONTINUUM_CONFIG.timeout_receding_ms)
@@ -624,12 +680,12 @@ class TestReturnEngineIntegration:
             state = ContinuumState(phase=ContinuumPhase.MANIFEST, presence_intensity=0.7)
             result = engine.evaluate(state, **kwargs)
             summary = build_return_summary(result)
-            assert summary.return_mode == expected_mode, (
-                f"kwargs={kwargs}: expected {expected_mode}, got {summary.return_mode}"
-            )
-            assert summary.is_returning == expected_returning, (
-                f"kwargs={kwargs}: expected is_returning={expected_returning}, got {summary.is_returning}"
-            )
+            assert (
+                summary.return_mode == expected_mode
+            ), f"kwargs={kwargs}: expected {expected_mode}, got {summary.return_mode}"
+            assert (
+                summary.is_returning == expected_returning
+            ), f"kwargs={kwargs}: expected is_returning={expected_returning}, got {summary.is_returning}"
             d = summary.to_dict()
             assert isinstance(d, dict)
             assert "return_mode" in d

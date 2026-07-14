@@ -144,27 +144,27 @@ from __future__ import annotations
 import pytest
 
 from core.conversation_continuity_truth import (
+    AUTHORITATIVE_CONTINUITY_REQUIRES_REBIND_AND_SESSION_POLICY,
     CONVERSATION_CONTINUITY_TRUTH_AUTHORITY,
     CONVERSATION_CONTINUITY_TRUTH_PR12_SENTINEL,
+    EVIDENCE_ABSENT_MUST_NOT_BE_OPTIMISTIC_POLICY,
     HISTORY_VISIBLE_IS_NOT_CONTINUITY_RESTORED_POLICY,
-    STATE_RESTORED_IS_NOT_CONVERSATION_CONTINUITY_POLICY,
-    TASK_CONTINUITY_IS_NOT_CONVERSATION_CONTINUITY_POLICY,
-    AUTHORITATIVE_CONTINUITY_REQUIRES_REBIND_AND_SESSION_POLICY,
     PARTIAL_RECOVERY_MUST_DOWNGRADE_CONTINUITY_POLICY,
     PROCESS_DEATH_REQUIRES_EXPLICIT_REBIND_POLICY,
-    EVIDENCE_ABSENT_MUST_NOT_BE_OPTIMISTIC_POLICY,
+    STATE_RESTORED_IS_NOT_CONVERSATION_CONTINUITY_POLICY,
+    TASK_CONTINUITY_IS_NOT_CONVERSATION_CONTINUITY_POLICY,
     ConversationContinuityClass,
+    ConversationContinuityContract,
     ConversationContinuityEvidence,
     ConversationContinuityVerdict,
-    ConversationContinuityContract,
     build_conversation_continuity_verdict,
 )
 from core.system_final_acceptance_verdict import AcceptanceDimensionId
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _full_evidence(**overrides) -> ConversationContinuityEvidence:
     """Return evidence with all four required dims True unless overridden."""
@@ -203,6 +203,7 @@ def _evaluate(evidence: ConversationContinuityEvidence) -> ConversationContinuit
 # ---------------------------------------------------------------------------
 # 1-9: Policy sentinels
 # ---------------------------------------------------------------------------
+
 
 def test_1_authority_sentinel_non_empty():
     assert isinstance(CONVERSATION_CONTINUITY_TRUTH_AUTHORITY, str)
@@ -245,6 +246,7 @@ def test_9_evidence_absent_policy_non_empty():
 # 10-15: ConversationContinuityClass enum values
 # ---------------------------------------------------------------------------
 
+
 def test_10_all_five_values_present():
     expected = {
         "authoritative_continuity_restored",
@@ -281,6 +283,7 @@ def test_15_continuity_lost_is_str():
 # 16-28: ConversationContinuityClass rank ordering
 # ---------------------------------------------------------------------------
 
+
 def test_16_authoritative_has_highest_rank():
     auth = ConversationContinuityClass.authoritative_continuity_restored
     for other in ConversationContinuityClass:
@@ -300,10 +303,7 @@ def test_18_state_restored_rank_gt_continuity_lost():
 
 
 def test_19_partial_continuity_rank_gt_history_only():
-    assert (
-        ConversationContinuityClass.partial_continuity.rank
-        > ConversationContinuityClass.history_only_restored.rank
-    )
+    assert ConversationContinuityClass.partial_continuity.rank > ConversationContinuityClass.history_only_restored.rank
 
 
 def test_20_authoritative_is_authoritative_true():
@@ -342,14 +342,14 @@ def test_27_from_string_unknown_returns_continuity_lost():
 
 def test_28_from_string_valid_returns_correct():
     assert (
-        ConversationContinuityClass.from_string("partial_continuity")
-        == ConversationContinuityClass.partial_continuity
+        ConversationContinuityClass.from_string("partial_continuity") == ConversationContinuityClass.partial_continuity
     )
 
 
 # ---------------------------------------------------------------------------
 # 29-39: ConversationContinuityEvidence
 # ---------------------------------------------------------------------------
+
 
 def test_29_default_evidence_all_false():
     e = ConversationContinuityEvidence()
@@ -428,6 +428,7 @@ def test_39_from_dict_defaults_session_confirmed_false():
 # 40-49: ConversationContinuityVerdict
 # ---------------------------------------------------------------------------
 
+
 def test_40_default_class_is_continuity_lost():
     v = ConversationContinuityVerdict()
     assert v.continuity_class == ConversationContinuityClass.continuity_lost
@@ -454,9 +455,7 @@ def test_44_to_dict_includes_policy_references():
 
 
 def test_45_from_dict_round_trips_continuity_class():
-    v = ConversationContinuityVerdict(
-        continuity_class=ConversationContinuityClass.partial_continuity
-    )
+    v = ConversationContinuityVerdict(continuity_class=ConversationContinuityClass.partial_continuity)
     v2 = ConversationContinuityVerdict.from_dict(v.to_dict())
     assert v2.continuity_class == ConversationContinuityClass.partial_continuity
 
@@ -473,26 +472,21 @@ def test_47_from_dict_unknown_class_falls_back_to_continuity_lost():
 
 
 def test_48_is_authoritative_property():
-    v = ConversationContinuityVerdict(
-        continuity_class=ConversationContinuityClass.authoritative_continuity_restored
-    )
+    v = ConversationContinuityVerdict(continuity_class=ConversationContinuityClass.authoritative_continuity_restored)
     assert v.is_authoritative is True
-    v2 = ConversationContinuityVerdict(
-        continuity_class=ConversationContinuityClass.partial_continuity
-    )
+    v2 = ConversationContinuityVerdict(continuity_class=ConversationContinuityClass.partial_continuity)
     assert v2.is_authoritative is False
 
 
 def test_49_requires_rebind_property():
-    v = ConversationContinuityVerdict(
-        continuity_class=ConversationContinuityClass.state_restored_rebind_required
-    )
+    v = ConversationContinuityVerdict(continuity_class=ConversationContinuityClass.state_restored_rebind_required)
     assert v.requires_rebind is True
 
 
 # ---------------------------------------------------------------------------
 # 50-55: ConversationContinuityContract — authoritative_continuity_restored
 # ---------------------------------------------------------------------------
+
 
 def test_50_all_required_dims_yields_authoritative():
     v = _evaluate(_full_evidence())
@@ -528,6 +522,7 @@ def test_55_missing_state_present_prevents_authoritative():
 # 56-60: ConversationContinuityContract — process_death downgrade
 # ---------------------------------------------------------------------------
 
+
 def test_56_all_dims_plus_process_death_yields_partial_not_authoritative():
     v = _evaluate(_full_evidence(process_death_observed=True))
     assert v.continuity_class == ConversationContinuityClass.partial_continuity
@@ -558,18 +553,21 @@ def test_60_process_death_verdict_reason_mentions_process_death():
 # 61-62: partial_recovery_only downgrade
 # ---------------------------------------------------------------------------
 
+
 def test_61_all_dims_plus_partial_recovery_only_yields_partial():
     v = _evaluate(_full_evidence(partial_recovery_only=True))
     assert v.continuity_class == ConversationContinuityClass.partial_continuity
 
 
 def test_62_partial_recovery_history_state_yields_partial():
-    v = _evaluate(_no_evidence(
-        history_visible=True,
-        state_present=True,
-        session_confirmed=True,
-        partial_recovery_only=True,
-    ))
+    v = _evaluate(
+        _no_evidence(
+            history_visible=True,
+            state_present=True,
+            session_confirmed=True,
+            partial_recovery_only=True,
+        )
+    )
     assert v.continuity_class == ConversationContinuityClass.partial_continuity
 
 
@@ -577,24 +575,19 @@ def test_62_partial_recovery_history_state_yields_partial():
 # 63-66: partial_continuity class
 # ---------------------------------------------------------------------------
 
+
 def test_63_history_state_session_yields_partial():
-    v = _evaluate(_no_evidence(
-        history_visible=True, state_present=True, session_confirmed=True
-    ))
+    v = _evaluate(_no_evidence(history_visible=True, state_present=True, session_confirmed=True))
     assert v.continuity_class == ConversationContinuityClass.partial_continuity
 
 
 def test_64_history_state_rebind_yields_partial():
-    v = _evaluate(_no_evidence(
-        history_visible=True, state_present=True, rebind_completed=True
-    ))
+    v = _evaluate(_no_evidence(history_visible=True, state_present=True, rebind_completed=True))
     assert v.continuity_class == ConversationContinuityClass.partial_continuity
 
 
 def test_65_history_state_task_continuity_yields_partial():
-    v = _evaluate(_no_evidence(
-        history_visible=True, state_present=True, task_continuity_ok=True
-    ))
+    v = _evaluate(_no_evidence(history_visible=True, state_present=True, task_continuity_ok=True))
     assert v.continuity_class == ConversationContinuityClass.partial_continuity
 
 
@@ -607,6 +600,7 @@ def test_66_history_state_no_supporting_dim_does_not_yield_partial():
 # ---------------------------------------------------------------------------
 # 67-70: history_only_restored class
 # ---------------------------------------------------------------------------
+
 
 def test_67_history_visible_alone_yields_history_only():
     v = _evaluate(_no_evidence(history_visible=True))
@@ -631,6 +625,7 @@ def test_70_history_only_policy_references():
 # ---------------------------------------------------------------------------
 # 71-75: state_restored_rebind_required class
 # ---------------------------------------------------------------------------
+
 
 def test_71_state_present_alone_yields_state_restored_rebind():
     v = _evaluate(_no_evidence(state_present=True))
@@ -663,6 +658,7 @@ def test_75_state_restored_policy_references():
 # 76-79: continuity_lost class
 # ---------------------------------------------------------------------------
 
+
 def test_76_no_evidence_yields_continuity_lost():
     v = _evaluate(_no_evidence())
     assert v.continuity_class == ConversationContinuityClass.continuity_lost
@@ -686,6 +682,7 @@ def test_79_continuity_lost_policy_references():
 # ---------------------------------------------------------------------------
 # 80-86: Critical invariants — crash / restart anti-regression
 # ---------------------------------------------------------------------------
+
 
 def test_80_history_only_restart_must_not_produce_authoritative():
     """After restart, if only history visible: MUST NOT be authoritative."""
@@ -764,6 +761,7 @@ def test_86_partial_continuity_class_is_lower_than_authoritative():
 # 87-90: build_conversation_continuity_verdict convenience function
 # ---------------------------------------------------------------------------
 
+
 def test_87_returns_verdict_instance():
     v = build_conversation_continuity_verdict(ConversationContinuityEvidence())
     assert isinstance(v, ConversationContinuityVerdict)
@@ -788,6 +786,7 @@ def test_90_verdict_id_starts_with_ccv():
 # 91-94: ConversationContinuityVerdict durable round-trip
 # ---------------------------------------------------------------------------
 
+
 def test_91_round_trip_continuity_class():
     for cls in ConversationContinuityClass:
         v = ConversationContinuityVerdict(continuity_class=cls)
@@ -810,6 +809,7 @@ def test_93_round_trip_session_confirmed():
 
 def test_94_round_trip_preserves_generated_at():
     import time
+
     ts = time.time()
     v = ConversationContinuityVerdict(generated_at=ts)
     v2 = ConversationContinuityVerdict.from_dict(v.to_dict())
@@ -819,6 +819,7 @@ def test_94_round_trip_preserves_generated_at():
 # ---------------------------------------------------------------------------
 # 95-98: AcceptanceDimensionId integration
 # ---------------------------------------------------------------------------
+
 
 def test_95_acceptance_dimension_has_conversation_continuity():
     assert hasattr(AcceptanceDimensionId, "conversation_continuity")
@@ -837,21 +838,20 @@ def test_97_all_dimensions_returns_ten():
 
 
 def test_98_from_string_returns_conversation_continuity():
-    assert (
-        AcceptanceDimensionId.from_string("conversation_continuity")
-        == AcceptanceDimensionId.conversation_continuity
-    )
+    assert AcceptanceDimensionId.from_string("conversation_continuity") == AcceptanceDimensionId.conversation_continuity
 
 
 # ---------------------------------------------------------------------------
 # 99-100: SystemFinalAcceptanceEvaluator integration
 # ---------------------------------------------------------------------------
 
+
 def test_99_evaluator_checklist_contains_conversation_continuity():
     from core.system_final_acceptance_verdict import (
         get_system_acceptance_evaluator,
         reset_system_acceptance_evaluator,
     )
+
     reset_system_acceptance_evaluator()
     try:
         evaluator = get_system_acceptance_evaluator()
@@ -868,6 +868,7 @@ def test_100_baseline_probe_does_not_produce_authoritative():
         get_system_acceptance_evaluator,
         reset_system_acceptance_evaluator,
     )
+
     reset_system_acceptance_evaluator()
     try:
         evaluator = get_system_acceptance_evaluator()

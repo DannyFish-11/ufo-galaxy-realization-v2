@@ -17,6 +17,7 @@ Tests:
 - get_device_ecosystem_summary structure
 - Test isolation via reset_android_device_state_store
 """
+
 from __future__ import annotations
 
 import time
@@ -33,14 +34,14 @@ from core.android_device_state_store import (
     absorb_capability_report_semantics,
     absorb_device_execution_event,
     absorb_device_state_snapshot,
-    get_android_participation_evidence,
     get_android_device_state_store,
+    get_android_participation_evidence,
     get_device_capability_report_semantics,
     get_device_ecosystem_summary,
     get_device_state_snapshot,
     invalidate_device_state_snapshot,
-    list_recent_execution_events,
     list_device_state_snapshots,
+    list_recent_execution_events,
     reset_android_device_state_store,
 )
 from core.device_lifecycle_state import (
@@ -293,40 +294,52 @@ def test_capability_report_semantics_reject_semantically_incompatible_payloads()
 
 
 def test_is_local_ai_ready_all_true():
-    snap = absorb_device_state_snapshot("d1", {
-        "local_loop_ready": True,
-        "model_ready": True,
-        "llama_cpp_available": True,
-    })
+    snap = absorb_device_state_snapshot(
+        "d1",
+        {
+            "local_loop_ready": True,
+            "model_ready": True,
+            "llama_cpp_available": True,
+        },
+    )
     assert snap.is_local_ai_ready() is True
 
 
 def test_is_local_ai_ready_ncnn_path():
-    snap = absorb_device_state_snapshot("d2", {
-        "local_loop_ready": True,
-        "model_ready": True,
-        "llama_cpp_available": False,
-        "ncnn_available": True,
-    })
+    snap = absorb_device_state_snapshot(
+        "d2",
+        {
+            "local_loop_ready": True,
+            "model_ready": True,
+            "llama_cpp_available": False,
+            "ncnn_available": True,
+        },
+    )
     assert snap.is_local_ai_ready() is True
 
 
 def test_is_local_ai_ready_missing_model():
-    snap = absorb_device_state_snapshot("d3", {
-        "local_loop_ready": True,
-        "model_ready": False,
-        "llama_cpp_available": True,
-    })
+    snap = absorb_device_state_snapshot(
+        "d3",
+        {
+            "local_loop_ready": True,
+            "model_ready": False,
+            "llama_cpp_available": True,
+        },
+    )
     assert snap.is_local_ai_ready() is False
 
 
 def test_is_local_ai_ready_no_runtime():
-    snap = absorb_device_state_snapshot("d4", {
-        "local_loop_ready": True,
-        "model_ready": True,
-        "llama_cpp_available": False,
-        "ncnn_available": False,
-    })
+    snap = absorb_device_state_snapshot(
+        "d4",
+        {
+            "local_loop_ready": True,
+            "model_ready": True,
+            "llama_cpp_available": False,
+            "ncnn_available": False,
+        },
+    )
     assert snap.is_local_ai_ready() is False
 
 
@@ -341,15 +354,18 @@ def test_is_local_ai_ready_all_none():
 
 
 def test_readiness_summary_fields():
-    snap = absorb_device_state_snapshot("d6", {
-        "model_ready": True,
-        "accessibility_ready": True,
-        "overlay_ready": False,
-        "local_loop_ready": True,
-        "llama_cpp_available": True,
-        "pending_first_download": False,
-        "degraded_reasons": [],
-    })
+    snap = absorb_device_state_snapshot(
+        "d6",
+        {
+            "model_ready": True,
+            "accessibility_ready": True,
+            "overlay_ready": False,
+            "local_loop_ready": True,
+            "llama_cpp_available": True,
+            "pending_first_download": False,
+            "degraded_reasons": [],
+        },
+    )
     summary = snap.readiness_summary()
     assert summary["model_ready"] is True
     assert summary["accessibility_ready"] is True
@@ -370,10 +386,21 @@ def test_to_dict_contains_required_keys():
     snap = absorb_device_state_snapshot("d7", {"model_ready": True})
     d = snap.to_dict()
     required = [
-        "device_id", "absorbed_at", "llama_cpp_available", "ncnn_available",
-        "model_ready", "accessibility_ready", "overlay_ready", "local_loop_ready",
-        "model_id", "runtime_type", "checksum_ok", "offline_queue_depth",
-        "current_fallback_tier", "warmup_result", "degraded_reasons",
+        "device_id",
+        "absorbed_at",
+        "llama_cpp_available",
+        "ncnn_available",
+        "model_ready",
+        "accessibility_ready",
+        "overlay_ready",
+        "local_loop_ready",
+        "model_id",
+        "runtime_type",
+        "checksum_ok",
+        "offline_queue_depth",
+        "current_fallback_tier",
+        "warmup_result",
+        "degraded_reasons",
     ]
     for key in required:
         assert key in d, f"Missing key: {key}"
@@ -436,9 +463,14 @@ def test_parse_execution_event_defaults():
 
 
 def test_execution_event_to_dict():
-    evt = absorb_device_execution_event("dev_f", {
-        "flow_id": "f1", "phase": "planning", "step_index": 0,
-    })
+    evt = absorb_device_execution_event(
+        "dev_f",
+        {
+            "flow_id": "f1",
+            "phase": "planning",
+            "step_index": 0,
+        },
+    )
     d = evt.to_dict()
     assert d["device_id"] == "dev_f"
     assert d["flow_id"] == "f1"
@@ -463,9 +495,7 @@ def test_get_device_state_snapshot_filters_stale_truth_by_ttl():
     absorb_device_state_snapshot("stale_dev", {"model_ready": True})
     store = get_android_device_state_store()
     with store._lock:  # noqa: SLF001 - test-only control of absorbed timestamp
-        store._snapshots["stale_dev"].absorbed_at = (
-            time.time() - ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS - 5
-        )
+        store._snapshots["stale_dev"].absorbed_at = time.time() - ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS - 5
     assert get_device_state_snapshot("stale_dev") is None
 
 
@@ -479,9 +509,7 @@ def test_participation_evidence_degrades_when_snapshot_truth_not_fresh():
     absorb_device_state_snapshot("ev_dev", {"model_ready": True})
     store = get_android_device_state_store()
     with store._lock:  # noqa: SLF001 - test-only control of absorbed timestamp
-        store._snapshots["ev_dev"].absorbed_at = (
-            time.time() - ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS - 5
-        )
+        store._snapshots["ev_dev"].absorbed_at = time.time() - ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS - 5
     evidence = get_android_participation_evidence("ev_dev")
     assert evidence["tier"] == "local_only"
     assert "android_snapshot_not_fresh_or_disconnected" in evidence["blocking_reasons"]
@@ -550,12 +578,22 @@ def test_ecosystem_summary_empty():
 
 def test_ecosystem_summary_counts():
     # 2 devices: 1 local-AI-ready, 1 not
-    absorb_device_state_snapshot("eco_1", {
-        "local_loop_ready": True, "model_ready": True, "llama_cpp_available": True,
-    })
-    absorb_device_state_snapshot("eco_2", {
-        "local_loop_ready": False, "model_ready": False, "llama_cpp_available": False,
-    })
+    absorb_device_state_snapshot(
+        "eco_1",
+        {
+            "local_loop_ready": True,
+            "model_ready": True,
+            "llama_cpp_available": True,
+        },
+    )
+    absorb_device_state_snapshot(
+        "eco_2",
+        {
+            "local_loop_ready": False,
+            "model_ready": False,
+            "llama_cpp_available": False,
+        },
+    )
     summary = get_device_ecosystem_summary()
     assert summary["total_devices_with_snapshot"] == 2
     assert summary["local_ai_ready_count"] == 1
@@ -563,11 +601,14 @@ def test_ecosystem_summary_counts():
 
 
 def test_ecosystem_summary_device_shape():
-    absorb_device_state_snapshot("shape_dev", {
-        "model_ready": True,
-        "model_id": "mbvlm",
-        "offline_queue_depth": 2,
-    })
+    absorb_device_state_snapshot(
+        "shape_dev",
+        {
+            "model_ready": True,
+            "model_id": "mbvlm",
+            "offline_queue_depth": 2,
+        },
+    )
     summary = get_device_ecosystem_summary()
     device = next(d for d in summary["devices"] if d["device_id"] == "shape_dev")
     assert "readiness" in device
@@ -577,13 +618,16 @@ def test_ecosystem_summary_device_shape():
 
 
 def test_ecosystem_summary_exposes_dispatch_capability_status_split():
-    absorb_device_state_snapshot("status_dev", {
-        "model_ready": True,
-        "local_loop_ready": False,
-        "mobilevlm_present": True,
-        "mobilevlm_checksum_ok": True,
-        "seeclick_present": False,
-    })
+    absorb_device_state_snapshot(
+        "status_dev",
+        {
+            "model_ready": True,
+            "local_loop_ready": False,
+            "mobilevlm_present": True,
+            "mobilevlm_checksum_ok": True,
+            "seeclick_present": False,
+        },
+    )
     summary = get_device_ecosystem_summary()
     device = next(d for d in summary["devices"] if d["device_id"] == "status_dev")
     status = device["dispatch_capability_status"]
@@ -640,9 +684,7 @@ def test_durable_restore_prunes_stale_snapshots(tmp_path, monkeypatch):
     reset_android_device_state_store(clear_durable_state=True)
 
     absorb_device_state_snapshot("stale_restore_dev", {"model_ready": True})
-    stale_absorbed_at = (
-        time.time() - ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS - _STALE_TEST_BUFFER_SECONDS
-    )
+    stale_absorbed_at = time.time() - ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS - _STALE_TEST_BUFFER_SECONDS
     store = get_android_device_state_store()
     with store._lock:  # noqa: SLF001 - no public API can age snapshots; simulate natural stale-on-restart explicitly
         store._snapshots["stale_restore_dev"].absorbed_at = stale_absorbed_at

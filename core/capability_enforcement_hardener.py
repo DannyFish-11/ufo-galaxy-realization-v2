@@ -393,8 +393,7 @@ def enforce_mainline_capability_gate(
             calling_site=calling_site,
         )
         logger.warning(
-            "[%s] capability gate: device=%s has no reported capabilities; "
-            "required=%s verdict=INSUFFICIENT_DATA",
+            "[%s] capability gate: device=%s has no reported capabilities; " "required=%s verdict=INSUFFICIENT_DATA",
             calling_site,
             device_id,
             req_caps,
@@ -436,8 +435,7 @@ def enforce_mainline_capability_gate(
 
     if mode == EnforcementMode.STRICT:
         logger.error(
-            "[%s] capability gate HARD REJECT: device=%s missing caps=%s "
-            "required=%s audit_id=%s",
+            "[%s] capability gate HARD REJECT: device=%s missing caps=%s " "required=%s audit_id=%s",
             calling_site,
             device_id,
             missing,
@@ -536,8 +534,7 @@ def audit_capability_override(
     )
 
     logger.warning(
-        "[%s] capability gate AUDITED OVERRIDE: device=%s missing=%s "
-        "reason=%r audit_id=%s",
+        "[%s] capability gate AUDITED OVERRIDE: device=%s missing=%s " "reason=%r audit_id=%s",
         calling_site,
         device_id,
         missing,

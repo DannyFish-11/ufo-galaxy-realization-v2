@@ -452,19 +452,14 @@ class AndroidParticipationTransitionSignal(str, Enum):
 # these semantics via runtime condition evaluation.
 # ---------------------------------------------------------------------------
 
-PARTICIPATION_TIER_TRANSITIONS: Dict[
-    AndroidParticipationTransitionSignal, str
-] = {
+PARTICIPATION_TIER_TRANSITIONS: Dict[AndroidParticipationTransitionSignal, str] = {
     # Upward-enabling signals
     AndroidParticipationTransitionSignal.websocket_connected: (
         "Tier can now rise to at least control_only after registration ack."
     ),
-    AndroidParticipationTransitionSignal.registration_ack_success: (
-        "Tier rises to control_only."
-    ),
+    AndroidParticipationTransitionSignal.registration_ack_success: ("Tier rises to control_only."),
     AndroidParticipationTransitionSignal.registration_fully_attached: (
-        "Tier rises to cross_device_enabled when cross_device_gate is ON; "
-        "otherwise cross_device_capable."
+        "Tier rises to cross_device_enabled when cross_device_gate is ON; " "otherwise cross_device_capable."
     ),
     AndroidParticipationTransitionSignal.registration_partial_attached: (
         "Tier is capped at cross_device_capable until gaps are resolved."
@@ -473,25 +468,17 @@ PARTICIPATION_TIER_TRANSITIONS: Dict[
         "Tier can rise to fully_attached when session is active in join_runtime."
     ),
     AndroidParticipationTransitionSignal.active_session_acquired: (
-        "Tier rises to fully_attached when capability is visible and "
-        "posture is join_runtime."
+        "Tier rises to fully_attached when capability is visible and " "posture is join_runtime."
     ),
-    AndroidParticipationTransitionSignal.readiness_satisfied: (
-        "Tier rises to dispatch_eligible."
-    ),
+    AndroidParticipationTransitionSignal.readiness_satisfied: ("Tier rises to dispatch_eligible."),
     AndroidParticipationTransitionSignal.cross_device_switch_enabled: (
         "Tier can rise to dispatch_eligible when readiness is satisfied."
     ),
-    AndroidParticipationTransitionSignal.cross_device_gate_enabled: (
-        "Tier can rise to cross_device_enabled."
-    ),
+    AndroidParticipationTransitionSignal.cross_device_gate_enabled: ("Tier can rise to cross_device_enabled."),
     AndroidParticipationTransitionSignal.posture_join_runtime: (
-        "Tier can rise to fully_attached when capability visible and "
-        "cross_device conditions are met."
+        "Tier can rise to fully_attached when capability visible and " "cross_device conditions are met."
     ),
-    AndroidParticipationTransitionSignal.execution_session_started: (
-        "Tier rises to distributed_participant."
-    ),
+    AndroidParticipationTransitionSignal.execution_session_started: ("Tier rises to distributed_participant."),
     AndroidParticipationTransitionSignal.reconnect_continuity_resumed: (
         "Tier recovers toward last confirmed tier without full reset."
     ),
@@ -499,36 +486,20 @@ PARTICIPATION_TIER_TRANSITIONS: Dict[
         "Tier re-derives from current runtime conditions."
     ),
     # Downward-forcing signals
-    AndroidParticipationTransitionSignal.websocket_disconnected: (
-        "Tier forced to local_only."
-    ),
+    AndroidParticipationTransitionSignal.websocket_disconnected: ("Tier forced to local_only."),
     AndroidParticipationTransitionSignal.posture_control_only: (
         "Tier forced to control_only regardless of other conditions."
     ),
     AndroidParticipationTransitionSignal.operator_suspended: (
         "Tier forced to control_only while suspension is active."
     ),
-    AndroidParticipationTransitionSignal.capability_visibility_lost: (
-        "Tier capped at cross_device_enabled."
-    ),
-    AndroidParticipationTransitionSignal.active_session_lost: (
-        "Tier capped at cross_device_enabled."
-    ),
-    AndroidParticipationTransitionSignal.readiness_lost: (
-        "Tier capped at fully_attached."
-    ),
-    AndroidParticipationTransitionSignal.cross_device_switch_disabled: (
-        "Tier capped at fully_attached."
-    ),
-    AndroidParticipationTransitionSignal.cross_device_gate_disabled: (
-        "Tier capped at cross_device_capable."
-    ),
-    AndroidParticipationTransitionSignal.execution_session_ended: (
-        "Tier falls back to dispatch_eligible."
-    ),
-    AndroidParticipationTransitionSignal.attachment_break: (
-        "Tier re-derives from current registration state."
-    ),
+    AndroidParticipationTransitionSignal.capability_visibility_lost: ("Tier capped at cross_device_enabled."),
+    AndroidParticipationTransitionSignal.active_session_lost: ("Tier capped at cross_device_enabled."),
+    AndroidParticipationTransitionSignal.readiness_lost: ("Tier capped at fully_attached."),
+    AndroidParticipationTransitionSignal.cross_device_switch_disabled: ("Tier capped at fully_attached."),
+    AndroidParticipationTransitionSignal.cross_device_gate_disabled: ("Tier capped at cross_device_capable."),
+    AndroidParticipationTransitionSignal.execution_session_ended: ("Tier falls back to dispatch_eligible."),
+    AndroidParticipationTransitionSignal.attachment_break: ("Tier re-derives from current registration state."),
 }
 
 
@@ -642,6 +613,7 @@ class AndroidNetworkParticipationState:
         # 附加统一生命周期阶段，与参与层对齐
         try:
             from core.device_lifecycle_state import stage_for_participation_tier  # noqa: PLC0415
+
             result["lifecycle_stage"] = stage_for_participation_tier(self.tier.value).value
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
@@ -744,17 +716,13 @@ def derive_android_network_participation_tier(
     # posture=control_only caps tier here
     is_control_only_posture = session_posture == "control_only"
     if is_control_only_posture:
-        blocking.append(
-            "session_posture='control_only': device explicitly announced control-only posture"
-        )
+        blocking.append("session_posture='control_only': device explicitly announced control-only posture")
         notes.append("Posture is control_only → capped at control_only.")
         return (AndroidNetworkParticipationTier.control_only, blocking, notes)
 
     # --- Tier 2: cross_device_capable ---
     if gaps:
-        blocking.append(
-            f"registration_gaps={gaps}: registration has incomplete downstream steps"
-        )
+        blocking.append(f"registration_gaps={gaps}: registration has incomplete downstream steps")
         notes.append(f"Registered but {len(gaps)} gap(s) → cross_device_capable.")
         return (
             AndroidNetworkParticipationTier.cross_device_capable,
@@ -766,9 +734,7 @@ def derive_android_network_participation_tier(
 
     # --- Tier 3: cross_device_enabled ---
     if not cross_device_enabled:
-        blocking.append(
-            "cross_device_enabled=False: Android-side cross_device gate is OFF"
-        )
+        blocking.append("cross_device_enabled=False: Android-side cross_device gate is OFF")
         notes.append("Fully attached but cross_device_enabled=False → cross_device_capable.")
         return (
             AndroidNetworkParticipationTier.cross_device_capable,
@@ -779,18 +745,14 @@ def derive_android_network_participation_tier(
     notes.append("cross_device_enabled=True")
 
     # --- Tier 4: fully_attached ---
-    has_join_runtime_session = (
-        active_session_count > 0 and session_posture == "join_runtime"
-    )
+    has_join_runtime_session = active_session_count > 0 and session_posture == "join_runtime"
     if not capability_visible:
         blocking.append("capability_visible=False: device capability not yet visible on V2")
     if not has_join_runtime_session:
         if active_session_count == 0:
             blocking.append("active_session_count=0: no active attached runtime session")
         else:
-            blocking.append(
-                f"session_posture='{session_posture}': session not in join_runtime posture"
-            )
+            blocking.append(f"session_posture='{session_posture}': session not in join_runtime posture")
 
     if not capability_visible or not has_join_runtime_session:
         notes.append(
@@ -807,13 +769,9 @@ def derive_android_network_participation_tier(
 
     # --- Tier 5: dispatch_eligible ---
     if not readiness_satisfied:
-        blocking.append(
-            "readiness_satisfied=False: model/accessibility/local-loop readiness not met"
-        )
+        blocking.append("readiness_satisfied=False: model/accessibility/local-loop readiness not met")
     if not dispatch_gate_passed:
-        blocking.append(
-            "dispatch_gate_passed=False: mode-gate or V2 cross-device switch check failed"
-        )
+        blocking.append("dispatch_gate_passed=False: mode-gate or V2 cross-device switch check failed")
 
     if not readiness_satisfied or not dispatch_gate_passed:
         notes.append(
@@ -830,9 +788,7 @@ def derive_android_network_participation_tier(
 
     # --- Tier 6: distributed_participant ---
     if not execution_active:
-        blocking.append(
-            "execution_active=False: no active distributed execution session in progress"
-        )
+        blocking.append("execution_active=False: no active distributed execution session in progress")
         notes.append("dispatch_eligible but no active execution session → dispatch_eligible.")
         return (
             AndroidNetworkParticipationTier.dispatch_eligible,
@@ -1106,7 +1062,9 @@ def get_participation_state_for_device(
     except Exception as exc:
         logger.warning(
             "get_participation_state_for_device: internal error device_id=%r: %s",
-            device_id, exc, exc_info=True,
+            device_id,
+            exc,
+            exc_info=True,
         )
         return AndroidNetworkParticipationState(
             device_id=device_id,
@@ -1134,6 +1092,7 @@ def _derive_live_state(device_id: str) -> AndroidNetworkParticipationState:
         from core.attached_runtime_session_registry import (
             get_registry,
         )
+
         registry = get_registry()
         entry = registry.lookup_session_by_device(device_id)
         if entry is not None:
@@ -1147,21 +1106,21 @@ def _derive_live_state(device_id: str) -> AndroidNetworkParticipationState:
     except Exception as exc:
         logger.debug(
             "_derive_live_state: registry read failed for device_id=%r: %s",
-            device_id, exc,
+            device_id,
+            exc,
         )
 
     # --- Read from android_device_state_store ---
     try:
         from core.android_device_state_store import get_device_state_snapshot
+
         snapshot = get_device_state_snapshot(device_id)
         if snapshot is not None:
             # Capability visibility: a snapshot being present means we have
             # device state; cross_device_enabled comes from local_loop_config
             cfg = getattr(snapshot, "local_loop_config", None) or {}
             if isinstance(cfg, dict):
-                cross_device_enabled = bool(
-                    cfg.get("crossDeviceEnabled", cfg.get("cross_device_enabled", False))
-                )
+                cross_device_enabled = bool(cfg.get("crossDeviceEnabled", cfg.get("cross_device_enabled", False)))
             # Readiness: all three gates must pass
             model_ready = bool(getattr(snapshot, "model_ready", False))
             accessibility_ready = bool(getattr(snapshot, "accessibility_ready", False))
@@ -1173,12 +1132,14 @@ def _derive_live_state(device_id: str) -> AndroidNetworkParticipationState:
     except Exception as exc:
         logger.debug(
             "_derive_live_state: snapshot read failed for device_id=%r: %s",
-            device_id, exc,
+            device_id,
+            exc,
         )
 
     # --- Read capability_visible from android_mode_gate_policy (mode state) ---
     try:
         from core.android_mode_gate_policy import build_mode_state_for_device
+
         mode_state = build_mode_state_for_device(device_id)
         if mode_state is not None:
             # capability_visible proxied from cross_device_enabled flag in mode state
@@ -1187,12 +1148,14 @@ def _derive_live_state(device_id: str) -> AndroidNetworkParticipationState:
     except Exception as exc:
         logger.debug(
             "_derive_live_state: mode_state read failed for device_id=%r: %s",
-            device_id, exc,
+            device_id,
+            exc,
         )
 
     # --- Read dispatch gate from android_mode_gate_policy ---
     try:
         from core.android_mode_gate_policy import evaluate_android_mode_readiness
+
         verdict = evaluate_android_mode_readiness(device_id)
         dispatch_gate_passed = bool(verdict.is_dispatch_eligible)
         if dispatch_gate_passed and not readiness_satisfied:
@@ -1201,22 +1164,24 @@ def _derive_live_state(device_id: str) -> AndroidNetworkParticipationState:
     except Exception as exc:
         logger.debug(
             "_derive_live_state: mode_gate read failed for device_id=%r: %s",
-            device_id, exc,
+            device_id,
+            exc,
         )
 
     # --- Detect active execution session ---
     try:
         from core.android_participant_session_state import list_active_participant_sessions
+
         active_sessions = list_active_participant_sessions()
         execution_active = any(
-            getattr(s, "device_id", "") == device_id
-            and getattr(s, "phase", "").startswith("execution")
+            getattr(s, "device_id", "") == device_id and getattr(s, "phase", "").startswith("execution")
             for s in active_sessions
         )
     except Exception as exc:
         logger.debug(
             "_derive_live_state: participant_sessions read failed for device_id=%r: %s",
-            device_id, exc,
+            device_id,
+            exc,
         )
 
     return build_android_network_participation_state(

@@ -61,23 +61,22 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
+import core.android_participant_evidence_ingress as _mod
 from core.android_participant_evidence_ingress import (
-    ANDROID_PARTICIPANT_EVIDENCE_INGRESS_AUTHORITY,
     ANDROID_PARTICIPANT_EVIDENCE_CONTRACT_VERSION,
-    EXPECTED_AUTHORITY_SENTINEL,
+    ANDROID_PARTICIPANT_EVIDENCE_INGRESS_AUTHORITY,
     EVIDENCE_PATH_IS_CONFIGURABLE_POLICY,
+    EVIDENCE_VISIBLE_IN_SUMMARY_POLICY,
+    EXPECTED_AUTHORITY_SENTINEL,
     FAIL_CONSERVATIVE_ON_MISSING_EVIDENCE_POLICY,
-    STALE_EVIDENCE_IS_NOT_READY_POLICY,
     MALFORMED_EVIDENCE_IS_NOT_READY_POLICY,
     PARTICIPANT_STATUS_DERIVED_FROM_EVIDENCE_POLICY,
-    EVIDENCE_VISIBLE_IN_SUMMARY_POLICY,
-    AndroidParticipantStatus,
+    STALE_EVIDENCE_IS_NOT_READY_POLICY,
     AndroidParticipantEvidenceResult,
-    ingest_android_participant_evidence,
+    AndroidParticipantStatus,
     build_android_participant_evidence_summary,
+    ingest_android_participant_evidence,
 )
-import core.android_participant_evidence_ingress as _mod
-
 
 # ===========================================================================
 # Helpers
@@ -190,8 +189,13 @@ class TestAndroidParticipantStatusEnum:
     def test_has_all_values(self):
         values = {s.value for s in AndroidParticipantStatus}
         expected = {
-            "ready", "degraded", "unavailable", "recovered",
-            "missing_evidence", "malformed_evidence", "stale_evidence",
+            "ready",
+            "degraded",
+            "unavailable",
+            "recovered",
+            "missing_evidence",
+            "malformed_evidence",
+            "stale_evidence",
             "unverified",
         }
         assert expected == values
@@ -251,9 +255,17 @@ class TestAndroidParticipantEvidenceResult:
         )
         d = r.to_dict()
         for key in [
-            "result_id", "status", "evidence_summary", "gap_description",
-            "raw_evidence", "evidence_path", "ingested_at", "age_seconds",
-            "participant_status_raw", "is_operational", "audit_event_count",
+            "result_id",
+            "status",
+            "evidence_summary",
+            "gap_description",
+            "raw_evidence",
+            "evidence_path",
+            "ingested_at",
+            "age_seconds",
+            "participant_status_raw",
+            "is_operational",
+            "audit_event_count",
             "reject_reason",
         ]:
             assert key in d, f"Key {key!r} missing from to_dict()"
@@ -474,17 +486,13 @@ class TestStaleEvidence:
         # generated 2 hours ago, max age 1 hour
         d = _make_valid_evidence(generated_at=_NOW - 7200.0)
         p = _write_evidence(str(tmp_path), d)
-        r = ingest_android_participant_evidence(
-            evidence_path=p, max_age_seconds=3600.0, _now=_NOW
-        )
+        r = ingest_android_participant_evidence(evidence_path=p, max_age_seconds=3600.0, _now=_NOW)
         assert r.status == AndroidParticipantStatus.stale_evidence
 
     def test_stale_reject_reason(self, tmp_path):
         d = _make_valid_evidence(generated_at=_NOW - 7200.0)
         p = _write_evidence(str(tmp_path), d)
-        r = ingest_android_participant_evidence(
-            evidence_path=p, max_age_seconds=3600.0, _now=_NOW
-        )
+        r = ingest_android_participant_evidence(evidence_path=p, max_age_seconds=3600.0, _now=_NOW)
         assert r.reject_reason == "stale_evidence"
 
     def test_stale_evidence_not_treated_as_ready(self, tmp_path):
@@ -496,9 +504,7 @@ class TestStaleEvidence:
             generated_at=_NOW - 7200.0,
         )
         p = _write_evidence(str(tmp_path), d)
-        r = ingest_android_participant_evidence(
-            evidence_path=p, max_age_seconds=3600.0, _now=_NOW
-        )
+        r = ingest_android_participant_evidence(evidence_path=p, max_age_seconds=3600.0, _now=_NOW)
         assert r.status == AndroidParticipantStatus.stale_evidence
         assert r.status != AndroidParticipantStatus.ready
 
@@ -506,25 +512,19 @@ class TestStaleEvidence:
         # generated 59 minutes ago, max age 1 hour (3600 s)
         d = _make_valid_evidence(generated_at=_NOW - 3540.0)
         p = _write_evidence(str(tmp_path), d)
-        r = ingest_android_participant_evidence(
-            evidence_path=p, max_age_seconds=3600.0, _now=_NOW
-        )
+        r = ingest_android_participant_evidence(evidence_path=p, max_age_seconds=3600.0, _now=_NOW)
         assert r.status != AndroidParticipantStatus.stale_evidence
 
     def test_stale_evidence_gap_description_mentions_staleness(self, tmp_path):
         d = _make_valid_evidence(generated_at=_NOW - 7200.0)
         p = _write_evidence(str(tmp_path), d)
-        r = ingest_android_participant_evidence(
-            evidence_path=p, max_age_seconds=3600.0, _now=_NOW
-        )
+        r = ingest_android_participant_evidence(evidence_path=p, max_age_seconds=3600.0, _now=_NOW)
         assert "stale" in r.gap_description.lower() or "old" in r.gap_description.lower()
 
     def test_stale_evidence_records_age(self, tmp_path):
         d = _make_valid_evidence(generated_at=_NOW - 7200.0)
         p = _write_evidence(str(tmp_path), d)
-        r = ingest_android_participant_evidence(
-            evidence_path=p, max_age_seconds=3600.0, _now=_NOW
-        )
+        r = ingest_android_participant_evidence(evidence_path=p, max_age_seconds=3600.0, _now=_NOW)
         assert r.age_seconds == pytest.approx(7200.0, rel=0.01)
 
 
@@ -536,7 +536,9 @@ class TestStaleEvidence:
 class TestExplicitParticipantStatus:
     def test_ready_explicit(self, tmp_path):
         d = _make_valid_evidence(
-            participant_status="ready", is_operational=True, audit_event_count=5,
+            participant_status="ready",
+            is_operational=True,
+            audit_event_count=5,
             generated_at=_NOW - 60.0,
         )
         p = _write_evidence(str(tmp_path), d)
@@ -545,7 +547,9 @@ class TestExplicitParticipantStatus:
 
     def test_degraded_explicit(self, tmp_path):
         d = _make_valid_evidence(
-            participant_status="degraded", is_operational=False, audit_event_count=3,
+            participant_status="degraded",
+            is_operational=False,
+            audit_event_count=3,
             generated_at=_NOW - 60.0,
         )
         p = _write_evidence(str(tmp_path), d)
@@ -554,7 +558,9 @@ class TestExplicitParticipantStatus:
 
     def test_unavailable_explicit(self, tmp_path):
         d = _make_valid_evidence(
-            participant_status="unavailable", is_operational=False, audit_event_count=0,
+            participant_status="unavailable",
+            is_operational=False,
+            audit_event_count=0,
             generated_at=_NOW - 60.0,
         )
         p = _write_evidence(str(tmp_path), d)
@@ -563,7 +569,9 @@ class TestExplicitParticipantStatus:
 
     def test_recovered_explicit(self, tmp_path):
         d = _make_valid_evidence(
-            participant_status="recovered", is_operational=True, audit_event_count=2,
+            participant_status="recovered",
+            is_operational=True,
+            audit_event_count=2,
             generated_at=_NOW - 60.0,
         )
         p = _write_evidence(str(tmp_path), d)
@@ -572,7 +580,8 @@ class TestExplicitParticipantStatus:
 
     def test_ready_evidence_summary_contains_device(self, tmp_path):
         d = _make_valid_evidence(
-            participant_status="ready", device_id="my-device-001",
+            participant_status="ready",
+            device_id="my-device-001",
             generated_at=_NOW - 60.0,
         )
         p = _write_evidence(str(tmp_path), d)
@@ -581,7 +590,9 @@ class TestExplicitParticipantStatus:
 
     def test_ready_gap_description_is_empty(self, tmp_path):
         d = _make_valid_evidence(
-            participant_status="ready", is_operational=True, audit_event_count=5,
+            participant_status="ready",
+            is_operational=True,
+            audit_event_count=5,
             generated_at=_NOW - 60.0,
         )
         p = _write_evidence(str(tmp_path), d)
@@ -590,7 +601,9 @@ class TestExplicitParticipantStatus:
 
     def test_degraded_gap_description_non_empty(self, tmp_path):
         d = _make_valid_evidence(
-            participant_status="degraded", is_operational=False, audit_event_count=3,
+            participant_status="degraded",
+            is_operational=False,
+            audit_event_count=3,
             generated_at=_NOW - 60.0,
         )
         p = _write_evidence(str(tmp_path), d)
@@ -599,7 +612,9 @@ class TestExplicitParticipantStatus:
 
     def test_unavailable_gap_description_non_empty(self, tmp_path):
         d = _make_valid_evidence(
-            participant_status="unavailable", is_operational=False, audit_event_count=0,
+            participant_status="unavailable",
+            is_operational=False,
+            audit_event_count=0,
             generated_at=_NOW - 60.0,
         )
         p = _write_evidence(str(tmp_path), d)
@@ -674,9 +689,7 @@ class TestEvidencePathConfiguration:
 
     def test_explicit_path_param_takes_priority(self, tmp_path, monkeypatch):
         # env var points to missing file; explicit path param should win
-        monkeypatch.setenv(
-            "ANDROID_PARTICIPANT_EVIDENCE_PATH", "/nonexistent/env-path.json"
-        )
+        monkeypatch.setenv("ANDROID_PARTICIPANT_EVIDENCE_PATH", "/nonexistent/env-path.json")
         d = _make_valid_evidence(participant_status="ready", generated_at=_NOW - 60.0)
         p = _write_evidence(str(tmp_path), d)
         r = ingest_android_participant_evidence(evidence_path=p, _now=_NOW)
@@ -713,9 +726,7 @@ class TestMaxAgeConfiguration:
             generated_at=_NOW - 30.0,
         )
         p = _write_evidence(str(tmp_path), d)
-        r = ingest_android_participant_evidence(
-            evidence_path=p, max_age_seconds=60.0, _now=_NOW
-        )
+        r = ingest_android_participant_evidence(evidence_path=p, max_age_seconds=60.0, _now=_NOW)
         assert r.status != AndroidParticipantStatus.stale_evidence
 
 
@@ -734,21 +745,25 @@ class TestSerialisation:
         assert parsed["status"] == "ready"
 
     def test_to_json_round_trip_for_missing(self):
-        r = ingest_android_participant_evidence(
-            evidence_path="/no/such/file.json", _now=_NOW
-        )
+        r = ingest_android_participant_evidence(evidence_path="/no/such/file.json", _now=_NOW)
         parsed = json.loads(r.to_json())
         assert parsed["status"] == "missing_evidence"
 
     def test_to_dict_has_all_required_keys(self, tmp_path):
-        r = ingest_android_participant_evidence(
-            evidence_path="/no/such/file.json", _now=_NOW
-        )
+        r = ingest_android_participant_evidence(evidence_path="/no/such/file.json", _now=_NOW)
         d = r.to_dict()
         required = [
-            "result_id", "status", "evidence_summary", "gap_description",
-            "raw_evidence", "evidence_path", "ingested_at", "age_seconds",
-            "participant_status_raw", "is_operational", "audit_event_count",
+            "result_id",
+            "status",
+            "evidence_summary",
+            "gap_description",
+            "raw_evidence",
+            "evidence_path",
+            "ingested_at",
+            "age_seconds",
+            "participant_status_raw",
+            "is_operational",
+            "audit_event_count",
             "reject_reason",
         ]
         for k in required:
@@ -763,9 +778,7 @@ class TestSerialisation:
 class TestBuildSummary:
     def test_summary_has_required_keys(self):
         s = build_android_participant_evidence_summary(
-            result=ingest_android_participant_evidence(
-                evidence_path="/no/such/file.json", _now=_NOW
-            )
+            result=ingest_android_participant_evidence(evidence_path="/no/such/file.json", _now=_NOW)
         )
         for key in [
             "android_participant_status",
@@ -783,9 +796,7 @@ class TestBuildSummary:
             assert key in s, f"Missing key: {key}"
 
     def test_summary_status_for_missing_evidence(self):
-        r = ingest_android_participant_evidence(
-            evidence_path="/no/such/file.json", _now=_NOW
-        )
+        r = ingest_android_participant_evidence(evidence_path="/no/such/file.json", _now=_NOW)
         s = build_android_participant_evidence_summary(result=r)
         assert s["android_participant_status"] == "missing_evidence"
 
@@ -801,9 +812,7 @@ class TestBuildSummary:
         monkeypatch.delenv("ANDROID_PARTICIPANT_EVIDENCE_PATH", raising=False)
 
     def test_summary_json_serialisable(self, tmp_path):
-        r = ingest_android_participant_evidence(
-            evidence_path="/no/such/file.json", _now=_NOW
-        )
+        r = ingest_android_participant_evidence(evidence_path="/no/such/file.json", _now=_NOW)
         s = build_android_participant_evidence_summary(result=r)
         payload = json.dumps(s)
         assert json.loads(payload)["android_participant_status"] == "missing_evidence"
@@ -820,6 +829,7 @@ class TestSystemFinalAcceptanceVerdictIntegration:
     @pytest.fixture(autouse=True)
     def fresh_evaluator(self):
         from core.system_final_acceptance_verdict import reset_system_acceptance_evaluator
+
         reset_system_acceptance_evaluator()
         yield
         reset_system_acceptance_evaluator()
@@ -827,6 +837,7 @@ class TestSystemFinalAcceptanceVerdictIntegration:
     def test_android_dimension_uses_evidence_ingress_signal_source(self, tmp_path):
         """Signal source should reference core.android_participant_evidence_ingress."""
         from core.system_final_acceptance_verdict import evaluate_system_acceptance
+
         report = evaluate_system_acceptance()
         item = report.checklist.get("android_participant")
         assert item is not None
@@ -839,9 +850,11 @@ class TestSystemFinalAcceptanceVerdictIntegration:
             os.path.join(str(tmp_path), "nonexistent.json"),
         )
         from core.system_final_acceptance_verdict import (
-            reset_system_acceptance_evaluator, evaluate_system_acceptance,
             DimensionStatus,
+            evaluate_system_acceptance,
+            reset_system_acceptance_evaluator,
         )
+
         reset_system_acceptance_evaluator()
         report = evaluate_system_acceptance()
         item = report.checklist["android_participant"]
@@ -854,8 +867,10 @@ class TestSystemFinalAcceptanceVerdictIntegration:
             os.path.join(str(tmp_path), "nonexistent.json"),
         )
         from core.system_final_acceptance_verdict import (
-            reset_system_acceptance_evaluator, evaluate_system_acceptance,
+            evaluate_system_acceptance,
+            reset_system_acceptance_evaluator,
         )
+
         reset_system_acceptance_evaluator()
         report = evaluate_system_acceptance()
         item = report.checklist["android_participant"]
@@ -873,9 +888,13 @@ class TestSystemFinalAcceptanceVerdictIntegration:
         p = _write_evidence(str(tmp_path), d)
         expected_result = ingest_android_participant_evidence(evidence_path=p, _now=_NOW)
         from unittest.mock import patch
+
         from core.system_final_acceptance_verdict import (
-            reset_system_acceptance_evaluator, evaluate_system_acceptance, DimensionStatus,
+            DimensionStatus,
+            evaluate_system_acceptance,
+            reset_system_acceptance_evaluator,
         )
+
         with patch(
             "core.system_final_acceptance_verdict._ingest_android_evidence",
             return_value=expected_result,
@@ -896,9 +915,13 @@ class TestSystemFinalAcceptanceVerdictIntegration:
         p = _write_evidence(str(tmp_path), d)
         expected_result = ingest_android_participant_evidence(evidence_path=p, _now=_NOW)
         from unittest.mock import patch
+
         from core.system_final_acceptance_verdict import (
-            reset_system_acceptance_evaluator, evaluate_system_acceptance, DimensionStatus,
+            DimensionStatus,
+            evaluate_system_acceptance,
+            reset_system_acceptance_evaluator,
         )
+
         with patch(
             "core.system_final_acceptance_verdict._ingest_android_evidence",
             return_value=expected_result,
@@ -917,13 +940,15 @@ class TestSystemFinalAcceptanceVerdictIntegration:
             generated_at=_NOW - 7200.0,
         )
         p = _write_evidence(str(tmp_path), d)
-        stale_result = ingest_android_participant_evidence(
-            evidence_path=p, max_age_seconds=3600.0, _now=_NOW
-        )
+        stale_result = ingest_android_participant_evidence(evidence_path=p, max_age_seconds=3600.0, _now=_NOW)
         from unittest.mock import patch
+
         from core.system_final_acceptance_verdict import (
-            reset_system_acceptance_evaluator, evaluate_system_acceptance, DimensionStatus,
+            DimensionStatus,
+            evaluate_system_acceptance,
+            reset_system_acceptance_evaluator,
         )
+
         with patch(
             "core.system_final_acceptance_verdict._ingest_android_evidence",
             return_value=stale_result,
@@ -940,9 +965,13 @@ class TestSystemFinalAcceptanceVerdictIntegration:
             fh.write("{bad json}")
         malformed_result = ingest_android_participant_evidence(evidence_path=p, _now=_NOW)
         from unittest.mock import patch
+
         from core.system_final_acceptance_verdict import (
-            reset_system_acceptance_evaluator, evaluate_system_acceptance, DimensionStatus,
+            DimensionStatus,
+            evaluate_system_acceptance,
+            reset_system_acceptance_evaluator,
         )
+
         with patch(
             "core.system_final_acceptance_verdict._ingest_android_evidence",
             return_value=malformed_result,
@@ -963,9 +992,13 @@ class TestSystemFinalAcceptanceVerdictIntegration:
         p = _write_evidence(str(tmp_path), d)
         unavailable_result = ingest_android_participant_evidence(evidence_path=p, _now=_NOW)
         from unittest.mock import patch
+
         from core.system_final_acceptance_verdict import (
-            reset_system_acceptance_evaluator, evaluate_system_acceptance, DimensionStatus,
+            DimensionStatus,
+            evaluate_system_acceptance,
+            reset_system_acceptance_evaluator,
         )
+
         with patch(
             "core.system_final_acceptance_verdict._ingest_android_evidence",
             return_value=unavailable_result,
@@ -986,9 +1019,12 @@ class TestSystemFinalAcceptanceVerdictIntegration:
         p = _write_evidence(str(tmp_path), d)
         ready_result = ingest_android_participant_evidence(evidence_path=p, _now=_NOW)
         from unittest.mock import patch
+
         from core.system_final_acceptance_verdict import (
-            reset_system_acceptance_evaluator, evaluate_system_acceptance,
+            evaluate_system_acceptance,
+            reset_system_acceptance_evaluator,
         )
+
         with patch(
             "core.system_final_acceptance_verdict._ingest_android_evidence",
             return_value=ready_result,
@@ -1006,8 +1042,10 @@ class TestSystemFinalAcceptanceVerdictIntegration:
             os.path.join(str(tmp_path), "nonexistent.json"),
         )
         from core.system_final_acceptance_verdict import (
-            reset_system_acceptance_evaluator, evaluate_system_acceptance,
+            evaluate_system_acceptance,
+            reset_system_acceptance_evaluator,
         )
+
         reset_system_acceptance_evaluator()
         report = evaluate_system_acceptance()
         assert "android_participant" in report.summary.lower()
@@ -1020,9 +1058,11 @@ class TestSystemFinalAcceptanceVerdictIntegration:
             os.path.join(str(tmp_path), "nonexistent.json"),
         )
         from core.system_final_acceptance_verdict import (
-            reset_system_acceptance_evaluator, evaluate_system_acceptance,
             SystemAcceptanceVerdict,
+            evaluate_system_acceptance,
+            reset_system_acceptance_evaluator,
         )
+
         reset_system_acceptance_evaluator()
         report = evaluate_system_acceptance()
         assert report.verdict != SystemAcceptanceVerdict.fully_operational
@@ -1039,9 +1079,13 @@ class TestSystemFinalAcceptanceVerdictIntegration:
         p = _write_evidence(str(tmp_path), d)
         recovered_result = ingest_android_participant_evidence(evidence_path=p, _now=_NOW)
         from unittest.mock import patch
+
         from core.system_final_acceptance_verdict import (
-            reset_system_acceptance_evaluator, evaluate_system_acceptance, DimensionStatus,
+            DimensionStatus,
+            evaluate_system_acceptance,
+            reset_system_acceptance_evaluator,
         )
+
         with patch(
             "core.system_final_acceptance_verdict._ingest_android_evidence",
             return_value=recovered_result,

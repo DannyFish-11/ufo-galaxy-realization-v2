@@ -112,9 +112,7 @@ CANONICAL_ROUNDTRIP_AUTHORITY: str = (
 ROUNDTRIP_SCHEMA_VERSION: str = "1.0"
 
 # Terminal Android execution phases (completion or failure)
-_ANDROID_TERMINAL_PHASES: frozenset = frozenset(
-    {"completed", "failed", "stagnation", "gate_decision"}
-)
+_ANDROID_TERMINAL_PHASES: frozenset = frozenset({"completed", "failed", "stagnation", "gate_decision"})
 
 # ---------------------------------------------------------------------------
 # ExecutionRoundtripRecord
@@ -178,9 +176,7 @@ class ExecutionRoundtripRecord:
         Module authority sentinel.
     """
 
-    roundtrip_id: str = field(
-        default_factory=lambda: f"rt_{uuid.uuid4().hex[:12]}"
-    )
+    roundtrip_id: str = field(default_factory=lambda: f"rt_{uuid.uuid4().hex[:12]}")
     action_id: str = ""
     action_kind: str = "dispatch"
     trace_id: str = ""

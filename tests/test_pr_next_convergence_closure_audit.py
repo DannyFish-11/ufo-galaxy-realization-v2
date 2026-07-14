@@ -11,6 +11,7 @@ Validates the PR-next-convergence audit module:
 - AndroidTruthInOperatorBoardAudit operator board audit
 - get_board_reasoning_for_closure() board reasoning API
 """
+
 from __future__ import annotations
 
 import time
@@ -19,28 +20,27 @@ from typing import Any, Dict
 import pytest
 
 from core.pr_next_convergence_closure_audit import (
+    PR_NEXT_CONVERGENCE_ANCHOR,
     PR_NEXT_CONVERGENCE_CLOSURE_AUDIT_AUTHORITY,
     PR_NEXT_CONVERGENCE_CONTRACT_VERSION,
     PR_NEXT_CONVERGENCE_PR_TITLE,
     PR_NEXT_CONVERGENCE_PR_TITLE_EN,
-    PR_NEXT_CONVERGENCE_ANCHOR,
-    OperabilityVerdict,
-    ThreeStateSourceVerdict,
-    ClosureGovernancePropagationTier,
+    AndroidTruthInOperatorBoardAudit,
     CloneToRunAudit,
     CloneToRunAuditCheckpoint,
-    ThreeStateRuntimeAudit,
     ClosureGovernancePropagationAudit,
-    AndroidTruthInOperatorBoardAudit,
+    ClosureGovernancePropagationTier,
     ConvergenceClosureAuditRecord,
-    build_clone_to_run_audit,
-    build_three_state_runtime_audit,
-    build_closure_governance_propagation_audit,
+    OperabilityVerdict,
+    ThreeStateRuntimeAudit,
+    ThreeStateSourceVerdict,
     build_android_truth_operator_board_audit,
-    get_board_reasoning_for_closure,
+    build_clone_to_run_audit,
+    build_closure_governance_propagation_audit,
     build_convergence_closure_audit,
+    build_three_state_runtime_audit,
+    get_board_reasoning_for_closure,
 )
-
 
 # ---------------------------------------------------------------------------
 # 权威标志与合同版本测试
@@ -160,9 +160,9 @@ class TestCloneToRunAudit:
     def test_verdict_is_not_clone_ready(self):
         # System is not yet fully clone-ready (Android APK needs manual build etc.)
         audit = build_clone_to_run_audit()
-        assert audit.operability_verdict != OperabilityVerdict.CLONE_READY, (
-            "System should not be fully clone-ready given Android dependency requirements"
-        )
+        assert (
+            audit.operability_verdict != OperabilityVerdict.CLONE_READY
+        ), "System should not be fully clone-ready given Android dependency requirements"
 
     def test_to_dict_serializes_correctly(self):
         audit = build_clone_to_run_audit()
@@ -203,15 +203,19 @@ class TestThreeStateRuntimeAudit:
     def test_verdict_is_not_narrative_only(self):
         # The system has real code for tri_state_phase and participation tiers
         audit = build_three_state_runtime_audit()
-        assert audit.verdict != ThreeStateSourceVerdict.NARRATIVE_ONLY, (
-            "Three-state concepts should at least be partially in code"
-        )
+        assert (
+            audit.verdict != ThreeStateSourceVerdict.NARRATIVE_ONLY
+        ), "Three-state concepts should at least be partially in code"
 
     def test_has_honest_assessment(self):
         audit = build_three_state_runtime_audit()
         assert audit.honest_assessment_zh, "Must provide an honest assessment in Chinese"
         # Should mention the two separate semantic lines
-        assert "线路" in audit.honest_assessment_zh or "两条" in audit.honest_assessment_zh or "两个" in audit.honest_assessment_zh
+        assert (
+            "线路" in audit.honest_assessment_zh
+            or "两条" in audit.honest_assessment_zh
+            or "两个" in audit.honest_assessment_zh
+        )
 
     def test_has_operator_board_gap(self):
         audit = build_three_state_runtime_audit()
@@ -269,9 +273,9 @@ class TestClosureGovernancePropagationAudit:
     def test_is_not_routing_only(self):
         # PR 1142 + this PR should take it beyond routing_only
         audit = build_closure_governance_propagation_audit()
-        assert audit.propagation_tier != ClosureGovernancePropagationTier.ROUTING_ONLY, (
-            "After PR 1142 and this PR, propagation should be beyond routing_only"
-        )
+        assert (
+            audit.propagation_tier != ClosureGovernancePropagationTier.ROUTING_ONLY
+        ), "After PR 1142 and this PR, propagation should be beyond routing_only"
 
     def test_is_not_not_propagated(self):
         audit = build_closure_governance_propagation_audit()
@@ -280,9 +284,9 @@ class TestClosureGovernancePropagationAudit:
     def test_closure_reflects_acceptance_verdict(self):
         # unified_result_ingress.is_fully_closed is controlled by acceptance gate
         audit = build_closure_governance_propagation_audit()
-        assert audit.closure_reflects_acceptance_verdict is True, (
-            "UnifiedResultIngress must block is_fully_closed when acceptance verdict is quarantine/reject"
-        )
+        assert (
+            audit.closure_reflects_acceptance_verdict is True
+        ), "UnifiedResultIngress must block is_fully_closed when acceptance verdict is quarantine/reject"
 
     def test_has_honest_assessment(self):
         audit = build_closure_governance_propagation_audit()
@@ -582,42 +586,45 @@ class TestPrNextConvergenceCodeProbes:
     def test_completion_ingress_has_android_context(self):
         """Verify that canonical_completion_ingress has notify_with_android_context."""
         from core.pr_next_convergence_closure_audit import _collect_probes
+
         p = _collect_probes()
         assert p.get("completion_ingress_has_android_context") is True, (
-            "canonical_completion_ingress must contain notify_with_android_context "
-            "(this PR adds it)"
+            "canonical_completion_ingress must contain notify_with_android_context " "(this PR adds it)"
         )
 
     def test_panel_has_android_participation_verdict(self):
         """Verify that unified_panel_aggregation has android_participation_verdict field."""
         from core.pr_next_convergence_closure_audit import _collect_probes
+
         p = _collect_probes()
         assert p.get("panel_has_android_participation_verdict") is True, (
-            "unified_panel_aggregation must contain android_participation_verdict "
-            "(this PR adds it)"
+            "unified_panel_aggregation must contain android_participation_verdict " "(this PR adds it)"
         )
 
     def test_dispatch_consumes_participation_evidence(self):
         """Verify that source_dispatch_orchestrator consumes get_android_participation_evidence (PR 1142)."""
         from core.pr_next_convergence_closure_audit import _collect_probes
+
         p = _collect_probes()
         assert p.get("dispatch_consumes_participation_evidence") is True, (
-            "source_dispatch_orchestrator must consume get_android_participation_evidence "
-            "(added in PR 1142)"
+            "source_dispatch_orchestrator must consume get_android_participation_evidence " "(added in PR 1142)"
         )
 
     def test_android_network_participation_has_7_tiers(self):
         """Verify that android_network_participation module defines distributed_participant tier."""
         from core.pr_next_convergence_closure_audit import _collect_probes
+
         p = _collect_probes()
         assert p.get("participation_has_7_tiers") is True
 
     def test_operator_surface_available(self):
         from core.pr_next_convergence_closure_audit import _collect_probes
+
         p = _collect_probes()
         assert p.get("operator_surface") is True
 
     def test_operational_readiness_surface_available(self):
         from core.pr_next_convergence_closure_audit import _collect_probes
+
         p = _collect_probes()
         assert p.get("operational_readiness_surface") is True

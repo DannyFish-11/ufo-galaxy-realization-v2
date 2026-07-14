@@ -80,6 +80,7 @@ CONSTELLATION_ORCHESTRATION_GATE_DENY_BY_DEFAULT = (
 # ConstellationRuntime
 # ---------------------------------------------------------------------------
 
+
 class ConstellationRuntime:
     """Unified planning→DAG→execution loop.
 
@@ -105,9 +106,7 @@ class ConstellationRuntime:
         self._evolver = None
         self._smart_orchestrator = None
         self._max_replan_attempts = max_replan_attempts
-        logger.info(
-            "ConstellationRuntime 初始化 [dag_evolution=%s]", enable_dag_evolution
-        )
+        logger.info("ConstellationRuntime 初始化 [dag_evolution=%s]", enable_dag_evolution)
 
     # ------------------------------------------------------------------
     # Lazy dependency accessors
@@ -117,9 +116,8 @@ class ConstellationRuntime:
         if self._evolver is None and self.enable_dag_evolution:
             try:
                 from core.dag_evolver import DAGEvolver
-                self._evolver = DAGEvolver(
-                    max_replan_attempts=self._max_replan_attempts
-                )
+
+                self._evolver = DAGEvolver(max_replan_attempts=self._max_replan_attempts)
             except Exception as exc:
                 logger.warning("DAGEvolver 不可用: %s", exc)
         return self._evolver
@@ -128,6 +126,7 @@ class ConstellationRuntime:
         if self._smart_orchestrator is None:
             try:
                 from core.orchestrator_engine import SmartOrchestrator
+
                 self._smart_orchestrator = SmartOrchestrator(self._config)
             except Exception as exc:
                 logger.warning("SmartOrchestrator 不可用: %s", exc)
@@ -136,6 +135,7 @@ class ConstellationRuntime:
     def _get_device_pool(self):
         try:
             from core.device_pool_manager import get_device_pool_manager
+
             return get_device_pool_manager()
         except Exception as exc:
             logger.debug("DevicePoolManager 不可用: %s", exc)
@@ -144,6 +144,7 @@ class ConstellationRuntime:
     def _get_audit_ledger(self):
         try:
             from core.control_plane.audit_ledger import AuditLedger
+
             return AuditLedger.get_instance()
         except Exception:
             return None
@@ -167,11 +168,11 @@ class ConstellationRuntime:
         * UDM present but no device is eligible → returns ``[]`` (gate fires).
         """
         try:
-            from core.device_participation import get_orchestration_ready_devices, _get_udm
+            from core.device_participation import _get_udm, get_orchestration_ready_devices
+
             if _get_udm() is None:
                 logger.debug(
-                    "_get_orchestration_candidate_set: device registry (UDM) unavailable"
-                    " — degrading gracefully"
+                    "_get_orchestration_candidate_set: device registry (UDM) unavailable" " — degrading gracefully"
                 )
                 return None
             return get_orchestration_ready_devices()
@@ -222,9 +223,7 @@ class ConstellationRuntime:
         """
         unassigned = [st for st in subtasks if not getattr(st, "device_id", "")]
         if not unassigned:
-            logger.debug(
-                "scheduling-gate | PASS (all tasks pre-assigned) | trace_id=%s", trace_id
-            )
+            logger.debug("scheduling-gate | PASS (all tasks pre-assigned) | trace_id=%s", trace_id)
             return None
 
         needed = len(unassigned)
@@ -242,8 +241,7 @@ class ConstellationRuntime:
 
         if n_ready == 0:
             logger.warning(
-                "scheduling-gate | BLOCKED | trace_id=%s | reason=no_orchestration_ready_devices"
-                " | needed=%d",
+                "scheduling-gate | BLOCKED | trace_id=%s | reason=no_orchestration_ready_devices" " | needed=%d",
                 trace_id,
                 needed,
             )
@@ -289,11 +287,10 @@ class ConstellationRuntime:
             return False
         try:
             from core.device_participation import is_device_orchestration_ready
+
             eligible = is_device_orchestration_ready(device_id)
             if eligible:
-                logger.debug(
-                    "orchestration-gate | PASS | device_id=%s", device_id
-                )
+                logger.debug("orchestration-gate | PASS | device_id=%s", device_id)
             else:
                 logger.info(
                     "orchestration-gate | EXCLUDED | device_id=%s "
@@ -348,9 +345,7 @@ class ConstellationRuntime:
         logger.info("[%s] ConstellationRuntime.run: %s", trace_id, task_description[:80])
 
         # ── Try Node_71 fast path ─────────────────────────────────────────
-        node71_result = await self._try_node71(
-            task_description, trace_id, device_id, session_id, context
-        )
+        node71_result = await self._try_node71(task_description, trace_id, device_id, session_id, context)
         if node71_result is not None:
             return node71_result
 
@@ -399,6 +394,7 @@ class ConstellationRuntime:
         """
         try:
             from core.node_registry import get_registry
+
             registry = get_registry()
             node = registry.get_node("Node_71") if registry else None
             if node is None:
@@ -474,19 +470,23 @@ class ConstellationRuntime:
 
         # Audit: intent stage
         self._ledger_append(
-            ledger, "TASK_CREATED", trace_id=trace_id, task_id=request_id,
+            ledger,
+            "TASK_CREATED",
+            trace_id=trace_id,
+            task_id=request_id,
             source="constellation_runtime",
             message=f"TaskConstellation: {task_description[:80]}",
         )
 
         # ── 2. Decompose → DAG ────────────────────────────────────────
-        decomposition = await orchestrator._decompose_task(
-            task_description, orch_request.user_context
-        )
+        decomposition = await orchestrator._decompose_task(task_description, orch_request.user_context)
 
         # Audit: plan stage
         self._ledger_append(
-            ledger, "DAG_PLANNED", trace_id=trace_id, task_id=request_id,
+            ledger,
+            "DAG_PLANNED",
+            trace_id=trace_id,
+            task_id=request_id,
             source="constellation_runtime",
             payload={
                 "subtask_count": len(decomposition.subtasks),
@@ -498,7 +498,10 @@ class ConstellationRuntime:
             # Simple task — skip DAG
             result = await orchestrator._execute_simple_task(task_description, orch_request)
             self._ledger_append(
-                ledger, "DAG_COMPLETED", trace_id=trace_id, task_id=request_id,
+                ledger,
+                "DAG_COMPLETED",
+                trace_id=trace_id,
+                task_id=request_id,
                 source="constellation_runtime",
                 payload={"mode": "simple", "status": "success"},
             )
@@ -514,6 +517,7 @@ class ConstellationRuntime:
         # Build DAG layers
         try:
             from core.orchestrator_engine import DAGScheduler
+
             layers, task_map = DAGScheduler.build_and_validate(decomposition.subtasks)
         except ValueError as dag_err:
             logger.error("[%s] DAG 构建失败: %s", trace_id, dag_err)
@@ -533,7 +537,10 @@ class ConstellationRuntime:
         gate_reason = self._check_scheduling_gate(decomposition.subtasks, trace_id)
         if gate_reason is not None:
             self._ledger_append(
-                ledger, "TASK_FAILED", trace_id=trace_id, task_id=request_id,
+                ledger,
+                "TASK_FAILED",
+                trace_id=trace_id,
+                task_id=request_id,
                 source="constellation_runtime",
                 payload={"reason": gate_reason, "failure_type": "scheduling_gate"},
             )
@@ -560,7 +567,10 @@ class ConstellationRuntime:
 
         # Audit: dispatch stage
         self._ledger_append(
-            ledger, "DAG_DISPATCHED", trace_id=trace_id, task_id=request_id,
+            ledger,
+            "DAG_DISPATCHED",
+            trace_id=trace_id,
+            task_id=request_id,
             source="constellation_runtime",
             payload={
                 "layers": len(layers),
@@ -591,7 +601,10 @@ class ConstellationRuntime:
 
         # Audit: result stage
         self._ledger_append(
-            ledger, "DAG_COMPLETED", trace_id=trace_id, task_id=request_id,
+            ledger,
+            "DAG_COMPLETED",
+            trace_id=trace_id,
+            task_id=request_id,
             source="constellation_runtime",
             payload={
                 "status": orch_result.status.value,
@@ -601,9 +614,7 @@ class ConstellationRuntime:
             },
         )
 
-        success = orch_result.status in (
-            OrchestrationStatus.SUCCESS, OrchestrationStatus.PARTIAL_SUCCESS
-        )
+        success = orch_result.status in (OrchestrationStatus.SUCCESS, OrchestrationStatus.PARTIAL_SUCCESS)
         return {
             "success": success,
             "reply": orch_result.summary or ("任务完成" if success else "任务失败"),
@@ -654,8 +665,7 @@ class ConstellationRuntime:
                 if task is None:
                     continue
                 deps_ok = all(
-                    task_map.get(dep_id) is not None
-                    and task_map[dep_id].status == SubTaskStatus.SUCCESS
+                    task_map.get(dep_id) is not None and task_map[dep_id].status == SubTaskStatus.SUCCESS
                     for dep_id in (task.depends_on or [])
                     if dep_id in task_map
                 )
@@ -668,10 +678,7 @@ class ConstellationRuntime:
 
             if tasks_to_run:
                 layer_results = await asyncio.gather(
-                    *[
-                        orchestrator._execute_subtask(task, orch_request)
-                        for task in tasks_to_run
-                    ],
+                    *[orchestrator._execute_subtask(task, orch_request) for task in tasks_to_run],
                     return_exceptions=True,
                 )
 
@@ -683,15 +690,19 @@ class ConstellationRuntime:
                     if task.status == SubTaskStatus.SUCCESS:
                         completed += 1
                         self._ledger_append(
-                            ledger, "TASK_COMPLETED",
-                            trace_id=trace_id, task_id=task.task_id,
+                            ledger,
+                            "TASK_COMPLETED",
+                            trace_id=trace_id,
+                            task_id=task.task_id,
                             source="constellation_runtime",
                         )
                     elif task.status == SubTaskStatus.FAILED:
                         failed += 1
                         self._ledger_append(
-                            ledger, "TASK_FAILED",
-                            trace_id=trace_id, task_id=task.task_id,
+                            ledger,
+                            "TASK_FAILED",
+                            trace_id=trace_id,
+                            task_id=task.task_id,
                             source="constellation_runtime",
                             payload={"error": task.error},
                         )
@@ -704,8 +715,10 @@ class ConstellationRuntime:
                                 context={"trace_id": trace_id},
                             )
                             self._ledger_append(
-                                ledger, "DAG_EVOLVED",
-                                trace_id=trace_id, task_id=request_id,
+                                ledger,
+                                "DAG_EVOLVED",
+                                trace_id=trace_id,
+                                task_id=request_id,
                                 source="constellation_runtime",
                                 payload={"trigger": "task_failed", "task_id": task.task_id},
                             )
@@ -736,6 +749,7 @@ class ConstellationRuntime:
             return
         try:
             from core.control_plane.audit_ledger import EventType
+
             et = getattr(EventType, event_name.upper(), None)
             if et is None:
                 return
@@ -747,6 +761,7 @@ class ConstellationRuntime:
 # ---------------------------------------------------------------------------
 # Response shape helpers
 # ---------------------------------------------------------------------------
+
 
 def wrap_as_orchestration_response(
     cr_result: Dict[str, Any],

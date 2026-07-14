@@ -40,31 +40,29 @@ class TestDeletedFilesAbsent:
     """PR-8 deleted files must not be present in the repository."""
 
     def test_start_client_bat_not_in_legacy_dir(self):
-        assert not (_ROOT / "windows_client" / "_legacy" / "START_CLIENT.bat").exists(), (
-            "START_CLIENT.bat was deleted in PR-8 and must not be in _legacy/"
-        )
+        assert not (
+            _ROOT / "windows_client" / "_legacy" / "START_CLIENT.bat"
+        ).exists(), "START_CLIENT.bat was deleted in PR-8 and must not be in _legacy/"
 
     def test_start_client_bat_not_in_windows_client_root(self):
-        assert not (_ROOT / "windows_client" / "START_CLIENT.bat").exists(), (
-            "START_CLIENT.bat must not be in the active windows_client/ root"
-        )
+        assert not (
+            _ROOT / "windows_client" / "START_CLIENT.bat"
+        ).exists(), "START_CLIENT.bat must not be in the active windows_client/ root"
 
     def test_start_galaxy_client_bat_not_in_legacy_dir(self):
-        assert not (_ROOT / "windows_client" / "_legacy" / "start_galaxy_client.bat").exists(), (
-            "start_galaxy_client.bat was deleted in PR-8 and must not be in _legacy/"
-        )
+        assert not (
+            _ROOT / "windows_client" / "_legacy" / "start_galaxy_client.bat"
+        ).exists(), "start_galaxy_client.bat was deleted in PR-8 and must not be in _legacy/"
 
     def test_start_galaxy_client_bat_not_in_windows_client_root(self):
-        assert not (_ROOT / "windows_client" / "start_galaxy_client.bat").exists(), (
-            "start_galaxy_client.bat must not be in the active windows_client/ root"
-        )
+        assert not (
+            _ROOT / "windows_client" / "start_galaxy_client.bat"
+        ).exists(), "start_galaxy_client.bat must not be in the active windows_client/ root"
 
     def test_no_bat_files_in_windows_client_at_all(self):
         """No .bat files should exist anywhere inside windows_client/."""
         bat_files = list((_ROOT / "windows_client").rglob("*.bat"))
-        assert bat_files == [], (
-            f"Found unexpected .bat file(s) inside windows_client/: {bat_files}"
-        )
+        assert bat_files == [], f"Found unexpected .bat file(s) inside windows_client/: {bat_files}"
 
     def test_canonical_start_bat_exists_at_repo_root(self):
         """start.bat must exist at the repository root as the canonical Windows bootstrap."""
@@ -84,28 +82,24 @@ class TestLegacyInitAcknowledgesDeletions:
 
     def test_init_mentions_start_client_bat_deleted(self):
         content = _read("windows_client/_legacy/__init__.py")
-        assert "START_CLIENT.bat" in content, (
-            "_legacy/__init__.py must reference the deleted START_CLIENT.bat"
-        )
+        assert "START_CLIENT.bat" in content, "_legacy/__init__.py must reference the deleted START_CLIENT.bat"
 
     def test_init_mentions_start_galaxy_client_bat_deleted(self):
         content = _read("windows_client/_legacy/__init__.py")
-        assert "start_galaxy_client.bat" in content, (
-            "_legacy/__init__.py must reference the deleted start_galaxy_client.bat"
-        )
+        assert (
+            "start_galaxy_client.bat" in content
+        ), "_legacy/__init__.py must reference the deleted start_galaxy_client.bat"
 
     def test_init_mentions_deletion_or_pr8(self):
         content = _read("windows_client/_legacy/__init__.py")
         has_deleted = "deleted" in content.lower() or "pr-8" in content.lower()
-        assert has_deleted, (
-            "_legacy/__init__.py must note that the .bat files were deleted (PR-8)"
-        )
+        assert has_deleted, "_legacy/__init__.py must note that the .bat files were deleted (PR-8)"
 
     def test_init_still_documents_active_direction(self):
         content = _read("windows_client/_legacy/__init__.py")
-        assert "DesktopPresenceRuntime" in content or "status_board_v2" in content, (
-            "_legacy/__init__.py must still document the active Windows direction"
-        )
+        assert (
+            "DesktopPresenceRuntime" in content or "status_board_v2" in content
+        ), "_legacy/__init__.py must still document the active Windows direction"
 
 
 # ===========================================================================
@@ -119,6 +113,7 @@ class TestLegacyPathsContainsPR8Entries:
     def test_module_importable(self):
         try:
             import core.orchestration_authority.legacy_paths as lp
+
             assert lp is not None
         except ImportError as e:
             pytest.skip(f"legacy_paths not importable in this env: {e}")
@@ -128,30 +123,24 @@ class TestLegacyPathsContainsPR8Entries:
             from core.orchestration_authority.legacy_paths import PR8_DELETED_PATHS
         except ImportError as e:
             pytest.skip(f"legacy_paths not importable: {e}")
-        assert isinstance(PR8_DELETED_PATHS, frozenset), (
-            "PR8_DELETED_PATHS must be a frozenset"
-        )
-        assert len(PR8_DELETED_PATHS) >= 2, (
-            "PR8_DELETED_PATHS must list at least the two deleted .bat files"
-        )
+        assert isinstance(PR8_DELETED_PATHS, frozenset), "PR8_DELETED_PATHS must be a frozenset"
+        assert len(PR8_DELETED_PATHS) >= 2, "PR8_DELETED_PATHS must list at least the two deleted .bat files"
 
     def test_pr8_deleted_paths_contains_start_client_bat(self):
         try:
             from core.orchestration_authority.legacy_paths import PR8_DELETED_PATHS
         except ImportError as e:
             pytest.skip(f"legacy_paths not importable: {e}")
-        assert any("START_CLIENT" in p for p in PR8_DELETED_PATHS), (
-            "PR8_DELETED_PATHS must include START_CLIENT.bat"
-        )
+        assert any("START_CLIENT" in p for p in PR8_DELETED_PATHS), "PR8_DELETED_PATHS must include START_CLIENT.bat"
 
     def test_pr8_deleted_paths_contains_start_galaxy_client_bat(self):
         try:
             from core.orchestration_authority.legacy_paths import PR8_DELETED_PATHS
         except ImportError as e:
             pytest.skip(f"legacy_paths not importable: {e}")
-        assert any("start_galaxy_client" in p for p in PR8_DELETED_PATHS), (
-            "PR8_DELETED_PATHS must include start_galaxy_client.bat"
-        )
+        assert any(
+            "start_galaxy_client" in p for p in PR8_DELETED_PATHS
+        ), "PR8_DELETED_PATHS must include start_galaxy_client.bat"
 
     def test_legacy_path_registry_has_pr8_guardrail_entries(self):
         try:
@@ -159,12 +148,9 @@ class TestLegacyPathsContainsPR8Entries:
         except ImportError as e:
             pytest.skip(f"legacy_paths not importable: {e}")
         pr8_entries = [
-            k for k, v in LEGACY_PATH_REGISTRY.items()
-            if v.pr_guardrail_added and "PR-8" in v.pr_guardrail_added
+            k for k, v in LEGACY_PATH_REGISTRY.items() if v.pr_guardrail_added and "PR-8" in v.pr_guardrail_added
         ]
-        assert len(pr8_entries) >= 2, (
-            f"LEGACY_PATH_REGISTRY must have at least 2 PR-8 entries, got: {pr8_entries}"
-        )
+        assert len(pr8_entries) >= 2, f"LEGACY_PATH_REGISTRY must have at least 2 PR-8 entries, got: {pr8_entries}"
 
     def test_pr8_entries_use_deleted_status(self):
         """PR-8 deleted file entries (bat launchers) must use LegacyPathStatus.DELETED."""
@@ -176,13 +162,8 @@ class TestLegacyPathsContainsPR8Entries:
         except ImportError as e:
             pytest.skip(f"legacy_paths not importable: {e}")
         # Only the bat-file entries that were physically deleted must carry DELETED status
-        bat_keys = [
-            k for k in LEGACY_PATH_REGISTRY
-            if "START_CLIENT" in k or "start_galaxy_client" in k
-        ]
-        assert len(bat_keys) >= 2, (
-            f"Expected at least 2 bat-file entries in LEGACY_PATH_REGISTRY, got: {bat_keys}"
-        )
+        bat_keys = [k for k in LEGACY_PATH_REGISTRY if "START_CLIENT" in k or "start_galaxy_client" in k]
+        assert len(bat_keys) >= 2, f"Expected at least 2 bat-file entries in LEGACY_PATH_REGISTRY, got: {bat_keys}"
         for key in bat_keys:
             entry = LEGACY_PATH_REGISTRY[key]
             assert entry.status == LegacyPathStatus.DELETED, (
@@ -192,9 +173,7 @@ class TestLegacyPathsContainsPR8Entries:
 
     def test_source_contains_pr8_deleted_paths_sentinel(self):
         content = _read("core/orchestration_authority/legacy_paths.py")
-        assert "PR8_DELETED_PATHS" in content, (
-            "legacy_paths.py must define and export PR8_DELETED_PATHS"
-        )
+        assert "PR8_DELETED_PATHS" in content, "legacy_paths.py must define and export PR8_DELETED_PATHS"
 
 
 # ===========================================================================
@@ -206,15 +185,11 @@ class TestLegacySurfacesDocExists:
     """docs/LEGACY_SURFACES.md must exist and cover key topics."""
 
     def test_file_exists(self):
-        assert (_ROOT / "docs" / "LEGACY_SURFACES.md").exists(), (
-            "docs/LEGACY_SURFACES.md must be created in PR-8"
-        )
+        assert (_ROOT / "docs" / "LEGACY_SURFACES.md").exists(), "docs/LEGACY_SURFACES.md must be created in PR-8"
 
     def test_mentions_deleted_status(self):
         content = _read("docs/LEGACY_SURFACES.md")
-        assert "DELETED" in content, (
-            "LEGACY_SURFACES.md must define/use a DELETED status"
-        )
+        assert "DELETED" in content, "LEGACY_SURFACES.md must define/use a DELETED status"
 
     def test_mentions_start_client_bat(self):
         content = _read("docs/LEGACY_SURFACES.md")
@@ -226,33 +201,25 @@ class TestLegacySurfacesDocExists:
 
     def test_mentions_canonical_replacement_for_bat_files(self):
         content = _read("docs/LEGACY_SURFACES.md")
-        assert "unified_launcher.py" in content or "start.bat" in content, (
-            "LEGACY_SURFACES.md must name the canonical replacement for the .bat files"
-        )
+        assert (
+            "unified_launcher.py" in content or "start.bat" in content
+        ), "LEGACY_SURFACES.md must name the canonical replacement for the .bat files"
 
     def test_mentions_dashboard_as_legacy_compat(self):
         content = _read("docs/LEGACY_SURFACES.md")
-        assert "dashboard" in content.lower(), (
-            "LEGACY_SURFACES.md must document the dashboard legacy-compat status"
-        )
+        assert "dashboard" in content.lower(), "LEGACY_SURFACES.md must document the dashboard legacy-compat status"
 
     def test_mentions_compat_py_as_legacy_compat(self):
         content = _read("docs/LEGACY_SURFACES.md")
-        assert "compat.py" in content, (
-            "LEGACY_SURFACES.md must document core/routes/compat.py legacy-compat status"
-        )
+        assert "compat.py" in content, "LEGACY_SURFACES.md must document core/routes/compat.py legacy-compat status"
 
     def test_mentions_canonical_startup(self):
         content = _read("docs/LEGACY_SURFACES.md")
-        assert "unified_launcher" in content, (
-            "LEGACY_SURFACES.md must reference the canonical startup path"
-        )
+        assert "unified_launcher" in content, "LEGACY_SURFACES.md must reference the canonical startup path"
 
     def test_mentions_non_regression_guardrails(self):
         content = _read("docs/LEGACY_SURFACES.md")
-        assert "check_legacy_regression" in content, (
-            "LEGACY_SURFACES.md must reference the non-regression CI script"
-        )
+        assert "check_legacy_regression" in content, "LEGACY_SURFACES.md must reference the non-regression CI script"
 
 
 # ===========================================================================
@@ -264,9 +231,9 @@ class TestCheckLegacyRegressionScript:
     """scripts/check_legacy_regression.py must exist and pass on the current repo."""
 
     def test_script_exists(self):
-        assert (_ROOT / "scripts" / "check_legacy_regression.py").exists(), (
-            "scripts/check_legacy_regression.py must be created in PR-8"
-        )
+        assert (
+            _ROOT / "scripts" / "check_legacy_regression.py"
+        ).exists(), "scripts/check_legacy_regression.py must be created in PR-8"
 
     def test_script_passes_on_current_repo(self):
         """The script must exit 0 on the current (clean) repository state."""
@@ -277,16 +244,13 @@ class TestCheckLegacyRegressionScript:
             cwd=str(_ROOT),
         )
         assert result.returncode == 0, (
-            f"check_legacy_regression.py reported violations:\n"
-            f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+            f"check_legacy_regression.py reported violations:\n" f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
         )
 
     def test_script_has_warn_only_flag(self):
         """The script must support --warn-only for CI warning-mode usage."""
         content = _read("scripts/check_legacy_regression.py")
-        assert "--warn-only" in content, (
-            "check_legacy_regression.py must support --warn-only flag for CI warning mode"
-        )
+        assert "--warn-only" in content, "check_legacy_regression.py must support --warn-only flag for CI warning mode"
 
     def test_script_checks_pr8_deleted_files(self):
         content = _read("scripts/check_legacy_regression.py")
@@ -295,9 +259,9 @@ class TestCheckLegacyRegressionScript:
 
     def test_script_checks_no_new_bat_launchers(self):
         content = _read("scripts/check_legacy_regression.py")
-        assert ".bat" in content and ("windows_client" in content), (
-            "check_legacy_regression.py must check for new .bat files in windows_client/"
-        )
+        assert ".bat" in content and (
+            "windows_client" in content
+        ), "check_legacy_regression.py must check for new .bat files in windows_client/"
 
 
 # ===========================================================================
@@ -313,21 +277,15 @@ class TestGuardrailsYmlHasLegacyRegressionJob:
 
     def test_guardrails_yml_has_legacy_regression_guard_job(self):
         content = _read(".github/workflows/guardrails.yml")
-        assert "legacy-regression-guard" in content, (
-            "guardrails.yml must define the legacy-regression-guard CI job"
-        )
+        assert "legacy-regression-guard" in content, "guardrails.yml must define the legacy-regression-guard CI job"
 
     def test_guardrails_yml_runs_check_legacy_regression_script(self):
         content = _read(".github/workflows/guardrails.yml")
-        assert "check_legacy_regression.py" in content, (
-            "guardrails.yml must invoke scripts/check_legacy_regression.py"
-        )
+        assert "check_legacy_regression.py" in content, "guardrails.yml must invoke scripts/check_legacy_regression.py"
 
     def test_guardrails_yml_updated_for_pr8(self):
         content = _read(".github/workflows/guardrails.yml")
-        assert "PR-8" in content, (
-            "guardrails.yml header must be updated to reference PR-8"
-        )
+        assert "PR-8" in content, "guardrails.yml header must be updated to reference PR-8"
 
 
 # ===========================================================================
@@ -341,9 +299,7 @@ class TestLegacyCompatSurfacesPresent:
     # 终态(用户裁决):dashboard/ 按 ui_surface_authority 的 DELETED 注册
     # ("do not recreate")整体删除——过渡期"保留作 legacy-compat"契约随之退役。
     def test_dashboard_backend_main_exists(self):
-        assert not (_ROOT / "dashboard").exists(), (
-            "dashboard/ 已整体退役删除,不得复活"
-        )
+        assert not (_ROOT / "dashboard").exists(), "dashboard/ 已整体退役删除,不得复活"
 
     def test_dashboard_backend_main_has_legacy_authority_marker(self):
         assert not (_ROOT / "dashboard" / "backend").exists()
@@ -353,15 +309,14 @@ class TestLegacyCompatSurfacesPresent:
 
     def test_core_routes_compat_py_exists(self):
         assert (_ROOT / "core" / "routes" / "compat.py").exists(), (
-            "core/routes/compat.py must remain as a legacy-compat surface until "
-            "all Android callers are migrated"
+            "core/routes/compat.py must remain as a legacy-compat surface until " "all Android callers are migrated"
         )
 
     def test_core_routes_compat_py_has_deprecation_marker(self):
         content = _read("core/routes/compat.py")
-        assert "deprecated" in content.lower() or "DEPRECATED" in content, (
-            "core/routes/compat.py must be marked as deprecated/legacy-compat"
-        )
+        assert (
+            "deprecated" in content.lower() or "DEPRECATED" in content
+        ), "core/routes/compat.py must be marked as deprecated/legacy-compat"
 
 
 # ===========================================================================
@@ -373,14 +328,12 @@ class TestCanonicalDocsPresent:
     """Key canonical documentation files must exist."""
 
     def test_unified_startup_md_exists(self):
-        assert (_ROOT / "docs" / "UNIFIED_STARTUP.md").exists(), (
-            "docs/UNIFIED_STARTUP.md must exist as canonical startup documentation"
-        )
+        assert (
+            _ROOT / "docs" / "UNIFIED_STARTUP.md"
+        ).exists(), "docs/UNIFIED_STARTUP.md must exist as canonical startup documentation"
 
     def test_legacy_surfaces_md_exists(self):
-        assert (_ROOT / "docs" / "LEGACY_SURFACES.md").exists(), (
-            "docs/LEGACY_SURFACES.md must exist (created in PR-8)"
-        )
+        assert (_ROOT / "docs" / "LEGACY_SURFACES.md").exists(), "docs/LEGACY_SURFACES.md must exist (created in PR-8)"
 
     def test_readme_exists(self):
         assert (_ROOT / "README.md").exists()
@@ -388,6 +341,4 @@ class TestCanonicalDocsPresent:
     def test_readme_mentions_canonical_startup(self):
         content = _read("README.md")
         has_startup = "unified_launcher" in content or "main.py" in content
-        assert has_startup, (
-            "README.md must reference the canonical startup path"
-        )
+        assert has_startup, "README.md must reference the canonical startup path"

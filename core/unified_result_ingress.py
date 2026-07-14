@@ -68,8 +68,8 @@ from __future__ import annotations
 import logging
 import os
 import re
-import time
 import threading
+import time
 from collections.abc import Collection
 from dataclasses import dataclass, field
 from enum import Enum
@@ -1459,9 +1459,9 @@ class UnifiedResultIngress:
         try:
             from core.offline_replay_ordering_contract import (
                 OFFLINE_REPLAY_ORDERING_CONTRACT_AUTHORITY,
-                OfflineReplayItemDecision,
-                OfflineReplayContractVerdict,
                 STALE_SEQ_WINDOW,
+                OfflineReplayContractVerdict,
+                OfflineReplayItemDecision,
             )
         except Exception as _import_err:
             logger.debug(
@@ -1714,7 +1714,7 @@ class UnifiedResultIngress:
         if not event.task_id:
             return
         try:
-            from core.canonical_task import get_canonical_task_runtime, TaskLifecycle
+            from core.canonical_task import TaskLifecycle, get_canonical_task_runtime
 
             _runtime = get_canonical_task_runtime()
             s = event.normalized_status.lower()

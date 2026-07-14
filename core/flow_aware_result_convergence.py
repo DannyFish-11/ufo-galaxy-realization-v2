@@ -540,12 +540,8 @@ class ResultConvergenceArtifact:
         Free-form evidence dictionary forwarded to operator surfaces.
     """
 
-    artifact_id: str = field(
-        default_factory=lambda: f"rca_{uuid.uuid4().hex[:12]}"
-    )
-    decision: ConvergenceDecisionKind = (
-        ConvergenceDecisionKind.quarantine_result_due_to_flow_mismatch
-    )
+    artifact_id: str = field(default_factory=lambda: f"rca_{uuid.uuid4().hex[:12]}")
+    decision: ConvergenceDecisionKind = ConvergenceDecisionKind.quarantine_result_due_to_flow_mismatch
     semantic_kind: ResultSemanticKind = ResultSemanticKind.unknown
     lineage: ConvergenceFlowLineage = ConvergenceFlowLineage.unknown_lineage
     policy_reference: str = ""
@@ -630,9 +626,7 @@ class ParallelFlowAggregationRecord:
     group_id: str
     parent_flow_id: str
     expected_count: Optional[int] = None
-    absorbed_subtasks: Dict[int, ResultConvergenceArtifact] = field(
-        default_factory=dict
-    )
+    absorbed_subtasks: Dict[int, ResultConvergenceArtifact] = field(default_factory=dict)
     all_complete: bool = False
     aggregate_artifact: Optional[ResultConvergenceArtifact] = None
     session_id: str = ""
@@ -655,15 +649,8 @@ class ParallelFlowAggregationRecord:
             "trace_id": self.trace_id,
             "created_at": self.created_at,
             "completed_at": self.completed_at,
-            "absorbed_subtasks": {
-                idx: art.to_dict()
-                for idx, art in self.absorbed_subtasks.items()
-            },
-            "aggregate_artifact": (
-                self.aggregate_artifact.to_dict()
-                if self.aggregate_artifact is not None
-                else None
-            ),
+            "absorbed_subtasks": {idx: art.to_dict() for idx, art in self.absorbed_subtasks.items()},
+            "aggregate_artifact": (self.aggregate_artifact.to_dict() if self.aggregate_artifact is not None else None),
         }
 
 
@@ -689,13 +676,9 @@ class FlowConvergenceSnapshot:
         Unix epoch seconds when this snapshot was taken.
     """
 
-    snapshot_id: str = field(
-        default_factory=lambda: f"fcs_{uuid.uuid4().hex[:8]}"
-    )
+    snapshot_id: str = field(default_factory=lambda: f"fcs_{uuid.uuid4().hex[:8]}")
     total_artifacts: int = 0
-    recent_artifacts: List[ResultConvergenceArtifact] = field(
-        default_factory=list
-    )
+    recent_artifacts: List[ResultConvergenceArtifact] = field(default_factory=list)
     active_parallel_groups: int = 0
     active_flow_ids: int = 0
     decision_counts: Dict[str, int] = field(default_factory=dict)
@@ -832,20 +815,15 @@ def decide_convergence(ctx: ResultConvergenceContext) -> ResultConvergenceArtifa
         return _make(
             ConvergenceDecisionKind.suppress_duplicate_result,
             DUPLICATE_RESULT_SUPPRESSED_FIRST_WRITE_WINS_POLICY,
-            f"duplicate result suppressed — result_id={ctx.result_id!r} "
-            "already absorbed for this flow",
+            f"duplicate result suppressed — result_id={ctx.result_id!r} " "already absorbed for this flow",
         )
 
     # Rule 4: Late partial after final
-    if (
-        resolved_semantic is ResultSemanticKind.partial_result
-        and ctx.final_already_absorbed
-    ):
+    if resolved_semantic is ResultSemanticKind.partial_result and ctx.final_already_absorbed:
         return _make(
             ConvergenceDecisionKind.suppress_late_partial_after_final,
             LATE_PARTIAL_AFTER_FINAL_IS_SUPPRESSED_POLICY,
-            "partial result arrived after final result was already promoted — "
-            "suppressed",
+            "partial result arrived after final result was already promoted — " "suppressed",
         )
 
     # Rule 5: Partial result
@@ -853,8 +831,7 @@ def decide_convergence(ctx: ResultConvergenceContext) -> ResultConvergenceArtifa
         return _make(
             ConvergenceDecisionKind.accept_partial_for_flow,
             PARTIAL_ACCEPTED_INTO_FLOW_PENDING_FINAL_POLICY,
-            "partial result accepted into delegated flow record; "
-            "flow remains open pending final result",
+            "partial result accepted into delegated flow record; " "flow remains open pending final result",
         )
 
     # Rule 6: Parallel subtask result
@@ -871,8 +848,7 @@ def decide_convergence(ctx: ResultConvergenceContext) -> ResultConvergenceArtifa
         return _make(
             ConvergenceDecisionKind.promote_final_as_canonical,
             FINAL_PROMOTES_AS_CANONICAL_AND_CLOSES_PARTIALS_POLICY,
-            "final result promoted as canonical; prior partials merged and "
-            "flow closed",
+            "final result promoted as canonical; prior partials merged and " "flow closed",
         )
 
     # Rule 9: Replay resend (not duplicate → process as normal final/partial
@@ -884,8 +860,7 @@ def decide_convergence(ctx: ResultConvergenceContext) -> ResultConvergenceArtifa
         return _make(
             ConvergenceDecisionKind.promote_final_as_canonical,
             RECONNECT_REPLAY_RESULT_ABSORBED_IDEMPOTENTLY_POLICY,
-            "reconnect replay — original not absorbed; promoting replayed "
-            "result as canonical",
+            "reconnect replay — original not absorbed; promoting replayed " "result as canonical",
         )
 
     # Rule 10: Fallback — quarantine
@@ -949,9 +924,7 @@ class FlowAwareConvergenceCoordinator:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         # Ring buffer of all convergence artifacts
-        self._artifacts: Deque[ResultConvergenceArtifact] = deque(
-            maxlen=_COORDINATOR_BUFFER_SIZE
-        )
+        self._artifacts: Deque[ResultConvergenceArtifact] = deque(maxlen=_COORDINATOR_BUFFER_SIZE)
         # Total artifact count (monotonic — counts past buffer capacity too)
         self._total_count: int = 0
         # Per-flow canonical state: flow_id → set of absorbed result_ids
@@ -1050,17 +1023,13 @@ class FlowAwareConvergenceCoordinator:
             self._total_count += 1
             return artifact
 
-    def get_parallel_group(
-        self, group_id: str
-    ) -> Optional[ParallelFlowAggregationRecord]:
+    def get_parallel_group(self, group_id: str) -> Optional[ParallelFlowAggregationRecord]:
         """Return the :class:`ParallelFlowAggregationRecord` for *group_id*, or
         ``None`` if not found."""
         with self._lock:
             return self._parallel_groups.get(group_id)
 
-    def get_artifact_by_id(
-        self, artifact_id: str
-    ) -> Optional[ResultConvergenceArtifact]:
+    def get_artifact_by_id(self, artifact_id: str) -> Optional[ResultConvergenceArtifact]:
         """Return the :class:`ResultConvergenceArtifact` with the given ID, or
         ``None`` if not found in the ring buffer."""
         with self._lock:
@@ -1069,9 +1038,7 @@ class FlowAwareConvergenceCoordinator:
                     return art
             return None
 
-    def list_recent_artifacts(
-        self, max_count: int = 50
-    ) -> List[ResultConvergenceArtifact]:
+    def list_recent_artifacts(self, max_count: int = 50) -> List[ResultConvergenceArtifact]:
         """Return up to *max_count* most-recent artifacts (newest last)."""
         with self._lock:
             items = list(self._artifacts)
@@ -1098,9 +1065,7 @@ class FlowAwareConvergenceCoordinator:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _enrich_context(
-        self, ctx: ResultConvergenceContext
-    ) -> ResultConvergenceContext:
+    def _enrich_context(self, ctx: ResultConvergenceContext) -> ResultConvergenceContext:
         """Return a copy of *ctx* enriched with coordinator-derived flags."""
         import dataclasses
 
@@ -1132,7 +1097,8 @@ class FlowAwareConvergenceCoordinator:
         if (
             ctx.flow_id
             and ctx.result_id
-            and decision not in (
+            and decision
+            not in (
                 ConvergenceDecisionKind.suppress_duplicate_result,
                 ConvergenceDecisionKind.absorb_replay_result_idempotently,
                 ConvergenceDecisionKind.quarantine_result_due_to_flow_mismatch,
@@ -1163,9 +1129,7 @@ class FlowAwareConvergenceCoordinator:
                     self._evict_parallel_groups_if_needed()
 
                 record = self._parallel_groups[group_id]
-                idx = ctx.subtask_index if ctx.subtask_index is not None else len(
-                    record.absorbed_subtasks
-                )
+                idx = ctx.subtask_index if ctx.subtask_index is not None else len(record.absorbed_subtasks)
                 if idx not in record.absorbed_subtasks:
                     record.absorbed_subtasks[idx] = artifact
 
@@ -1217,15 +1181,11 @@ class FlowAwareConvergenceCoordinator:
 
     def _evict_parallel_groups_if_needed(self) -> None:
         """Evict oldest parallel group records when capacity is exceeded."""
-        while (
-            len(self._parallel_groups) > _MAX_PARALLEL_GROUPS
-            and self._parallel_group_order
-        ):
+        while len(self._parallel_groups) > _MAX_PARALLEL_GROUPS and self._parallel_group_order:
             oldest = self._parallel_group_order.pop(0)
             self._parallel_groups.pop(oldest, None)
             logger.debug(
-                "FlowAwareConvergenceCoordinator: evicted oldest "
-                "parallel group_id=%s",
+                "FlowAwareConvergenceCoordinator: evicted oldest " "parallel group_id=%s",
                 oldest,
             )
 

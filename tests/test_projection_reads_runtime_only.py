@@ -36,8 +36,8 @@ from __future__ import annotations
 
 import inspect
 import json
-import sys
 import os
+import sys
 
 import pytest
 
@@ -46,29 +46,30 @@ if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
 from core.operator_surface import (
-    OPERATOR_SURFACE_PROJECTION_POLICY,
     OPERATOR_SURFACE_AUTHORITY,
-    TaskInspection,
-    RouteInspection,
+    OPERATOR_SURFACE_PROJECTION_POLICY,
+    DevicePresenceSummary,
     ExecutorInspection,
     FailureDomainInspection,
     LineageInspection,
-    DevicePresenceSummary,
     OperatorSnapshot,
     OperatorSurface,
+    RouteInspection,
+    TaskInspection,
     get_operator_surface,
     reset_operator_surface,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def reset():
     reset_operator_surface()
     from core.canonical_task import reset_canonical_task_runtime
+
     reset_canonical_task_runtime()
     yield
     reset_operator_surface()
@@ -77,10 +78,11 @@ def reset():
 
 def _register_task(goal: str = "test"):
     from core.canonical_task import (
+        TaskOrigin,
         build_canonical_task,
         get_canonical_task_runtime,
-        TaskOrigin,
     )
+
     task = build_canonical_task(goal=goal, origin=TaskOrigin.API_REQUEST)
     get_canonical_task_runtime().register(task)
     return task
@@ -89,6 +91,7 @@ def _register_task(goal: str = "test"):
 # ===========================================================================
 # 1-10: Policy and source declaration
 # ===========================================================================
+
 
 class TestProjectionPolicy:
     def test_01_policy_references_canonical(self):
@@ -140,27 +143,31 @@ class TestProjectionPolicy:
 # 11-12: Module-level source purity
 # ===========================================================================
 
+
 class TestModuleSourcePurity:
     def test_11_operator_surface_no_legacy_dispatch_registry(self):
         import core.operator_surface as m
+
         source = inspect.getsource(m)
         assert "legacy_dispatch_registry" not in source
 
     def test_12_operator_surface_no_registered_devices(self):
         import core.operator_surface as m
+
         source = inspect.getsource(m)
         # Must not directly import registered_devices compat cache
-        assert "from core.routes._shared import" not in source or \
-               "REGISTERED_DEVICES" not in inspect.getsource(m)
+        assert "from core.routes._shared import" not in source or "REGISTERED_DEVICES" not in inspect.getsource(m)
 
 
 # ===========================================================================
 # 13-14: Snapshot consistency with canonical runtime
 # ===========================================================================
 
+
 class TestSnapshotConsistency:
     def test_13_snapshot_active_count_matches_runtime(self):
         from core.canonical_task import get_canonical_task_runtime
+
         _register_task("task_a")
         _register_task("task_b")
         surface = get_operator_surface()
@@ -177,6 +184,7 @@ class TestSnapshotConsistency:
 # ===========================================================================
 # 15-20: Return types enforce projection types
 # ===========================================================================
+
 
 class TestReturnTypeEnforcement:
     def test_15_inspect_task_returns_task_inspection(self):

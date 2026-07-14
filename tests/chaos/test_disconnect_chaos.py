@@ -18,16 +18,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
 def _reset() -> None:
+    from core.orchestration.global_arbiter import reset_global_arbiter
     from core.unified.idempotency import reset_idempotency_store
     from core.unified.release_gate import reset_release_gate
-    from core.orchestration.global_arbiter import reset_global_arbiter
 
     reset_idempotency_store()
     reset_release_gate()
@@ -44,8 +43,8 @@ class TestDisconnectErrorMapping:
         _reset()
 
     def test_websocket_disconnect_maps_to_transport_disconnect(self):
-        from core.unified.error_mapper import ErrorMapper
         from core.unified.error_codes import GalaxyErrorCode
+        from core.unified.error_mapper import ErrorMapper
 
         class WebSocketDisconnect(Exception):
             pass
@@ -60,8 +59,8 @@ class TestDisconnectErrorMapping:
         assert is_retryable(GalaxyErrorCode.TRANSPORT_DISCONNECT) is True
 
     def test_connection_refused_maps_to_connect_failed(self):
-        from core.unified.error_mapper import ErrorMapper
         from core.unified.error_codes import GalaxyErrorCode
+        from core.unified.error_mapper import ErrorMapper
 
         exc = ConnectionRefusedError("refused")
         payload = ErrorMapper.from_exception(exc, trace_id="t-002")
@@ -111,8 +110,8 @@ class TestHeartbeatLossScenario:
         assert is_retryable(GalaxyErrorCode.DEVICE_OFFLINE) is True
 
     def test_legacy_device_error_offline_mapped(self):
-        from core.unified.error_mapper import ErrorMapper
         from core.unified.error_codes import GalaxyErrorCode
+        from core.unified.error_mapper import ErrorMapper
 
         payload = ErrorMapper.from_legacy_device_error(
             device_id="phone_01",
@@ -123,8 +122,8 @@ class TestHeartbeatLossScenario:
         assert payload.detail["device_id"] == "phone_01"
 
     def test_legacy_device_timeout_mapped(self):
-        from core.unified.error_mapper import ErrorMapper
         from core.unified.error_codes import GalaxyErrorCode
+        from core.unified.error_mapper import ErrorMapper
 
         payload = ErrorMapper.from_legacy_device_error(
             device_id="tablet_01",

@@ -16,6 +16,7 @@ Validates:
 7. FlowContinuityCoordinator.decide_reconnect propagates durable fields.
 8. _extract_durable_continuity_fields helper extraction is correct.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -24,14 +25,17 @@ import pytest
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _reset():
     from core.attached_runtime_session_registry import reset_session_registry
+
     reset_session_registry()
 
 
 # ===========================================================================
 # A — AttachedSessionRegistryEntry carries durable continuity fields
 # ===========================================================================
+
 
 class TestRegistryEntryDurableFields:
     """AttachedSessionRegistryEntry stores durable_session_id and continuity_epoch."""
@@ -41,12 +45,14 @@ class TestRegistryEntryDurableFields:
 
     def test_default_values_are_empty(self):
         from core.attached_runtime_session_registry import AttachedSessionRegistryEntry
+
         e = AttachedSessionRegistryEntry(device_id="dev-001")
         assert e.durable_session_id == ""
         assert e.continuity_epoch == 0
 
     def test_explicit_values_stored(self):
         from core.attached_runtime_session_registry import AttachedSessionRegistryEntry
+
         e = AttachedSessionRegistryEntry(
             device_id="dev-001",
             durable_session_id="dsid-abc",
@@ -57,6 +63,7 @@ class TestRegistryEntryDurableFields:
 
     def test_to_dict_includes_durable_fields(self):
         from core.attached_runtime_session_registry import AttachedSessionRegistryEntry
+
         e = AttachedSessionRegistryEntry(
             device_id="dev-001",
             durable_session_id="dsid-xyz",
@@ -68,6 +75,7 @@ class TestRegistryEntryDurableFields:
 
     def test_from_dict_round_trips_durable_fields(self):
         from core.attached_runtime_session_registry import AttachedSessionRegistryEntry
+
         e = AttachedSessionRegistryEntry(
             device_id="dev-001",
             durable_session_id="dsid-round",
@@ -79,6 +87,7 @@ class TestRegistryEntryDurableFields:
 
     def test_from_dict_missing_durable_fields_defaults_safe(self):
         from core.attached_runtime_session_registry import AttachedSessionRegistryEntry
+
         d = {"device_id": "dev-001"}
         e = AttachedSessionRegistryEntry.from_dict(d)
         assert e.durable_session_id == ""
@@ -89,6 +98,7 @@ class TestRegistryEntryDurableFields:
 # B — register_session stores durable continuity fields
 # ===========================================================================
 
+
 class TestRegisterSessionDurableFields:
     """register_session stores durable_session_id and continuity_epoch."""
 
@@ -97,6 +107,7 @@ class TestRegisterSessionDurableFields:
 
     def test_durable_fields_stored_on_register(self):
         from core.attached_runtime_session_registry import register_session
+
         entry = register_session(
             "dev-001",
             durable_session_id="dsid-reg",
@@ -107,15 +118,17 @@ class TestRegisterSessionDurableFields:
 
     def test_absent_durable_fields_default_safely(self):
         from core.attached_runtime_session_registry import register_session
+
         entry = register_session("dev-002")
         assert entry.durable_session_id == ""
         assert entry.continuity_epoch == 0
 
     def test_durable_fields_round_trip_via_to_dict(self):
         from core.attached_runtime_session_registry import (
-            register_session,
             AttachedSessionRegistryEntry,
+            register_session,
         )
+
         entry = register_session(
             "dev-003",
             durable_session_id="dsid-rt",
@@ -131,6 +144,7 @@ class TestRegisterSessionDurableFields:
 # C — reconnect_session preserves / updates durable continuity fields
 # ===========================================================================
 
+
 class TestReconnectSessionDurableFields:
     """reconnect_session preserves and updates durable continuity fields."""
 
@@ -139,10 +153,11 @@ class TestReconnectSessionDurableFields:
 
     def test_reconnect_preserves_existing_durable_fields(self):
         from core.attached_runtime_session_registry import (
-            register_session,
-            reconnect_session,
             detach_session,
+            reconnect_session,
+            register_session,
         )
+
         entry = register_session(
             "dev-001",
             runtime_attachment_session_id="att-1",
@@ -160,10 +175,11 @@ class TestReconnectSessionDurableFields:
 
     def test_reconnect_updates_durable_fields_when_supplied(self):
         from core.attached_runtime_session_registry import (
-            register_session,
-            reconnect_session,
             detach_session,
+            reconnect_session,
+            register_session,
         )
+
         entry = register_session(
             "dev-001",
             runtime_attachment_session_id="att-1",
@@ -183,10 +199,11 @@ class TestReconnectSessionDurableFields:
     def test_reconnect_preserves_runtime_session_id(self):
         """Core PR-G invariant: runtime_session_id preserved across reconnect."""
         from core.attached_runtime_session_registry import (
-            register_session,
-            reconnect_session,
             detach_session,
+            reconnect_session,
+            register_session,
         )
+
         entry = register_session(
             "dev-001",
             runtime_attachment_session_id="att-1",
@@ -206,6 +223,7 @@ class TestReconnectSessionDurableFields:
 # D — classify_reconnect_outcome with durable_session_id
 # ===========================================================================
 
+
 class TestClassifyReconnectOutcomeDurableFields:
     """classify_reconnect_outcome validates durable_session_id (PR-C)."""
 
@@ -214,10 +232,11 @@ class TestClassifyReconnectOutcomeDurableFields:
 
     def test_matching_durable_session_id_grants_continuity_resume(self):
         from core.attached_runtime_session_registry import (
-            register_session,
-            detach_session,
             classify_reconnect_outcome,
+            detach_session,
+            register_session,
         )
+
         register_session(
             "dev-001",
             runtime_attachment_session_id="att-1",
@@ -235,9 +254,10 @@ class TestClassifyReconnectOutcomeDurableFields:
     def test_mismatched_durable_session_id_yields_new_attachment(self):
         """Durable identity mismatch means different session era → new attachment."""
         from core.attached_runtime_session_registry import (
-            register_session,
             classify_reconnect_outcome,
+            register_session,
         )
+
         register_session(
             "dev-001",
             runtime_attachment_session_id="att-1",
@@ -255,9 +275,10 @@ class TestClassifyReconnectOutcomeDurableFields:
     def test_absent_durable_session_id_in_client_is_non_constraining(self):
         """If the client doesn't send durable_session_id, continuity check passes."""
         from core.attached_runtime_session_registry import (
-            register_session,
             classify_reconnect_outcome,
+            register_session,
         )
+
         register_session(
             "dev-001",
             runtime_attachment_session_id="att-1",
@@ -275,9 +296,10 @@ class TestClassifyReconnectOutcomeDurableFields:
     def test_absent_durable_session_id_in_registry_is_backward_compat(self):
         """Registry entry with no durable_session_id → client's value is ignored."""
         from core.attached_runtime_session_registry import (
-            register_session,
             classify_reconnect_outcome,
+            register_session,
         )
+
         register_session(
             "dev-001",
             runtime_attachment_session_id="att-1",
@@ -295,6 +317,7 @@ class TestClassifyReconnectOutcomeDurableFields:
     def test_no_existing_entry_always_new_attachment(self):
         """No prior entry → new_attachment regardless of durable fields."""
         from core.attached_runtime_session_registry import classify_reconnect_outcome
+
         outcome, entry = classify_reconnect_outcome(
             "dev-unknown",
             runtime_attachment_session_id="att-x",
@@ -306,9 +329,10 @@ class TestClassifyReconnectOutcomeDurableFields:
     def test_mismatched_attachment_id_yields_new_attachment_ignoring_durable(self):
         """Wrong runtime_attachment_session_id → new_attachment even if durable matches."""
         from core.attached_runtime_session_registry import (
-            register_session,
             classify_reconnect_outcome,
+            register_session,
         )
+
         register_session(
             "dev-001",
             runtime_attachment_session_id="att-correct",
@@ -325,9 +349,10 @@ class TestClassifyReconnectOutcomeDurableFields:
     def test_lower_continuity_epoch_yields_new_attachment(self):
         """Older continuity epoch must not resume a newer stored session era."""
         from core.attached_runtime_session_registry import (
-            register_session,
             classify_reconnect_outcome,
+            register_session,
         )
+
         register_session(
             "dev-001",
             runtime_attachment_session_id="att-epoch",
@@ -348,17 +373,20 @@ class TestClassifyReconnectOutcomeDurableFields:
 # E — ContinuityEventContext carries durable fields
 # ===========================================================================
 
+
 class TestContinuityEventContextDurableFields:
     """ContinuityEventContext carries durable_session_id and continuity_epoch."""
 
     def test_default_values(self):
         from core.flow_continuity_coordinator import ContinuityEventContext
+
         ctx = ContinuityEventContext()
         assert ctx.durable_session_id == ""
         assert ctx.continuity_epoch == 0
 
     def test_explicit_values_stored(self):
         from core.flow_continuity_coordinator import ContinuityEventContext
+
         ctx = ContinuityEventContext(
             durable_session_id="dsid-ctx",
             continuity_epoch=4,
@@ -368,6 +396,7 @@ class TestContinuityEventContextDurableFields:
 
     def test_to_dict_includes_durable_fields(self):
         from core.flow_continuity_coordinator import ContinuityEventContext
+
         ctx = ContinuityEventContext(
             durable_session_id="dsid-dict",
             continuity_epoch=8,
@@ -381,17 +410,20 @@ class TestContinuityEventContextDurableFields:
 # F — ContinuityDecisionArtifact carries durable fields
 # ===========================================================================
 
+
 class TestContinuityDecisionArtifactDurableFields:
     """ContinuityDecisionArtifact carries and round-trips durable fields."""
 
     def test_default_values(self):
         from core.flow_continuity_coordinator import ContinuityDecisionArtifact
+
         a = ContinuityDecisionArtifact()
         assert a.durable_session_id == ""
         assert a.continuity_epoch == 0
 
     def test_explicit_values_stored(self):
         from core.flow_continuity_coordinator import ContinuityDecisionArtifact
+
         a = ContinuityDecisionArtifact(
             durable_session_id="dsid-art",
             continuity_epoch=6,
@@ -401,6 +433,7 @@ class TestContinuityDecisionArtifactDurableFields:
 
     def test_to_dict_includes_durable_fields(self):
         from core.flow_continuity_coordinator import ContinuityDecisionArtifact
+
         a = ContinuityDecisionArtifact(
             durable_session_id="dsid-d",
             continuity_epoch=11,
@@ -411,6 +444,7 @@ class TestContinuityDecisionArtifactDurableFields:
 
     def test_from_dict_round_trips_durable_fields(self):
         from core.flow_continuity_coordinator import ContinuityDecisionArtifact
+
         a = ContinuityDecisionArtifact(
             durable_session_id="dsid-rt",
             continuity_epoch=13,
@@ -421,6 +455,7 @@ class TestContinuityDecisionArtifactDurableFields:
 
     def test_from_dict_missing_durable_fields_defaults_safe(self):
         from core.flow_continuity_coordinator import ContinuityDecisionArtifact
+
         a = ContinuityDecisionArtifact.from_dict({})
         assert a.durable_session_id == ""
         assert a.continuity_epoch == 0
@@ -429,6 +464,7 @@ class TestContinuityDecisionArtifactDurableFields:
 # ===========================================================================
 # G — FlowContinuityCoordinator.decide_reconnect propagates durable fields
 # ===========================================================================
+
 
 class TestFlowContinuityCoordinatorDurableFields:
     """decide_reconnect propagates durable_session_id and continuity_epoch."""
@@ -442,8 +478,9 @@ class TestFlowContinuityCoordinatorDurableFields:
         class _MockRegistry:
             pass
 
-        def _mock_classify(device_id, *, runtime_attachment_session_id="",
-                           durable_session_id="", registry=None, **kwargs):
+        def _mock_classify(
+            device_id, *, runtime_attachment_session_id="", durable_session_id="", registry=None, **kwargs
+        ):
             if capture is not None:
                 capture["device_id"] = device_id
                 capture["runtime_attachment_session_id"] = runtime_attachment_session_id
@@ -457,10 +494,11 @@ class TestFlowContinuityCoordinatorDurableFields:
 
     def test_durable_fields_propagated_to_artifact_on_continuity_resume(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         captured: dict = {}
         c = self._make_coordinator_with_mock("continuity_resume", captured)
         ctx = ContinuityEventContext(
@@ -480,10 +518,11 @@ class TestFlowContinuityCoordinatorDurableFields:
 
     def test_mismatched_durable_id_produces_new_attachment(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = self._make_coordinator_with_mock("new_attachment")
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.transport_reconnect,
@@ -497,10 +536,11 @@ class TestFlowContinuityCoordinatorDurableFields:
     def test_no_durable_fields_still_resumes_via_attachment_id(self):
         """Existing PR-G path not broken: attachment ID alone still resumes."""
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = self._make_coordinator_with_mock("continuity_resume")
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.transport_reconnect,
@@ -517,6 +557,7 @@ class TestFlowContinuityCoordinatorDurableFields:
             ContinuityEventContext,
             ContinuityEventKind,
         )
+
         captured: dict = {}
         c = self._make_coordinator_with_mock("new_attachment", captured)
         ctx = ContinuityEventContext(
@@ -532,9 +573,9 @@ class TestFlowContinuityCoordinatorDurableFields:
     def test_registry_tuple_outcome_is_supported(self):
         """Real classify_reconnect_outcome returns (outcome, entry) tuple."""
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
 
         class _Entry:
@@ -557,6 +598,7 @@ class TestFlowContinuityCoordinatorDurableFields:
 # H — _extract_durable_continuity_fields helper
 # ===========================================================================
 
+
 class TestExtractDurableContinuityFields:
     """_extract_durable_continuity_fields extracts Android continuity fields."""
 
@@ -564,6 +606,7 @@ class TestExtractDurableContinuityFields:
         from galaxy_gateway.android.handlers.registration import (
             _extract_durable_continuity_fields,
         )
+
         msg = {
             "durable_session_id": "dsid-extract",
             "session_continuity_epoch": 5,
@@ -576,6 +619,7 @@ class TestExtractDurableContinuityFields:
         from galaxy_gateway.android.handlers.registration import (
             _extract_durable_continuity_fields,
         )
+
         dsid, epoch = _extract_durable_continuity_fields({})
         assert dsid == ""
         assert epoch == 0
@@ -584,9 +628,8 @@ class TestExtractDurableContinuityFields:
         from galaxy_gateway.android.handlers.registration import (
             _extract_durable_continuity_fields,
         )
-        dsid, epoch = _extract_durable_continuity_fields(
-            {"durable_session_id": None, "session_continuity_epoch": 3}
-        )
+
+        dsid, epoch = _extract_durable_continuity_fields({"durable_session_id": None, "session_continuity_epoch": 3})
         assert dsid == ""
         assert epoch == 3
 
@@ -594,6 +637,7 @@ class TestExtractDurableContinuityFields:
         from galaxy_gateway.android.handlers.registration import (
             _extract_durable_continuity_fields,
         )
+
         dsid, epoch = _extract_durable_continuity_fields(
             {"durable_session_id": "dsid-x", "session_continuity_epoch": "not-a-number"}
         )
@@ -604,6 +648,7 @@ class TestExtractDurableContinuityFields:
         from galaxy_gateway.android.handlers.registration import (
             _extract_durable_continuity_fields,
         )
+
         dsid, epoch = _extract_durable_continuity_fields(
             {"durable_session_id": "dsid-y", "session_continuity_epoch": "7"}
         )
@@ -615,6 +660,7 @@ class TestExtractDurableContinuityFields:
 # I — End-to-end: reconnect preserves session era via durable identity
 # ===========================================================================
 
+
 class TestDurableContinuityEndToEnd:
     """End-to-end: Android supplies valid durable identity → continuity preserved."""
 
@@ -624,10 +670,10 @@ class TestDurableContinuityEndToEnd:
     def test_fresh_registration_followed_by_continuity_resume(self):
         """Full cycle: register → detach → reconnect with durable ID → resume."""
         from core.attached_runtime_session_registry import (
-            register_session,
+            classify_reconnect_outcome,
             detach_session,
             reconnect_session,
-            classify_reconnect_outcome,
+            register_session,
         )
 
         # First registration (Android first connect)
@@ -671,8 +717,8 @@ class TestDurableContinuityEndToEnd:
     def test_stale_era_cold_restart_triggers_new_attachment(self):
         """Cold restart with different durable_session_id → new session era."""
         from core.attached_runtime_session_registry import (
-            register_session,
             classify_reconnect_outcome,
+            register_session,
         )
 
         register_session(
@@ -694,8 +740,8 @@ class TestDurableContinuityEndToEnd:
     def test_no_durable_fields_at_all_backward_compat(self):
         """Backward compat: older Android client sends no durable fields → still works."""
         from core.attached_runtime_session_registry import (
-            register_session,
             classify_reconnect_outcome,
+            register_session,
         )
 
         register_session(

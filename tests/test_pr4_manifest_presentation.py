@@ -28,15 +28,16 @@ import pytest
 
 from core.execution.decision_executor import ExecutionResult
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_openclawd():
     """Return a minimal OpenClawd instance with heavy init suppressed."""
     with patch("core.openclawd.OpenClawd.__init__", return_value=None):
         from core.openclawd import OpenClawd
+
         oc = OpenClawd.__new__(OpenClawd)
     oc._continuum_orchestrator = None
     oc._decision_executor = None
@@ -88,11 +89,13 @@ def _make_fake_process(
 # A) _determine_execution_path unit tests
 # ---------------------------------------------------------------------------
 
+
 class TestDetermineExecutionPath:
     """Unit-test the static helper directly."""
 
     def _ep(self, entry_mode, action_taken, cross_device=False):
         from core.openclawd import OpenClawd
+
         result = {"action_taken": action_taken}
         return OpenClawd._determine_execution_path(
             entry_mode=entry_mode,
@@ -129,13 +132,12 @@ class TestDetermineExecutionPath:
 # B) _run_execution returns a serialisable dict (not None)
 # ---------------------------------------------------------------------------
 
+
 class TestRunExecutionReturnType:
     def test_returns_dict(self):
         oc = _make_openclawd()
         mock_exec = MagicMock()
-        mock_exec.execute.return_value = ExecutionResult(
-            action_taken="noop", success=True, skipped_reason="observe"
-        )
+        mock_exec.execute.return_value = ExecutionResult(action_taken="noop", success=True, skipped_reason="observe")
         oc._decision_executor = mock_exec
         result = oc._run_execution({"decision": {"action_level": "observe"}})
         assert isinstance(result, dict)
@@ -177,13 +179,9 @@ class TestRunExecutionReturnType:
     def test_required_keys_present(self):
         oc = _make_openclawd()
         mock_exec = MagicMock()
-        mock_exec.execute.return_value = ExecutionResult(
-            action_taken="launch_app", target="notepad.exe", success=True
-        )
+        mock_exec.execute.return_value = ExecutionResult(action_taken="launch_app", target="notepad.exe", success=True)
         oc._decision_executor = mock_exec
-        result = oc._run_execution(
-            {"decision": {"action_level": "execute"}}, entry_mode="local"
-        )
+        result = oc._run_execution({"decision": {"action_level": "execute"}}, entry_mode="local")
         for key in ("action_taken", "success", "skipped_reason"):
             assert key in result, f"Missing key: {key}"
 
@@ -191,6 +189,7 @@ class TestRunExecutionReturnType:
 # ---------------------------------------------------------------------------
 # C) process() response always contains execution_path + execution_result
 # ---------------------------------------------------------------------------
+
 
 def _stub_process_internals(oc, *, action_taken="noop", skipped_reason=None):
     """Attach lightweight stubs so oc.process() can run end-to-end."""
@@ -215,8 +214,7 @@ def _stub_process_internals(oc, *, action_taken="noop", skipped_reason=None):
     }
     oc._run_execution = lambda state, entry_mode=None: dict(exec_result)  # type: ignore[assignment]
 
-    async def _fake_dispatch_chat(message, intent=None, device_id=None,
-                                   session_id=None, trace_id=None):
+    async def _fake_dispatch_chat(message, intent=None, device_id=None, session_id=None, trace_id=None):
         return {"success": True, "response": "hello", "metadata": {}}
 
     oc._dispatch_chat = _fake_dispatch_chat
@@ -252,9 +250,7 @@ class TestProcessResponseSchema:
         oc = _make_openclawd()
         _stub_process_internals(oc, action_taken="noop", skipped_reason="enable_system_actions=false")
         result = await oc.process(message="tell me a joke", session_id="s2", entry_mode="local")
-        assert result["execution_path"] == "none", (
-            f"Expected 'none', got {result['execution_path']!r}"
-        )
+        assert result["execution_path"] == "none", f"Expected 'none', got {result['execution_path']!r}"
 
     @pytest.mark.asyncio
     async def test_execution_result_has_skipped_reason_when_none(self):
@@ -262,20 +258,14 @@ class TestProcessResponseSchema:
         _stub_process_internals(oc, action_taken="noop", skipped_reason="enable_system_actions=false")
         result = await oc.process(message="hello", session_id="s3", entry_mode="local")
         exec_res = result["execution_result"]
-        assert exec_res.get("skipped_reason"), (
-            "skipped_reason should be set when execution_path='none'"
-        )
+        assert exec_res.get("skipped_reason"), "skipped_reason should be set when execution_path='none'"
 
     @pytest.mark.asyncio
     async def test_cross_device_entry_gives_cross_device_path(self):
         oc = _make_openclawd()
         _stub_process_internals(oc, action_taken="noop", skipped_reason="entry_mode=cross_device")
-        result = await oc.process(
-            message="run on device", session_id="s4", entry_mode="cross_device"
-        )
-        assert result["execution_path"] == "cross_device", (
-            f"Expected 'cross_device', got {result['execution_path']!r}"
-        )
+        result = await oc.process(message="run on device", session_id="s4", entry_mode="cross_device")
+        assert result["execution_path"] == "cross_device", f"Expected 'cross_device', got {result['execution_path']!r}"
 
     @pytest.mark.asyncio
     async def test_execution_path_in_metadata(self):
@@ -292,14 +282,13 @@ class TestProcessResponseSchema:
         oc = _make_openclawd()
         _stub_process_internals(oc, action_taken="launch_app", skipped_reason=None)
         result = await oc.process(message="open notepad", session_id="s6", entry_mode="local")
-        assert result["execution_path"] == "local", (
-            f"Expected 'local', got {result['execution_path']!r}"
-        )
+        assert result["execution_path"] == "local", f"Expected 'local', got {result['execution_path']!r}"
 
 
 # ---------------------------------------------------------------------------
 # D) Error path includes execution_path and execution_result
 # ---------------------------------------------------------------------------
+
 
 class TestErrorPathSchema:
     @pytest.mark.asyncio
@@ -322,8 +311,7 @@ class TestErrorPathSchema:
 
         oc._run_continuum = _bad_continuum
 
-        async def _fake_dispatch_chat(message, intent=None, device_id=None,
-                                       session_id=None, trace_id=None):
+        async def _fake_dispatch_chat(message, intent=None, device_id=None, session_id=None, trace_id=None):
             return {"success": True, "response": "ok", "metadata": {}}
 
         oc._dispatch_chat = _fake_dispatch_chat
@@ -350,8 +338,7 @@ class TestErrorPathSchema:
 
         oc._run_continuum = _bad_continuum
 
-        async def _fake_dispatch_chat(message, intent=None, device_id=None,
-                                       session_id=None, trace_id=None):
+        async def _fake_dispatch_chat(message, intent=None, device_id=None, session_id=None, trace_id=None):
             return {"success": True, "response": "ok", "metadata": {}}
 
         oc._dispatch_chat = _fake_dispatch_chat
@@ -367,6 +354,7 @@ class TestErrorPathSchema:
 # E) Observability: structured log emitted when execution_path is set
 # ---------------------------------------------------------------------------
 
+
 class TestObservabilityLog:
     @pytest.mark.asyncio
     async def test_info_log_emitted_with_execution_path(self, caplog):
@@ -377,9 +365,7 @@ class TestObservabilityLog:
             await oc.process(message="hello", session_id="obs_sess", entry_mode="local")
 
         log_messages = " ".join(caplog.messages)
-        assert "execution_path" in log_messages, (
-            "Expected 'execution_path' in log output; got: " + log_messages[:200]
-        )
+        assert "execution_path" in log_messages, "Expected 'execution_path' in log output; got: " + log_messages[:200]
 
     @pytest.mark.asyncio
     async def test_log_contains_entry_mode(self, caplog):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
+
 logger = logging.getLogger(__name__)
 
 
@@ -274,9 +275,7 @@ def _build_result_backflow_stage(device_id: Optional[str]) -> Dict[str, Any]:
             logger.debug("Fallback triggered: %s", exc)
             evidence = {}
     passed = bool(device_id) and bool(
-        evidence.get("acceptance_tag")
-        or evidence.get("mapped_android_proof_class")
-        or evidence.get("message_id")
+        evidence.get("acceptance_tag") or evidence.get("mapped_android_proof_class") or evidence.get("message_id")
     )
     summary = (
         "结果回流已落入 acceptance 证据面"
@@ -296,9 +295,7 @@ def _build_result_backflow_stage(device_id: Optional[str]) -> Dict[str, Any]:
             "evidence_authority": evidence.get("evidence_authority"),
             "evidence_completeness": evidence.get("evidence_completeness"),
             "closure_significance": evidence.get("closure_significance"),
-            "canonical_confirmation_required": bool(
-                evidence.get("canonical_confirmation_required")
-            ),
+            "canonical_confirmation_required": bool(evidence.get("canonical_confirmation_required")),
             "message_id": evidence.get("message_id"),
             "snapshot_id": evidence.get("snapshot_id"),
         },
@@ -413,7 +410,7 @@ def _resolve_mesh_session(
             return {}
         latest = sorted(sessions, key=_session_timestamp_key)[-1]
         return latest.to_dict()
-    except Exception as exc:
+    except Exception:
         return {}
 
 
@@ -442,10 +439,7 @@ def _build_chain_summary(
     stages: List[Dict[str, Any]],
 ) -> str:
     stage_summary = ", ".join(f"{stage['stage']}={stage['status']}" for stage in stages)
-    return (
-        f"overall={overall_status}; device_id={device_id}; session_id={session_id}; "
-        f"stages=[{stage_summary}]"
-    )
+    return f"overall={overall_status}; device_id={device_id}; session_id={session_id}; " f"stages=[{stage_summary}]"
 
 
 def _build_gate_candidate(
@@ -457,36 +451,31 @@ def _build_gate_candidate(
 ) -> Dict[str, Any]:
     normalized_mode = _normalize_gate_mode(gate_mode)
     required_stages_list: List[str] = []
-    for stage in (gate_required_stages or CROSS_REPO_ACCEPTANCE_GATE_DEFAULT_REQUIRED_STAGES):
+    for stage in gate_required_stages or CROSS_REPO_ACCEPTANCE_GATE_DEFAULT_REQUIRED_STAGES:
         normalized_stage = str(stage).strip() if stage is not None else ""
         if normalized_stage:
             required_stages_list.append(normalized_stage)
     required_stages = tuple(required_stages_list)
 
     allowed_failure_boundaries: Set[str] = set()
-    for boundary in (gate_allowed_failure_boundaries or []):
+    for boundary in gate_allowed_failure_boundaries or []:
         normalized_boundary = str(boundary).strip() if boundary is not None else ""
         if normalized_boundary:
             allowed_failure_boundaries.add(normalized_boundary)
     stage_map = {str(stage.get("stage") or ""): stage for stage in stages if isinstance(stage, dict)}
     missing_required_stages = [stage for stage in required_stages if stage not in stage_map]
     failed_required_stages = [
-        stage
-        for stage in required_stages
-        if stage in stage_map and stage_map[stage].get("status") != "passed"
+        stage for stage in required_stages if stage in stage_map and stage_map[stage].get("status") != "passed"
     ]
     failed_required_stage_set = set(failed_required_stages)
     blocking_failed_stages = [
         stage
         for stage in failed_required_stages
-        if str(stage_map.get(stage, {}).get("failure_boundary") or "")
-        not in allowed_failure_boundaries
+        if str(stage_map.get(stage, {}).get("failure_boundary") or "") not in allowed_failure_boundaries
     ]
     all_required_present = len(missing_required_stages) == 0
     passed_required_stages = [
-        stage
-        for stage in required_stages
-        if stage in stage_map and stage not in failed_required_stage_set
+        stage for stage in required_stages if stage in stage_map and stage not in failed_required_stage_set
     ]
     gate_passed = all_required_present and len(blocking_failed_stages) == 0
     verdict = "pass" if gate_passed else "block"
@@ -525,19 +514,15 @@ def _build_truth_boundary_contract(
         or board_visibility.get("completion_state") == "closed"
     )
     acceptance_verdict = (
-        truth_visibility.get("acceptance_verdict")
-        or board_visibility.get("acceptance_verdict")
-        or "unknown"
+        truth_visibility.get("acceptance_verdict") or board_visibility.get("acceptance_verdict") or "unknown"
     )
     acceptance_verdict_normalized = str(acceptance_verdict or "").strip().lower()
     authority_completion_truth = bool(
-        truth_visibility.get("authority_completion_truth")
-        or board_visibility.get("authority_completion_truth")
+        truth_visibility.get("authority_completion_truth") or board_visibility.get("authority_completion_truth")
     )
     if not authority_completion_truth and acceptance_verdict_normalized == "accept":
         authority_completion_truth = bool(
-            truth_visibility.get("is_fully_closed")
-            or board_visibility.get("is_fully_closed")
+            truth_visibility.get("is_fully_closed") or board_visibility.get("is_fully_closed")
         )
     result_backflow_stage = next(
         (stage for stage in stages if stage.get("stage") == "result_backflow"),
@@ -568,10 +553,7 @@ def _build_truth_boundary_contract(
     advisory_evidence_only = bool(
         truth_visibility.get("advisory_evidence_only")
         or board_visibility.get("advisory_evidence_only")
-        or (
-            result_backflow_details.get("canonical_confirmation_required")
-            and not authority_completion_truth
-        )
+        or (result_backflow_details.get("canonical_confirmation_required") and not authority_completion_truth)
     )
     canonical_confirmation_present = bool(
         truth_visibility.get("canonical_confirmation_present")

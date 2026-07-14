@@ -26,7 +26,7 @@ import asyncio
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -43,6 +43,7 @@ def _reset_durable_result_store():
             get_durable_result_id_store,
             reset_durable_result_id_store,
         )
+
         get_durable_result_id_store().clear()
         reset_durable_result_id_store()
     except Exception:
@@ -53,13 +54,15 @@ def _reset_durable_result_store():
 # V3 slot gate test helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_v3_all_approved_result(device_ids, execution_mode):
     """Build a CanonicalDispatchSlotsResult that approves all given device IDs."""
     from core.canonical_dispatch_slot_authority import (
         CanonicalDispatchSlot,
-        CanonicalDispatchSlotStatus,
         CanonicalDispatchSlotsResult,
+        CanonicalDispatchSlotStatus,
     )
+
     approved = [
         CanonicalDispatchSlot(
             device_id=d,
@@ -87,6 +90,7 @@ def _v3_all_approved_side_effect(device_ids, execution_mode, **kw):
 # A.1 — handle_task_result wakes DeviceRouter task_event
 # ===========================================================================
 
+
 class TestTaskResultWakesDeviceRouter(unittest.IsolatedAsyncioTestCase):
     """PR-1 P0: handle_task_result must call device_router.handle_task_result."""
 
@@ -105,6 +109,7 @@ class TestTaskResultWakesDeviceRouter(unittest.IsolatedAsyncioTestCase):
 
         # Stub DeviceRouter with a real event we can inspect
         from galaxy_gateway.device_router import DeviceRouter
+
         router = DeviceRouter()
         event = asyncio.Event()
         router._task_events["task-abc"] = event
@@ -115,19 +120,24 @@ class TestTaskResultWakesDeviceRouter(unittest.IsolatedAsyncioTestCase):
             "status": "success",
         }
 
-        with patch(
-            "galaxy_gateway.android.handlers.task_lifecycle.store_task_result",
-            new_callable=AsyncMock,
-        ), patch(
-            "galaxy_gateway.android.handlers.task_lifecycle._reconcile_inbound_message",
-            MagicMock(),
-        ), patch(
-            # handler 对该钩子是直呼(非 None 守卫):要中和须用可调用桩
-            "galaxy_gateway.android.handlers.task_lifecycle._try_ingest_participant_truth",
-            MagicMock(),
-        ), patch(
-            "galaxy_gateway.device_router.device_router",
-            router,
+        with (
+            patch(
+                "galaxy_gateway.android.handlers.task_lifecycle.store_task_result",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "galaxy_gateway.android.handlers.task_lifecycle._reconcile_inbound_message",
+                MagicMock(),
+            ),
+            patch(
+                # handler 对该钩子是直呼(非 None 守卫):要中和须用可调用桩
+                "galaxy_gateway.android.handlers.task_lifecycle._try_ingest_participant_truth",
+                MagicMock(),
+            ),
+            patch(
+                "galaxy_gateway.device_router.device_router",
+                router,
+            ),
         ):
             await handle_task_result(bridge, None, msg)
 
@@ -148,6 +158,7 @@ class TestTaskResultWakesDeviceRouter(unittest.IsolatedAsyncioTestCase):
         bridge._devices = {}
 
         from galaxy_gateway.device_router import DeviceRouter
+
         router = DeviceRouter()
         router._task_events["task-xyz"] = asyncio.Event()
 
@@ -158,19 +169,24 @@ class TestTaskResultWakesDeviceRouter(unittest.IsolatedAsyncioTestCase):
             "payload": {"result": "done"},
         }
 
-        with patch(
-            "galaxy_gateway.android.handlers.task_lifecycle.store_task_result",
-            new_callable=AsyncMock,
-        ), patch(
-            "galaxy_gateway.android.handlers.task_lifecycle._reconcile_inbound_message",
-            MagicMock(),
-        ), patch(
-            # handler 对该钩子是直呼(非 None 守卫):要中和须用可调用桩
-            "galaxy_gateway.android.handlers.task_lifecycle._try_ingest_participant_truth",
-            MagicMock(),
-        ), patch(
-            "galaxy_gateway.device_router.device_router",
-            router,
+        with (
+            patch(
+                "galaxy_gateway.android.handlers.task_lifecycle.store_task_result",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "galaxy_gateway.android.handlers.task_lifecycle._reconcile_inbound_message",
+                MagicMock(),
+            ),
+            patch(
+                # handler 对该钩子是直呼(非 None 守卫):要中和须用可调用桩
+                "galaxy_gateway.android.handlers.task_lifecycle._try_ingest_participant_truth",
+                MagicMock(),
+            ),
+            patch(
+                "galaxy_gateway.device_router.device_router",
+                router,
+            ),
         ):
             await handle_task_result(bridge, None, msg)
 
@@ -180,6 +196,7 @@ class TestTaskResultWakesDeviceRouter(unittest.IsolatedAsyncioTestCase):
 # ===========================================================================
 # A.2 — handle_task_end wakes DeviceRouter task_event
 # ===========================================================================
+
 
 class TestTaskEndWakesDeviceRouter(unittest.IsolatedAsyncioTestCase):
     """PR-1 P0: handle_task_end must also call device_router.handle_task_result."""
@@ -196,6 +213,7 @@ class TestTaskEndWakesDeviceRouter(unittest.IsolatedAsyncioTestCase):
         bridge._devices = {}
 
         from galaxy_gateway.device_router import DeviceRouter
+
         router = DeviceRouter()
         event = asyncio.Event()
         router._task_events["task-end-1"] = event
@@ -206,16 +224,20 @@ class TestTaskEndWakesDeviceRouter(unittest.IsolatedAsyncioTestCase):
             "status": "completed",
         }
 
-        with patch(
-            "galaxy_gateway.android.handlers.task_lifecycle._reconcile_inbound_message",
-            MagicMock(),
-        ), patch(
-            # handler 对该钩子是直呼(非 None 守卫):要中和须用可调用桩
-            "galaxy_gateway.android.handlers.task_lifecycle._try_ingest_participant_truth",
-            MagicMock(),
-        ), patch(
-            "galaxy_gateway.device_router.device_router",
-            router,
+        with (
+            patch(
+                "galaxy_gateway.android.handlers.task_lifecycle._reconcile_inbound_message",
+                MagicMock(),
+            ),
+            patch(
+                # handler 对该钩子是直呼(非 None 守卫):要中和须用可调用桩
+                "galaxy_gateway.android.handlers.task_lifecycle._try_ingest_participant_truth",
+                MagicMock(),
+            ),
+            patch(
+                "galaxy_gateway.device_router.device_router",
+                router,
+            ),
         ):
             await handle_task_end(bridge, None, msg)
 
@@ -228,6 +250,7 @@ class TestTaskEndWakesDeviceRouter(unittest.IsolatedAsyncioTestCase):
 # ===========================================================================
 # A.3 — handoff_v2 terminal result wakes DeviceRouter task_event
 # ===========================================================================
+
 
 class TestHandoffV2TerminalWakesDeviceRouter(unittest.IsolatedAsyncioTestCase):
     """PR-1 P0: terminal handoff_v2 result must call device_router.handle_task_result."""
@@ -255,6 +278,7 @@ class TestHandoffV2TerminalWakesDeviceRouter(unittest.IsolatedAsyncioTestCase):
         mock_outcome.callback_invoked = True
 
         from galaxy_gateway.device_router import DeviceRouter
+
         router = DeviceRouter()
         event = asyncio.Event()
         router._task_events["handoff-task-1"] = event
@@ -271,15 +295,19 @@ class TestHandoffV2TerminalWakesDeviceRouter(unittest.IsolatedAsyncioTestCase):
             "payload": {"output": "done"},
         }
 
-        with patch(
-            "galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response",
-            return_value=mock_outcome,
-        ), patch(
-            "galaxy_gateway.android.handlers.handoff_v2_result._audit_handoff_v2_result",
-            None,
-        ), patch(
-            "galaxy_gateway.device_router.device_router",
-            router,
+        with (
+            patch(
+                "galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response",
+                return_value=mock_outcome,
+            ),
+            patch(
+                "galaxy_gateway.android.handlers.handoff_v2_result._audit_handoff_v2_result",
+                None,
+            ),
+            patch(
+                "galaxy_gateway.device_router.device_router",
+                router,
+            ),
         ):
             await handle_handoff_v2_result(bridge, None, msg)
 
@@ -309,6 +337,7 @@ class TestHandoffV2TerminalWakesDeviceRouter(unittest.IsolatedAsyncioTestCase):
         mock_outcome.callback_invoked = False
 
         from galaxy_gateway.device_router import DeviceRouter
+
         router = DeviceRouter()
         event = asyncio.Event()
         router._task_events["handoff-task-2"] = event
@@ -320,15 +349,19 @@ class TestHandoffV2TerminalWakesDeviceRouter(unittest.IsolatedAsyncioTestCase):
             "task_id": "handoff-task-2",
         }
 
-        with patch(
-            "galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response",
-            return_value=mock_outcome,
-        ), patch(
-            "galaxy_gateway.android.handlers.handoff_v2_result._audit_handoff_v2_result",
-            None,
-        ), patch(
-            "galaxy_gateway.device_router.device_router",
-            router,
+        with (
+            patch(
+                "galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response",
+                return_value=mock_outcome,
+            ),
+            patch(
+                "galaxy_gateway.android.handlers.handoff_v2_result._audit_handoff_v2_result",
+                None,
+            ),
+            patch(
+                "galaxy_gateway.device_router.device_router",
+                router,
+            ),
         ):
             await handle_handoff_v2_result(bridge, None, msg)
 
@@ -341,6 +374,7 @@ class TestHandoffV2TerminalWakesDeviceRouter(unittest.IsolatedAsyncioTestCase):
 # ===========================================================================
 # A.4 — dispatch_to_websocket completes via event (integration)
 # ===========================================================================
+
 
 class TestDispatchToWebsocketCompletesViaEvent(unittest.IsolatedAsyncioTestCase):
     """PR-1 P0: dispatch_to_websocket should complete via event.set(), not timeout."""
@@ -394,24 +428,28 @@ class TestDispatchToWebsocketCompletesViaEvent(unittest.IsolatedAsyncioTestCase)
 # B.1 — Capability-aware routing: confirmed target proceeds
 # ===========================================================================
 
+
 class TestCapabilityAwareRoutingConfirmedTarget(unittest.TestCase):
     """PR-1 P0: confirmed capability target should proceed without interference."""
 
     def test_route_envelope_capability_mismatch_sentinel_exists(self):
         """The new CAPABILITY_MISMATCH_CONTROLLED_DECISION sentinel must exist."""
         from core.command_router import CAPABILITY_MISMATCH_CONTROLLED_DECISION
+
         self.assertIn("PR-1", CAPABILITY_MISMATCH_CONTROLLED_DECISION)
         self.assertIn("CAPABILITY_MISMATCH", CAPABILITY_MISMATCH_CONTROLLED_DECISION)
 
     def test_capability_mismatch_error_code_exists(self):
         """GatewayErrorCode must include CAPABILITY_MISMATCH."""
         from core.command_router import GatewayErrorCode
+
         self.assertIn("CAPABILITY_MISMATCH", [e.value for e in GatewayErrorCode])
 
 
 # ===========================================================================
 # B.2 — Capability mismatch with fallback: rerouted to capable device
 # ===========================================================================
+
 
 class TestCapabilityMismatchFallback(unittest.IsolatedAsyncioTestCase):
     """PR-1 P0: when target fails cap check but alternatives exist, fallback."""
@@ -478,22 +516,27 @@ class TestCapabilityMismatchFallback(unittest.IsolatedAsyncioTestCase):
                 "latency_ms": 1.0,
             }
 
-        with patch(
-            "core.capability_network_runtime_policy.query_routable_executors",
-            return_value=[mock_executor],
-        ), patch(
-            "core.capability_network_runtime_policy.query_network_path",
-            return_value=MagicMock(is_reachable=True, path_state="active"),
-        ), patch.object(cr, "_route_cross_device_envelope", _mock_route_cross), \
-           patch.object(cr, "_route_worker_envelope", AsyncMock(return_value={"success": False})), \
-           patch("core.command_router.get_command_router", return_value=cr), \
-           patch("core.acl_enforcer.get_acl_enforcer", return_value=MagicMock(
-               check=MagicMock(return_value=MagicMock(allowed=True, reason=""))
-           )), \
-           patch(
-               "core.canonical_dispatch_slot_authority.get_canonical_dispatch_slots",
-               side_effect=_v3_all_approved_side_effect,
-           ):
+        with (
+            patch(
+                "core.capability_network_runtime_policy.query_routable_executors",
+                return_value=[mock_executor],
+            ),
+            patch(
+                "core.capability_network_runtime_policy.query_network_path",
+                return_value=MagicMock(is_reachable=True, path_state="active"),
+            ),
+            patch.object(cr, "_route_cross_device_envelope", _mock_route_cross),
+            patch.object(cr, "_route_worker_envelope", AsyncMock(return_value={"success": False})),
+            patch("core.command_router.get_command_router", return_value=cr),
+            patch(
+                "core.acl_enforcer.get_acl_enforcer",
+                return_value=MagicMock(check=MagicMock(return_value=MagicMock(allowed=True, reason=""))),
+            ),
+            patch(
+                "core.canonical_dispatch_slot_authority.get_canonical_dispatch_slots",
+                side_effect=_v3_all_approved_side_effect,
+            ),
+        ):
             result = await cr.route_envelope(envelope)
 
         # Should have been redirected to the capable device, not the wrong one
@@ -526,16 +569,21 @@ class TestCapabilityMismatchFallback(unittest.IsolatedAsyncioTestCase):
         )
 
         # Simulate: device-incapable not in graph AND no routable alternatives
-        with patch(
-            "core.capability_network_runtime_policy.query_routable_executors",
-            return_value=[],  # Empty: no capable devices in graph
-        ), patch(
-            "core.capability_network_runtime_policy.query_network_path",
-            return_value=MagicMock(is_reachable=False, path_state="unknown"),
-        ), patch("core.command_router.get_command_router", return_value=cr), \
-           patch("core.acl_enforcer.get_acl_enforcer", return_value=MagicMock(
-               check=MagicMock(return_value=MagicMock(allowed=True, reason=""))
-           )):
+        with (
+            patch(
+                "core.capability_network_runtime_policy.query_routable_executors",
+                return_value=[],  # Empty: no capable devices in graph
+            ),
+            patch(
+                "core.capability_network_runtime_policy.query_network_path",
+                return_value=MagicMock(is_reachable=False, path_state="unknown"),
+            ),
+            patch("core.command_router.get_command_router", return_value=cr),
+            patch(
+                "core.acl_enforcer.get_acl_enforcer",
+                return_value=MagicMock(check=MagicMock(return_value=MagicMock(allowed=True, reason=""))),
+            ),
+        ):
             result = await cr.route_envelope(envelope)
 
         self.assertFalse(
@@ -553,12 +601,14 @@ class TestCapabilityMismatchFallback(unittest.IsolatedAsyncioTestCase):
 # B.3 — send_gateway_command passes required_capabilities
 # ===========================================================================
 
+
 class TestSendGatewayCommandPassesCapabilities(unittest.TestCase):
     """PR-1 P0: send_gateway_command must forward required_capabilities to TaskEnvelope."""
 
     def test_send_gateway_command_signature_has_required_capabilities(self):
         """send_gateway_command must accept required_capabilities parameter."""
         import inspect
+
         from core.openclawd import OpenClawd
 
         sig = inspect.signature(OpenClawd.send_gateway_command)
@@ -571,6 +621,7 @@ class TestSendGatewayCommandPassesCapabilities(unittest.TestCase):
     def test_send_gateway_command_required_capabilities_default_none(self):
         """required_capabilities should default to None for backward compat."""
         import inspect
+
         from core.openclawd import OpenClawd
 
         sig = inspect.signature(OpenClawd.send_gateway_command)
@@ -584,6 +635,7 @@ class TestSendGatewayCommandPassesCapabilities(unittest.TestCase):
 # ===========================================================================
 # B.4 — Capability mismatch metadata audit trail
 # ===========================================================================
+
 
 class TestCapabilityMismatchAuditTrail(unittest.IsolatedAsyncioTestCase):
     """PR-1 P0: fallback decision must be recorded in envelope metadata."""
@@ -624,22 +676,27 @@ class TestCapabilityMismatchAuditTrail(unittest.IsolatedAsyncioTestCase):
                 "latency_ms": 1.0,
             }
 
-        with patch(
-            "core.capability_network_runtime_policy.query_routable_executors",
-            return_value=[mock_executor],
-        ), patch(
-            "core.capability_network_runtime_policy.query_network_path",
-            return_value=MagicMock(is_reachable=True, path_state="active"),
-        ), patch.object(cr, "_route_cross_device_envelope", _capture_envelope), \
-           patch.object(cr, "_route_worker_envelope", AsyncMock(return_value={"success": False})), \
-           patch("core.command_router.get_command_router", return_value=cr), \
-           patch("core.acl_enforcer.get_acl_enforcer", return_value=MagicMock(
-               check=MagicMock(return_value=MagicMock(allowed=True, reason=""))
-           )), \
-           patch(
-               "core.canonical_dispatch_slot_authority.get_canonical_dispatch_slots",
-               side_effect=_v3_all_approved_side_effect,
-           ):
+        with (
+            patch(
+                "core.capability_network_runtime_policy.query_routable_executors",
+                return_value=[mock_executor],
+            ),
+            patch(
+                "core.capability_network_runtime_policy.query_network_path",
+                return_value=MagicMock(is_reachable=True, path_state="active"),
+            ),
+            patch.object(cr, "_route_cross_device_envelope", _capture_envelope),
+            patch.object(cr, "_route_worker_envelope", AsyncMock(return_value={"success": False})),
+            patch("core.command_router.get_command_router", return_value=cr),
+            patch(
+                "core.acl_enforcer.get_acl_enforcer",
+                return_value=MagicMock(check=MagicMock(return_value=MagicMock(allowed=True, reason=""))),
+            ),
+            patch(
+                "core.canonical_dispatch_slot_authority.get_canonical_dispatch_slots",
+                side_effect=_v3_all_approved_side_effect,
+            ),
+        ):
             await cr.route_envelope(envelope)
 
         self.assertTrue(

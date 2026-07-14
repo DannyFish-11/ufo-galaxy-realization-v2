@@ -237,27 +237,17 @@ class SystemResourceRecord:
         return {
             "resource_id": self.resource_id,
             "resource_type": (
-                self.resource_type.value
-                if isinstance(self.resource_type, SystemResourceType)
-                else self.resource_type
+                self.resource_type.value if isinstance(self.resource_type, SystemResourceType) else self.resource_type
             ),
             "source": self.source,
             "origin": self.origin,
-            "health": (
-                self.health.value
-                if isinstance(self.health, SystemResourceHealth)
-                else self.health
-            ),
+            "health": (self.health.value if isinstance(self.health, SystemResourceHealth) else self.health),
             "availability": (
                 self.availability.value
                 if isinstance(self.availability, SystemResourceAvailability)
                 else self.availability
             ),
-            "trust_level": (
-                self.trust_level.value
-                if isinstance(self.trust_level, TrustLevel)
-                else self.trust_level
-            ),
+            "trust_level": (self.trust_level.value if isinstance(self.trust_level, TrustLevel) else self.trust_level),
             "auth_scope": self.auth_scope,
             "capabilities": list(self.capabilities),
             "tags": list(self.tags),
@@ -423,16 +413,10 @@ class SystemResourceRegistry:
         with self._lock:
             return list(self._records.values())
 
-    def list_by_type(
-        self, resource_type: SystemResourceType
-    ) -> List[SystemResourceRecord]:
+    def list_by_type(self, resource_type: SystemResourceType) -> List[SystemResourceRecord]:
         """Return all records of *resource_type*."""
         with self._lock:
-            return [
-                r
-                for r in self._records.values()
-                if r.resource_type == resource_type
-            ]
+            return [r for r in self._records.values() if r.resource_type == resource_type]
 
     # ── Health management ────────────────────────────────────────────────────
 
@@ -461,12 +445,8 @@ class SystemResourceRegistry:
         """Return a :class:`SystemResourceSnapshot` of the current state."""
         with self._lock:
             records = list(self._records.values())
-        healthy = sum(
-            1 for r in records if r.health == SystemResourceHealth.HEALTHY
-        )
-        unavailable = sum(
-            1 for r in records if r.health == SystemResourceHealth.UNAVAILABLE
-        )
+        healthy = sum(1 for r in records if r.health == SystemResourceHealth.HEALTHY)
+        unavailable = sum(1 for r in records if r.health == SystemResourceHealth.UNAVAILABLE)
         return SystemResourceSnapshot(
             resources=records,
             total_count=len(records),

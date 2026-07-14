@@ -96,11 +96,15 @@ See ``docs/PROJECTION_OUTPUT_AUTHORITY.md`` for the full canonical output
 authority model including the endpoint directory.
 """
 
-from .runtime_truth_compiler import (
-    RUNTIME_TRUTH_COMPILER_AUTHORITY,
-    RuntimeTruthSnapshot,
-    compile_runtime_truth,
+from core.desktop_consumption_adapter import (
+    DESKTOP_CONSUMPTION_ADAPTER_AUTHORITY,
+    DesktopClientViewModel,
+    DesktopOneAPIHorizonSummary,
+    DesktopProviderRoutingSummary,
+    DesktopReadinessState,
+    adapt_integration_payload,
 )
+
 from .assembly_governance import (
     ProjectionExecutionSummary,
     ProjectionExecutionTraceSummary,
@@ -113,27 +117,24 @@ from .assembly_governance import (
     summarize_intent_for_projection,
     summarize_readiness_for_projection,
 )
+
+# PR-5: server-side canonicalization sentinels; PR-6: topology-ready projection
+# delivery sentinel; PR-7: projection readiness / quality contract sentinel
 from .projection_compiler import (
     DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY,
-    ExecutionSummary,
-    # PR-5: server-side canonicalization sentinels
     LEGACY_PROJECTION_UCP_KEYS,
     PROJECTION_COMPILER_AUTHORITY,
-    # PR-6: topology-ready projection delivery sentinel
     TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY,
-    # PR-7: projection readiness / quality contract sentinel
     TOPOLOGY_READINESS_CONTRACT_AUTHORITY,
+    ExecutionSummary,
     build_desktop_status_board_integration_from_runtime,
     build_runtime_projection,
 )
 from .runtime_projection import RuntimeProjection
-from core.desktop_consumption_adapter import (
-    DESKTOP_CONSUMPTION_ADAPTER_AUTHORITY,
-    DesktopClientViewModel,
-    DesktopOneAPIHorizonSummary,
-    DesktopProviderRoutingSummary,
-    DesktopReadinessState,
-    adapt_integration_payload,
+from .runtime_truth_compiler import (
+    RUNTIME_TRUTH_COMPILER_AUTHORITY,
+    RuntimeTruthSnapshot,
+    compile_runtime_truth,
 )
 
 __all__ = [

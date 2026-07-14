@@ -408,19 +408,11 @@ class DelegatedFlowReadinessVerdict(str, Enum):
     """
 
     ready_for_release = "ready_for_release"
-    not_ready_due_to_missing_truth_alignment = (
-        "not_ready_due_to_missing_truth_alignment"
-    )
-    not_ready_due_to_result_convergence_gap = (
-        "not_ready_due_to_result_convergence_gap"
-    )
-    not_ready_due_to_operator_visibility_gap = (
-        "not_ready_due_to_operator_visibility_gap"
-    )
+    not_ready_due_to_missing_truth_alignment = "not_ready_due_to_missing_truth_alignment"
+    not_ready_due_to_result_convergence_gap = "not_ready_due_to_result_convergence_gap"
+    not_ready_due_to_operator_visibility_gap = "not_ready_due_to_operator_visibility_gap"
     not_ready_due_to_compat_influence = "not_ready_due_to_compat_influence"
-    readiness_unknown_due_to_missing_signal = (
-        "readiness_unknown_due_to_missing_signal"
-    )
+    readiness_unknown_due_to_missing_signal = "readiness_unknown_due_to_missing_signal"
 
     @classmethod
     def from_string(cls, value: str) -> "DelegatedFlowReadinessVerdict":
@@ -553,9 +545,7 @@ class DelegatedFlowReadinessReport:
     """
 
     report_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
-    verdict: DelegatedFlowReadinessVerdict = (
-        DelegatedFlowReadinessVerdict.readiness_unknown_due_to_missing_signal
-    )
+    verdict: DelegatedFlowReadinessVerdict = DelegatedFlowReadinessVerdict.readiness_unknown_due_to_missing_signal
     dimensions: Dict[str, DimensionReadinessResult] = field(default_factory=dict)
     summary: str = ""
     gaps: List[Dict[str, str]] = field(default_factory=list)
@@ -568,10 +558,7 @@ class DelegatedFlowReadinessReport:
         return {
             "report_id": self.report_id,
             "verdict": self.verdict.value,
-            "dimensions": {
-                dim_key: dim_result.to_dict()
-                for dim_key, dim_result in self.dimensions.items()
-            },
+            "dimensions": {dim_key: dim_result.to_dict() for dim_key, dim_result in self.dimensions.items()},
             "summary": self.summary,
             "gaps": self.gaps,
             "is_ready_for_release": self.is_ready_for_release,
@@ -591,9 +578,7 @@ class DelegatedFlowReadinessReport:
             dimensions[dim_key] = DimensionReadinessResult.from_dict(dim_data)
         return cls(
             report_id=data.get("report_id", uuid.uuid4().hex[:12]),
-            verdict=DelegatedFlowReadinessVerdict.from_string(
-                data.get("verdict", "")
-            ),
+            verdict=DelegatedFlowReadinessVerdict.from_string(data.get("verdict", "")),
             dimensions=dimensions,
             summary=data.get("summary", ""),
             gaps=data.get("gaps", []),
@@ -613,9 +598,10 @@ class DelegatedFlowReadinessReport:
 
 # FlowContinuityCoordinator (PR-3V2) — continuity_replay dimension
 try:
-    from core.flow_continuity_coordinator import (  # type: ignore[import]
-        get_flow_continuity_coordinator as _get_continuity_coordinator,
+    from core.flow_continuity_coordinator import (
+        get_flow_continuity_coordinator as _get_continuity_coordinator,  # type: ignore[import]
     )
+
     _CONTINUITY_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -624,9 +610,10 @@ except Exception as exc:
 
 # FlowTruthAlignmentRuntime (PR-5V2) — truth_ownership dimension
 try:
-    from core.flow_level_truth_ownership import (  # type: ignore[import]
-        build_flow_truth_alignment_snapshot as _build_truth_snapshot,
+    from core.flow_level_truth_ownership import (
+        build_flow_truth_alignment_snapshot as _build_truth_snapshot,  # type: ignore[import]
     )
+
     _TRUTH_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -635,9 +622,10 @@ except Exception as exc:
 
 # FlowAwareConvergenceCoordinator (PR-6V2) — result_convergence dimension
 try:
-    from core.flow_aware_result_convergence import (  # type: ignore[import]
-        build_flow_convergence_snapshot as _build_convergence_snapshot,
+    from core.flow_aware_result_convergence import (
+        build_flow_convergence_snapshot as _build_convergence_snapshot,  # type: ignore[import]
     )
+
     _CONVERGENCE_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -646,9 +634,10 @@ except Exception as exc:
 
 # FlowLevelOperatorSurface (PR-7V2) — operator_surface dimension
 try:
-    from core.flow_level_operator_surface import (  # type: ignore[import]
-        get_flow_level_operator_surface as _get_operator_surface,
+    from core.flow_level_operator_surface import (
+        get_flow_level_operator_surface as _get_operator_surface,  # type: ignore[import]
     )
+
     _OPERATOR_SURFACE_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -657,9 +646,10 @@ except Exception as exc:
 
 # CompatLegacyPathBlockingCanonicalization (PR-8V2) — compat_legacy dimension
 try:
-    from core.compat_legacy_path_blocking_canonicalization import (  # type: ignore[import]
-        build_blocking_canonicalization_snapshot as _build_blocking_snapshot,
+    from core.compat_legacy_path_blocking_canonicalization import (
+        build_blocking_canonicalization_snapshot as _build_blocking_snapshot,  # type: ignore[import]
     )
+
     _COMPAT_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -790,10 +780,7 @@ class DelegatedFlowReadinessGate:
                         "This may indicate the delegated path has not yet "
                         "been exercised or that the Android/V2 contract "
                         "signal is absent.  "
-                        "Policy: "
-                        + _policy_excerpt(
-                            ANDROID_V2_CONTRACT_SIGNAL_ABSENCE_IS_READINESS_GAP_POLICY
-                        )
+                        "Policy: " + _policy_excerpt(ANDROID_V2_CONTRACT_SIGNAL_ABSENCE_IS_READINESS_GAP_POLICY)
                     ),
                     signal_source=signal_source,
                     evidence=evidence,
@@ -858,9 +845,9 @@ class DelegatedFlowReadinessGate:
 
             total_decisions = evidence.get("total_decisions", 0)
             decision_counts = evidence.get("decision_counts", {})
-            quarantine_count = decision_counts.get(
-                "quarantine_due_to_posture_conflict", 0
-            ) + decision_counts.get("block_due_to_compat_influence", 0)
+            quarantine_count = decision_counts.get("quarantine_due_to_posture_conflict", 0) + decision_counts.get(
+                "block_due_to_compat_influence", 0
+            )
 
             if total_decisions == 0:
                 return DimensionReadinessResult(
@@ -871,10 +858,7 @@ class DelegatedFlowReadinessGate:
                         "history.  No Android truth has been aligned against "
                         "V2 canonical state.  This indicates a missing "
                         "Android/V2 truth alignment contract signal.  "
-                        "Policy: "
-                        + _policy_excerpt(
-                            ANDROID_V2_CONTRACT_SIGNAL_ABSENCE_IS_READINESS_GAP_POLICY
-                        )
+                        "Policy: " + _policy_excerpt(ANDROID_V2_CONTRACT_SIGNAL_ABSENCE_IS_READINESS_GAP_POLICY)
                     ),
                     signal_source=signal_source,
                     evidence=evidence,
@@ -938,9 +922,7 @@ class DelegatedFlowReadinessGate:
 
             total_decisions = evidence.get("total_artifacts", 0)
             decision_counts = evidence.get("decision_counts", {})
-            quarantine_count = decision_counts.get(
-                "quarantine_result_due_to_flow_mismatch", 0
-            )
+            quarantine_count = decision_counts.get("quarantine_result_due_to_flow_mismatch", 0)
 
             if total_decisions == 0:
                 return DimensionReadinessResult(
@@ -951,10 +933,7 @@ class DelegatedFlowReadinessGate:
                         "decision history.  No results have been converged "
                         "through the flow-aware convergence path.  "
                         "This indicates a missing Android/V2 result signal.  "
-                        "Policy: "
-                        + _policy_excerpt(
-                            ANDROID_V2_CONTRACT_SIGNAL_ABSENCE_IS_READINESS_GAP_POLICY
-                        )
+                        "Policy: " + _policy_excerpt(ANDROID_V2_CONTRACT_SIGNAL_ABSENCE_IS_READINESS_GAP_POLICY)
                     ),
                     signal_source=signal_source,
                     evidence=evidence,
@@ -1025,6 +1004,7 @@ class DelegatedFlowReadinessGate:
             # Check for __all__ presence as a structural health indicator.
             try:
                 import core.flow_level_operator_surface as _flos_mod
+
                 all_names = getattr(_flos_mod, "__all__", None)
                 evidence["__all___present"] = all_names is not None
                 evidence["__all___count"] = len(all_names) if all_names else 0
@@ -1077,21 +1057,15 @@ class DelegatedFlowReadinessGate:
                 evidence = snapshot.to_dict()
 
             healthy = evidence.get("blocking_canonicalization_healthy", True)
-            quarantine_count = evidence.get(
-                "by_decision", {}
-            ).get("quarantine_due_to_ambiguous_contract", 0)
+            quarantine_count = evidence.get("by_decision", {}).get("quarantine_due_to_ambiguous_contract", 0)
             invisible_flow_count = evidence.get("invisible_flow_count", 0)
 
             if not healthy or quarantine_count > 0 or invisible_flow_count > 0:
                 reasons = []
                 if quarantine_count > 0:
-                    reasons.append(
-                        f"{quarantine_count} quarantined contract(s)"
-                    )
+                    reasons.append(f"{quarantine_count} quarantined contract(s)")
                 if invisible_flow_count > 0:
-                    reasons.append(
-                        f"{invisible_flow_count} invisible flow(s)"
-                    )
+                    reasons.append(f"{invisible_flow_count} invisible flow(s)")
                 return DimensionReadinessResult(
                     dimension=dimension,
                     status=DimensionReadinessStatus.not_ready,
@@ -1145,9 +1119,7 @@ class DelegatedFlowReadinessGate:
            (continuity gaps are truth-adjacent)
         7. All ready → ``ready_for_release``
         """
-        dim_statuses = {
-            key: result.status for key, result in dimensions.items()
-        }
+        dim_statuses = {key: result.status for key, result in dimensions.items()}
 
         # Rule 1: any unknown → missing signal
         if DimensionReadinessStatus.unknown in dim_statuses.values():
@@ -1156,23 +1128,17 @@ class DelegatedFlowReadinessGate:
         # Rule 2: truth_ownership not_ready
         truth_status = dim_statuses.get(ReadinessDimension.truth_ownership.value)
         if truth_status == DimensionReadinessStatus.not_ready:
-            return (
-                DelegatedFlowReadinessVerdict.not_ready_due_to_missing_truth_alignment
-            )
+            return DelegatedFlowReadinessVerdict.not_ready_due_to_missing_truth_alignment
 
         # Rule 3: result_convergence not_ready
         conv_status = dim_statuses.get(ReadinessDimension.result_convergence.value)
         if conv_status == DimensionReadinessStatus.not_ready:
-            return (
-                DelegatedFlowReadinessVerdict.not_ready_due_to_result_convergence_gap
-            )
+            return DelegatedFlowReadinessVerdict.not_ready_due_to_result_convergence_gap
 
         # Rule 4: operator_surface not_ready
         op_status = dim_statuses.get(ReadinessDimension.operator_surface.value)
         if op_status == DimensionReadinessStatus.not_ready:
-            return (
-                DelegatedFlowReadinessVerdict.not_ready_due_to_operator_visibility_gap
-            )
+            return DelegatedFlowReadinessVerdict.not_ready_due_to_operator_visibility_gap
 
         # Rule 5: compat_legacy not_ready
         compat_status = dim_statuses.get(ReadinessDimension.compat_legacy.value)
@@ -1182,14 +1148,10 @@ class DelegatedFlowReadinessGate:
         # Rule 6: continuity_replay not_ready (truth-adjacent)
         cont_status = dim_statuses.get(ReadinessDimension.continuity_replay.value)
         if cont_status == DimensionReadinessStatus.not_ready:
-            return (
-                DelegatedFlowReadinessVerdict.not_ready_due_to_missing_truth_alignment
-            )
+            return DelegatedFlowReadinessVerdict.not_ready_due_to_missing_truth_alignment
 
         # Rule 7: all five must be ready
-        all_ready = all(
-            s == DimensionReadinessStatus.ready for s in dim_statuses.values()
-        )
+        all_ready = all(s == DimensionReadinessStatus.ready for s in dim_statuses.values())
         if all_ready and len(dim_statuses) == len(ReadinessDimension.all_dimensions()):
             return DelegatedFlowReadinessVerdict.ready_for_release
 
@@ -1226,16 +1188,9 @@ class DelegatedFlowReadinessGate:
     ) -> str:
         """Build a one-line human-readable summary."""
         if verdict == DelegatedFlowReadinessVerdict.ready_for_release:
-            return (
-                "Delegated canonical path READY FOR RELEASE: all five "
-                "readiness dimensions passed."
-            )
+            return "Delegated canonical path READY FOR RELEASE: all five " "readiness dimensions passed."
         gap_dims = [g["dimension"] for g in gaps]
-        return (
-            f"Delegated canonical path NOT READY: "
-            f"verdict={verdict.value}, "
-            f"gaps=[{', '.join(gap_dims)}]."
-        )
+        return f"Delegated canonical path NOT READY: " f"verdict={verdict.value}, " f"gaps=[{', '.join(gap_dims)}]."
 
 
 # ---------------------------------------------------------------------------
@@ -1247,6 +1202,7 @@ _DEFAULT_GATE_LOCK = None
 
 try:
     import threading as _threading
+
     _DEFAULT_GATE_LOCK = _threading.Lock()
 except Exception as exc:
     logger.debug("Suppressed: %s", exc)

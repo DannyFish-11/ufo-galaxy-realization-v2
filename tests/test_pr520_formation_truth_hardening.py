@@ -49,7 +49,7 @@ import logging
 import os
 import sys
 import unittest
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -58,9 +58,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _reset_integrity_runtime():
     try:
         from core.multi_device_control_integrity import reset_multi_device_integrity_runtime
+
         reset_multi_device_integrity_runtime()
     except Exception:
         pass
@@ -78,6 +80,7 @@ class TestPR520Sentinels(unittest.TestCase):
         from core.constellation_runtime import (
             CONSTELLATION_ORCHESTRATION_GATE_DENY_BY_DEFAULT,
         )
+
         assert "DENY_BY_DEFAULT" in CONSTELLATION_ORCHESTRATION_GATE_DENY_BY_DEFAULT
         assert "GAP-517-005" in CONSTELLATION_ORCHESTRATION_GATE_DENY_BY_DEFAULT
 
@@ -85,6 +88,7 @@ class TestPR520Sentinels(unittest.TestCase):
         from galaxy_gateway.device_router import (
             DEVICE_ROUTER_FORMATION_DESCRIPTOR_ATTACHED,
         )
+
         assert "FORMATION_DESCRIPTOR_ATTACHED" in DEVICE_ROUTER_FORMATION_DESCRIPTOR_ATTACHED
         assert "GAP-517-004" in DEVICE_ROUTER_FORMATION_DESCRIPTOR_ATTACHED
 
@@ -92,10 +96,8 @@ class TestPR520Sentinels(unittest.TestCase):
         from galaxy_gateway.cross_device_coordinator import (
             CROSS_DEVICE_COORDINATOR_FORMATION_DESCRIPTOR_ATTACHED,
         )
-        assert (
-            "FORMATION_DESCRIPTOR_ATTACHED"
-            in CROSS_DEVICE_COORDINATOR_FORMATION_DESCRIPTOR_ATTACHED
-        )
+
+        assert "FORMATION_DESCRIPTOR_ATTACHED" in CROSS_DEVICE_COORDINATOR_FORMATION_DESCRIPTOR_ATTACHED
         assert "GAP-517-004" in CROSS_DEVICE_COORDINATOR_FORMATION_DESCRIPTOR_ATTACHED
 
 
@@ -110,6 +112,7 @@ class TestOrchestrationGateDenyByDefault(unittest.TestCase):
 
     def _make_runtime(self):
         from core.constellation_runtime import ConstellationRuntime
+
         return ConstellationRuntime(enable_dag_evolution=False)
 
     # B — ImportError → False (deny-by-default)
@@ -135,9 +138,7 @@ class TestOrchestrationGateDenyByDefault(unittest.TestCase):
     # D — WARNING is logged when gate is unreachable
     def test_warning_emitted_when_gate_unreachable(self):
         rt = self._make_runtime()
-        with self.assertLogs(
-            "Galaxy.ConstellationRuntime", level="WARNING"
-        ) as log_ctx:
+        with self.assertLogs("Galaxy.ConstellationRuntime", level="WARNING") as log_ctx:
             with patch(
                 "core.device_participation.is_device_orchestration_ready",
                 side_effect=ImportError("unavailable"),
@@ -190,6 +191,7 @@ class TestDeviceRouterFormationAttachment(unittest.IsolatedAsyncioTestCase):
 
     def _make_router(self):
         from galaxy_gateway.device_router import DeviceRouter
+
         router = DeviceRouter()
         return router
 
@@ -222,9 +224,7 @@ class TestDeviceRouterFormationAttachment(unittest.IsolatedAsyncioTestCase):
             "galaxy_gateway.cross_device_switch.is_cross_device_enabled",
             return_value=True,
         ):
-            result = await router._dispatch_cross_device_task(
-                task, devices, _substrate_caller="test"
-            )
+            result = await router._dispatch_cross_device_task(task, devices, _substrate_caller="test")
 
         self.assertIn("formation", result, "Formation key must be present in result")
 
@@ -248,17 +248,13 @@ class TestDeviceRouterFormationAttachment(unittest.IsolatedAsyncioTestCase):
             "galaxy_gateway.cross_device_switch.is_cross_device_enabled",
             return_value=True,
         ):
-            result = await router._dispatch_cross_device_task(
-                task, devices, _substrate_caller="test"
-            )
+            result = await router._dispatch_cross_device_task(task, devices, _substrate_caller="test")
 
         formation = result.get("formation", {})
         self.assertIsInstance(formation, dict)
         # Must carry member device IDs
         members = formation.get("members", [])
-        member_ids = [
-            m.get("device_id") for m in members if isinstance(m, dict)
-        ]
+        member_ids = [m.get("device_id") for m in members if isinstance(m, dict)]
         self.assertIn("dev_primary", member_ids)
         self.assertIn("dev_secondary", member_ids)
 
@@ -279,9 +275,7 @@ class TestDeviceRouterFormationAttachment(unittest.IsolatedAsyncioTestCase):
             "galaxy_gateway.cross_device_switch.is_cross_device_enabled",
             return_value=True,
         ):
-            result = await router._dispatch_cross_device_task(
-                task, devices, _substrate_caller="test"
-            )
+            result = await router._dispatch_cross_device_task(task, devices, _substrate_caller="test")
 
         formation = result.get("formation")
         if formation is not None:
@@ -303,6 +297,7 @@ class TestCoordinatorFormationAttachment(unittest.IsolatedAsyncioTestCase):
 
     def _make_coordinator(self):
         from galaxy_gateway.cross_device_coordinator import CrossDeviceCoordinator
+
         return CrossDeviceCoordinator()
 
     # K — formation key is present in coordinator result
@@ -328,10 +323,7 @@ class TestCoordinatorFormationAttachment(unittest.IsolatedAsyncioTestCase):
             _substrate_caller="test",
         )
 
-        self.assertIn(
-            "formation", result,
-            "Formation key must be attached to coordinator result"
-        )
+        self.assertIn("formation", result, "Formation key must be attached to coordinator result")
 
     # L — formation attached even when resolve_formation returns EMPTY group
     async def test_formation_fallback_does_not_crash(self):
@@ -371,10 +363,10 @@ class TestFormationTruthRecordEmitted(unittest.IsolatedAsyncioTestCase):
 
     async def test_formation_truth_record_appended_after_dispatch(self):
         _reset_integrity_runtime()
-        from galaxy_gateway.device_router import DeviceRouter
         from core.multi_device_control_integrity import (
             get_multi_device_integrity_runtime,
         )
+        from galaxy_gateway.device_router import DeviceRouter
 
         router = DeviceRouter()
         devices = []
@@ -394,9 +386,7 @@ class TestFormationTruthRecordEmitted(unittest.IsolatedAsyncioTestCase):
             "galaxy_gateway.cross_device_switch.is_cross_device_enabled",
             return_value=True,
         ):
-            await router._dispatch_cross_device_task(
-                task, devices, _substrate_caller="test"
-            )
+            await router._dispatch_cross_device_task(task, devices, _substrate_caller="test")
 
         rt = get_multi_device_integrity_runtime()
         snapshot = rt.snapshot()
@@ -422,6 +412,7 @@ class TestResidualGapResolutionStatus(unittest.TestCase):
 
     def _get_gap(self, gap_id: str):
         from core.multi_device_control_integrity import get_residual_integrity_gaps
+
         for gap in get_residual_integrity_gaps():
             if gap.gap_id == gap_id:
                 return gap
@@ -450,6 +441,7 @@ class TestResidualGapResolutionStatus(unittest.TestCase):
             MultiDeviceIntegritySnapshot,
             build_integrity_snapshot,
         )
+
         snapshot = build_integrity_snapshot()
         open_ids = {g.gap_id for g in snapshot.open_gaps()}
         self.assertNotIn("GAP-517-004", open_ids)

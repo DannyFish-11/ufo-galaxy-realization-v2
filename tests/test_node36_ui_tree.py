@@ -4,6 +4,7 @@
 Windows System API(UIA)→ 结构化 UIGraph 的序列化与选择器搜索。
 用最小假控件(鸭子类型)覆盖,无需 Windows / pywinauto。
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -18,7 +19,7 @@ _spec = importlib.util.spec_from_file_location("node36_ui_tree", _UT_PATH)
 ui_tree = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(ui_tree)
 
-from core.schemas.ui_element import UISource, UIActionKind
+from core.schemas.ui_element import UIActionKind, UISource
 
 
 class _Rect:
@@ -40,8 +41,21 @@ class _EI:
 
 class _Ctl:
     """最小假 pywinauto 控件(鸭子类型)。"""
-    def __init__(self, control_type, text="", *, rect=None, enabled=True, visible=True,
-                 automation_id="", class_name="", focused=False, toggle=None, children=None):
+
+    def __init__(
+        self,
+        control_type,
+        text="",
+        *,
+        rect=None,
+        enabled=True,
+        visible=True,
+        automation_id="",
+        class_name="",
+        focused=False,
+        toggle=None,
+        children=None,
+    ):
         self._ct = control_type
         self._text = text
         self.element_info = _EI(control_type, automation_id)
@@ -79,12 +93,17 @@ class _Ctl:
 
 
 def _window():
-    return _Ctl("Window", "记事本", rect=_Rect(0, 0, 1280, 800), children=[
-        _Ctl("Edit", "文本区", rect=_Rect(0, 40, 1280, 760), automation_id="editor", focused=True),
-        _Ctl("Button", "保存", rect=_Rect(1100, 0, 1200, 40), automation_id="saveBtn"),
-        _Ctl("CheckBox", "自动换行", rect=_Rect(0, 0, 100, 40), toggle=True),
-        _Ctl("Text", "状态栏", rect=_Rect(0, 760, 1280, 800)),
-    ])
+    return _Ctl(
+        "Window",
+        "记事本",
+        rect=_Rect(0, 0, 1280, 800),
+        children=[
+            _Ctl("Edit", "文本区", rect=_Rect(0, 40, 1280, 760), automation_id="editor", focused=True),
+            _Ctl("Button", "保存", rect=_Rect(1100, 0, 1200, 40), automation_id="saveBtn"),
+            _Ctl("CheckBox", "自动换行", rect=_Rect(0, 0, 100, 40), toggle=True),
+            _Ctl("Text", "状态栏", rect=_Rect(0, 760, 1280, 800)),
+        ],
+    )
 
 
 class TestControlToNode:
@@ -121,6 +140,7 @@ class TestControlToNode:
         class Bad:
             def window_text(self):
                 raise RuntimeError("window gone")
+
         node = ui_tree.control_to_node(Bad())
         assert node.label == ""  # 异常被吞,给空
 
@@ -148,10 +168,14 @@ class TestBuildGraphAndFind:
 
     def test_find_interactive_ranked_first(self):
         # 两个同名控件,一个可交互一个不可 → 可交互排前
-        w = _Ctl("Window", "x", children=[
-            _Ctl("Text", "确定"),
-            _Ctl("Button", "确定", rect=_Rect(0, 0, 10, 10)),
-        ])
+        w = _Ctl(
+            "Window",
+            "x",
+            children=[
+                _Ctl("Text", "确定"),
+                _Ctl("Button", "确定", rect=_Rect(0, 0, 10, 10)),
+            ],
+        )
         g = ui_tree.build_ui_graph(w)
         hits = ui_tree.find_in_graph(g, {"name": "确定"})
         assert hits[0].role == "button"

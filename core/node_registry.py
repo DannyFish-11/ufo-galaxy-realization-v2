@@ -14,30 +14,32 @@
 日期：2026-02-06
 """
 
-import sys
-import json
 import asyncio
-import logging
 import importlib
 import importlib.util
-from pathlib import Path
-from typing import Dict, List, Optional, Any, Type, Set
+import json
+import logging
+import sys
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
-from abc import ABC, abstractmethod
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set, Type
 
 logger = logging.getLogger("NodeRegistry")
 
 
 # 延迟导入以避免循环依赖
 def _get_capability_manager():
-    from .capability_manager import get_capability_manager, CapabilityStatus
+    from .capability_manager import CapabilityStatus, get_capability_manager
+
     return get_capability_manager(), CapabilityStatus
 
 
 def _get_connection_manager():
     from .connection_manager import get_connection_manager
+
     return get_connection_manager()
 
 
@@ -45,8 +47,10 @@ def _get_connection_manager():
 # 节点状态和类型定义
 # ============================================================================
 
+
 class NodeStatus(Enum):
     """节点状态"""
+
     UNKNOWN = auto()
     REGISTERED = auto()
     INITIALIZING = auto()
@@ -59,23 +63,26 @@ class NodeStatus(Enum):
 
 class NodeCategory(Enum):
     """节点类别"""
-    CORE = "core"                   # 核心节点
-    LLM = "llm"                     # LLM 相关
+
+    CORE = "core"  # 核心节点
+    LLM = "llm"  # LLM 相关
     COMMUNICATION = "communication"  # 通信节点
-    HARDWARE = "hardware"           # 硬件节点
-    INTEGRATION = "integration"     # 集成节点
-    UTILITY = "utility"             # 工具节点
-    ADVANCED = "advanced"           # 高级节点
-    RESERVED = "reserved"           # 保留节点
+    HARDWARE = "hardware"  # 硬件节点
+    INTEGRATION = "integration"  # 集成节点
+    UTILITY = "utility"  # 工具节点
+    ADVANCED = "advanced"  # 高级节点
+    RESERVED = "reserved"  # 保留节点
 
 
 # ============================================================================
 # 节点元数据
 # ============================================================================
 
+
 @dataclass
 class NodeCapability:
     """节点能力"""
+
     name: str
     description: str
     input_schema: Dict[str, Any] = field(default_factory=dict)
@@ -87,6 +94,7 @@ class NodeCapability:
 @dataclass
 class NodeMetadata:
     """节点元数据"""
+
     node_id: str
     name: str
     version: str = "1.0.0"
@@ -120,6 +128,7 @@ class NodeMetadata:
 # ============================================================================
 # 节点基类
 # ============================================================================
+
 
 class BaseNode(ABC):
     """节点基类 - 所有节点必须继承此类"""
@@ -164,13 +173,14 @@ class BaseNode(ABC):
             "status": self.metadata.status.name,
             "capabilities": self.get_capabilities(),
             "health_score": self.metadata.health_score,
-            "call_count": self.metadata.call_count
+            "call_count": self.metadata.call_count,
         }
 
 
 # ============================================================================
 # 节点注册表
 # ============================================================================
+
 
 class NodeRegistry:
     """节点注册表 - 管理所有节点的注册和发现"""
@@ -240,7 +250,7 @@ class NodeRegistry:
                         node_name=node.name,
                         category=node.metadata.category.value,
                         input_schema=cap.input_schema,
-                        output_schema=cap.output_schema
+                        output_schema=cap.output_schema,
                     )
             except Exception as e:
                 logger.warning(f"能力注册失败 (非致命): {e}")
@@ -303,10 +313,7 @@ class NodeRegistry:
 
     def get_ready_nodes(self) -> List[BaseNode]:
         """获取就绪的节点"""
-        return [
-            node for node in self.nodes.values()
-            if node.metadata.status in [NodeStatus.READY, NodeStatus.RUNNING]
-        ]
+        return [node for node in self.nodes.values() if node.metadata.status in [NodeStatus.READY, NodeStatus.RUNNING]]
 
     def find_best_node_for_capability(self, capability: str) -> Optional[BaseNode]:
         """为能力找到最佳节点"""
@@ -325,8 +332,9 @@ class NodeRegistry:
     # 节点调用
     # ========================================================================
 
-    async def call_node(self, node_id: str, action: str, params: Dict[str, Any] = None,
-                        allow_failover: bool = True) -> Dict[str, Any]:
+    async def call_node(
+        self, node_id: str, action: str, params: Dict[str, Any] = None, allow_failover: bool = True
+    ) -> Dict[str, Any]:
         """
         调用节点，支持自动故障转移
 
@@ -340,8 +348,7 @@ class NodeRegistry:
 
         if node.metadata.status not in [NodeStatus.READY, NodeStatus.RUNNING]:
             if allow_failover:
-                return await self._failover_call(node_id, action, params,
-                                                  f"节点未就绪: {node.metadata.status.name}")
+                return await self._failover_call(node_id, action, params, f"节点未就绪: {node.metadata.status.name}")
             return {"success": False, "error": f"节点未就绪: {node.metadata.status.name}"}
 
         params = params or {}
@@ -355,9 +362,7 @@ class NodeRegistry:
             node.metadata.call_count += 1
             node.metadata.success_count += 1
             elapsed = (datetime.now() - start_time).total_seconds()
-            node.metadata.avg_response_time = (
-                node.metadata.avg_response_time * 0.9 + elapsed * 0.1
-            )
+            node.metadata.avg_response_time = node.metadata.avg_response_time * 0.9 + elapsed * 0.1
 
             return {"success": True, "data": result}
 
@@ -382,8 +387,9 @@ class NodeRegistry:
                 return await self._failover_call(node_id, action, params, str(e))
             return {"success": False, "error": str(e)}
 
-    async def _failover_call(self, failed_node_id: str, action: str,
-                              params: Dict[str, Any], reason: str) -> Dict[str, Any]:
+    async def _failover_call(
+        self, failed_node_id: str, action: str, params: Dict[str, Any], reason: str
+    ) -> Dict[str, Any]:
         """
         故障转移：查找具有相同能力的备选节点并重试
 
@@ -446,7 +452,7 @@ class NodeRegistry:
             node.metadata.error_message = None
 
             # 重置连续失败计数
-            if hasattr(node.metadata, '_consecutive_health_failures'):
+            if hasattr(node.metadata, "_consecutive_health_failures"):
                 node.metadata._consecutive_health_failures = 0
 
             # 如果之前是 ERROR 状态，恢复为 RUNNING
@@ -474,7 +480,7 @@ class NodeRegistry:
         node.metadata.error_message = error
 
         # 追踪连续失败
-        if not hasattr(node.metadata, '_consecutive_health_failures'):
+        if not hasattr(node.metadata, "_consecutive_health_failures"):
             node.metadata._consecutive_health_failures = 0
         node.metadata._consecutive_health_failures += 1
 
@@ -483,8 +489,7 @@ class NodeRegistry:
             if node.metadata.status != NodeStatus.ERROR:
                 node.metadata.status = NodeStatus.ERROR
                 logger.warning(
-                    f"节点 {node_id} 连续 {node.metadata._consecutive_health_failures} "
-                    f"次健康检查失败，标记为 ERROR"
+                    f"节点 {node_id} 连续 {node.metadata._consecutive_health_failures} " f"次健康检查失败，标记为 ERROR"
                 )
 
         # ===== 集成：标记能力状态 =====
@@ -493,6 +498,7 @@ class NodeRegistry:
             cap_status = CapabilityStatus.OFFLINE if "超时" in error else CapabilityStatus.ERROR
             # 使用 fire-and-forget 模式，不 await
             import asyncio as _asyncio
+
             loop = _asyncio.get_running_loop()
             if loop.is_running():
                 loop.create_task(capability_manager.update_node_status(node_id, cap_status))
@@ -549,9 +555,7 @@ class NodeRegistry:
             # 查找节点类
             node_class = None
             for name, obj in vars(module).items():
-                if (isinstance(obj, type) and
-                    issubclass(obj, BaseNode) and
-                    obj is not BaseNode):
+                if isinstance(obj, type) and issubclass(obj, BaseNode) and obj is not BaseNode:
                     node_class = obj
                     break
 
@@ -586,7 +590,7 @@ class NodeRegistry:
                 self.module = mod
 
             async def initialize(self) -> bool:
-                if hasattr(self.module, 'initialize'):
+                if hasattr(self.module, "initialize"):
                     if asyncio.iscoroutinefunction(self.module.initialize):
                         await self.module.initialize()
                     else:
@@ -602,7 +606,7 @@ class NodeRegistry:
                         return await func(**params)
                     else:
                         return func(**params)
-                elif hasattr(self.module, 'execute'):
+                elif hasattr(self.module, "execute"):
                     func = self.module.execute
                     if asyncio.iscoroutinefunction(func):
                         return await func(action, params)
@@ -679,19 +683,16 @@ class NodeRegistry:
             "total_nodes": len(self.nodes),
             "ready_nodes": len(self.get_ready_nodes()),
             "capabilities": list(self.capability_index.keys()),
-            "categories": {
-                cat.value: len(node_ids)
-                for cat, node_ids in self.category_index.items()
-            },
+            "categories": {cat.value: len(node_ids) for cat, node_ids in self.category_index.items()},
             "nodes": {
                 node_id: {
                     "name": node.name,
                     "status": node.metadata.status.name,
                     "health": node.metadata.health_score,
-                    "calls": node.metadata.call_count
+                    "calls": node.metadata.call_count,
                 }
                 for node_id, node in self.nodes.items()
-            }
+            },
         }
 
     def export_to_json(self) -> str:
@@ -752,6 +753,7 @@ def reset_node_registry() -> None:
 # 便捷函数
 # ============================================================================
 
+
 async def register_node(node: BaseNode) -> bool:
     """注册节点"""
     return await get_registry().register_node(node)
@@ -782,6 +784,7 @@ def get_all_nodes() -> List[BaseNode]:
 # ============================================================================
 
 if __name__ == "__main__":
+
     async def test():
         registry = get_registry()
 
@@ -789,9 +792,7 @@ if __name__ == "__main__":
         class TestNode(BaseNode):
             async def initialize(self) -> bool:
                 self.metadata.status = NodeStatus.READY
-                self.metadata.capabilities.append(
-                    NodeCapability(name="test", description="测试能力")
-                )
+                self.metadata.capabilities.append(NodeCapability(name="test", description="测试能力"))
                 return True
 
             async def execute(self, action: str, params: Dict[str, Any]) -> Dict[str, Any]:

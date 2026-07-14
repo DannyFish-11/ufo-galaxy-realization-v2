@@ -45,9 +45,7 @@ class ContextManager:
             entries = entries[-limit:]
         return {"success": True, "session_id": session_id, "entries": entries}
 
-    async def search_context(
-        self, query: str, user_id: Optional[str] = None, limit: int = 5
-    ) -> dict:
+    async def search_context(self, query: str, user_id: Optional[str] = None, limit: int = 5) -> dict:
         results = []
         for session_id, entries in self._contexts.items():
             for entry in entries:
@@ -56,11 +54,13 @@ class ContextManager:
                 for msg in entry.get("messages", []):
                     content = msg.get("content", "")
                     if query.lower() in content.lower():
-                        results.append({
-                            "session_id": session_id,
-                            "message": msg,
-                            "timestamp": entry.get("timestamp"),
-                        })
+                        results.append(
+                            {
+                                "session_id": session_id,
+                                "message": msg,
+                                "timestamp": entry.get("timestamp"),
+                            }
+                        )
                         if len(results) >= limit:
                             break
                 if len(results) >= limit:
@@ -70,12 +70,15 @@ class ContextManager:
         return {"success": True, "query": query, "results": results}
 
     async def get_user_profile(self, user_id: str) -> dict:
-        profile = self._user_profiles.get(user_id, {
-            "user_id": user_id,
-            "session_count": 0,
-            "preferences": {},
-            "created_at": time.time(),
-        })
+        profile = self._user_profiles.get(
+            user_id,
+            {
+                "user_id": user_id,
+                "session_count": 0,
+                "preferences": {},
+                "created_at": time.time(),
+            },
+        )
         return profile
 
     async def get_stats(self) -> dict:

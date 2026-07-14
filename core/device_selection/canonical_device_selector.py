@@ -172,11 +172,7 @@ class CanonicalDeviceSelectionEntry:
     def to_dict(self) -> Dict[str, Any]:
         """Return a JSON-serialisable representation."""
         return {
-            "device": (
-                self.device.to_dict()
-                if hasattr(self.device, "to_dict")
-                else {"device_id": self.device_id}
-            ),
+            "device": (self.device.to_dict() if hasattr(self.device, "to_dict") else {"device_id": self.device_id}),
             "participation": self.participation.to_dict(),
         }
 
@@ -233,9 +229,7 @@ def assess_device_participation(
         connection = getattr(device, "connection", None)
         conn_state_val = ""
         if connection is not None:
-            conn_state_val = str(
-                getattr(connection, "state", "disconnected")
-            ).lower()
+            conn_state_val = str(getattr(connection, "state", "disconnected")).lower()
         canonical_routable = conn_state_val in ("connected", "reconnecting")
 
         # Enrich with router liveness signal (additive enrichment only).
@@ -258,9 +252,7 @@ def assess_device_participation(
             orchestration_eligible = cross_device_eligible and orchestration_override
         else:
             autonomy = getattr(device, "autonomy", None)
-            runtime_enabled = bool(
-                getattr(autonomy, "runtime_enabled", False) if autonomy is not None else False
-            )
+            runtime_enabled = bool(getattr(autonomy, "runtime_enabled", False) if autonomy is not None else False)
             # A device is orchestration-eligible when it is cross-device-eligible
             # OR runtime-enabled (runtime_enabled indicates the device can run
             # the Galaxy runtime client autonomously, which is sufficient for
@@ -386,9 +378,7 @@ def select_orchestration_candidates(
             if required_capabilities:
                 cap_profile = getattr(device, "capabilities", None)
                 device_caps: List[str] = (
-                    list(getattr(cap_profile, "capabilities", []))
-                    if cap_profile is not None
-                    else []
+                    list(getattr(cap_profile, "capabilities", [])) if cap_profile is not None else []
                 )
                 if not all(c in device_caps for c in required_capabilities):
                     continue
@@ -441,11 +431,7 @@ def device_score_input_from_canonical(
 
         device = entry.device
         cap_profile = getattr(device, "capabilities", None)
-        caps: List[str] = (
-            list(getattr(cap_profile, "capabilities", []))
-            if cap_profile is not None
-            else []
-        )
+        caps: List[str] = list(getattr(cap_profile, "capabilities", [])) if cap_profile is not None else []
 
         level = SandboxLevel(sandbox_level) if sandbox_level is not None else SandboxLevel.STANDARD
 

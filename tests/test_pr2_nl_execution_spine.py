@@ -77,9 +77,7 @@ def test_build_problem_execution_closure_blocks_closed_when_evidence_rejected():
     )
     assert closure["task_completed"] is False
     assert closure["problem_solved"] is False
-    assert (
-        closure["task_completion_semantics"]["closure_blocked_by_evidence_gate"] is True
-    )
+    assert closure["task_completion_semantics"]["closure_blocked_by_evidence_gate"] is True
 
 
 def test_spine_goal_truncation_handles_multibyte_chars():

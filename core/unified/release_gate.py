@@ -73,9 +73,7 @@ class RolloutBlockedError(Exception):
     """Raised when a context_key is outside the rollout percentage."""
 
     def __init__(self, flag: str, percentage: int, context_key: str) -> None:
-        super().__init__(
-            f"Feature '{flag}' rollout {percentage}% excludes context '{context_key}'"
-        )
+        super().__init__(f"Feature '{flag}' rollout {percentage}% excludes context '{context_key}'")
         self.flag = flag
         self.percentage = percentage
         self.context_key = context_key
@@ -105,7 +103,7 @@ class ReleaseGate:
     def _init(self) -> None:
         self._flags: Dict[str, Dict[str, Any]] = {}
         self._overrides: Dict[str, bool] = {}
-        self._stats: Dict[str, Dict[str, int]] = {}   # flag → {"allowed": N, "blocked": N}
+        self._stats: Dict[str, Dict[str, int]] = {}  # flag → {"allowed": N, "blocked": N}
         self._loaded_at: float = 0.0
         self._load_flags()
 
@@ -127,6 +125,7 @@ class ReleaseGate:
 
         try:
             import yaml  # optional dep; only loaded here
+
             with open(path, "r", encoding="utf-8") as fh:
                 raw = yaml.safe_load(fh) or {}
             self._flags = {k: v for k, v in raw.items() if isinstance(v, dict)}
@@ -134,8 +133,7 @@ class ReleaseGate:
             logger.info("ReleaseGate: loaded %d flags from %s", len(self._flags), path)
         except ImportError:
             logger.warning(
-                "PyYAML not installed — ReleaseGate cannot load feature_flags.yaml; "
-                "all features default to enabled."
+                "PyYAML not installed — ReleaseGate cannot load feature_flags.yaml; " "all features default to enabled."
             )
             self._flags = {}
         except Exception as exc:
@@ -195,7 +193,10 @@ class ReleaseGate:
         if not result:
             logger.debug(
                 "ReleaseGate BLOCK flag=%s pct=%d bucket=%d context=%s",
-                flag, pct, bucket, context_key,
+                flag,
+                pct,
+                bucket,
+                context_key,
             )
         return result
 

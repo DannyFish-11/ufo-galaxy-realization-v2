@@ -103,23 +103,6 @@ from typing import Any
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Subject imports
-# ---------------------------------------------------------------------------
-
-from contracts.source_posture_contract import (
-    SOURCE_POSTURE_CONTRACT_AUTHORITY,
-    SOURCE_POSTURE_CONTRACT_PR1_UNIFICATION_SENTINEL,
-    SOURCE_POSTURE_NO_CROSS_DEVICE_ENABLED_OVERLOAD_POLICY,
-    SOURCE_POSTURE_NO_ENTRYMODE_OVERLOAD_POLICY,
-    SOURCE_POSTURE_VALID_VALUES,
-    SourcePostureContractField,
-    SourcePostureValue,
-    build_source_posture_field,
-    posture_value_to_str,
-    resolve_source_posture_value,
-    validate_source_posture_value,
-)
 from contracts.handoff_envelope_v2 import (
     HandoffEnvelopeV2,
     HandoffSourceSummary,
@@ -135,6 +118,23 @@ from contracts.source_dispatch import (
     build_source_dispatch_plan,
     build_source_dispatch_result,
 )
+from contracts.source_posture_contract import (
+    SOURCE_POSTURE_CONTRACT_AUTHORITY,
+    SOURCE_POSTURE_CONTRACT_PR1_UNIFICATION_SENTINEL,
+    SOURCE_POSTURE_NO_CROSS_DEVICE_ENABLED_OVERLOAD_POLICY,
+    SOURCE_POSTURE_NO_ENTRYMODE_OVERLOAD_POLICY,
+    SOURCE_POSTURE_VALID_VALUES,
+    SourcePostureContractField,
+    SourcePostureValue,
+    build_source_posture_field,
+    posture_value_to_str,
+    resolve_source_posture_value,
+    validate_source_posture_value,
+)
+
+# ---------------------------------------------------------------------------
+# Subject imports
+# ---------------------------------------------------------------------------
 
 
 # ===========================================================================
@@ -577,11 +577,13 @@ def test_K02_result_posture_independent_when_explicitly_set() -> None:
 
 def test_L01_source_posture_value_importable_from_contracts() -> None:
     from contracts import SourcePostureValue as SPV  # noqa: PLC0415
+
     assert SPV.CONTROL_ONLY.value == "control_only"
 
 
 def test_L02_source_posture_contract_field_importable() -> None:
     from contracts import SourcePostureContractField as SPCF  # noqa: PLC0415
+
     field = SPCF()
     assert field.source_runtime_posture == "control_only"
 
@@ -592,6 +594,7 @@ def test_L03_sentinel_constants_importable_from_contracts() -> None:
         SOURCE_POSTURE_CONTRACT_PR1_UNIFICATION_SENTINEL,
         SOURCE_POSTURE_NO_ENTRYMODE_OVERLOAD_POLICY,
     )
+
     assert len(SOURCE_POSTURE_CONTRACT_AUTHORITY) > 0
     assert len(SOURCE_POSTURE_CONTRACT_PR1_UNIFICATION_SENTINEL) > 0
     assert len(SOURCE_POSTURE_NO_ENTRYMODE_OVERLOAD_POLICY) > 0
@@ -599,6 +602,7 @@ def test_L03_sentinel_constants_importable_from_contracts() -> None:
 
 def test_L04_build_source_posture_field_importable() -> None:
     from contracts import build_source_posture_field as bspf  # noqa: PLC0415
+
     field = bspf("join_runtime")
     assert field.source_runtime_posture == "join_runtime"
 

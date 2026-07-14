@@ -91,6 +91,7 @@ def _get_engine() -> Optional[Any]:
             return None
         try:
             from core.tts.piper_engine import PiperTTSEngine
+
             eng = PiperTTSEngine()
             return eng if eng.available() else None
         except Exception as exc:  # noqa: BLE001
@@ -102,6 +103,7 @@ def _get_engine() -> Optional[Any]:
             return None
         try:
             from core.tts.melo_engine import MeloTTSEngine
+
             eng = MeloTTSEngine()
             return eng if eng.available() else None
         except Exception as exc:  # noqa: BLE001
@@ -117,7 +119,9 @@ def _get_engine() -> Optional[Any]:
             # 也不触发下面的"TTS 引擎不可用"告警,最终每次合成静默失败——
             # 真机表现就是"字出来了、一句话都不说"。故在这里先验一次导入。
             import edge_tts  # noqa: F401
+
             from core.tts import EdgeTTSEngine
+
             voice = os.getenv("GALAXY_TTS_VOICE", "zh-CN-XiaoxiaoNeural")
             return EdgeTTSEngine(voice=voice)
         except Exception as exc:  # noqa: BLE001
@@ -129,6 +133,7 @@ def _get_engine() -> Optional[Any]:
             return None
         try:
             from core.tts.kokoro_engine import KokoroTTSEngine
+
             eng = KokoroTTSEngine()
             # available() 缺模型文件时自动踢后台拉取(拉完下次选择/重启即生效)
             return eng if eng.available() else None
@@ -141,6 +146,7 @@ def _get_engine() -> Optional[Any]:
             return None
         try:
             from core.tts.sapi_engine import SapiTTSEngine
+
             eng = SapiTTSEngine()
             return eng if eng.available() else None
         except Exception as exc:  # noqa: BLE001
@@ -152,6 +158,7 @@ def _get_engine() -> Optional[Any]:
             return None
         try:
             from core.tts.indextts_engine import IndexTTSEngine
+
             eng = IndexTTSEngine()
             return eng if eng.available() else None
         except Exception as exc:  # noqa: BLE001
@@ -162,24 +169,19 @@ def _get_engine() -> Optional[Any]:
         # 质量档(零样本克隆+情绪,自回归大模型):仅显式选择才启用,不进
         # 任何默认回退链——CPU 合成一句数秒到数十秒,拿它当日常对话嗓音会
         # 显著加重延迟。不可用/运行期失败仍落回默认链,绝不整段静默。
-        _engine = (_try_indextts() or _try_edge() or _try_melo()
-                   or _try_piper() or _try_kokoro() or _try_sapi())
+        _engine = _try_indextts() or _try_edge() or _try_melo() or _try_piper() or _try_kokoro() or _try_sapi()
     elif choice == "melo":
-        _engine = (_try_melo() or _try_piper() or _try_edge()
-                   or _try_kokoro() or _try_sapi())
+        _engine = _try_melo() or _try_piper() or _try_edge() or _try_kokoro() or _try_sapi()
     elif choice == "piper":
-        _engine = (_try_piper() or _try_melo() or _try_edge()
-                   or _try_kokoro() or _try_sapi())
+        _engine = _try_piper() or _try_melo() or _try_edge() or _try_kokoro() or _try_sapi()
     elif choice == "kokoro":
         _engine = _try_kokoro() or _try_sapi()
     elif choice == "sapi":
         _engine = _try_sapi()
     elif choice == "auto":
-        _engine = (_try_edge() or _try_kokoro() or _try_melo()
-                   or _try_piper() or _try_sapi())
+        _engine = _try_edge() or _try_kokoro() or _try_melo() or _try_piper() or _try_sapi()
     else:  # edge(默认)——运行期失败仍可经 demote 落到离线链
-        _engine = (_try_edge() or _try_melo() or _try_piper()
-                   or _try_kokoro() or _try_sapi())
+        _engine = _try_edge() or _try_melo() or _try_piper() or _try_kokoro() or _try_sapi()
 
     if _engine is None:
         logger.warning("TTS 引擎不可用(语音输出降级;装 edge-tts / melotts / piper-tts 可启用)")
@@ -200,7 +202,8 @@ def demote_current_engine(reason: str = "") -> Optional[Any]:
     _failed_engine_types.add(type(cur).__name__)
     logger.warning(
         "TTS 引擎 %s 运行期失败(%s),拉黑并降级到下一引擎",
-        type(cur).__name__, (reason or "")[:120],
+        type(cur).__name__,
+        (reason or "")[:120],
     )
     _engine = None
     _engine_failed = False
@@ -277,7 +280,11 @@ def speak_response(text: str, *, source: str = "") -> None:
 
             # discard:被打断时清理已合成但没播的临时 mp3,避免每次 barge-in 泄漏文件。
             speaker = StreamingSpeaker(
-                _synth, _play, stop=_stop, on_speaking=_set_speaking, discard=_rm,
+                _synth,
+                _play,
+                stop=_stop,
+                on_speaking=_set_speaking,
+                discard=_rm,
             )
             _active_speaker = speaker
             try:
@@ -387,7 +394,11 @@ def begin_incremental_speech(*, source: str = "") -> Optional[Any]:
         await holder["engine"].stop()
 
     speaker = IncrementalSpeaker(
-        _synth, _play, stop=_stop, on_speaking=_set_speaking, discard=_rm,
+        _synth,
+        _play,
+        stop=_stop,
+        on_speaking=_set_speaking,
+        discard=_rm,
     )
     if not speaker.start():
         return None  # 无运行中事件循环(同步环境),降级整段
@@ -398,6 +409,7 @@ def begin_incremental_speech(*, source: str = "") -> Optional[Any]:
         global _active_speaker
         if _active_speaker is speaker:
             _active_speaker = None
+
     try:
         speaker._player_task.add_done_callback(_clear_active)
     except Exception:  # noqa: BLE001

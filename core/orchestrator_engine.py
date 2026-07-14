@@ -115,7 +115,7 @@ class DAGScheduler:
             name_to_id[task.name] = task.task_id
 
         # 2. 将 depends_on 中的名称解析为 task_id
-        adj: Dict[str, List[str]] = defaultdict(list)      # task_id → [依赖它的 task_id]
+        adj: Dict[str, List[str]] = defaultdict(list)  # task_id → [依赖它的 task_id]
         in_degree: Dict[str, int] = {t.task_id: 0 for t in subtasks}
 
         for task in subtasks:
@@ -159,10 +159,7 @@ class DAGScheduler:
         # 4. 环检测
         if visited_count < len(subtasks):
             remaining = [tid for tid, deg in in_degree.items() if deg > 0]
-            raise ValueError(
-                f"检测到循环依赖！涉及的子任务: "
-                f"{[task_map[tid].name for tid in remaining]}"
-            )
+            raise ValueError(f"检测到循环依赖！涉及的子任务: " f"{[task_map[tid].name for tid in remaining]}")
 
         return layers, task_map
 
@@ -197,6 +194,7 @@ class SmartOrchestrator:
         if self._llm_router is None:
             try:
                 from core.multi_llm_router import get_llm_router
+
                 self._llm_router = get_llm_router()
             except Exception as e:
                 logger.warning("无法加载 LLM Router: %s", e)
@@ -207,6 +205,7 @@ class SmartOrchestrator:
         if self._agent_kernel is None:
             try:
                 from core.agent.kernel import AgentKernel
+
                 self._agent_kernel = AgentKernel()
             except Exception as e:
                 logger.warning("无法加载 AgentKernel: %s", e)
@@ -241,9 +240,7 @@ class SmartOrchestrator:
             if not decomposition.subtasks:
                 # 简单任务：直接用 LLM 回答，不走 DAG
                 logger.info("简单任务，直接处理（无需 DAG 分解）")
-                direct_result = await self._execute_simple_task(
-                    request.task_description, request
-                )
+                direct_result = await self._execute_simple_task(request.task_description, request)
                 result.status = OrchestrationStatus.SUCCESS
                 result.summary = direct_result.get("reply", "任务完成")
                 result.total_subtasks = 1
@@ -258,9 +255,7 @@ class SmartOrchestrator:
                 len(decomposition.subtasks),
             )
             try:
-                layers, task_map = DAGScheduler.build_and_validate(
-                    decomposition.subtasks
-                )
+                layers, task_map = DAGScheduler.build_and_validate(decomposition.subtasks)
             except ValueError as dag_err:
                 result.status = OrchestrationStatus.FAILED
                 result.error = str(dag_err)
@@ -286,7 +281,9 @@ class SmartOrchestrator:
             for layer_idx, layer_task_ids in enumerate(layers):
                 logger.info(
                     "执行第 %d/%d 层: %d 个并行任务",
-                    layer_idx + 1, len(layers), len(layer_task_ids),
+                    layer_idx + 1,
+                    len(layers),
+                    len(layer_task_ids),
                 )
 
                 # 检查是否有前置依赖失败导致本层任务需要跳过
@@ -309,10 +306,7 @@ class SmartOrchestrator:
                 # 并行执行本层所有可执行任务
                 if tasks_to_run:
                     layer_results = await asyncio.gather(
-                        *[
-                            self._execute_subtask(task, request)
-                            for task in tasks_to_run
-                        ],
+                        *[self._execute_subtask(task, request) for task in tasks_to_run],
                         return_exceptions=True,
                     )
 
@@ -335,10 +329,7 @@ class SmartOrchestrator:
                 result.summary = f"全部 {completed} 个子任务执行成功"
             elif completed > 0:
                 result.status = OrchestrationStatus.PARTIAL_SUCCESS
-                result.summary = (
-                    f"{completed}/{result.total_subtasks} 个子任务成功, "
-                    f"{failed} 个失败"
-                )
+                result.summary = f"{completed}/{result.total_subtasks} 个子任务成功, " f"{failed} 个失败"
             else:
                 result.status = OrchestrationStatus.FAILED
                 result.summary = f"全部 {failed} 个子任务执行失败"
@@ -356,7 +347,9 @@ class SmartOrchestrator:
         self._tasks[request.request_id] = result
         logger.info(
             "编排完成: %s | %s | %.0fms",
-            result.request_id, result.status.value, result.total_time_ms,
+            result.request_id,
+            result.status.value,
+            result.total_time_ms,
         )
         return result
 
@@ -403,14 +396,16 @@ class SmartOrchestrator:
         # 解析 LLM 返回的 JSON 为 SubTask 列表
         subtasks: List[SubTask] = []
         for st_data in raw.get("subtasks", []):
-            subtasks.append(SubTask(
-                name=st_data.get("name", "unnamed"),
-                description=st_data.get("description", ""),
-                depends_on=st_data.get("depends_on", []),
-                action=st_data.get("action", "execute"),
-                device_type=st_data.get("device_type", ""),
-                params=st_data.get("params", {}),
-            ))
+            subtasks.append(
+                SubTask(
+                    name=st_data.get("name", "unnamed"),
+                    description=st_data.get("description", ""),
+                    depends_on=st_data.get("depends_on", []),
+                    action=st_data.get("action", "execute"),
+                    device_type=st_data.get("device_type", ""),
+                    params=st_data.get("params", {}),
+                )
+            )
 
         return TaskDecomposition(
             goal=raw.get("goal", task_description),
@@ -457,15 +452,17 @@ class SmartOrchestrator:
                 router = self._get_llm_router()
                 if router is not None:
                     llm_resp = await router.chat(
-                        messages=[{
-                            "role": "user",
-                            "content": (
-                                f"请执行以下任务并返回结果:\n"
-                                f"任务: {subtask.name}\n"
-                                f"描述: {subtask.description}\n"
-                                f"参数: {json.dumps(subtask.params, ensure_ascii=False, default=str)}"
-                            ),
-                        }],
+                        messages=[
+                            {
+                                "role": "user",
+                                "content": (
+                                    f"请执行以下任务并返回结果:\n"
+                                    f"任务: {subtask.name}\n"
+                                    f"描述: {subtask.description}\n"
+                                    f"参数: {json.dumps(subtask.params, ensure_ascii=False, default=str)}"
+                                ),
+                            }
+                        ],
                         task_type=subtask.action or "general",
                         temperature=0.5,
                         max_tokens=2048,
@@ -534,13 +531,12 @@ class SmartOrchestrator:
             "task_id": result.request_id,
             "status": result.status.value,
             "execution_plan": {
-                "layers": [
-                    [st.name for st in result.subtasks if st.status != SubTaskStatus.PENDING]
-                ],
+                "layers": [[st.name for st in result.subtasks if st.status != SubTaskStatus.PENDING]],
                 "total_subtasks": result.total_subtasks,
             },
             "result": {
-                "success": result.status in (
+                "success": result.status
+                in (
                     OrchestrationStatus.SUCCESS,
                     OrchestrationStatus.PARTIAL_SUCCESS,
                 ),
@@ -595,14 +591,8 @@ class SmartOrchestrator:
     async def get_system_capabilities(self) -> Dict[str, Any]:
         """获取系统能力摘要。"""
         total = len(self._tasks)
-        completed = sum(
-            1 for t in self._tasks.values()
-            if t.status == OrchestrationStatus.SUCCESS
-        )
-        failed = sum(
-            1 for t in self._tasks.values()
-            if t.status == OrchestrationStatus.FAILED
-        )
+        completed = sum(1 for t in self._tasks.values() if t.status == OrchestrationStatus.SUCCESS)
+        failed = sum(1 for t in self._tasks.values() if t.status == OrchestrationStatus.FAILED)
         return {
             "total_nodes": 110,
             "healthy_nodes": 110,

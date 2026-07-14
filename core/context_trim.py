@@ -17,6 +17,7 @@ CPU 本地模型的延迟大头是 prompt 预填(prefill)。本模块提供三�
 
 全部零 LLM 成本、零 IO;开关与阈值均可 env 调。
 """
+
 from __future__ import annotations
 
 import os
@@ -38,6 +39,7 @@ def _env_int(name: str, default: int) -> int:
 # 1. 工具结果插入截断
 # ---------------------------------------------------------------------------
 
+
 def clip_tool_result(text: str, max_chars: int = 0) -> str:
     """头+尾保留式截断:长工具输出的结论常在末尾(exit code/汇总行),
     纯 ``[:N]`` 会把它切没。默认上限 GALAXY_TOOL_RESULT_MAX_CHARS=4000。"""
@@ -46,14 +48,13 @@ def clip_tool_result(text: str, max_chars: int = 0) -> str:
         return text
     head = int(limit * 0.75)
     tail = limit - head
-    return (
-        f"{text[:head]}\n…[中段已修剪,原文共 {len(text)} 字]…\n{text[-tail:]}"
-    )
+    return f"{text[:head]}\n…[中段已修剪,原文共 {len(text)} 字]…\n{text[-tail:]}"
 
 
 # ---------------------------------------------------------------------------
 # 2. ReAct 老轮次工具结果修剪
 # ---------------------------------------------------------------------------
+
 
 def prune_stale_tool_results(
     messages: List[Dict[str, Any]],
@@ -70,7 +71,8 @@ def prune_stale_tool_results(
     if keep <= 0:
         return 0
     round_starts = [
-        i for i, m in enumerate(messages)
+        i
+        for i, m in enumerate(messages)
         if isinstance(m, dict) and m.get("role") == "assistant" and m.get("tool_calls")
     ]
     if len(round_starts) <= keep:
@@ -84,8 +86,7 @@ def prune_stale_tool_results(
         if not isinstance(content, str) or len(content) <= min_chars:
             continue
         m["content"] = (
-            f"[早期工具结果已修剪·原 {len(content)} 字,要点见其后推理;"
-            f"如需原文请重新调用] {content[:200]}…"
+            f"[早期工具结果已修剪·原 {len(content)} 字,要点见其后推理;" f"如需原文请重新调用] {content[:200]}…"
         )
         pruned += 1
     return pruned
@@ -94,6 +95,7 @@ def prune_stale_tool_results(
 # ---------------------------------------------------------------------------
 # 3. 工具定义瘦身(auto 档)
 # ---------------------------------------------------------------------------
+
 
 def _terms_of(text: str) -> set:
     """查询/工具描述 → 词项集合:ASCII 词 + CJK 双字滑窗(零依赖轻量分词)。"""

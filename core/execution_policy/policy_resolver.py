@@ -70,8 +70,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
-from .policy_band import PolicyBand, BAND_ORDER, band_rank
-from .execution_policy import ExecutionPolicy, DEFAULT_CONSERVATIVE_POLICY
+from .execution_policy import DEFAULT_CONSERVATIVE_POLICY, ExecutionPolicy
+from .policy_band import BAND_ORDER, PolicyBand, band_rank
 
 logger = logging.getLogger("Galaxy.ExecutionPolicy.Resolver")
 
@@ -94,25 +94,26 @@ RETURN_PRESSURE_RESTRICT: float = 0.40
 
 #: Maps policy band → (risk_budget, action_budget, fallback_budget)
 _BAND_BUDGETS: dict[PolicyBand, tuple[float, int, int]] = {
-    PolicyBand.OBSERVE_ONLY:     (0.0, 0, 0),
-    PolicyBand.ASSISTIVE:        (0.1, 0, 1),
-    PolicyBand.BOUNDED_EXECUTE:  (0.5, 5, 2),
-    PolicyBand.FULL_EXECUTE:     (1.0, -1, 3),
+    PolicyBand.OBSERVE_ONLY: (0.0, 0, 0),
+    PolicyBand.ASSISTIVE: (0.1, 0, 1),
+    PolicyBand.BOUNDED_EXECUTE: (0.5, 5, 2),
+    PolicyBand.FULL_EXECUTE: (1.0, -1, 3),
 }
 
 #: Maps policy band → list of allowed executor level strings.
 #: Sourced from :class:`~core.execution_observability.executor_level.ExecutorLevel`.
 _BAND_EXECUTOR_LEVELS: dict[PolicyBand, list[str]] = {
-    PolicyBand.OBSERVE_ONLY:    [],
-    PolicyBand.ASSISTIVE:       ["orchestrator"],
+    PolicyBand.OBSERVE_ONLY: [],
+    PolicyBand.ASSISTIVE: ["orchestrator"],
     PolicyBand.BOUNDED_EXECUTE: ["system_api", "uia", "orchestrator"],
-    PolicyBand.FULL_EXECUTE:    ["system_api", "uia", "gui", "vlm", "remote_executor", "orchestrator"],
+    PolicyBand.FULL_EXECUTE: ["system_api", "uia", "gui", "vlm", "remote_executor", "orchestrator"],
 }
 
 
 # ---------------------------------------------------------------------------
 # Return-pressure computation
 # ---------------------------------------------------------------------------
+
 
 def _compute_return_pressure(return_summary: Optional[Any]) -> float:
     """Derive a normalised return-pressure float [0.0, 1.0] from a summary.
@@ -145,10 +146,10 @@ def _compute_return_pressure(return_summary: Optional[Any]) -> float:
             return 0.0
 
         _pressure_by_mode = {
-            "none":               0.0,
-            "hold":               0.05,
-            "soft_decay":         0.35 + min(decay, 1.0) * 0.20,
-            "step_down":          0.65,
+            "none": 0.0,
+            "hold": 0.05,
+            "soft_decay": 0.35 + min(decay, 1.0) * 0.20,
+            "step_down": 0.65,
             "return_to_formless": 0.90,
         }
         return _pressure_by_mode.get(mode_str, 0.30)
@@ -160,6 +161,7 @@ def _compute_return_pressure(return_summary: Optional[Any]) -> float:
 # ---------------------------------------------------------------------------
 # Authority-role helpers
 # ---------------------------------------------------------------------------
+
 
 def _is_legacy_or_deprecated_role(authority_role: Optional[Any]) -> bool:
     """Return True if *authority_role* is a legacy or deprecated role."""
@@ -178,7 +180,8 @@ def _is_active_authoritative_role(authority_role: Optional[Any]) -> bool:
     if authority_role is None:
         return False
     try:
-        from core.orchestration_authority import is_authoritative, AuthorityRole
+        from core.orchestration_authority import AuthorityRole, is_authoritative
+
         if isinstance(authority_role, AuthorityRole):
             return is_authoritative(authority_role)
         role_str = authority_role.value if hasattr(authority_role, "value") else str(authority_role)
@@ -199,6 +202,7 @@ def _is_active_authoritative_role(authority_role: Optional[Any]) -> bool:
 # Band downgrade helper
 # ---------------------------------------------------------------------------
 
+
 def _downgrade_band(band: PolicyBand, steps: int = 1) -> PolicyBand:
     """Return a band that is *steps* levels less permissive than *band*."""
     current_rank = band_rank(band)
@@ -209,6 +213,7 @@ def _downgrade_band(band: PolicyBand, steps: int = 1) -> PolicyBand:
 # ---------------------------------------------------------------------------
 # Primary resolver
 # ---------------------------------------------------------------------------
+
 
 def resolve_policy(
     *,
@@ -291,9 +296,7 @@ def _resolve_policy_impl(
 
     authority_str: Optional[str] = None
     if authority_role is not None:
-        authority_str = (
-            authority_role.value if hasattr(authority_role, "value") else str(authority_role).lower()
-        )
+        authority_str = authority_role.value if hasattr(authority_role, "value") else str(authority_role).lower()
 
     # ---------------------------------------------------------------
     # 1. Compute return pressure (from summary + retreat_tendency)
@@ -334,8 +337,8 @@ def _resolve_policy_impl(
     # 3. Determine base band from phase
     # ---------------------------------------------------------------
     _PHASE_TO_BASE_BAND: dict[str, PolicyBand] = {
-        "silent":   PolicyBand.OBSERVE_ONLY,
-        "liminal":  PolicyBand.ASSISTIVE,
+        "silent": PolicyBand.OBSERVE_ONLY,
+        "liminal": PolicyBand.ASSISTIVE,
         "manifest": PolicyBand.BOUNDED_EXECUTE,
     }
     band = _PHASE_TO_BASE_BAND.get(phase_str or "", PolicyBand.OBSERVE_ONLY)

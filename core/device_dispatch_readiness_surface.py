@@ -87,6 +87,7 @@ def _enumerate_known_device_ids() -> List[str]:
     # 来源 1：UDM
     try:
         from core.unified.device_manager import get_unified_device_manager
+
         udm = get_unified_device_manager()
         for device in udm.list_devices():
             # UnifiedDevice 可以是 dataclass/dict；兼容两种形式
@@ -105,6 +106,7 @@ def _enumerate_known_device_ids() -> List[str]:
         from galaxy_gateway.android.handlers.registration import (
             get_all_devices_with_registration_gaps,
         )
+
         for did in get_all_devices_with_registration_gaps():
             known[did] = None
     except Exception as exc:
@@ -113,13 +115,10 @@ def _enumerate_known_device_ids() -> List[str]:
     # 来源 3：android_device_state_store
     try:
         from core.android_device_state_store import get_device_ecosystem_summary
+
         summary = get_device_ecosystem_summary()
         for device_entry in summary.get("devices") or []:
-            did = (
-                device_entry.get("device_id")
-                if isinstance(device_entry, dict)
-                else None
-            )
+            did = device_entry.get("device_id") if isinstance(device_entry, dict) else None
             if did:
                 known[did] = None
     except Exception as exc:
@@ -170,6 +169,7 @@ def get_device_dispatch_readiness(
     """
     try:
         from core.unified_dispatch_readiness_gate import evaluate_dispatch_readiness
+
         result = evaluate_dispatch_readiness(
             device_id,
             required_capabilities=required_capabilities,
@@ -181,8 +181,7 @@ def get_device_dispatch_readiness(
         payload = result.to_dict()
     except Exception as exc:
         logger.error(
-            "DeviceDispatchReadinessSurface: evaluate_dispatch_readiness 失败 "
-            "device_id=%r: %s",
+            "DeviceDispatchReadinessSurface: evaluate_dispatch_readiness 失败 " "device_id=%r: %s",
             device_id,
             exc,
         )
@@ -299,11 +298,7 @@ def get_dispatch_readiness_panel(
     # 无法判断是否真的被拦截，独立统计）后的所有拦截设备数。
     # 每台设备的 status 值是互斥的（来自 DispatchReadinessStatus 枚举），
     # 因此分类计数之和 == summary["total"]，不会重复计入。
-    total_blocked = (
-        summary["total"]
-        - summary["dispatch_ready"]
-        - summary["gate_error"]
-    )
+    total_blocked = summary["total"] - summary["dispatch_ready"] - summary["gate_error"]
     summary["total_blocked"] = total_blocked
 
     return {

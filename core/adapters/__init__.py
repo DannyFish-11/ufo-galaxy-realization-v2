@@ -18,14 +18,14 @@ core/adapters — AIP v3 传输适配器集合
     ...
 """
 
-from core.adapters.websocket_adapter import WebSocketAdapter
+from core.adapters.ble_adapter import BLEAdapter
+from core.adapters.canbus_adapter import CANBusAdapter
+from core.adapters.dbus_adapter import DBusAdapter
 from core.adapters.mqtt_adapter import MQTTAdapter
+from core.adapters.serial_adapter import SerialAdapter
 from core.adapters.tcp_adapter import TCPAdapter
 from core.adapters.udp_adapter import UDPAdapter
-from core.adapters.ble_adapter import BLEAdapter
-from core.adapters.serial_adapter import SerialAdapter
-from core.adapters.dbus_adapter import DBusAdapter
-from core.adapters.canbus_adapter import CANBusAdapter
+from core.adapters.websocket_adapter import WebSocketAdapter
 
 __all__ = [
     "WebSocketAdapter",

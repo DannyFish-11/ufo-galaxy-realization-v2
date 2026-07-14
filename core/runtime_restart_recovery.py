@@ -162,9 +162,7 @@ WEBRTC_BINDINGS_ARE_EPHEMERAL_POLICY: str = (
     "re-dispatched.  This is a documented non-goal, not a gap."
 )
 
-RUNTIME_RESTART_RECOVERY_PR5_SENTINEL: str = (
-    "RUNTIME_RESTART_RECOVERY_PR5::runtime-restart-recovery-coordinator-pr5-v1"
-)
+RUNTIME_RESTART_RECOVERY_PR5_SENTINEL: str = "RUNTIME_RESTART_RECOVERY_PR5::runtime-restart-recovery-coordinator-pr5-v1"
 
 # PR-D1: in-flight task lifecycle durability sentinel
 INFLIGHT_TASK_LIFECYCLE_RECOVERY_POLICY: str = (
@@ -572,8 +570,7 @@ class RuntimeRestartRecoveryCoordinator:
         report.non_goals = [
             "WebRTC transport bindings are intentionally ephemeral and "
             "are NOT recovered. See WEBRTC_BINDINGS_ARE_EPHEMERAL_POLICY.",
-            "Device heartbeat state is NOT recovered. Devices re-register on "
-            "reconnect.",
+            "Device heartbeat state is NOT recovered. Devices re-register on " "reconnect.",
             "Capability/readiness/participation liveness is NOT durably recovered as "
             "live truth. Recovered node/topology views are explicitly degraded until "
             "fresh runtime signals revalidate them.",
@@ -821,9 +818,7 @@ class RuntimeRestartRecoveryCoordinator:
         report.node_registry_entries_restored = int(restored or 0)
         metrics = registry.get_metrics()
         truth = metrics.get("truth_governance") if isinstance(metrics, dict) else {}
-        report.node_registry_revalidation_pending = int(
-            (truth or {}).get("revalidation_pending_count") or 0
-        )
+        report.node_registry_revalidation_pending = int((truth or {}).get("revalidation_pending_count") or 0)
         if report.node_registry_revalidation_pending:
             report.degraded_recovery_surfaces.append("node_registry")
 
@@ -848,6 +843,7 @@ class RuntimeRestartRecoveryCoordinator:
     def _recover_mesh_sessions(self, report: RuntimeRecoveryReport) -> None:
         """Recover non-terminal mesh session states."""
         from core.mesh.mesh_session_persistence import recover_mesh_sessions
+
         records = recover_mesh_sessions(store=self._mesh_session_store)
         report.mesh_sessions_recovered = len(records)
 
@@ -856,8 +852,9 @@ class RuntimeRestartRecoveryCoordinator:
             from core.mesh.mesh_session_persistence import (
                 get_persistence_store,
             )
+
             store = self._mesh_session_store or get_persistence_store()
-            all_ids_raw = store.list_recoverable()
+            store.list_recoverable()
             # list_recoverable only returns non-terminal; total = records + skipped
             # We can get the total by checking the store's memory cache directly
             # For a conservative estimate: skipped = (total on disk) - recovered
@@ -880,11 +877,10 @@ class RuntimeRestartRecoveryCoordinator:
         if registry is None:
             try:
                 from core.mesh.body_mesh_registry import get_body_mesh_registry
+
                 registry = get_body_mesh_registry()
             except Exception as exc:
-                logger.warning(
-                    "RuntimeRestartRecovery: could not get body mesh registry: %s", exc
-                )
+                logger.warning("RuntimeRestartRecovery: could not get body mesh registry: %s", exc)
                 return
 
         restored = restore_body_mesh_from_snapshot(
@@ -901,14 +897,13 @@ class RuntimeRestartRecoveryCoordinator:
         """Clear in-memory WebRTC task bindings — intentionally ephemeral."""
         try:
             from core.webrtc_task_lifecycle import reset_webrtc_task_session_registry
+
             reset_webrtc_task_session_registry()
             report.webrtc_bindings_cleared = True
             logger.debug("RuntimeRestartRecovery: WebRTC bindings cleared (intentional)")
         except Exception as exc:
             # Non-fatal — bindings are ephemeral anyway
-            logger.debug(
-                "RuntimeRestartRecovery: could not clear WebRTC bindings: %s", exc
-            )
+            logger.debug("RuntimeRestartRecovery: could not clear WebRTC bindings: %s", exc)
             report.webrtc_bindings_cleared = False
 
     def _recover_hybrid_orchestration(self, report: RuntimeRecoveryReport) -> None:
@@ -926,6 +921,7 @@ class RuntimeRestartRecoveryCoordinator:
         from core.hybrid_orchestration_continuity import (
             get_continuity_registry,
         )
+
         registry = (
             self._hybrid_continuity_registry
             if self._hybrid_continuity_registry is not None
@@ -933,40 +929,31 @@ class RuntimeRestartRecoveryCoordinator:
         )
 
         # 4a: mark running executions as interrupted
-        count = registry.mark_all_running_as_interrupted(
-            reason="process_restart"
-        )
+        count = registry.mark_all_running_as_interrupted(reason="process_restart")
         report.hybrid_executions_interrupted = count
         logger.info(
-            "RuntimeRestartRecovery: marked %d hybrid executions as "
-            "interrupted",
+            "RuntimeRestartRecovery: marked %d hybrid executions as " "interrupted",
             count,
         )
 
         # 4b: restore non-terminal records from the durable persistence store
         if self._hybrid_continuity_store is not None:
-            restored = registry.restore_from_persistence(
-                self._hybrid_continuity_store
-            )
+            restored = registry.restore_from_persistence(self._hybrid_continuity_store)
             report.hybrid_executions_restored += restored
             logger.info(
-                "RuntimeRestartRecovery: restored %d hybrid executions "
-                "from persistence store",
+                "RuntimeRestartRecovery: restored %d hybrid executions " "from persistence store",
                 restored,
             )
             # Mark any newly-restored running/dispatched records as interrupted —
             # they were in-flight when the process died and must be interrupted
             # even though they were not present in the live registry during step 4a.
-            extra_interrupted = registry.mark_all_running_as_interrupted(
-                reason="process_restart_from_store"
-            )
+            extra_interrupted = registry.mark_all_running_as_interrupted(reason="process_restart_from_store")
             report.hybrid_executions_interrupted += extra_interrupted
             # Invalidate remote partial results — transport is gone after restart
             invalidated = registry.invalidate_remote_partial_results()
             report.hybrid_remote_partial_invalidated = invalidated
             logger.info(
-                "RuntimeRestartRecovery: invalidated %d remote partial "
-                "results",
+                "RuntimeRestartRecovery: invalidated %d remote partial " "results",
                 invalidated,
             )
 
@@ -991,6 +978,7 @@ class RuntimeRestartRecoveryCoordinator:
             InFlightTaskDisposition,
             restore_inflight_tasks_from_snapshot,
         )
+
         restored = restore_inflight_tasks_from_snapshot(
             store=self._task_lifecycle_store,
         )
@@ -1005,8 +993,7 @@ class RuntimeRestartRecoveryCoordinator:
             elif rec.disposition == InFlightTaskDisposition.TERMINAL_ON_INTERRUPT:
                 report.inflight_tasks_terminal += 1
         logger.info(
-            "RuntimeRestartRecovery: recovered %d in-flight tasks "
-            "(resumable=%d replay=%d reissue=%d terminal=%d)",
+            "RuntimeRestartRecovery: recovered %d in-flight tasks " "(resumable=%d replay=%d reissue=%d terminal=%d)",
             report.inflight_tasks_recovered,
             report.inflight_tasks_resumable,
             report.inflight_tasks_replay_only,
@@ -1015,9 +1002,7 @@ class RuntimeRestartRecoveryCoordinator:
         )
         # Convert documentary recovery into operational execution behavior.
         # Capture already_pending and dispatched sets for step 11 (PR-P1-1).
-        already_pending_ids, dispatched_ids = self._dispatch_recovered_tasks(
-            restored, report
-        )
+        already_pending_ids, dispatched_ids = self._dispatch_recovered_tasks(restored, report)
         # Store on the report for the continuity evaluation step.
         # Using private attrs to avoid polluting the public report schema;
         # the continuity_report field (PR-P1-1) is the consumer-facing surface.
@@ -1093,16 +1078,15 @@ class RuntimeRestartRecoveryCoordinator:
         dispatched_ids: set = set()
 
         try:
-            from core.task_lifecycle_persistence import InFlightTaskDisposition
             from core.task_envelope_lifecycle_registry import (
-                get_lifecycle_registry,
                 LifecycleOwner,
                 PendingEnvelopeRecord,
+                get_lifecycle_registry,
             )
+            from core.task_lifecycle_persistence import InFlightTaskDisposition
         except Exception as exc:
             logger.warning(
-                "RuntimeRestartRecovery._dispatch_recovered_tasks: "
-                "import failed — %s",
+                "RuntimeRestartRecovery._dispatch_recovered_tasks: " "import failed — %s",
                 exc,
             )
             return already_pending_ids, dispatched_ids
@@ -1118,8 +1102,7 @@ class RuntimeRestartRecoveryCoordinator:
             registry = get_lifecycle_registry()
         except Exception as exc:
             logger.warning(
-                "RuntimeRestartRecovery._dispatch_recovered_tasks: "
-                "could not obtain lifecycle registry — %s",
+                "RuntimeRestartRecovery._dispatch_recovered_tasks: " "could not obtain lifecycle registry — %s",
                 exc,
             )
             return already_pending_ids, dispatched_ids
@@ -1150,10 +1133,7 @@ class RuntimeRestartRecoveryCoordinator:
                 continue
 
             if not rec.task_id:
-                logger.debug(
-                    "RuntimeRestartRecovery._dispatch_recovered_tasks: "
-                    "skipping record with empty task_id"
-                )
+                logger.debug("RuntimeRestartRecovery._dispatch_recovered_tasks: " "skipping record with empty task_id")
                 continue
 
             # Duplicate guard — never overwrite a live in-process record.
@@ -1172,9 +1152,7 @@ class RuntimeRestartRecoveryCoordinator:
 
             # Reconstruct a PendingEnvelopeRecord and insert it directly.
             try:
-                owner = LifecycleOwner(rec.owner) if rec.owner in {
-                    o.value for o in LifecycleOwner
-                } else target_owner
+                LifecycleOwner(rec.owner) if rec.owner in {o.value for o in LifecycleOwner} else target_owner
                 # Always use the disposition-mapped owner as the authoritative
                 # post-restart stage — the snapshot owner tells us where the
                 # task *was*, the disposition tells us where it needs to *be*.
@@ -1210,8 +1188,7 @@ class RuntimeRestartRecoveryCoordinator:
                 )
             except Exception as exc:
                 logger.warning(
-                    "RuntimeRestartRecovery._dispatch_recovered_tasks: "
-                    "failed to register task_id=%s — %s",
+                    "RuntimeRestartRecovery._dispatch_recovered_tasks: " "failed to register task_id=%s — %s",
                     rec.task_id,
                     exc,
                 )
@@ -1242,15 +1219,14 @@ class RuntimeRestartRecoveryCoordinator:
         See :data:`SESSION_TRUTH_RECOVERY_POLICY`.
         """
         try:
-            from core.session_truth_snapshot import (
-                restore_session_truth_from_snapshot,
-                get_session_truth_snapshot_store,
-            )
             from core.canonical_session_truth import get_canonical_session_truth_runtime
+            from core.session_truth_snapshot import (
+                get_session_truth_snapshot_store,
+                restore_session_truth_from_snapshot,
+            )
         except Exception as exc:
             logger.warning(
-                "RuntimeRestartRecovery._recover_session_truth: "
-                "import failed — %s",
+                "RuntimeRestartRecovery._recover_session_truth: " "import failed — %s",
                 exc,
             )
             return
@@ -1271,8 +1247,7 @@ class RuntimeRestartRecoveryCoordinator:
             )
         except Exception as exc:
             logger.warning(
-                "RuntimeRestartRecovery._recover_session_truth: "
-                "restore failed — %s",
+                "RuntimeRestartRecovery._recover_session_truth: " "restore failed — %s",
                 exc,
             )
 
@@ -1310,8 +1285,7 @@ class RuntimeRestartRecoveryCoordinator:
             from core.task_lifecycle_persistence import InFlightTaskDisposition
         except Exception as exc:
             logger.warning(
-                "RuntimeRestartRecovery._reconcile_continuation_waiters: "
-                "import failed — %s",
+                "RuntimeRestartRecovery._reconcile_continuation_waiters: " "import failed — %s",
                 exc,
             )
             return
@@ -1323,6 +1297,7 @@ class RuntimeRestartRecoveryCoordinator:
             from core.task_lifecycle_persistence import (
                 restore_inflight_tasks_from_snapshot,
             )
+
             restored = restore_inflight_tasks_from_snapshot(
                 store=self._task_lifecycle_store,
             )
@@ -1336,8 +1311,7 @@ class RuntimeRestartRecoveryCoordinator:
                         resumable_task_ids.append(rec.task_id)
         except Exception as exc:
             logger.warning(
-                "RuntimeRestartRecovery._reconcile_continuation_waiters: "
-                "could not enumerate recovered tasks — %s",
+                "RuntimeRestartRecovery._reconcile_continuation_waiters: " "could not enumerate recovered tasks — %s",
                 exc,
             )
             return
@@ -1362,6 +1336,7 @@ class RuntimeRestartRecoveryCoordinator:
             from core.continuation_rebind_registry import (
                 get_continuation_rebind_registry,
             )
+
             rebind_registry = get_continuation_rebind_registry()
         except Exception as exc:
             logger.debug(
@@ -1372,9 +1347,7 @@ class RuntimeRestartRecoveryCoordinator:
 
         reconciled = 0
         rebinds_registered = 0
-        restart_error = RuntimeError(
-            "restart_recovery: V2 restarted; waiter unblocked for re-dispatch"
-        )
+        restart_error = RuntimeError("restart_recovery: V2 restarted; waiter unblocked for re-dispatch")
         for task_id in resumable_task_ids:
             try:
                 # fail_pending_dispatch sets fut.set_exception so the awaiting
@@ -1401,8 +1374,7 @@ class RuntimeRestartRecoveryCoordinator:
                             rebinds_registered += 1
                         except Exception as rebind_exc:
                             logger.debug(
-                                "RuntimeRestartRecovery: could not register "
-                                "rebind for task_id=%s — %s",
+                                "RuntimeRestartRecovery: could not register " "rebind for task_id=%s — %s",
                                 task_id,
                                 rebind_exc,
                             )
@@ -1440,8 +1412,7 @@ class RuntimeRestartRecoveryCoordinator:
             from core.durable_truth_authority_chain import verify_durable_truth_convergence
         except Exception as exc:
             logger.warning(
-                "RuntimeRestartRecovery._verify_durable_truth_convergence: "
-                "import failed — %s",
+                "RuntimeRestartRecovery._verify_durable_truth_convergence: " "import failed — %s",
                 exc,
             )
             return
@@ -1462,14 +1433,11 @@ class RuntimeRestartRecoveryCoordinator:
             )
         except Exception as exc:
             logger.warning(
-                "RuntimeRestartRecovery._verify_durable_truth_convergence: "
-                "convergence check failed — %s",
+                "RuntimeRestartRecovery._verify_durable_truth_convergence: " "convergence check failed — %s",
                 exc,
             )
 
-    def _consolidate_multi_participant_recovery(
-        self, report: RuntimeRecoveryReport
-    ) -> None:
+    def _consolidate_multi_participant_recovery(self, report: RuntimeRecoveryReport) -> None:
         """Group recovered tasks by participant device_id (PR-2).
 
         Iterates the recovered in-flight task records and counts how many
@@ -1484,6 +1452,7 @@ class RuntimeRestartRecoveryCoordinator:
             from core.task_lifecycle_persistence import (
                 restore_inflight_tasks_from_snapshot,
             )
+
             restored = restore_inflight_tasks_from_snapshot(
                 store=self._task_lifecycle_store,
             )
@@ -1527,8 +1496,7 @@ class RuntimeRestartRecoveryCoordinator:
             from core.durable_result_idempotency import get_durable_result_id_store
         except Exception as exc:
             logger.warning(
-                "RuntimeRestartRecovery._verify_result_continuity_guard: "
-                "import failed — %s",
+                "RuntimeRestartRecovery._verify_result_continuity_guard: " "import failed — %s",
                 exc,
             )
             return
@@ -1545,8 +1513,7 @@ class RuntimeRestartRecoveryCoordinator:
             )
         except Exception as exc:
             logger.warning(
-                "RuntimeRestartRecovery._verify_result_continuity_guard: "
-                "DurableResultIdSet check failed — %s",
+                "RuntimeRestartRecovery._verify_result_continuity_guard: " "DurableResultIdSet check failed — %s",
                 exc,
             )
             report.result_continuity_guard_active = False
@@ -1631,8 +1598,7 @@ class RuntimeRestartRecoveryCoordinator:
             )
         except Exception as exc:
             logger.warning(
-                "RuntimeRestartRecovery._evaluate_task_continuity: "
-                "evaluation failed — %s",
+                "RuntimeRestartRecovery._evaluate_task_continuity: " "evaluation failed — %s",
                 exc,
             )
 
@@ -1714,13 +1680,21 @@ def run_startup_recovery(
     # 重置),每次启动双跑一遍。进程内幂等:显式传 store(测试注入)时不缓存;
     # 无参调用第二次直接返回首次报告。
     global _startup_recovery_report
-    _explicit = any(x is not None for x in (
-        mesh_session_store, body_mesh_store, body_mesh_registry,
-        hybrid_continuity_registry, hybrid_continuity_store, task_lifecycle_store,
-    ))
+    _explicit = any(
+        x is not None
+        for x in (
+            mesh_session_store,
+            body_mesh_store,
+            body_mesh_registry,
+            hybrid_continuity_registry,
+            hybrid_continuity_store,
+            task_lifecycle_store,
+        )
+    )
     if not _explicit and _startup_recovery_report is not None:
-        logger.info("startup recovery 本进程已执行过(recovery_id=%s),复用首次报告",
-                    _startup_recovery_report.recovery_id)
+        logger.info(
+            "startup recovery 本进程已执行过(recovery_id=%s),复用首次报告", _startup_recovery_report.recovery_id
+        )
         return _startup_recovery_report
     coordinator = RuntimeRestartRecoveryCoordinator(
         mesh_session_store=mesh_session_store,

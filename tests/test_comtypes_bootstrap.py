@@ -27,10 +27,10 @@ sys.path.insert(0, _AUTONOMY_DIR)
 
 import comtypes_bootstrap as cb  # noqa: E402 (inserted path above)
 
-
 # ---------------------------------------------------------------------------
 # Helper: build a minimal comtypes mock suitable for sys.modules patching
 # ---------------------------------------------------------------------------
+
 
 def _make_comtypes_mocks(gen_dir="/old/gen", gen_path=None):
     """Return a dict suitable for ``patch.dict(sys.modules, ...)``."""
@@ -118,9 +118,12 @@ class TestGetAsciiSafeCacheDir(unittest.TestCase):
                     return "/tmp/\u4e2d\u6587/.comtypes_cache"
                 return original_join(*args)
 
-            with patch.dict(os.environ, {
-                "PROGRAMDATA": "\u4e2d\u6587\\ProgramData",  # 非 ASCII PROGRAMDATA
-            }):
+            with patch.dict(
+                os.environ,
+                {
+                    "PROGRAMDATA": "\u4e2d\u6587\\ProgramData",  # 非 ASCII PROGRAMDATA
+                },
+            ):
                 with patch("os.path.join", side_effect=_failing_join):
                     result = cb._get_ascii_safe_cache_dir()
 
@@ -277,6 +280,7 @@ class TestEnsureUiaClientOnWindows(unittest.TestCase):
                 with patch.object(cb, "_collect_stale_cache_dirs", return_value=[]):
                     with patch.object(cb, "_regenerate_uia_module", side_effect=mock_regenerate):
                         import builtins
+
                         original = builtins.__import__
 
                         def fake_import(name, *args, **kwargs):
@@ -293,4 +297,3 @@ class TestEnsureUiaClientOnWindows(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

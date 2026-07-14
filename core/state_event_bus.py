@@ -61,6 +61,7 @@ logger = logging.getLogger("Galaxy.StateEventBus")
 # Event types
 # ---------------------------------------------------------------------------
 
+
 class StateEventType(str, Enum):
     """Canonical event types emitted by the unified state event bus.
 
@@ -68,33 +69,33 @@ class StateEventType(str, Enum):
     """
 
     # ── Phase / tri-state transitions ─────────────────────────────────────
-    PHASE_SILENT = "phase.silent"    # session entered SILENT state
-    PHASE_LIMINAL = "phase.liminal"   # session entered LIMINAL state
+    PHASE_SILENT = "phase.silent"  # session entered SILENT state
+    PHASE_LIMINAL = "phase.liminal"  # session entered LIMINAL state
     PHASE_MANIFEST = "phase.manifest"  # session entered MANIFEST state
 
     # ── Task lifecycle ─────────────────────────────────────────────────────
-    TASK_STARTED = "task.started"    # task transitioned to 'running'
-    TASK_DONE = "task.done"       # task completed successfully
-    TASK_FAILED = "task.failed"     # task failed
+    TASK_STARTED = "task.started"  # task transitioned to 'running'
+    TASK_DONE = "task.done"  # task completed successfully
+    TASK_FAILED = "task.failed"  # task failed
 
     # ── Skill / tool invocation ────────────────────────────────────────────
-    SKILL_INVOKED = "skill.invoked"   # skill/MCP tool call started
-    SKILL_DONE = "skill.done"      # skill/MCP tool call succeeded
-    SKILL_FAILED = "skill.failed"    # skill/MCP tool call failed
+    SKILL_INVOKED = "skill.invoked"  # skill/MCP tool call started
+    SKILL_DONE = "skill.done"  # skill/MCP tool call succeeded
+    SKILL_FAILED = "skill.failed"  # skill/MCP tool call failed
 
     # ── Executor / device actions ──────────────────────────────────────────
     EXECUTOR_START = "executor.start"  # execution action started
-    EXECUTOR_DONE = "executor.done"   # execution action finished
-    EXECUTOR_FAIL = "executor.fail"   # execution action failed
+    EXECUTOR_DONE = "executor.done"  # execution action finished
+    EXECUTOR_FAIL = "executor.fail"  # execution action failed
 
     # ── Device state ───────────────────────────────────────────────────────
     DEVICE_UPDATED = "device.updated"  # device state / capability updated
 
     # ── Block-4: Presence / mesh / HITL ───────────────────────────────────
     PRESENCE_PROJECTED = "presence.projected"  # cognitive state projected to device(s)
-    HITL_EVALUATED = "hitl.evaluated"      # HITL gate evaluation completed
-    MESH_UPDATED = "mesh.updated"        # body mesh topology changed
-    TASK_CANCELLED = "task.cancelled"      # task cancelled by cancel/interrupt signal
+    HITL_EVALUATED = "hitl.evaluated"  # HITL gate evaluation completed
+    MESH_UPDATED = "mesh.updated"  # body mesh topology changed
+    TASK_CANCELLED = "task.cancelled"  # task cancelled by cancel/interrupt signal
 
     # ── Desktop shell / clothing state (PR-8 V2) ──────────────────────────
     # These correspond to the UI shell expansion modes in
@@ -104,8 +105,8 @@ class StateEventType(str, Enum):
     # FULLAGENT.  They are distinct from the tri-state lifecycle events above:
     # shell events describe how the desktop clothing is rendered; phase events
     # describe the subject's existential state.
-    SHELL_DORMANT = "shell.dormant"    # clothing hidden / collapsed
-    SHELL_ISLAND = "shell.island"     # compact clothing (island mode)
+    SHELL_DORMANT = "shell.dormant"  # clothing hidden / collapsed
+    SHELL_ISLAND = "shell.island"  # compact clothing (island mode)
     SHELL_SIDESHEET = "shell.sidesheet"  # side panel clothing expansion
     SHELL_FULLAGENT = "shell.fullagent"  # full clothing expansion
 
@@ -123,12 +124,13 @@ class StateEventType(str, Enum):
     AMBIENT_DECISION = "ambient.decision"
 
     # ── Generic / passthrough ─────────────────────────────────────────────
-    GENERIC = "generic"         # uncategorised event
+    GENERIC = "generic"  # uncategorised event
 
 
 # ---------------------------------------------------------------------------
 # Event schema
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class StateEvent:
@@ -178,6 +180,7 @@ class StateEvent:
 # Subscription token
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class SubscriptionToken:
     """Opaque handle returned by :meth:`StateEventBus.subscribe`.
@@ -185,7 +188,7 @@ class SubscriptionToken:
     Pass it back to :meth:`StateEventBus.unsubscribe` to remove the listener.
     """
 
-    event_type: Optional[str]   # None means "wildcard" (all types)
+    event_type: Optional[str]  # None means "wildcard" (all types)
     callback: Callable
     token_id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
@@ -193,6 +196,7 @@ class SubscriptionToken:
 # ---------------------------------------------------------------------------
 # StateEventBus
 # ---------------------------------------------------------------------------
+
 
 class StateEventBus:
     """In-process publish/subscribe event bus with async-safe delivery.
@@ -242,15 +246,14 @@ class StateEventBus:
             A :class:`SubscriptionToken` that can be passed to
             :meth:`unsubscribe`.
         """
-        key: Optional[str] = (
-            event_type.value if isinstance(event_type, StateEventType) else event_type
-        )
+        key: Optional[str] = event_type.value if isinstance(event_type, StateEventType) else event_type
         token = SubscriptionToken(event_type=key, callback=callback)
         self._subscribers.setdefault(key, []).append(token)
         self._all_tokens[token.token_id] = token
         logger.debug(
             "StateEventBus: subscribed token=%s event_type=%s",
-            token.token_id, key,
+            token.token_id,
+            key,
         )
         return token
 
@@ -274,7 +277,8 @@ class StateEventBus:
         self._all_tokens.pop(token.token_id, None)
         logger.debug(
             "StateEventBus: unsubscribed token=%s event_type=%s",
-            token.token_id, token.event_type,
+            token.token_id,
+            token.event_type,
         )
         return True
 
@@ -309,11 +313,7 @@ class StateEventBus:
             The :class:`StateEvent` that was dispatched.
         """
         if event is None:
-            type_str = (
-                event_type.value
-                if isinstance(event_type, StateEventType)
-                else str(event_type)
-            )
+            type_str = event_type.value if isinstance(event_type, StateEventType) else str(event_type)
             event = StateEvent(
                 type=type_str,
                 source=source,
@@ -349,16 +349,18 @@ class StateEventBus:
                         except RuntimeError:
                             # No running loop — skip async subscriber gracefully.
                             logger.debug(
-                                "StateEventBus: async subscriber skipped (no loop) "
-                                "token=%s event=%s",
-                                token.token_id, event.type,
+                                "StateEventBus: async subscriber skipped (no loop) " "token=%s event=%s",
+                                token.token_id,
+                                event.type,
                             )
                     else:
                         token.callback(event)
                 except Exception as exc:
                     logger.warning(
                         "StateEventBus: subscriber raised token=%s event=%s: %s",
-                        token.token_id, event.type, exc,
+                        token.token_id,
+                        event.type,
+                        exc,
                     )
 
     # ── Diagnostics ───────────────────────────────────────────────────────
@@ -367,11 +369,7 @@ class StateEventBus:
         """Return the number of subscribers for *event_type* (or total if ``None``)."""
         if event_type is None:
             return len(self._all_tokens)
-        key = (
-            event_type.value
-            if isinstance(event_type, StateEventType)
-            else event_type
-        )
+        key = event_type.value if isinstance(event_type, StateEventType) else event_type
         return len(self._subscribers.get(key, []))
 
     def clear(self) -> None:
@@ -404,6 +402,7 @@ def reset_state_event_bus() -> None:
 # ---------------------------------------------------------------------------
 # Convenience helpers
 # ---------------------------------------------------------------------------
+
 
 def emit(
     event_type: Union[StateEventType, str],

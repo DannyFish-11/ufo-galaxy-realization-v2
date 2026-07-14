@@ -68,7 +68,7 @@ class TestModelsTabKeysExistInConfigSchema:
         missing = sorted(k for k in ui_keys if k not in CONFIG_SCHEMA)
         assert not missing, (
             f"ModelsTab.tsx 引用了以下 key,但 core/routes/config.py::CONFIG_SCHEMA "
-            f"里没有——POST /api/config 会对这些 key 返回 400,导致面板显示\"保存失败\": "
+            f'里没有——POST /api/config 会对这些 key 返回 400,导致面板显示"保存失败": '
             f"{missing}"
         )
 
@@ -87,9 +87,7 @@ class TestSettingsTabKeysExistInConfigSchema:
         ui_keys = _extract_settings_tab_keys()
         assert ui_keys, "未能从 SettingsTab.tsx 解析出任何 key —— 正则可能需要更新"
         missing = sorted(k for k in ui_keys if k not in CONFIG_SCHEMA)
-        assert not missing, (
-            f"SettingsTab.tsx 的 CONFIG_KEYS 引用了以下 key,但 CONFIG_SCHEMA 里没有: {missing}"
-        )
+        assert not missing, f"SettingsTab.tsx 的 CONFIG_KEYS 引用了以下 key,但 CONFIG_SCHEMA 里没有: {missing}"
 
 
 class TestPostConfigEndToEnd:

@@ -104,9 +104,7 @@ def build_problem_execution_spine(
             "decision_basis": _route_basis,
         },
         "android_integration": {
-            "participation_mode": (
-                "delegated_or_takeover_participant" if _android_selected else "none"
-            ),
+            "participation_mode": ("delegated_or_takeover_participant" if _android_selected else "none"),
             "required_runtime_points": list(ANDROID_RUNTIME_INTEGRATION_POINTS),
             "result_reporting_shape": {
                 "required_fields": list(ANDROID_RESULT_REPORTING_SHAPE["required_fields"]),
@@ -147,9 +145,7 @@ def build_problem_execution_closure(
     )
     _acceptance_verdict = str(evidence_acceptance_verdict or "").strip().lower()
     _evidence_gate_blocked = _acceptance_verdict in {"quarantine", "reject"}
-    _closure_requirements_met = bool(
-        truth_chain_complete and completion_notified and (not _evidence_gate_blocked)
-    )
+    _closure_requirements_met = bool(truth_chain_complete and completion_notified and (not _evidence_gate_blocked))
     _task_closed = bool(_is_terminal_status and _closure_requirements_met)
     _problem_closed = bool(_problem_closed_signal and _closure_requirements_met)
     _execution_path = str(_payload.get("execution_path") or "")
@@ -164,11 +160,7 @@ def build_problem_execution_closure(
     _degraded_but_solved = bool(normalized_status == "degraded" and _problem_closed)
     return {
         "contract_version": NL_EXECUTION_SPINE_CONTRACT_VERSION,
-        "task_closure_stage": (
-            "closed"
-            if _task_closed
-            else "partial_or_pending"
-        ),
+        "task_closure_stage": ("closed" if _task_closed else "partial_or_pending"),
         "delegated_step_stage": (
             "closed"
             if (_delegated_signal and _is_terminal_status)
@@ -251,10 +243,7 @@ def _derive_route_decision_basis(
         "delegation_point": metadata.get("delegation_point") or "",
         "remote_execution_mode": metadata.get("remote_execution_mode") or "",
         "action_taken": execution_result.get("action_taken") or "none",
-        "decision_source": (
-            _path_basis.get("decision_source")
-            or "openclawd.determine_execution_path"
-        ),
+        "decision_source": (_path_basis.get("decision_source") or "openclawd.determine_execution_path"),
     }
 
 

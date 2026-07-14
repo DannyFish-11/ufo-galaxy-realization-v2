@@ -24,6 +24,7 @@ python-matter-server 是阶段2，仅当想甩开 HA 时才值得）。
 控制通路（下行）已有：nodes/Node_27_SmartHome 的 HA REST；本桥补的是
 上行（发现 + 感知）。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -60,10 +61,7 @@ def ha_bridge_enabled() -> bool:
     """是否应启动 HA 桥：URL+TOKEN 齐 且未被 GALAXY_HA_BRIDGE=0 显式关闭。"""
     if os.environ.get("GALAXY_HA_BRIDGE", "1").strip() == "0":
         return False
-    return bool(
-        os.environ.get("HOME_ASSISTANT_URL", "").strip()
-        and os.environ.get("HOME_ASSISTANT_TOKEN", "").strip()
-    )
+    return bool(os.environ.get("HOME_ASSISTANT_URL", "").strip() and os.environ.get("HOME_ASSISTANT_TOKEN", "").strip())
 
 
 class HABridge:
@@ -106,6 +104,7 @@ class HABridge:
         """拉全量 HA 实体，逐个注册/刷新进 UDM。返回镜像数量;失败返回 0 不抛。"""
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=15.0) as client:
                 resp = await client.get(
                     f"{self._url}/api/states",
@@ -138,6 +137,7 @@ class HABridge:
         online = value not in _UNAVAILABLE_STATES
         try:
             from core.unified.device_manager import get_unified_device_manager
+
             dm = get_unified_device_manager()
             device_id = f"ha_{entity_id}"
             patch = {
@@ -157,9 +157,13 @@ class HABridge:
                 # 注册只立最小身份;register_device_from_dict 会把"多余键"整体
                 # 当 metadata(嵌套错位),且其语义为"注册即在线"——完整状态
                 # (status/metadata/capabilities)一律走下面的 SSOT upsert。
-                dm.register_device_from_dict(device_id, {
-                    "device_type": "iot", "device_name": patch["device_name"],
-                })
+                dm.register_device_from_dict(
+                    device_id,
+                    {
+                        "device_type": "iot",
+                        "device_name": patch["device_name"],
+                    },
+                )
             dm.upsert_device_state(device_id, patch, source="ha_bridge")
             return True
         except Exception as exc:  # noqa: BLE001
@@ -171,9 +175,9 @@ class HABridge:
     def _ws_url(self) -> str:
         base = self._url
         if base.startswith("https://"):
-            return "wss://" + base[len("https://"):] + "/api/websocket"
+            return "wss://" + base[len("https://") :] + "/api/websocket"
         if base.startswith("http://"):
-            return "ws://" + base[len("http://"):] + "/api/websocket"
+            return "ws://" + base[len("http://") :] + "/api/websocket"
         return "ws://" + base + "/api/websocket"
 
     async def _event_loop(self) -> None:
@@ -195,6 +199,7 @@ class HABridge:
 
     async def _consume_events(self) -> None:
         import websockets
+
         async with websockets.connect(self._ws_url(), max_size=4 * 1024 * 1024) as ws:
             # HA WS 协议:auth_required → auth → auth_ok → subscribe_events
             first = json.loads(await ws.recv())
@@ -205,9 +210,7 @@ class HABridge:
                     logger.warning("HA 桥:WebSocket 鉴权失败: %s", reply.get("type"))
                     self._running = False  # token 错误,重试无意义
                     return
-            await ws.send(json.dumps(
-                {"id": 1, "type": "subscribe_events", "event_type": "state_changed"}
-            ))
+            await ws.send(json.dumps({"id": 1, "type": "subscribe_events", "event_type": "state_changed"}))
             await ws.recv()  # subscribe result
             self.connected = True
             logger.info("HA 桥:事件流已连接(state_changed)")
@@ -232,15 +235,20 @@ class HABridge:
         self.last_event_ts = time.time()
         old_state = data.get("old_state") or {}
         try:
-            from core.state_event_bus import emit, StateEventType
-            emit(StateEventType.DEVICE_UPDATED, "ha_bridge", {
-                "device_id": f"ha_{entity_id}",
-                "ha_entity_id": entity_id,
-                "ha_domain": entity_id.split(".", 1)[0],
-                "old_state": str(old_state.get("state", "") or ""),
-                "new_state": str(new_state.get("state", "") or ""),
-                "friendly_name": (new_state.get("attributes") or {}).get("friendly_name", ""),
-            })
+            from core.state_event_bus import StateEventType, emit
+
+            emit(
+                StateEventType.DEVICE_UPDATED,
+                "ha_bridge",
+                {
+                    "device_id": f"ha_{entity_id}",
+                    "ha_entity_id": entity_id,
+                    "ha_domain": entity_id.split(".", 1)[0],
+                    "old_state": str(old_state.get("state", "") or ""),
+                    "new_state": str(new_state.get("state", "") or ""),
+                    "friendly_name": (new_state.get("attributes") or {}).get("friendly_name", ""),
+                },
+            )
         except Exception as exc:  # noqa: BLE001
             logger.debug("HA 桥:DEVICE_UPDATED 事件发布失败(非致命): %s", exc)
 

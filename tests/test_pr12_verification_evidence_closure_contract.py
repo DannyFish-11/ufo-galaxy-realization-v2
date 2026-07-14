@@ -79,44 +79,39 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 _MODULE_AVAILABLE = False
 try:
-    from core.verification_evidence_closure_contract import (
-        # Authority / policy sentinels
-        VERIFICATION_EVIDENCE_CLOSURE_CONTRACT_AUTHORITY,
-        VERIFICATION_EVIDENCE_CLOSURE_CONTRACT_PR12_SENTINEL,
+    from core.verification_evidence_closure_contract import (  # Authority / policy sentinels; Enumerations; Data classes; Functions
+        EVIDENCE_ABSENCE_DEFAULTS_TO_UNVERIFIED_POLICY,
         EVIDENCE_PRESENCE_IS_NOT_VERIFICATION_CLOSURE_POLICY,
+        MULTIPLE_SOURCE_CONVERGENCE_REQUIRED_FOR_FULLY_CLOSED_POLICY,
+        OPEN_VERIFICATION_ITEMS_BLOCK_FULLY_CLOSED_POLICY,
         PARTIAL_VERIFICATION_IS_NOT_CONDITIONAL_CLOSURE_POLICY,
         REVIEW_PASSED_WITHOUT_COMPLETE_EVIDENCE_MUST_DOWNGRADE_POLICY,
-        EVIDENCE_ABSENCE_DEFAULTS_TO_UNVERIFIED_POLICY,
-        OPEN_VERIFICATION_ITEMS_BLOCK_FULLY_CLOSED_POLICY,
         UNDOCUMENTED_CONDITIONS_BLOCK_CONDITIONAL_CLOSURE_POLICY,
-        MULTIPLE_SOURCE_CONVERGENCE_REQUIRED_FOR_FULLY_CLOSED_POLICY,
-        # Enumerations
-        VerificationClosureClass,
+        VERIFICATION_EVIDENCE_CLOSURE_CONTRACT_AUTHORITY,
+        VERIFICATION_EVIDENCE_CLOSURE_CONTRACT_PR12_SENTINEL,
         EvidenceSourceStatus,
         VerificationCheckStatus,
-        # Data classes
+        VerificationClosureClass,
         VerificationClosureEvidence,
         VerificationClosureVerdict,
-        # Functions
-        classify_verification_closure,
-        build_verification_closure_verdict,
         build_baseline_verification_closure_verdict,
+        build_verification_closure_verdict,
+        classify_verification_closure,
     )
+
     _MODULE_AVAILABLE = True
 except ImportError as _imp_err:
-    print(
-        f"SKIP: core.verification_evidence_closure_contract unavailable: {_imp_err}"
-    )
+    print(f"SKIP: core.verification_evidence_closure_contract unavailable: {_imp_err}")
 
 
 def _skip_if_unavailable(test_fn):
     """Decorator: skip test if the module is not available."""
+
     def wrapper(self):
         if not _MODULE_AVAILABLE:
-            self.skipTest(
-                "core.verification_evidence_closure_contract not available"
-            )
+            self.skipTest("core.verification_evidence_closure_contract not available")
         return test_fn(self)
+
     wrapper.__name__ = test_fn.__name__
     return wrapper
 
@@ -124,6 +119,7 @@ def _skip_if_unavailable(test_fn):
 # ---------------------------------------------------------------------------
 # Helper: build evidence with named overrides
 # ---------------------------------------------------------------------------
+
 
 def _ev(**kwargs) -> "VerificationClosureEvidence":
     """Build VerificationClosureEvidence with fully conservative defaults."""
@@ -278,9 +274,7 @@ class TestVerificationEvidenceClosureContract(unittest.TestCase):
     @_skip_if_unavailable
     def test_D01_full_evidence_produces_fully_closed(self):
         verdict = classify_verification_closure(_full_evidence())
-        self.assertEqual(
-            verdict.closure_class, VerificationClosureClass.fully_closed
-        )
+        self.assertEqual(verdict.closure_class, VerificationClosureClass.fully_closed)
 
     @_skip_if_unavailable
     def test_D02_fully_closed_sets_is_fully_closed_true(self):
@@ -315,9 +309,7 @@ class TestVerificationEvidenceClosureContract(unittest.TestCase):
     def test_E01_missing_all_evidence_sources_blocks_fully_closed(self):
         evidence = _full_evidence(all_evidence_sources_present=False)
         verdict = classify_verification_closure(evidence)
-        self.assertNotEqual(
-            verdict.closure_class, VerificationClosureClass.fully_closed
-        )
+        self.assertNotEqual(verdict.closure_class, VerificationClosureClass.fully_closed)
 
     @_skip_if_unavailable
     def test_E02_missing_all_sources_with_conditions_gives_conditionally_closed(self):
@@ -327,9 +319,7 @@ class TestVerificationEvidenceClosureContract(unittest.TestCase):
             conditions_bounded=True,
         )
         verdict = classify_verification_closure(evidence)
-        self.assertEqual(
-            verdict.closure_class, VerificationClosureClass.conditionally_closed
-        )
+        self.assertEqual(verdict.closure_class, VerificationClosureClass.conditionally_closed)
 
     @_skip_if_unavailable
     def test_E03_missing_all_sources_no_conditions_gives_partially_substantiated(self):
@@ -339,9 +329,7 @@ class TestVerificationEvidenceClosureContract(unittest.TestCase):
             conditions_documented=False,
         )
         verdict = classify_verification_closure(evidence)
-        self.assertEqual(
-            verdict.closure_class, VerificationClosureClass.partially_substantiated
-        )
+        self.assertEqual(verdict.closure_class, VerificationClosureClass.partially_substantiated)
 
     # -----------------------------------------------------------------------
     # Group F — fully_closed requires multiple_source_convergence
@@ -351,9 +339,7 @@ class TestVerificationEvidenceClosureContract(unittest.TestCase):
     def test_F01_no_multiple_source_convergence_blocks_fully_closed(self):
         evidence = _full_evidence(multiple_source_convergence=False)
         verdict = classify_verification_closure(evidence)
-        self.assertNotEqual(
-            verdict.closure_class, VerificationClosureClass.fully_closed
-        )
+        self.assertNotEqual(verdict.closure_class, VerificationClosureClass.fully_closed)
 
     @_skip_if_unavailable
     def test_F02_no_convergence_with_conditions_gives_conditionally_closed(self):
@@ -363,9 +349,7 @@ class TestVerificationEvidenceClosureContract(unittest.TestCase):
             conditions_bounded=True,
         )
         verdict = classify_verification_closure(evidence)
-        self.assertEqual(
-            verdict.closure_class, VerificationClosureClass.conditionally_closed
-        )
+        self.assertEqual(verdict.closure_class, VerificationClosureClass.conditionally_closed)
 
     @_skip_if_unavailable
     def test_F03_no_convergence_downgrade_reason_mentions_convergence(self):
@@ -382,9 +366,7 @@ class TestVerificationEvidenceClosureContract(unittest.TestCase):
     def test_G01_open_items_block_fully_closed(self):
         evidence = _full_evidence(no_open_verification_items=False)
         verdict = classify_verification_closure(evidence)
-        self.assertNotEqual(
-            verdict.closure_class, VerificationClosureClass.fully_closed
-        )
+        self.assertNotEqual(verdict.closure_class, VerificationClosureClass.fully_closed)
 
     @_skip_if_unavailable
     def test_G02_open_items_block_conditionally_closed(self):
@@ -394,17 +376,13 @@ class TestVerificationEvidenceClosureContract(unittest.TestCase):
             conditions_bounded=True,
         )
         verdict = classify_verification_closure(evidence)
-        self.assertNotEqual(
-            verdict.closure_class, VerificationClosureClass.conditionally_closed
-        )
+        self.assertNotEqual(verdict.closure_class, VerificationClosureClass.conditionally_closed)
 
     @_skip_if_unavailable
     def test_G03_open_items_produce_partially_substantiated(self):
         evidence = _full_evidence(no_open_verification_items=False)
         verdict = classify_verification_closure(evidence)
-        self.assertEqual(
-            verdict.closure_class, VerificationClosureClass.partially_substantiated
-        )
+        self.assertEqual(verdict.closure_class, VerificationClosureClass.partially_substantiated)
 
     @_skip_if_unavailable
     def test_G04_open_items_downgrade_reason_mentions_open_items(self):
@@ -436,9 +414,7 @@ class TestVerificationEvidenceClosureContract(unittest.TestCase):
             conditions_bounded=True,
         )
         verdict = classify_verification_closure(evidence)
-        self.assertEqual(
-            verdict.closure_class, VerificationClosureClass.conditionally_closed
-        )
+        self.assertEqual(verdict.closure_class, VerificationClosureClass.conditionally_closed)
 
     @_skip_if_unavailable
     def test_H02_conditionally_closed_is_closed_true(self):
@@ -481,9 +457,7 @@ class TestVerificationEvidenceClosureContract(unittest.TestCase):
             conditions_bounded=False,  # not bounded
         )
         verdict = classify_verification_closure(evidence)
-        self.assertNotEqual(
-            verdict.closure_class, VerificationClosureClass.conditionally_closed
-        )
+        self.assertNotEqual(verdict.closure_class, VerificationClosureClass.conditionally_closed)
 
     @_skip_if_unavailable
     def test_I02_unbounded_conditions_produce_partially_substantiated(self):
@@ -496,9 +470,7 @@ class TestVerificationEvidenceClosureContract(unittest.TestCase):
             conditions_bounded=False,
         )
         verdict = classify_verification_closure(evidence)
-        self.assertEqual(
-            verdict.closure_class, VerificationClosureClass.partially_substantiated
-        )
+        self.assertEqual(verdict.closure_class, VerificationClosureClass.partially_substantiated)
 
     # -----------------------------------------------------------------------
     # Group J — conditionally_closed requires conditions_documented
@@ -517,9 +489,7 @@ class TestVerificationEvidenceClosureContract(unittest.TestCase):
             conditions_bounded=True,
         )
         verdict = classify_verification_closure(evidence)
-        self.assertNotEqual(
-            verdict.closure_class, VerificationClosureClass.conditionally_closed
-        )
+        self.assertNotEqual(verdict.closure_class, VerificationClosureClass.conditionally_closed)
 
     # -----------------------------------------------------------------------
     # Group K — partially_substantiated
@@ -535,9 +505,7 @@ class TestVerificationEvidenceClosureContract(unittest.TestCase):
             # not all sources present, no convergence, no conditions
         )
         verdict = classify_verification_closure(evidence)
-        self.assertEqual(
-            verdict.closure_class, VerificationClosureClass.partially_substantiated
-        )
+        self.assertEqual(verdict.closure_class, VerificationClosureClass.partially_substantiated)
 
     @_skip_if_unavailable
     def test_K02_partially_substantiated_is_not_closed(self):
@@ -576,9 +544,7 @@ class TestVerificationEvidenceClosureContract(unittest.TestCase):
             no_open_verification_items=False,  # open items remain
         )
         verdict = classify_verification_closure(evidence)
-        self.assertEqual(
-            verdict.closure_class, VerificationClosureClass.partially_substantiated
-        )
+        self.assertEqual(verdict.closure_class, VerificationClosureClass.partially_substantiated)
 
     # -----------------------------------------------------------------------
     # Group M — review accepted but checks not passed → partially_substantiated
@@ -595,9 +561,7 @@ class TestVerificationEvidenceClosureContract(unittest.TestCase):
             review_accepted=True,  # review accepted, but checks failed
         )
         verdict = classify_verification_closure(evidence)
-        self.assertEqual(
-            verdict.closure_class, VerificationClosureClass.partially_substantiated
-        )
+        self.assertEqual(verdict.closure_class, VerificationClosureClass.partially_substantiated)
 
     @_skip_if_unavailable
     def test_M02_review_accepted_but_checks_not_passed_is_not_closed(self):
@@ -867,11 +831,26 @@ class TestVerificationEvidenceClosureContract(unittest.TestCase):
     def test_T01_is_fully_closed_true_only_for_fully_closed_class(self):
         for evidence, expected_fully_closed in [
             (_full_evidence(), True),
-            (_ev(evidence_sources_confirmed=True, verification_checks_executed=True,
-                 verification_checks_passed=True, no_open_verification_items=True,
-                 conditions_documented=True, conditions_bounded=True), False),
-            (_ev(evidence_sources_confirmed=True, verification_checks_executed=True,
-                 verification_checks_passed=True, no_open_verification_items=True), False),
+            (
+                _ev(
+                    evidence_sources_confirmed=True,
+                    verification_checks_executed=True,
+                    verification_checks_passed=True,
+                    no_open_verification_items=True,
+                    conditions_documented=True,
+                    conditions_bounded=True,
+                ),
+                False,
+            ),
+            (
+                _ev(
+                    evidence_sources_confirmed=True,
+                    verification_checks_executed=True,
+                    verification_checks_passed=True,
+                    no_open_verification_items=True,
+                ),
+                False,
+            ),
             (_ev(evidence_sources_confirmed=True, verification_checks_executed=True), False),
             (_ev(evidence_sources_confirmed=True), False),
             (_ev(), False),
@@ -1098,9 +1077,7 @@ class TestVerificationEvidenceClosureContract(unittest.TestCase):
                 get_system_acceptance_evaluator,
             )
         except ImportError:
-            self.skipTest(
-                "core.system_final_acceptance_verdict not available"
-            )
+            self.skipTest("core.system_final_acceptance_verdict not available")
         evaluator = get_system_acceptance_evaluator()
         report = evaluator.evaluate()
         self.assertIn("verification_evidence_closure", report.checklist)
@@ -1110,13 +1087,11 @@ class TestVerificationEvidenceClosureContract(unittest.TestCase):
         """The verification_evidence_closure checklist item has a valid status."""
         try:
             from core.system_final_acceptance_verdict import (
-                get_system_acceptance_evaluator,
                 DimensionStatus,
+                get_system_acceptance_evaluator,
             )
         except ImportError:
-            self.skipTest(
-                "core.system_final_acceptance_verdict not available"
-            )
+            self.skipTest("core.system_final_acceptance_verdict not available")
         evaluator = get_system_acceptance_evaluator()
         report = evaluator.evaluate()
         item = report.checklist.get("verification_evidence_closure")
@@ -1135,9 +1110,7 @@ class TestVerificationEvidenceClosureContract(unittest.TestCase):
         try:
             from core.system_final_acceptance_verdict import AcceptanceDimensionId
         except ImportError:
-            self.skipTest(
-                "core.system_final_acceptance_verdict not available"
-            )
+            self.skipTest("core.system_final_acceptance_verdict not available")
         dims = [d.value for d in AcceptanceDimensionId.all_dimensions()]
         self.assertIn("verification_evidence_closure", dims)
 
@@ -1146,9 +1119,7 @@ class TestVerificationEvidenceClosureContract(unittest.TestCase):
         try:
             from core.system_final_acceptance_verdict import AcceptanceDimensionId
         except ImportError:
-            self.skipTest(
-                "core.system_final_acceptance_verdict not available"
-            )
+            self.skipTest("core.system_final_acceptance_verdict not available")
         dim = AcceptanceDimensionId.verification_evidence_closure
         self.assertEqual(dim.value, "verification_evidence_closure")
 
@@ -1162,13 +1133,11 @@ class TestVerificationEvidenceClosureContract(unittest.TestCase):
         the module is available, and the baseline correctly returns unverified."""
         try:
             from core.system_final_acceptance_verdict import (
-                get_system_acceptance_evaluator,
                 DimensionStatus,
+                get_system_acceptance_evaluator,
             )
         except ImportError:
-            self.skipTest(
-                "core.system_final_acceptance_verdict not available"
-            )
+            self.skipTest("core.system_final_acceptance_verdict not available")
         evaluator = get_system_acceptance_evaluator()
         report = evaluator.evaluate()
         item = report.checklist.get("verification_evidence_closure")
@@ -1189,23 +1158,17 @@ class TestVerificationEvidenceClosureContract(unittest.TestCase):
         """EVIDENCE_ABSENCE_DEFAULTS_TO_UNVERIFIED_POLICY: zero-evidence probe
         must return unverified, never fully_closed."""
         verdict = build_baseline_verification_closure_verdict()
-        self.assertNotEqual(
-            verdict.closure_class, VerificationClosureClass.fully_closed
-        )
+        self.assertNotEqual(verdict.closure_class, VerificationClosureClass.fully_closed)
 
     @_skip_if_unavailable
     def test_AD02_zero_evidence_probe_must_not_be_conditionally_closed(self):
         verdict = build_baseline_verification_closure_verdict()
-        self.assertNotEqual(
-            verdict.closure_class, VerificationClosureClass.conditionally_closed
-        )
+        self.assertNotEqual(verdict.closure_class, VerificationClosureClass.conditionally_closed)
 
     @_skip_if_unavailable
     def test_AD03_zero_evidence_probe_must_not_be_partially_substantiated(self):
         verdict = build_baseline_verification_closure_verdict()
-        self.assertNotEqual(
-            verdict.closure_class, VerificationClosureClass.partially_substantiated
-        )
+        self.assertNotEqual(verdict.closure_class, VerificationClosureClass.partially_substantiated)
 
     @_skip_if_unavailable
     def test_AD04_zero_evidence_probe_must_not_be_pending(self):
@@ -1220,9 +1183,7 @@ class TestVerificationEvidenceClosureContract(unittest.TestCase):
         """EVIDENCE_PRESENCE_IS_NOT_VERIFICATION_CLOSURE_POLICY."""
         evidence = _ev(evidence_sources_confirmed=True)
         verdict = classify_verification_closure(evidence)
-        self.assertNotEqual(
-            verdict.closure_class, VerificationClosureClass.fully_closed
-        )
+        self.assertNotEqual(verdict.closure_class, VerificationClosureClass.fully_closed)
 
     @_skip_if_unavailable
     def test_AD06_partial_verification_must_not_claim_conditionally_closed(self):
@@ -1236,9 +1197,7 @@ class TestVerificationEvidenceClosureContract(unittest.TestCase):
             conditions_bounded=True,
         )
         verdict = classify_verification_closure(evidence)
-        self.assertNotEqual(
-            verdict.closure_class, VerificationClosureClass.conditionally_closed
-        )
+        self.assertNotEqual(verdict.closure_class, VerificationClosureClass.conditionally_closed)
 
     @_skip_if_unavailable
     def test_AD07_multiple_evidence_sources_alone_must_not_claim_fully_closed(self):
@@ -1251,9 +1210,7 @@ class TestVerificationEvidenceClosureContract(unittest.TestCase):
             # verification_checks_executed=False (default)
         )
         verdict = classify_verification_closure(evidence)
-        self.assertNotEqual(
-            verdict.closure_class, VerificationClosureClass.fully_closed
-        )
+        self.assertNotEqual(verdict.closure_class, VerificationClosureClass.fully_closed)
 
 
 if __name__ == "__main__":

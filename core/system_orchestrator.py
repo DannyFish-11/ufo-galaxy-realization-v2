@@ -53,9 +53,7 @@ logger = logging.getLogger("Galaxy.Orchestrator")
 # Authority sentinel — used by validate_runtime.py and CI guardrails
 # ---------------------------------------------------------------------------
 
-SYSTEM_ORCHESTRATOR_AUTHORITY: str = (
-    "main.py:SYSTEM_ORCHESTRATOR — canonical staged bring-up contract (PR-2)"
-)
+SYSTEM_ORCHESTRATOR_AUTHORITY: str = "main.py:SYSTEM_ORCHESTRATOR — canonical staged bring-up contract (PR-2)"
 
 # ---------------------------------------------------------------------------
 # Strict-preflight sentinel — used by CI and validate_runtime.py
@@ -83,16 +81,17 @@ present in the startup sequence.
 # Startup phase contract
 # ---------------------------------------------------------------------------
 
+
 class StartupPhase(Enum):
     """Ordered startup phases for the canonical bring-up sequence."""
 
-    LOAD_CONFIG = 1          # Phase 1 — Load unified configuration baseline
-    RESOLVE_MODE = 2         # Phase 2 — Resolve current system mode
-    ENV_CHECKS = 3           # Phase 3 — Environment / bootstrap checks
+    LOAD_CONFIG = 1  # Phase 1 — Load unified configuration baseline
+    RESOLVE_MODE = 2  # Phase 2 — Resolve current system mode
+    ENV_CHECKS = 3  # Phase 3 — Environment / bootstrap checks
     BACKGROUND_SUBSYSTEMS = 4  # Phase 4 — Background subsystem bring-up hooks
-    RUNTIME_SUBJECT = 5      # Phase 5 — Runtime subject bring-up hooks
-    DESKTOP_SURFACE = 6      # Phase 6 — Desktop surface bring-up hooks
-    READINESS_SUMMARY = 7    # Phase 7 — Final readiness summary
+    RUNTIME_SUBJECT = 5  # Phase 5 — Runtime subject bring-up hooks
+    DESKTOP_SURFACE = 6  # Phase 6 — Desktop surface bring-up hooks
+    READINESS_SUMMARY = 7  # Phase 7 — Final readiness summary
 
 
 class PhaseStatus(Enum):
@@ -110,6 +109,7 @@ class PhaseStatus(Enum):
 # Phase result — typed, inspectable, extensible
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class PhaseResult:
     """Outcome of a single startup phase."""
@@ -125,14 +125,13 @@ class PhaseResult:
         return self.status in (PhaseStatus.OK, PhaseStatus.DEGRADED, PhaseStatus.SKIPPED)
 
     def __str__(self) -> str:
-        return f"[{self.phase.name}] {self.status.name}" + (
-            f" — {self.detail}" if self.detail else ""
-        )
+        return f"[{self.phase.name}] {self.status.name}" + (f" — {self.detail}" if self.detail else "")
 
 
 # ---------------------------------------------------------------------------
 # Readiness summary
 # ---------------------------------------------------------------------------
+
 
 class OrchestratorReadiness(Enum):
     """Overall readiness state after all phases have run."""
@@ -182,6 +181,7 @@ PhaseHook = Callable[[], PhaseResult]
 # SystemOrchestrator — the staged bring-up engine
 # ---------------------------------------------------------------------------
 
+
 class SystemOrchestrator:
     """
     Staged bring-up engine for Galaxy-Nexus.
@@ -208,9 +208,7 @@ class SystemOrchestrator:
         self.continue_on_failure = continue_on_failure
         # Resolve strict mode: explicit argument takes precedence over env var.
         if strict_preflight is None:
-            strict_preflight = os.environ.get(STRICT_PREFLIGHT_ENV_VAR, "").lower() in (
-                "1", "true", "yes"
-            )
+            strict_preflight = os.environ.get(STRICT_PREFLIGHT_ENV_VAR, "").lower() in ("1", "true", "yes")
         self.strict_preflight: bool = strict_preflight
         self._extra_hooks: Dict[StartupPhase, List[PhaseHook]] = {}
 
@@ -231,6 +229,7 @@ class SystemOrchestrator:
         logger.info("[启动·配置] Loading unified configuration …")
         try:
             from core.unified_config import get_config
+
             cfg = get_config()
             detail = "unified config loaded"
             if hasattr(cfg, "get_status_dict"):
@@ -254,6 +253,7 @@ class SystemOrchestrator:
     def _run_phase_2_resolve_mode(self) -> PhaseResult:
         """Phase 2 — Resolve current system mode."""
         import os
+
         logger.info("[启动·模式] Resolving system mode …")
         mode = os.environ.get("GALAXY_SYSTEM_MODE", "desktop-local").strip() or "desktop-local"
         nats_enabled = os.environ.get("GALAXY_NATS_ENABLED", "").lower() in ("true", "1")
@@ -290,12 +290,11 @@ class SystemOrchestrator:
         issues: List[str] = []
         has_critical_failure = False
         try:
-            from core.config_preflight import run_preflight, ConfigPreflightError
+            from core.config_preflight import ConfigPreflightError, run_preflight  # noqa: F401
+
             report = run_preflight(dry_run=True)  # collect findings without raising
             if not report.ok:
-                issues.append(
-                    f"preflight: {len(report.critical_findings)} CRITICAL finding(s)"
-                )
+                issues.append(f"preflight: {len(report.critical_findings)} CRITICAL finding(s)")
                 if self.strict_preflight:
                     has_critical_failure = True
                     logger.error(
@@ -376,15 +375,10 @@ class SystemOrchestrator:
             from core.nats_posture import evaluate_nats_posture
 
             nats_posture = evaluate_nats_posture()
-            diagnostics["checks"]["nats_posture_assertion_ok"] = bool(
-                nats_posture.get("assertion_ok", True)
-            )
+            diagnostics["checks"]["nats_posture_assertion_ok"] = bool(nats_posture.get("assertion_ok", True))
             diagnostics["nats_posture"] = nats_posture
             if not nats_posture.get("assertion_ok", True):
-                reason = (
-                    nats_posture.get("violation_reason")
-                    or "nats_posture_violation_unknown_reason"
-                )
+                reason = nats_posture.get("violation_reason") or "nats_posture_violation_unknown_reason"
                 hard_failures.append(str(reason))
         except Exception as exc:
             logger.debug("Fallback triggered: %s", exc)
@@ -525,6 +519,7 @@ class SystemOrchestrator:
         ]:
             try:
                 import importlib
+
                 mod = importlib.import_module(mod_name)
                 if not hasattr(mod, cls_name):
                     issues.append(f"{cls_name} missing from {mod_name}")
@@ -602,6 +597,7 @@ class SystemOrchestrator:
         # 必然 "Cannot find module ...electron\cli.js" 崩溃;见
         # core.electron_launch_guard.electron_package_intact 的说明)。
         from core.electron_launch_guard import electron_package_intact
+
         node_modules = os.path.join(electron_dir, "node_modules")
         if not os.path.isdir(node_modules) or not electron_package_intact(electron_dir):
             if not npm_path:
@@ -625,11 +621,20 @@ class SystemOrchestrator:
                 )
                 if npm_result.returncode != 0:
                     # 官方 registry 网络失败(国内常见)→ npmmirror 镜像重试一次
-                    _err_txt = (npm_result.stderr or npm_result.stdout or "")
-                    if any(k in _err_txt for k in (
-                        "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN",
-                        "network", "socket", "TLS", "fetch failed",
-                    )):
+                    _err_txt = npm_result.stderr or npm_result.stdout or ""
+                    if any(
+                        k in _err_txt
+                        for k in (
+                            "ETIMEDOUT",
+                            "ECONNRESET",
+                            "ECONNREFUSED",
+                            "EAI_AGAIN",
+                            "network",
+                            "socket",
+                            "TLS",
+                            "fetch failed",
+                        )
+                    ):
                         logger.warning("[启动·桌面壳] npm 官方源失败,改用 npmmirror 镜像重试…")
                         npm_result = subprocess.run(
                             [npm_path, "install", "--registry=https://registry.npmmirror.com"],
@@ -670,7 +675,9 @@ class SystemOrchestrator:
                 env=env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                text=True, encoding="utf-8", errors="replace",
+                text=True,
+                encoding="utf-8",
+                errors="replace",
                 bufsize=1,
                 # Detached so Electron survives if Python parent exits.
                 # (POSIX: setsid via start_new_session; ignored on Windows.)
@@ -749,14 +756,13 @@ class SystemOrchestrator:
         quasi_platform_state_boundary_status: str = "not_checked"
         quasi_platform_state_boundary_data: Dict[str, Any] = {}
         phase_status = PhaseStatus.OK
-        strict_authority = os.environ.get("GALAXY_STRICT_AUTHORITY_CHECK", "").lower() in (
-            "1", "true", "yes"
-        )
+        strict_authority = os.environ.get("GALAXY_STRICT_AUTHORITY_CHECK", "").lower() in ("1", "true", "yes")
         try:
             from core.center_authority_boundary import (
-                evaluate_center_authority_boundary,
                 CenterAuthorityBoundaryReport,
+                evaluate_center_authority_boundary,
             )
+
             boundary_report: CenterAuthorityBoundaryReport = evaluate_center_authority_boundary()
             authority_boundary_data = {
                 "all_domains_intact": boundary_report.all_domains_intact,
@@ -765,17 +771,13 @@ class SystemOrchestrator:
             }
             if boundary_report.all_domains_intact:
                 authority_boundary_status = "intact"
-                logger.info(
-                    "[Phase 7] V6 center authority boundary: INTACT — "
-                    "all four authority domains verified."
-                )
+                logger.info("[Phase 7] V6 center authority boundary: INTACT — " "all four authority domains verified.")
             else:
                 authority_boundary_status = "degraded"
                 if strict_authority:
                     phase_status = PhaseStatus.FAILED
                     logger.error(
-                        "[Phase 7] V6 center authority boundary FAILED "
-                        "(GALAXY_STRICT_AUTHORITY_CHECK=1): %s",
+                        "[Phase 7] V6 center authority boundary FAILED " "(GALAXY_STRICT_AUTHORITY_CHECK=1): %s",
                         boundary_report.degraded_domains,
                     )
                 else:
@@ -814,8 +816,7 @@ class SystemOrchestrator:
                 if strict_authority:
                     phase_status = PhaseStatus.FAILED
                     logger.error(
-                        "[Phase 7] Quasi-platform boundary assertion FAILED "
-                        "(GALAXY_STRICT_AUTHORITY_CHECK=1): %s",
+                        "[Phase 7] Quasi-platform boundary assertion FAILED " "(GALAXY_STRICT_AUTHORITY_CHECK=1): %s",
                         quasi_platform_state_boundary_data.get("violations"),
                     )
                 elif phase_status != PhaseStatus.FAILED:

@@ -12,6 +12,7 @@ This layer is intentionally distinct from the technical lifecycle:
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
+
 logger = logging.getLogger(__name__)
 
 
@@ -128,17 +129,14 @@ PRESENCE_MODE_DEFINITIONS: Tuple[PresenceModeDefinition, ...] = (
     PresenceModeDefinition(
         mode=DesktopPresenceMode.MANIFEST,
         definition=(
-            "Explicit action/execution/result layer where work traces become perceptible as "
-            "desktop-visible change."
+            "Explicit action/execution/result layer where work traces become perceptible as " "desktop-visible change."
         ),
         tri_state_mapping=(
             "Maps to tri-state=manifest with explicit coupling to execution substrate, command routing, "
             "and completion traces."
         ),
         extension_scope="Carries execution pressure, result emission, and completion visibility.",
-        non_equivalence_guard=(
-            "Manifest requires real execution/result evidence; it is not a cosmetic UI expansion."
-        ),
+        non_equivalence_guard=("Manifest requires real execution/result evidence; it is not a cosmetic UI expansion."),
         ambient_board_role="Ambient board escalates into action-support context and trace framing.",
         foreground_role="Presence layer becomes explicit foreground actor during execution windows.",
     ),
@@ -228,8 +226,7 @@ DESKTOP_EXTENSION_HOME: Dict[str, Any] = {
     "multimodal_ingress_home": "DesktopPresenceRuntime native MultimodalIngressBus + request multimodal_context",
     "continuous_sensing_influence": "Feeds liminal transition pressure and ambient-board gradients.",
     "webrtc_streaming_home": (
-        "PerceptionSourceRegistry and ingress channels feed liminal ambient board "
-        "and manifest trace."
+        "PerceptionSourceRegistry and ingress channels feed liminal ambient board " "and manifest trace."
     ),
     "background_foreground_boundary": (
         "Static anchors background availability, liminal governs boundary transitions, "
@@ -238,9 +235,7 @@ DESKTOP_EXTENSION_HOME: Dict[str, Any] = {
 }
 
 
-def _lookup_transition_policy(
-    from_mode: DesktopPresenceMode, to_mode: DesktopPresenceMode
-) -> PresenceTransitionPolicy:
+def _lookup_transition_policy(from_mode: DesktopPresenceMode, to_mode: DesktopPresenceMode) -> PresenceTransitionPolicy:
     for policy in PRESENCE_TRANSITION_POLICIES:
         if to_mode == policy.to_mode and from_mode in policy.from_modes:
             return policy
@@ -294,9 +289,7 @@ class DesktopPresenceStateMachine:
             try:
                 android_drives_liminal = bool(android_presence_participation.any_drives_liminal)
                 android_drives_manifest = bool(android_presence_participation.any_drives_manifest)
-                android_participant_count = int(
-                    android_presence_participation.presence_participant_count
-                )
+                android_participant_count = int(android_presence_participation.presence_participant_count)
             except AttributeError:
                 pass
 
@@ -414,19 +407,13 @@ def build_desktop_presence_system_view(
     subject_fg = dict(subject_foreground or {})
     unified_lineage = dict(subject_unified_lineage or {})
     continuous_ingress = dict(canonical_continuous_ingress or {})
-    lineage_active_families = (
-        (unified_lineage.get("temporal_alignment") or {}).get("active_continuous_families")
-    )
+    lineage_active_families = (unified_lineage.get("temporal_alignment") or {}).get("active_continuous_families")
     ingress_active_families = continuous_ingress.get("active_families") or []
     active_stream_families = list(
-        lineage_active_families
-        if lineage_active_families is not None
-        else ingress_active_families
+        lineage_active_families if lineage_active_families is not None else ingress_active_families
     )
     subject_state = str(subject_fg.get("subject_state") or dominant_tristate)
-    subject_state_source = (
-        "subject_foreground" if subject_fg.get("subject_state") else "dominant_tristate_fallback"
-    )
+    subject_state_source = "subject_foreground" if subject_fg.get("subject_state") else "dominant_tristate_fallback"
 
     view: Dict[str, Any] = {
         "formal_presence_modes": [d.to_dict() for d in PRESENCE_MODE_DEFINITIONS],
@@ -446,9 +433,7 @@ def build_desktop_presence_system_view(
         },
         "foreground_hierarchy": dict(DESKTOP_FOREGROUND_HIERARCHY),
         "future_extension_home": dict(DESKTOP_EXTENSION_HOME),
-        "hidden_context_visible_action_surface": (
-            build_hidden_context_visible_action_surface_contract()
-        ),
+        "hidden_context_visible_action_surface": (build_hidden_context_visible_action_surface_contract()),
         "realtime_streaming_backbone": {
             "contract": build_realtime_streaming_backbone_contract(),
             "runtime_status": dict(stream_runtime_status or {}),
@@ -461,9 +446,7 @@ def build_desktop_presence_system_view(
             view["subject_unified_lineage"] = dict(unified_lineage)
         view["subject_panel"] = {
             "source_object_family": "subject_foreground",
-            "shared_canonical_lineage_id": str(
-                unified_lineage.get("canonical_lineage_id") or ""
-            ),
+            "shared_canonical_lineage_id": str(unified_lineage.get("canonical_lineage_id") or ""),
             "subject_state": subject_state,
             "subject_state_source": subject_state_source,
             "foreground_event": str(subject_fg.get("foreground_event") or ""),

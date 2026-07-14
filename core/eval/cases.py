@@ -14,10 +14,10 @@ class EvalCase:
 
     id: str
     prompt: str
-    must_contain: List[str] = field(default_factory=list)       # 输出须含全部(大小写不敏感)
-    must_not_contain: List[str] = field(default_factory=list)   # 输出不得含任一
-    expect_tools: List[str] = field(default_factory=list)       # 轨迹中应出现的工具名
-    expect_success: Optional[bool] = None                       # 期望 result.success
+    must_contain: List[str] = field(default_factory=list)  # 输出须含全部(大小写不敏感)
+    must_not_contain: List[str] = field(default_factory=list)  # 输出不得含任一
+    expect_tools: List[str] = field(default_factory=list)  # 轨迹中应出现的工具名
+    expect_success: Optional[bool] = None  # 期望 result.success
     weight: float = 1.0
     tags: List[str] = field(default_factory=list)
 
@@ -48,7 +48,7 @@ def builtin_cases() -> List[EvalCase]:
         EvalCase(
             id="tool_list_files",
             prompt="列出当前目录下的文件。",
-            expect_tools=["filesystem", "shell", "list"],   # 任一类文件/列目录工具
+            expect_tools=["filesystem", "shell", "list"],  # 任一类文件/列目录工具
             expect_success=True,
             tags=["tool", "smoke"],
         ),

@@ -6,8 +6,8 @@ protocol.  All tests are unit-style (mocking the WebSocket) and do NOT
 require a running server.
 """
 
-import sys
 import asyncio
+import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -19,10 +19,10 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from galaxy_gateway.android_bridge import AndroidBridge, MessageType
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_ws():
     """Return a minimal mock websocket."""
@@ -38,6 +38,7 @@ def _base_msg(msg_type: str, device_id: str = "android-test-001") -> dict:
 # ---------------------------------------------------------------------------
 # device_register
 # ---------------------------------------------------------------------------
+
 
 class TestDeviceRegister:
     """AIP v3.0 device_register → device_register_ack."""
@@ -79,6 +80,7 @@ class TestDeviceRegister:
 # heartbeat
 # ---------------------------------------------------------------------------
 
+
 class TestHeartbeat:
     """AIP v3.0 heartbeat → heartbeat_ack."""
 
@@ -109,6 +111,7 @@ class TestHeartbeat:
     @pytest.mark.asyncio
     async def test_heartbeat_updates_last_seen(self):
         import time
+
         reg_msg = {
             "type": MessageType.DEVICE_REGISTER.value,
             "device_id": "android-hb-002",
@@ -131,6 +134,7 @@ class TestHeartbeat:
 # ---------------------------------------------------------------------------
 # capability_report
 # ---------------------------------------------------------------------------
+
 
 class TestCapabilityReport:
     """AIP v3.0 capability_report with platform, device_id,
@@ -176,6 +180,7 @@ class TestCapabilityReport:
 # ---------------------------------------------------------------------------
 # task_result
 # ---------------------------------------------------------------------------
+
 
 class TestTaskResult:
     """AIP v3.0 task_result message handling."""
@@ -229,6 +234,7 @@ class TestTaskResult:
 # ---------------------------------------------------------------------------
 # diagnostics_payload
 # ---------------------------------------------------------------------------
+
 
 class TestDiagnosticsPayload:
     """AIP v3.0 diagnostics_payload with error_type, error_context,

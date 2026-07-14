@@ -12,6 +12,7 @@ Validates the current-state backbone audit module:
 - build_system_backbone_snapshot() operator/board API
 - Serialization (to_dict) round-trips
 """
+
 from __future__ import annotations
 
 import time
@@ -37,7 +38,6 @@ from core.current_state_backbone_audit import (
     build_mode_map,
     build_system_backbone_snapshot,
 )
-
 
 # ---------------------------------------------------------------------------
 # Authority sentinels
@@ -152,16 +152,12 @@ class TestBuildChainMap:
 
     def test_all_six_chains_present(self):
         for chain_id in ChainId:
-            assert chain_id.value in self.chain_map.chains, (
-                f"Missing chain: {chain_id.value}"
-            )
+            assert chain_id.value in self.chain_map.chains, f"Missing chain: {chain_id.value}"
 
     def test_each_chain_has_at_least_two_segments(self):
         for chain_id in ChainId:
             segs = self.chain_map.chains[chain_id.value]
-            assert len(segs) >= 2, (
-                f"Chain {chain_id.value} has fewer than 2 segments"
-            )
+            assert len(segs) >= 2, f"Chain {chain_id.value} has fewer than 2 segments"
 
     def test_overall_closure_computed_for_all_chains(self):
         for chain_id in ChainId:
@@ -251,9 +247,7 @@ class TestBuildModeMap:
 
     def test_each_mode_has_code_anchors(self):
         for m in self.mode_map.modes:
-            assert m.v2_code_anchor or m.android_code_anchor, (
-                f"Mode {m.mode_id.value} missing code anchors"
-            )
+            assert m.v2_code_anchor or m.android_code_anchor, f"Mode {m.mode_id.value} missing code anchors"
 
     def test_to_dict_serializable(self):
         d = self.mode_map.to_dict()
@@ -331,66 +325,48 @@ class TestBuildBackboneSnapshot:
         assert "partially_operable" in self.snap.overall_operability_zh
 
     def test_established_items_non_empty(self):
-        assert len(self.snap.established) >= 5, (
-            "Expected at least 5 established backbone items"
-        )
+        assert len(self.snap.established) >= 5, "Expected at least 5 established backbone items"
 
     def test_partial_items_non_empty(self):
-        assert len(self.snap.partial) >= 3, (
-            "Expected at least 3 partial backbone items"
-        )
+        assert len(self.snap.partial) >= 3, "Expected at least 3 partial backbone items"
 
     def test_open_items_non_empty(self):
-        assert len(self.snap.open_items) >= 2, (
-            "Expected at least 2 open backbone items"
-        )
+        assert len(self.snap.open_items) >= 2, "Expected at least 2 open backbone items"
 
     def test_all_items_are_backbone_item_instances(self):
-        all_items = (
-            self.snap.established
-            + self.snap.partial
-            + self.snap.open_items
-        )
+        all_items = self.snap.established + self.snap.partial + self.snap.open_items
         for item in all_items:
             assert isinstance(item, BackboneItem)
 
     def test_established_items_have_correct_state(self):
         for item in self.snap.established:
-            assert item.closure_state == ClosureState.ESTABLISHED, (
-                f"Item '{item.label}' in established list has wrong state: {item.closure_state}"
-            )
+            assert (
+                item.closure_state == ClosureState.ESTABLISHED
+            ), f"Item '{item.label}' in established list has wrong state: {item.closure_state}"
 
     def test_partial_items_have_correct_state(self):
         for item in self.snap.partial:
-            assert item.closure_state == ClosureState.PARTIAL, (
-                f"Item '{item.label}' in partial list has wrong state: {item.closure_state}"
-            )
+            assert (
+                item.closure_state == ClosureState.PARTIAL
+            ), f"Item '{item.label}' in partial list has wrong state: {item.closure_state}"
 
     def test_open_items_have_correct_state(self):
         for item in self.snap.open_items:
-            assert item.closure_state == ClosureState.OPEN, (
-                f"Item '{item.label}' in open_items list has wrong state: {item.closure_state}"
-            )
+            assert (
+                item.closure_state == ClosureState.OPEN
+            ), f"Item '{item.label}' in open_items list has wrong state: {item.closure_state}"
 
     def test_all_items_have_labels_and_anchors(self):
-        all_items = (
-            self.snap.established
-            + self.snap.partial
-            + self.snap.open_items
-        )
+        all_items = self.snap.established + self.snap.partial + self.snap.open_items
         for item in all_items:
             assert item.label, f"BackboneItem missing label"
-            assert item.v2_anchor or item.android_anchor, (
-                f"BackboneItem '{item.label}' missing code anchors"
-            )
+            assert item.v2_anchor or item.android_anchor, f"BackboneItem '{item.label}' missing code anchors"
 
     def test_transport_protocol_is_established(self):
         """WebSocket transport 协议应在已成立列表中。"""
         labels = [i.label for i in self.snap.established]
         found = any("WebSocket" in l or "transport" in l or "Transport" in l for l in labels)
-        assert found, (
-            f"Expected WebSocket transport in established items. Got: {labels}"
-        )
+        assert found, f"Expected WebSocket transport in established items. Got: {labels}"
 
     def test_local_llm_is_open_or_partial(self):
         """本地 LLM 相关项应在半闭合或未闭合列表中。"""
@@ -398,9 +374,7 @@ class TestBuildBackboneSnapshot:
         open_labels = [i.label for i in self.snap.open_items]
         all_labels = partial_labels + open_labels
         found = any("LLM" in l or "本地" in l or "local" in l.lower() for l in all_labels)
-        assert found, (
-            f"Expected local LLM in partial/open items. Got: {all_labels}"
-        )
+        assert found, f"Expected local LLM in partial/open items. Got: {all_labels}"
 
     def test_to_dict_serializable(self):
         d = self.snap.to_dict()
@@ -485,24 +459,18 @@ class TestBuildSystemBackboneSnapshot:
         summary = self.summary["chain_closure_summary"]
         assert isinstance(summary, dict)
         for chain_id in ChainId:
-            assert chain_id.value in summary, (
-                f"Missing chain in closure summary: {chain_id.value}"
-            )
+            assert chain_id.value in summary, f"Missing chain in closure summary: {chain_id.value}"
 
     def test_chain_closure_values_are_valid(self):
         valid_states = {"established", "partial", "open"}
         for cid, state in self.summary["chain_closure_summary"].items():
-            assert state in valid_states, (
-                f"Invalid closure state for chain {cid}: {state}"
-            )
+            assert state in valid_states, f"Invalid closure state for chain {cid}: {state}"
 
     def test_mode_closure_summary_has_all_modes(self):
         summary = self.summary["mode_closure_summary"]
         assert isinstance(summary, dict)
         for mode_id in ModeId:
-            assert mode_id.value in summary, (
-                f"Missing mode in closure summary: {mode_id.value}"
-            )
+            assert mode_id.value in summary, f"Missing mode in closure summary: {mode_id.value}"
 
     def test_counts_are_positive_integers(self):
         assert isinstance(self.summary["established_count"], int)
@@ -597,16 +565,13 @@ class TestStructuralIntegrity:
         partial_labels = {i.label for i in snap.partial}
         open_labels = {i.label for i in snap.open_items}
         assert established_labels.isdisjoint(partial_labels), (
-            f"Labels in both established and partial: "
-            f"{established_labels & partial_labels}"
+            f"Labels in both established and partial: " f"{established_labels & partial_labels}"
         )
         assert established_labels.isdisjoint(open_labels), (
-            f"Labels in both established and open: "
-            f"{established_labels & open_labels}"
+            f"Labels in both established and open: " f"{established_labels & open_labels}"
         )
         assert partial_labels.isdisjoint(open_labels), (
-            f"Labels in both partial and open: "
-            f"{partial_labels & open_labels}"
+            f"Labels in both partial and open: " f"{partial_labels & open_labels}"
         )
 
     def test_chain_overall_state_reflects_worst_segment(self):
@@ -617,19 +582,14 @@ class TestStructuralIntegrity:
             worst = max(priority[s.closure_state.value] for s in segs)
             worst_str = ["established", "partial", "open"][worst]
             overall = chain_map.overall_closure_by_chain[cid]
-            assert overall == worst_str, (
-                f"Chain {cid}: expected {worst_str}, got {overall}"
-            )
+            assert overall == worst_str, f"Chain {cid}: expected {worst_str}, got {overall}"
 
     def test_backbone_snapshot_chain_and_mode_maps_consistent(self):
         """BackboneSnapshot 内的 chain_map 和 mode_map 应与单独调用结果一致。"""
         snap = build_backbone_snapshot()
         cm = build_chain_map()
         mm = build_mode_map()
-        assert (
-            snap.chain_map.overall_closure_by_chain
-            == cm.overall_closure_by_chain
-        )
+        assert snap.chain_map.overall_closure_by_chain == cm.overall_closure_by_chain
         snap_mode_ids = {m.mode_id for m in snap.mode_map.modes}
         ref_mode_ids = {m.mode_id for m in mm.modes}
         assert snap_mode_ids == ref_mode_ids

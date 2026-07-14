@@ -85,7 +85,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from .formation_group import DeviceFormationGroup, EMPTY_FORMATION_GROUP
+from .formation_group import EMPTY_FORMATION_GROUP, DeviceFormationGroup
 from .formation_role import FormationRole
 
 __all__ = [
@@ -335,11 +335,7 @@ class FormationRuntimeDecision:
             "formation_id": self.formation_id,
             "runtime_state": self.runtime_state.value,
             "recommended_actions": [a.to_dict() for a in self.recommended_actions],
-            "new_group": (
-                getattr(self.new_group, "to_dict", lambda: None)()
-                if self.new_group is not None
-                else None
-            ),
+            "new_group": (getattr(self.new_group, "to_dict", lambda: None)() if self.new_group is not None else None),
             "continuation_viable": self.continuation_viable,
             "reason": self.reason,
             "trigger_event": self.trigger_event,
@@ -366,18 +362,14 @@ class FormationRuntimeSnapshot:
 
     formation_id: str = ""
     runtime_state: FormationRuntimeState = FormationRuntimeState.ACTIVE
-    participant_statuses: Dict[str, FormationParticipantStatus] = field(
-        default_factory=dict
-    )
+    participant_statuses: Dict[str, FormationParticipantStatus] = field(default_factory=dict)
     snapshot_ts: float = field(default_factory=time.time)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "formation_id": self.formation_id,
             "runtime_state": self.runtime_state.value,
-            "participant_statuses": {
-                k: v.to_dict() for k, v in self.participant_statuses.items()
-            },
+            "participant_statuses": {k: v.to_dict() for k, v in self.participant_statuses.items()},
             "snapshot_ts": self.snapshot_ts,
         }
 
@@ -488,14 +480,10 @@ class FormationRuntimeCoordinator:
         """
         try:
             effective_score = self._effective_score(new_state, health_score)
-            self._update_participant(
-                device_id, new_state, effective_score, reason or new_state.value
-            )
+            self._update_participant(device_id, new_state, effective_score, reason or new_state.value)
             return self._evaluate_and_decide("readiness_changed")
         except Exception as exc:
-            logger.warning(
-                "on_participant_readiness_changed: unexpected error: %s", exc
-            )
+            logger.warning("on_participant_readiness_changed: unexpected error: %s", exc)
             return self._safe_noop_decision("readiness_changed")
 
     def on_participant_lost(
@@ -567,9 +555,7 @@ class FormationRuntimeCoordinator:
             else:
                 new_state = FormationParticipantState.READY
 
-            self._update_participant(
-                device_id, new_state, health_score, reason or "health_degraded"
-            )
+            self._update_participant(device_id, new_state, health_score, reason or "health_degraded")
             return self._evaluate_and_decide("health_degraded")
         except Exception as exc:
             logger.warning("on_health_degraded: unexpected error: %s", exc)
@@ -660,9 +646,7 @@ class FormationRuntimeCoordinator:
         """Current (possibly reshaped) :class:`~.formation_group.DeviceFormationGroup`."""
         return self._group
 
-    def get_participant_status(
-        self, device_id: str
-    ) -> Optional[FormationParticipantStatus]:
+    def get_participant_status(self, device_id: str) -> Optional[FormationParticipantStatus]:
         """Return the :class:`FormationParticipantStatus` for a device, or None."""
         return self._participant_statuses.get(device_id)
 
@@ -748,9 +732,7 @@ class FormationRuntimeCoordinator:
             return self._degraded_threshold
         return 1.0
 
-    def _evaluate_and_decide(
-        self, trigger_event: str
-    ) -> FormationRuntimeDecision:
+    def _evaluate_and_decide(self, trigger_event: str) -> FormationRuntimeDecision:
         """Core evaluation: inspect participant states and produce a decision."""
         source_id = getattr(self._group, "source_device_id", None)
         members = getattr(self._group, "members", []) or []
@@ -778,9 +760,7 @@ class FormationRuntimeCoordinator:
 
             if role == FormationRole.PRIMARY_EXECUTION and state != FormationParticipantState.LOST:
                 viable_primaries.append(dev_id)
-            elif role == FormationRole.FALLBACK and state not in (
-                FormationParticipantState.LOST,
-            ):
+            elif role == FormationRole.FALLBACK and state not in (FormationParticipantState.LOST,):
                 viable_fallbacks.append(dev_id)
 
         actions: List[FormationRecoveryAction] = []
@@ -858,8 +838,7 @@ class FormationRuntimeCoordinator:
             viable_non_source = sum(
                 1
                 for m in members
-                if getattr(m, "device_id", None) not in lost_ids
-                and getattr(m, "device_id", None) != source_id
+                if getattr(m, "device_id", None) not in lost_ids and getattr(m, "device_id", None) != source_id
             )
             if viable_non_source >= self._min_viable_participant_count:
                 actions.append(
@@ -871,8 +850,7 @@ class FormationRuntimeCoordinator:
                 self._runtime_state = FormationRuntimeState.DEGRADED_CONTINUATION
                 continuation_viable = True
                 reason = (
-                    f"degraded continuation — {len(lost_ids)} participant(s) removed, "
-                    f"{viable_non_source} viable"
+                    f"degraded continuation — {len(lost_ids)} participant(s) removed, " f"{viable_non_source} viable"
                 )
             else:
                 actions.append(
@@ -943,12 +921,7 @@ class FormationRuntimeCoordinator:
                 hmap[dev_id] = FormationHealthSignal(
                     device_id=dev_id,
                     health_score=status.health_score,
-                    is_reachable=(
-                        status.state
-                        not in (
-                            FormationParticipantState.LOST,
-                        )
-                    ),
+                    is_reachable=(status.state not in (FormationParticipantState.LOST,)),
                     reason=status.reason,
                 )
             return hmap
@@ -956,9 +929,7 @@ class FormationRuntimeCoordinator:
             logger.debug("_build_health_map: %s", exc)
             return {}
 
-    def _reshape_with_engine(
-        self, health_map: Dict[str, Any]
-    ) -> Optional[DeviceFormationGroup]:
+    def _reshape_with_engine(self, health_map: Dict[str, Any]) -> Optional[DeviceFormationGroup]:
         """Apply a full rebalance pass via :class:`~.formation_rebalance_engine.FormationRebalanceEngine`."""
         try:
             from .formation_rebalance_engine import apply_rebalance

@@ -64,7 +64,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -194,8 +193,13 @@ class TestResultMergePolicyEnum:
         from contracts.cross_runtime_result_merge import ResultMergePolicy
 
         expected = {
-            "primary_wins", "first_success", "last_success",
-            "all_required", "best_effort", "fallback_chain", "unknown",
+            "primary_wins",
+            "first_success",
+            "last_success",
+            "all_required",
+            "best_effort",
+            "fallback_chain",
+            "unknown",
         }
         actual = {p.value for p in ResultMergePolicy}
         assert expected == actual
@@ -239,7 +243,7 @@ class TestRuntimeResultProvenance:
 
 class TestRuntimeResultUnitSerialisation:
     def test_to_dict_returns_dict(self):
-        from contracts.cross_runtime_result_merge import RuntimeResultUnit, RuntimeResultRole, RuntimeResultStatus
+        from contracts.cross_runtime_result_merge import RuntimeResultRole, RuntimeResultStatus, RuntimeResultUnit
 
         u = RuntimeResultUnit(
             role=RuntimeResultRole.primary,
@@ -258,7 +262,7 @@ class TestRuntimeResultUnitSerialisation:
         assert isinstance(parsed, dict)
 
     def test_from_dict_round_trip(self):
-        from contracts.cross_runtime_result_merge import RuntimeResultUnit, RuntimeResultRole, RuntimeResultStatus
+        from contracts.cross_runtime_result_merge import RuntimeResultRole, RuntimeResultStatus, RuntimeResultUnit
 
         original = RuntimeResultUnit(
             role=RuntimeResultRole.target,
@@ -290,10 +294,24 @@ class TestRuntimeResultUnitSerialisation:
 
 class TestRuntimeResultUnitFieldNames:
     REQUIRED_FIELDS = [
-        "result_unit_id", "device_id", "runtime_id", "role", "status",
-        "output", "error", "reason", "trace_id", "task_id", "session_id",
-        "mesh_session_id", "execution_trace", "governance_snapshot",
-        "policy_alignment", "provenance", "timestamp", "metadata",
+        "result_unit_id",
+        "device_id",
+        "runtime_id",
+        "role",
+        "status",
+        "output",
+        "error",
+        "reason",
+        "trace_id",
+        "task_id",
+        "session_id",
+        "mesh_session_id",
+        "execution_trace",
+        "governance_snapshot",
+        "policy_alignment",
+        "provenance",
+        "timestamp",
+        "metadata",
     ]
 
     def test_all_fields_present(self):
@@ -304,13 +322,13 @@ class TestRuntimeResultUnitFieldNames:
             assert field in d, f"Missing field: {field}"
 
     def test_role_serialised_as_string(self):
-        from contracts.cross_runtime_result_merge import RuntimeResultUnit, RuntimeResultRole
+        from contracts.cross_runtime_result_merge import RuntimeResultRole, RuntimeResultUnit
 
         d = RuntimeResultUnit(role=RuntimeResultRole.source).to_dict()
         assert d["role"] == "source"
 
     def test_status_serialised_as_string(self):
-        from contracts.cross_runtime_result_merge import RuntimeResultUnit, RuntimeResultStatus
+        from contracts.cross_runtime_result_merge import RuntimeResultStatus, RuntimeResultUnit
 
         d = RuntimeResultUnit(status=RuntimeResultStatus.succeeded).to_dict()
         assert d["status"] == "succeeded"
@@ -381,10 +399,19 @@ class TestResultMergeInputSerialisation:
 
 class TestResultMergeInputFieldNames:
     REQUIRED_FIELDS = [
-        "merge_id", "trace_id", "task_id", "session_id", "mesh_session_id",
-        "result_units", "merge_policy", "primary_result_unit_id",
-        "execution_trace_refs", "governance_snapshot_refs", "policy_alignment_refs",
-        "merge_reason", "metadata",
+        "merge_id",
+        "trace_id",
+        "task_id",
+        "session_id",
+        "mesh_session_id",
+        "result_units",
+        "merge_policy",
+        "primary_result_unit_id",
+        "execution_trace_refs",
+        "governance_snapshot_refs",
+        "policy_alignment_refs",
+        "merge_reason",
+        "metadata",
     ]
 
     def test_all_fields_present(self):
@@ -449,11 +476,26 @@ class TestMergedRuntimeResultSerialisation:
 
 class TestMergedRuntimeResultFieldNames:
     REQUIRED_FIELDS = [
-        "merge_id", "trace_id", "task_id", "session_id", "mesh_session_id",
-        "result_units", "primary_result_unit_id", "merge_policy", "merged_output",
-        "success", "partial", "fallback_applied", "conflicts",
-        "execution_trace_refs", "governance_snapshot_refs", "policy_alignment_refs",
-        "merge_reason", "errors", "timestamp", "metadata",
+        "merge_id",
+        "trace_id",
+        "task_id",
+        "session_id",
+        "mesh_session_id",
+        "result_units",
+        "primary_result_unit_id",
+        "merge_policy",
+        "merged_output",
+        "success",
+        "partial",
+        "fallback_applied",
+        "conflicts",
+        "execution_trace_refs",
+        "governance_snapshot_refs",
+        "policy_alignment_refs",
+        "merge_reason",
+        "errors",
+        "timestamp",
+        "metadata",
     ]
 
     def test_all_fields_present(self):
@@ -500,7 +542,7 @@ class TestMergedRuntimeResultCompactSummary:
 
 class TestResultMergeSummarySerialisation:
     def test_to_dict(self):
-        from contracts.cross_runtime_result_merge import ResultMergeSummary, ResultMergePolicy
+        from contracts.cross_runtime_result_merge import ResultMergePolicy, ResultMergeSummary
 
         s = ResultMergeSummary(
             merge_policy=ResultMergePolicy.primary_wins,
@@ -522,7 +564,7 @@ class TestResultMergeSummarySerialisation:
         assert isinstance(json.loads(j), dict)
 
     def test_from_dict_round_trip(self):
-        from contracts.cross_runtime_result_merge import ResultMergeSummary, ResultMergePolicy
+        from contracts.cross_runtime_result_merge import ResultMergePolicy, ResultMergeSummary
 
         original = ResultMergeSummary(
             merge_id="merge_001",
@@ -547,11 +589,24 @@ class TestResultMergeSummarySerialisation:
 
 class TestResultMergeSummaryFieldNames:
     REQUIRED_FIELDS = [
-        "summary_id", "merge_id", "trace_id", "task_id", "session_id",
-        "merge_policy", "success", "partial", "fallback_applied",
-        "unit_count", "succeeded_unit_count", "failed_unit_count",
-        "conflict_count", "error_count", "has_merged_output",
-        "merge_reason", "timestamp", "metadata",
+        "summary_id",
+        "merge_id",
+        "trace_id",
+        "task_id",
+        "session_id",
+        "merge_policy",
+        "success",
+        "partial",
+        "fallback_applied",
+        "unit_count",
+        "succeeded_unit_count",
+        "failed_unit_count",
+        "conflict_count",
+        "error_count",
+        "has_merged_output",
+        "merge_reason",
+        "timestamp",
+        "metadata",
     ]
 
     def test_all_fields_present(self):
@@ -570,7 +625,9 @@ class TestResultMergeSummaryFieldNames:
 class TestFromLocalTakeoverResultDict:
     def test_success_path(self):
         from contracts.cross_runtime_result_merge import (
-            from_local_takeover_result, RuntimeResultRole, RuntimeResultStatus,
+            RuntimeResultRole,
+            RuntimeResultStatus,
+            from_local_takeover_result,
         )
 
         d = _make_takeover_result_dict(success=True)
@@ -582,7 +639,8 @@ class TestFromLocalTakeoverResultDict:
 
     def test_failure_path(self):
         from contracts.cross_runtime_result_merge import (
-            from_local_takeover_result, RuntimeResultStatus,
+            RuntimeResultStatus,
+            from_local_takeover_result,
         )
 
         d = _make_takeover_result_dict(success=False, status="failed", reason="executor_unavailable")
@@ -606,7 +664,8 @@ class TestFromLocalTakeoverResultDict:
 class TestFromLocalTakeoverResultObject:
     def test_object_with_to_dict(self):
         from contracts.cross_runtime_result_merge import (
-            from_local_takeover_result, RuntimeResultStatus,
+            RuntimeResultStatus,
+            from_local_takeover_result,
         )
 
         obj = MagicMock()
@@ -649,7 +708,9 @@ class TestFromLocalTakeoverResultGraceful:
 class TestFromSourceDispatchResultDict:
     def test_success_path(self):
         from contracts.cross_runtime_result_merge import (
-            from_source_dispatch_result, RuntimeResultRole, RuntimeResultStatus,
+            RuntimeResultRole,
+            RuntimeResultStatus,
+            from_source_dispatch_result,
         )
 
         d = _make_dispatch_result_dict(success=True)
@@ -661,7 +722,8 @@ class TestFromSourceDispatchResultDict:
 
     def test_failure_path(self):
         from contracts.cross_runtime_result_merge import (
-            from_source_dispatch_result, RuntimeResultStatus,
+            RuntimeResultStatus,
+            from_source_dispatch_result,
         )
 
         d = _make_dispatch_result_dict(success=False, errors=["dispatch_failed"])
@@ -685,7 +747,8 @@ class TestFromSourceDispatchResultDict:
 class TestFromSourceDispatchResultObject:
     def test_object_with_to_dict(self):
         from contracts.cross_runtime_result_merge import (
-            from_source_dispatch_result, RuntimeResultStatus,
+            RuntimeResultStatus,
+            from_source_dispatch_result,
         )
 
         obj = MagicMock()
@@ -721,13 +784,18 @@ class TestFromSourceDispatchResultGraceful:
 class TestFromExecutionOutputSuccess:
     def test_success(self):
         from contracts.cross_runtime_result_merge import (
-            from_execution_output, RuntimeResultStatus, RuntimeResultRole,
+            RuntimeResultRole,
+            RuntimeResultStatus,
+            from_execution_output,
         )
 
         out = {"success": True, "action_taken": "click"}
         unit = from_execution_output(
-            out, trace_id="trace_local", task_id="task_local",
-            session_id="sess_local", role=RuntimeResultRole.primary,
+            out,
+            trace_id="trace_local",
+            task_id="task_local",
+            session_id="sess_local",
+            role=RuntimeResultRole.primary,
         )
         assert unit.status == RuntimeResultStatus.succeeded
         assert unit.role == RuntimeResultRole.primary
@@ -751,7 +819,8 @@ class TestFromExecutionOutputSuccess:
 class TestFromExecutionOutputFailure:
     def test_failure(self):
         from contracts.cross_runtime_result_merge import (
-            from_execution_output, RuntimeResultStatus,
+            RuntimeResultStatus,
+            from_execution_output,
         )
 
         out = {"success": False, "action_taken": "error"}
@@ -760,7 +829,8 @@ class TestFromExecutionOutputFailure:
 
     def test_failure_without_action(self):
         from contracts.cross_runtime_result_merge import (
-            from_execution_output, RuntimeResultStatus,
+            RuntimeResultStatus,
+            from_execution_output,
         )
 
         out = {"success": False}
@@ -776,7 +846,8 @@ class TestFromExecutionOutputFailure:
 class TestFromExecutionOutputBlocked:
     def test_readiness_gate_blocked(self):
         from contracts.cross_runtime_result_merge import (
-            from_execution_output, RuntimeResultStatus,
+            RuntimeResultStatus,
+            from_execution_output,
         )
 
         out = {"success": False, "skipped_reason": "readiness_gate:device_busy"}
@@ -785,7 +856,8 @@ class TestFromExecutionOutputBlocked:
 
     def test_skipped(self):
         from contracts.cross_runtime_result_merge import (
-            from_execution_output, RuntimeResultStatus,
+            RuntimeResultStatus,
+            from_execution_output,
         )
 
         out = {"success": False, "skipped_reason": "policy_skip"}
@@ -800,7 +872,7 @@ class TestFromExecutionOutputBlocked:
 
 class TestFromExecutionOutputGraceful:
     def test_none_input(self):
-        from contracts.cross_runtime_result_merge import from_execution_output, RuntimeResultStatus
+        from contracts.cross_runtime_result_merge import RuntimeResultStatus, from_execution_output
 
         unit = from_execution_output(None)
         assert unit is not None
@@ -824,7 +896,8 @@ class TestFromExecutionOutputGraceful:
 class TestBuildMergedRuntimeResult:
     def test_basic_build(self):
         from contracts.cross_runtime_result_merge import (
-            build_merged_runtime_result, ResultMergePolicy,
+            ResultMergePolicy,
+            build_merged_runtime_result,
         )
 
         r = build_merged_runtime_result(
@@ -867,7 +940,7 @@ class TestBuildMergedRuntimeResultSafety:
         assert r is not None
 
     def test_returns_merged_runtime_result_type(self):
-        from contracts.cross_runtime_result_merge import build_merged_runtime_result, MergedRuntimeResult
+        from contracts.cross_runtime_result_merge import MergedRuntimeResult, build_merged_runtime_result
 
         r = build_merged_runtime_result()
         assert isinstance(r, MergedRuntimeResult)
@@ -881,7 +954,9 @@ class TestBuildMergedRuntimeResultSafety:
 class TestMergeRuntimeResultsLocalOnly:
     def test_single_local_unit(self):
         from contracts.cross_runtime_result_merge import (
-            from_execution_output, merge_runtime_results, ResultMergePolicy,
+            ResultMergePolicy,
+            from_execution_output,
+            merge_runtime_results,
         )
 
         unit = from_execution_output(
@@ -915,7 +990,9 @@ class TestMergeRuntimeResultsLocalOnly:
 class TestMergeRuntimeResultsRemoteOnly:
     def test_single_remote_unit(self):
         from contracts.cross_runtime_result_merge import (
-            from_local_takeover_result, merge_runtime_results, RuntimeResultStatus,
+            RuntimeResultStatus,
+            from_local_takeover_result,
+            merge_runtime_results,
         )
 
         d = _make_takeover_result_dict(success=True)
@@ -933,8 +1010,11 @@ class TestMergeRuntimeResultsRemoteOnly:
 class TestMergeRuntimeResultsPrimaryWins:
     def test_primary_wins_one_failed(self):
         from contracts.cross_runtime_result_merge import (
-            from_execution_output, from_local_takeover_result,
-            merge_runtime_results, ResultMergePolicy, RuntimeResultRole,
+            ResultMergePolicy,
+            RuntimeResultRole,
+            from_execution_output,
+            from_local_takeover_result,
+            merge_runtime_results,
         )
 
         local_unit = from_execution_output(
@@ -962,7 +1042,9 @@ class TestMergeRuntimeResultsPrimaryWins:
 class TestMergeRuntimeResultsFirstSuccess:
     def test_first_success_wins(self):
         from contracts.cross_runtime_result_merge import (
-            from_execution_output, merge_runtime_results, ResultMergePolicy,
+            ResultMergePolicy,
+            from_execution_output,
+            merge_runtime_results,
         )
 
         unit1 = from_execution_output({"success": True, "action_taken": "click"})
@@ -976,7 +1058,9 @@ class TestMergeRuntimeResultsFirstSuccess:
 
     def test_first_success_with_leading_failure(self):
         from contracts.cross_runtime_result_merge import (
-            from_execution_output, merge_runtime_results, ResultMergePolicy,
+            ResultMergePolicy,
+            from_execution_output,
+            merge_runtime_results,
         )
 
         fail_unit = from_execution_output({"success": False, "action_taken": "error"})
@@ -997,7 +1081,9 @@ class TestMergeRuntimeResultsFirstSuccess:
 class TestMergeRuntimeResultsLastSuccess:
     def test_last_success_wins(self):
         from contracts.cross_runtime_result_merge import (
-            from_execution_output, merge_runtime_results, ResultMergePolicy,
+            ResultMergePolicy,
+            from_execution_output,
+            merge_runtime_results,
         )
 
         unit1 = from_execution_output({"success": True, "action_taken": "click"})
@@ -1018,7 +1104,9 @@ class TestMergeRuntimeResultsLastSuccess:
 class TestMergeRuntimeResultsAllRequired:
     def test_all_succeed(self):
         from contracts.cross_runtime_result_merge import (
-            from_execution_output, merge_runtime_results, ResultMergePolicy,
+            ResultMergePolicy,
+            from_execution_output,
+            merge_runtime_results,
         )
 
         unit1 = from_execution_output({"success": True, "action_taken": "click"})
@@ -1032,7 +1120,9 @@ class TestMergeRuntimeResultsAllRequired:
 
     def test_one_fails(self):
         from contracts.cross_runtime_result_merge import (
-            from_execution_output, merge_runtime_results, ResultMergePolicy,
+            ResultMergePolicy,
+            from_execution_output,
+            merge_runtime_results,
         )
 
         unit1 = from_execution_output({"success": True, "action_taken": "click"})
@@ -1053,7 +1143,9 @@ class TestMergeRuntimeResultsAllRequired:
 class TestMergeRuntimeResultsBestEffort:
     def test_partial_success(self):
         from contracts.cross_runtime_result_merge import (
-            from_execution_output, merge_runtime_results, ResultMergePolicy,
+            ResultMergePolicy,
+            from_execution_output,
+            merge_runtime_results,
         )
 
         unit1 = from_execution_output({"success": True, "action_taken": "click"})
@@ -1068,7 +1160,9 @@ class TestMergeRuntimeResultsBestEffort:
 
     def test_all_fail(self):
         from contracts.cross_runtime_result_merge import (
-            from_execution_output, merge_runtime_results, ResultMergePolicy,
+            ResultMergePolicy,
+            from_execution_output,
+            merge_runtime_results,
         )
 
         unit1 = from_execution_output({"success": False})
@@ -1086,7 +1180,9 @@ class TestMergeRuntimeResultsBestEffort:
 class TestMergeRuntimeResultsFallbackChain:
     def test_first_unit_succeeds(self):
         from contracts.cross_runtime_result_merge import (
-            from_execution_output, merge_runtime_results, ResultMergePolicy,
+            ResultMergePolicy,
+            from_execution_output,
+            merge_runtime_results,
         )
 
         unit1 = from_execution_output({"success": True, "action_taken": "click"})
@@ -1107,8 +1203,12 @@ class TestMergeRuntimeResultsFallbackChain:
 class TestMergeRuntimeResultsFallbackUsed:
     def test_fallback_applied(self):
         from contracts.cross_runtime_result_merge import (
-            from_execution_output, merge_runtime_results, ResultMergePolicy,
-            RuntimeResultUnit, RuntimeResultRole, RuntimeResultStatus,
+            ResultMergePolicy,
+            RuntimeResultRole,
+            RuntimeResultStatus,
+            RuntimeResultUnit,
+            from_execution_output,
+            merge_runtime_results,
         )
 
         primary = from_execution_output({"success": False}, role=RuntimeResultRole.primary)
@@ -1162,7 +1262,9 @@ class TestMergeRuntimeResultsNone:
 class TestMergeRuntimeResultsConflicts:
     def test_conflicting_outputs_detected(self):
         from contracts.cross_runtime_result_merge import (
-            from_execution_output, merge_runtime_results, ResultMergePolicy,
+            ResultMergePolicy,
+            from_execution_output,
+            merge_runtime_results,
         )
 
         unit1 = from_execution_output({"success": True, "action_taken": "click", "result": "A"})
@@ -1176,7 +1278,9 @@ class TestMergeRuntimeResultsConflicts:
 
     def test_identical_outputs_no_conflict(self):
         from contracts.cross_runtime_result_merge import (
-            from_execution_output, merge_runtime_results, ResultMergePolicy,
+            ResultMergePolicy,
+            from_execution_output,
+            merge_runtime_results,
         )
 
         same_out = {"success": True, "action_taken": "click"}
@@ -1197,7 +1301,9 @@ class TestMergeRuntimeResultsConflicts:
 class TestBuildResultMergeSummaryFromResult:
     def test_from_result(self):
         from contracts.cross_runtime_result_merge import (
-            from_execution_output, merge_runtime_results, build_result_merge_summary,
+            build_result_merge_summary,
+            from_execution_output,
+            merge_runtime_results,
         )
 
         unit = from_execution_output({"success": True, "action_taken": "click"})
@@ -1218,7 +1324,8 @@ class TestBuildResultMergeSummaryFromResult:
 class TestBuildResultMergeSummaryDirect:
     def test_direct_kwargs(self):
         from contracts.cross_runtime_result_merge import (
-            build_result_merge_summary, ResultMergePolicy,
+            ResultMergePolicy,
+            build_result_merge_summary,
         )
 
         summary = build_result_merge_summary(
@@ -1251,7 +1358,7 @@ class TestBuildResultMergeSummaryNeverRaises:
         assert summary is not None
 
     def test_returns_result_merge_summary_type(self):
-        from contracts.cross_runtime_result_merge import build_result_merge_summary, ResultMergeSummary
+        from contracts.cross_runtime_result_merge import ResultMergeSummary, build_result_merge_summary
 
         summary = build_result_merge_summary()
         assert isinstance(summary, ResultMergeSummary)
@@ -1352,8 +1459,9 @@ class TestCoreRuntimePackageReexports:
 
 class TestProjectionEndpointResultMergeSummary:
     def test_endpoint_returns_200(self):
-        from fastapi.testclient import TestClient
         from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
         from core.routes.projection import create_router
 
         app = FastAPI()
@@ -1363,8 +1471,9 @@ class TestProjectionEndpointResultMergeSummary:
         assert resp.status_code == 200
 
     def test_endpoint_returns_valid_json(self):
-        from fastapi.testclient import TestClient
         from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
         from core.routes.projection import create_router
 
         app = FastAPI()
@@ -1375,8 +1484,9 @@ class TestProjectionEndpointResultMergeSummary:
         assert isinstance(body, dict)
 
     def test_endpoint_has_required_fields(self):
-        from fastapi.testclient import TestClient
         from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
         from core.routes.projection import create_router
 
         app = FastAPI()
@@ -1388,8 +1498,9 @@ class TestProjectionEndpointResultMergeSummary:
             assert field in body, f"Missing field in response: {field}"
 
     def test_endpoint_merge_reason_no_active_merge(self):
-        from fastapi.testclient import TestClient
         from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
         from core.routes.projection import create_router
 
         app = FastAPI()
@@ -1408,8 +1519,12 @@ class TestProjectionEndpointResultMergeSummary:
 class TestMergedRuntimeResultFullRoundTrip:
     def test_full_round_trip(self):
         from contracts.cross_runtime_result_merge import (
-            MergedRuntimeResult, ResultMergePolicy, RuntimeResultUnit,
-            RuntimeResultRole, RuntimeResultStatus, RuntimeResultProvenance,
+            MergedRuntimeResult,
+            ResultMergePolicy,
+            RuntimeResultProvenance,
+            RuntimeResultRole,
+            RuntimeResultStatus,
+            RuntimeResultUnit,
         )
 
         prov = RuntimeResultProvenance(
@@ -1463,8 +1578,10 @@ class TestMergedRuntimeResultFullRoundTrip:
 class TestGracefulMissingProvenance:
     def test_unit_without_provenance(self):
         from contracts.cross_runtime_result_merge import (
-            RuntimeResultUnit, merge_runtime_results,
-            RuntimeResultRole, RuntimeResultStatus,
+            RuntimeResultRole,
+            RuntimeResultStatus,
+            RuntimeResultUnit,
+            merge_runtime_results,
         )
 
         unit = RuntimeResultUnit(
@@ -1481,8 +1598,11 @@ class TestGracefulMissingProvenance:
 
     def test_unit_with_empty_provenance(self):
         from contracts.cross_runtime_result_merge import (
-            RuntimeResultUnit, RuntimeResultProvenance,
-            merge_runtime_results, RuntimeResultRole, RuntimeResultStatus,
+            RuntimeResultProvenance,
+            RuntimeResultRole,
+            RuntimeResultStatus,
+            RuntimeResultUnit,
+            merge_runtime_results,
         )
 
         prov = RuntimeResultProvenance()
@@ -1505,8 +1625,11 @@ class TestGracefulMissingProvenance:
 class TestProvenanceRefsCollected:
     def test_refs_aggregated(self):
         from contracts.cross_runtime_result_merge import (
-            RuntimeResultUnit, RuntimeResultProvenance,
-            merge_runtime_results, RuntimeResultRole, RuntimeResultStatus,
+            RuntimeResultProvenance,
+            RuntimeResultRole,
+            RuntimeResultStatus,
+            RuntimeResultUnit,
+            merge_runtime_results,
         )
 
         prov1 = RuntimeResultProvenance(
@@ -1546,9 +1669,12 @@ class TestProvenanceRefsCollected:
 class TestCombinedTakeoverAndDispatchMerge:
     def test_combined_merge(self):
         from contracts.cross_runtime_result_merge import (
-            from_local_takeover_result, from_source_dispatch_result,
-            merge_runtime_results, ResultMergePolicy,
-            RuntimeResultRole, RuntimeResultStatus,
+            ResultMergePolicy,
+            RuntimeResultRole,
+            RuntimeResultStatus,
+            from_local_takeover_result,
+            from_source_dispatch_result,
+            merge_runtime_results,
         )
 
         dispatch_unit = from_source_dispatch_result(

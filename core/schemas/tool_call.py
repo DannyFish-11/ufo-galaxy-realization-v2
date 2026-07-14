@@ -18,10 +18,11 @@ from pydantic import BaseModel, Field
 
 class ToolLayer(str, Enum):
     """工具所在层级"""
-    MCP = "mcp"          # MCP Server 工具 → mcp__<server>__<tool>
-    MCP_GW = "mcp_gw"   # MCP Gateway 自建工具 → mcp__gateway__<tool>
-    SKILL = "skill"      # Skill 技能 → skill__<id>
-    NODE = "node"        # Node 节点 → node__<id>__<action>
+
+    MCP = "mcp"  # MCP Server 工具 → mcp__<server>__<tool>
+    MCP_GW = "mcp_gw"  # MCP Gateway 自建工具 → mcp__gateway__<tool>
+    SKILL = "skill"  # Skill 技能 → skill__<id>
+    NODE = "node"  # Node 节点 → node__<id>__<action>
 
 
 class ToolCallStatus(str, Enum):

@@ -145,6 +145,7 @@ ACCEPTANCE_REQUIRES_TRUSTED_EVIDENCE_POLICY: str = (
 # ResultAcceptanceVerdict
 # ---------------------------------------------------------------------------
 
+
 class ResultAcceptanceVerdict(str, Enum):
     """Canonical acceptance decision for a result event.
 
@@ -174,6 +175,7 @@ class ResultAcceptanceVerdict(str, Enum):
 # ---------------------------------------------------------------------------
 # ResultTrustAcceptanceRecord
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class ResultTrustAcceptanceRecord:
@@ -250,6 +252,7 @@ class ResultTrustAcceptanceRecord:
 # evaluate_result_truth_acceptance
 # ---------------------------------------------------------------------------
 
+
 def evaluate_result_truth_acceptance(
     evidence_record: Any,
 ) -> ResultTrustAcceptanceRecord:
@@ -292,16 +295,8 @@ def evaluate_result_truth_acceptance(
         diagnosis = list(getattr(evidence_record, "diagnosis", []))
 
         # Normalise trust level to string for comparison
-        trust_level = (
-            trust_level_raw.value
-            if hasattr(trust_level_raw, "value")
-            else str(trust_level_raw)
-        )
-        evidence_state = (
-            evidence_state_raw.value
-            if hasattr(evidence_state_raw, "value")
-            else str(evidence_state_raw)
-        )
+        trust_level = trust_level_raw.value if hasattr(trust_level_raw, "value") else str(trust_level_raw)
+        evidence_state = evidence_state_raw.value if hasattr(evidence_state_raw, "value") else str(evidence_state_raw)
 
         verdict, propagate_flags, operator_warning = _derive_verdict_and_flags(trust_level)
 
@@ -375,6 +370,7 @@ def _derive_verdict_and_flags(
 # apply_acceptance_gate
 # ---------------------------------------------------------------------------
 
+
 def apply_acceptance_gate(
     evidence_record: Any,
     ingress_outcome: Any,
@@ -419,13 +415,9 @@ def apply_acceptance_gate(
         ):
             ingress_outcome.is_fully_closed = False
             if not ingress_outcome.incomplete_reason:
-                ingress_outcome.incomplete_reason = (
-                    f"evidence_gate:{acceptance.verdict.value}"
-                )
+                ingress_outcome.incomplete_reason = f"evidence_gate:{acceptance.verdict.value}"
             elif "evidence_gate" not in ingress_outcome.incomplete_reason:
-                ingress_outcome.incomplete_reason += (
-                    f"; evidence_gate:{acceptance.verdict.value}"
-                )
+                ingress_outcome.incomplete_reason += f"; evidence_gate:{acceptance.verdict.value}"
 
         logger.info(
             "result_truth_acceptance_gate: verdict=%s trust=%s state=%s "
@@ -440,8 +432,7 @@ def apply_acceptance_gate(
 
     except Exception as exc:
         logger.warning(
-            "result_truth_acceptance_gate: apply_acceptance_gate failed to "
-            "stamp ingress_outcome: exc=%s",
+            "result_truth_acceptance_gate: apply_acceptance_gate failed to " "stamp ingress_outcome: exc=%s",
             exc,
         )
 

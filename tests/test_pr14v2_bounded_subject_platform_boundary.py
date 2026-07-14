@@ -45,12 +45,13 @@ Locks the following invariants:
 from __future__ import annotations
 
 import json
+
 import pytest
 
 from core.bounded_subject_platform_boundary import (
+    BOUNDED_SUBJECT_HAS_NO_GLOBAL_TRUTH_FINALIZATION_POLICY,
     BOUNDED_SUBJECT_PLATFORM_BOUNDARY_AUTHORITY,
     BOUNDED_SUBJECT_PLATFORM_BOUNDARY_PR14V2_SENTINEL,
-    BOUNDED_SUBJECT_HAS_NO_GLOBAL_TRUTH_FINALIZATION_POLICY,
     CANONICAL_CENTER_BOUNDARY_IS_SOLE_AUTHORITY_POLICY,
     OBSERVABILITY_BOUNDARY_IS_NOT_PARALLEL_AUTHORITY_POLICY,
     OUTWARD_CONSUMPTION_BOUNDARY_IS_CONSUMPTION_ONLY_POLICY,
@@ -62,17 +63,17 @@ from core.bounded_subject_platform_boundary import (
     PlatformBoundarySnapshot,
     QuasiPlatformStateBoundaryViolation,
     assert_quasi_platform_state_intact,
-    build_quasi_platform_runtime_assertion_report,
     build_platform_boundary_snapshot,
+    build_quasi_platform_runtime_assertion_report,
     evaluate_quasi_platform_state,
     get_platform_boundary_axes,
     get_system_definition,
 )
 
-
 # ===========================================================================
 # 1–3: Authority and policy sentinels
 # ===========================================================================
+
 
 def test_authority_sentinel_is_non_empty_and_contains_keywords() -> None:
     assert BOUNDED_SUBJECT_PLATFORM_BOUNDARY_AUTHORITY
@@ -109,6 +110,7 @@ def test_all_five_policy_sentinels_are_non_empty() -> None:
 # 4: PlatformBoundaryAxis enum
 # ===========================================================================
 
+
 def test_platform_boundary_axis_has_all_five_values() -> None:
     values = {a.value for a in PlatformBoundaryAxis}
     assert "canonical_center" in values
@@ -122,6 +124,7 @@ def test_platform_boundary_axis_has_all_five_values() -> None:
 # ===========================================================================
 # 5: BoundaryAxisDescriptor
 # ===========================================================================
+
 
 def test_boundary_axis_descriptor_to_dict_has_all_required_keys() -> None:
     axes = get_platform_boundary_axes()
@@ -142,6 +145,7 @@ def test_boundary_axis_descriptor_to_dict_has_all_required_keys() -> None:
 # ===========================================================================
 # 6: PlatformBoundarySnapshot
 # ===========================================================================
+
 
 def test_platform_boundary_snapshot_to_dict_has_all_required_keys() -> None:
     snap = build_platform_boundary_snapshot()
@@ -164,6 +168,7 @@ def test_platform_boundary_snapshot_to_dict_has_all_required_keys() -> None:
 # 7: Registry has exactly five axes
 # ===========================================================================
 
+
 def test_platform_boundary_axis_registry_has_exactly_five_entries() -> None:
     assert len(PLATFORM_BOUNDARY_AXIS_REGISTRY) == 5
 
@@ -178,30 +183,26 @@ def test_registry_covers_all_five_axis_values() -> None:
 # 8–10: Per-axis invariants
 # ===========================================================================
 
+
 def test_every_axis_has_non_empty_code_evidence() -> None:
     for axis in PLATFORM_BOUNDARY_AXIS_REGISTRY:
-        assert axis.code_evidence, (
-            f"axis={axis.axis.value} has empty code_evidence"
-        )
+        assert axis.code_evidence, f"axis={axis.axis.value} has empty code_evidence"
 
 
 def test_every_axis_is_android_v2_consistent() -> None:
     for axis in PLATFORM_BOUNDARY_AXIS_REGISTRY:
-        assert axis.android_v2_consistent is True, (
-            f"axis={axis.axis.value} has android_v2_consistent=False"
-        )
+        assert axis.android_v2_consistent is True, f"axis={axis.axis.value} has android_v2_consistent=False"
 
 
 def test_every_axis_has_no_parallel_authority() -> None:
     for axis in PLATFORM_BOUNDARY_AXIS_REGISTRY:
-        assert axis.no_parallel_authority is True, (
-            f"axis={axis.axis.value} has no_parallel_authority=False"
-        )
+        assert axis.no_parallel_authority is True, f"axis={axis.axis.value} has no_parallel_authority=False"
 
 
 # ===========================================================================
 # 11–13: build_platform_boundary_snapshot / assert_quasi_platform_state_intact
 # ===========================================================================
+
 
 def test_build_platform_boundary_snapshot_returns_intact() -> None:
     snap = build_platform_boundary_snapshot()
@@ -223,10 +224,12 @@ def test_assert_quasi_platform_state_intact_does_not_raise() -> None:
 # 14: QuasiPlatformStateBoundaryViolation is raised on misconfigured axis
 # ===========================================================================
 
+
 def test_violation_raised_when_android_v2_inconsistent() -> None:
     from core.bounded_subject_platform_boundary import (
         evaluate_quasi_platform_state,
     )
+
     bad_axis = BoundaryAxisDescriptor(
         axis=PlatformBoundaryAxis.CANONICAL_CENTER,
         description="test",
@@ -244,6 +247,7 @@ def test_violation_raised_when_parallel_authority_introduced() -> None:
     from core.bounded_subject_platform_boundary import (
         evaluate_quasi_platform_state,
     )
+
     bad_axis = BoundaryAxisDescriptor(
         axis=PlatformBoundaryAxis.BOUNDED_SUBJECT,
         description="test",
@@ -261,6 +265,7 @@ def test_quasi_platform_state_boundary_violation_carries_snapshot() -> None:
     from core.bounded_subject_platform_boundary import (
         evaluate_quasi_platform_state,
     )
+
     bad_axis = BoundaryAxisDescriptor(
         axis=PlatformBoundaryAxis.OUTWARD_CONSUMPTION,
         description="test",
@@ -282,6 +287,7 @@ def test_quasi_platform_state_boundary_violation_carries_snapshot() -> None:
 
 def test_assert_quasi_platform_state_raises_when_parallel_final_integration_detected(monkeypatch) -> None:
     import core.bounded_subject_platform_boundary as boundary
+
     original_builder = boundary.build_final_acceptance_surface_boundary
 
     def _fake_boundary_builder(**kwargs):
@@ -298,6 +304,7 @@ def test_assert_quasi_platform_state_raises_when_parallel_final_integration_dete
 # 15–16: Helper functions
 # ===========================================================================
 
+
 def test_get_platform_boundary_axes_returns_five_axes() -> None:
     axes = get_platform_boundary_axes()
     assert len(axes) == 5
@@ -312,6 +319,7 @@ def test_get_system_definition_matches_sentinel() -> None:
 # ===========================================================================
 # 17–18: Serialisation
 # ===========================================================================
+
 
 def test_snapshot_to_json_is_valid_json_with_required_keys() -> None:
     snap = build_platform_boundary_snapshot()
@@ -347,6 +355,7 @@ def test_runtime_assertion_report_is_intact_and_covers_final_integration_guard()
 # ===========================================================================
 # 19–23: Per-axis code evidence references
 # ===========================================================================
+
 
 def _axis_by(axis_type: PlatformBoundaryAxis) -> BoundaryAxisDescriptor:
     for a in PLATFORM_BOUNDARY_AXIS_REGISTRY:
@@ -389,18 +398,18 @@ def test_outward_consumption_axis_references_final_acceptance_surface_boundary()
 # 24: No duplicate axis values
 # ===========================================================================
 
+
 def test_no_duplicate_axis_values_in_registry() -> None:
     seen = set()
     for a in PLATFORM_BOUNDARY_AXIS_REGISTRY:
-        assert a.axis not in seen, (
-            f"Duplicate axis value in registry: {a.axis.value}"
-        )
+        assert a.axis not in seen, f"Duplicate axis value in registry: {a.axis.value}"
         seen.add(a.axis)
 
 
 # ===========================================================================
 # 25–29: Policy sentinel vocabulary
 # ===========================================================================
+
 
 def test_canonical_center_policy_references_canonical_center() -> None:
     p = CANONICAL_CENTER_BOUNDARY_IS_SOLE_AUTHORITY_POLICY
@@ -434,6 +443,7 @@ def test_outward_consumption_policy_references_consumption() -> None:
 # ===========================================================================
 # 30: Authority sentinel references quasi-platform state concepts
 # ===========================================================================
+
 
 def test_authority_sentinel_references_canonical_governance_concepts() -> None:
     s = BOUNDED_SUBJECT_PLATFORM_BOUNDARY_AUTHORITY

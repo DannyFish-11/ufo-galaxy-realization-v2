@@ -156,6 +156,7 @@ Functions::
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
+
 logger = logging.getLogger(__name__)
 
 
@@ -324,15 +325,9 @@ _POSTURE_JOIN_RUNTIME: str = "join_runtime"
 _POSTURE_CONTROL_ONLY: str = "control_only"
 _RING_BUFFER_CAPACITY: int = 128
 _TRACKER_STATE_PATH_ENV: str = "GALAXY_DELEGATED_RUNTIME_EXECUTION_TRACKER_STATE_PATH"
-_TRACKER_ACTIVE_RECOVERY_TTL_ENV: str = (
-    "GALAXY_DELEGATED_RUNTIME_EXECUTION_TRACKER_ACTIVE_RECOVERY_TTL_SECONDS"
-)
-_DEFAULT_TRACKER_STATE_PATH: str = (
-    "data/runtime/delegated_runtime_execution_tracker.json"
-)
-_ACTIVE_RECOVERY_TTL_SECONDS: float = float(
-    os.getenv(_TRACKER_ACTIVE_RECOVERY_TTL_ENV, "900")
-)
+_TRACKER_ACTIVE_RECOVERY_TTL_ENV: str = "GALAXY_DELEGATED_RUNTIME_EXECUTION_TRACKER_ACTIVE_RECOVERY_TTL_SECONDS"
+_DEFAULT_TRACKER_STATE_PATH: str = "data/runtime/delegated_runtime_execution_tracker.json"
+_ACTIVE_RECOVERY_TTL_SECONDS: float = float(os.getenv(_TRACKER_ACTIVE_RECOVERY_TTL_ENV, "900"))
 _RECOVERY_STATUS_LIVE: str = "live"
 _RECOVERY_STATUS_REVALIDATED: str = "revalidated_live"
 _RECOVERY_STATUS_RECOVERED_UNREVALIDATED: str = "recovered_unrevalidated"
@@ -524,10 +519,7 @@ class DelegatedExecutionIdentity:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "DelegatedExecutionIdentity":
         if not isinstance(data, dict):
-            raise ValueError(
-                "DelegatedExecutionIdentity.from_dict: expected dict, "
-                f"got {type(data).__name__!r}"
-            )
+            raise ValueError("DelegatedExecutionIdentity.from_dict: expected dict, " f"got {type(data).__name__!r}")
         return cls(
             tracker_id=str(data.get("tracker_id", "") or str(uuid.uuid4())),
             session_id=str(data.get("session_id", "")),
@@ -573,8 +565,7 @@ class DelegatedExecutionAcknowledgment:
     def from_dict(cls, data: Dict[str, Any]) -> "DelegatedExecutionAcknowledgment":
         if not isinstance(data, dict):
             raise ValueError(
-                "DelegatedExecutionAcknowledgment.from_dict: expected dict, "
-                f"got {type(data).__name__!r}"
+                "DelegatedExecutionAcknowledgment.from_dict: expected dict, " f"got {type(data).__name__!r}"
             )
         return cls(
             signal=AcknowledgmentSignal.from_string(str(data.get("signal", "ack"))),
@@ -623,10 +614,7 @@ class DelegatedExecutionResult:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "DelegatedExecutionResult":
         if not isinstance(data, dict):
-            raise ValueError(
-                "DelegatedExecutionResult.from_dict: expected dict, "
-                f"got {type(data).__name__!r}"
-            )
+            raise ValueError("DelegatedExecutionResult.from_dict: expected dict, " f"got {type(data).__name__!r}")
         return cls(
             success=bool(data.get("success", False)),
             result_payload=dict(data.get("result_payload", {})),
@@ -667,13 +655,9 @@ class DelegatedExecutionTrackingRecord:
         Non-empty string when the tracking record was rejected at creation.
     """
 
-    identity: DelegatedExecutionIdentity = field(
-        default_factory=DelegatedExecutionIdentity
-    )
+    identity: DelegatedExecutionIdentity = field(default_factory=DelegatedExecutionIdentity)
     phase: DelegatedExecutionPhase = DelegatedExecutionPhase.pending_ack
-    acknowledgments: List[DelegatedExecutionAcknowledgment] = field(
-        default_factory=list
-    )
+    acknowledgments: List[DelegatedExecutionAcknowledgment] = field(default_factory=list)
     result: Optional[DelegatedExecutionResult] = None
     source_runtime_posture: str = _POSTURE_CONTROL_ONLY
     coordination_role: str = ""
@@ -688,11 +672,7 @@ class DelegatedExecutionTrackingRecord:
 
     def is_accepted(self) -> bool:
         """Return True iff the record was accepted (not rejected, contract-anchored)."""
-        return (
-            not self.reject_reason
-            and bool(self.identity.session_id)
-            and bool(self.identity.contract_id)
-        )
+        return not self.reject_reason and bool(self.identity.session_id) and bool(self.identity.contract_id)
 
     def is_rejected(self) -> bool:
         """Return True iff the record was rejected at creation time."""
@@ -744,8 +724,7 @@ class DelegatedExecutionTrackingRecord:
         """
         if not isinstance(data, dict):
             raise ValueError(
-                "DelegatedExecutionTrackingRecord.from_dict: expected dict, "
-                f"got {type(data).__name__!r}"
+                "DelegatedExecutionTrackingRecord.from_dict: expected dict, " f"got {type(data).__name__!r}"
             )
         raw_identity = data.get("identity", {})
         raw_acks = data.get("acknowledgments", [])
@@ -756,11 +735,7 @@ class DelegatedExecutionTrackingRecord:
             if isinstance(raw_identity, dict)
             else DelegatedExecutionIdentity()
         )
-        acknowledgments = [
-            DelegatedExecutionAcknowledgment.from_dict(a)
-            for a in raw_acks
-            if isinstance(a, dict)
-        ]
+        acknowledgments = [DelegatedExecutionAcknowledgment.from_dict(a) for a in raw_acks if isinstance(a, dict)]
         result: Optional[DelegatedExecutionResult] = None
         if isinstance(raw_result, dict):
             result = DelegatedExecutionResult.from_dict(raw_result)
@@ -772,25 +747,14 @@ class DelegatedExecutionTrackingRecord:
             ),
             acknowledgments=acknowledgments,
             result=result,
-            source_runtime_posture=str(
-                data.get("source_runtime_posture", _POSTURE_CONTROL_ONLY)
-            ),
+            source_runtime_posture=str(data.get("source_runtime_posture", _POSTURE_CONTROL_ONLY)),
             coordination_role=str(data.get("coordination_role", "")),
             created_at=float(data.get("created_at", time.time())),
             updated_at=float(data.get("updated_at", time.time())),
             reject_reason=str(data.get("reject_reason", "")),
-            recovered_from_durable_state=bool(
-                data.get("recovered_from_durable_state", False)
-            ),
-            recovery_status=str(
-                data.get("recovery_status", _RECOVERY_STATUS_LIVE)
-                or _RECOVERY_STATUS_LIVE
-            ),
-            recovered_at=(
-                float(data["recovered_at"])
-                if data.get("recovered_at") is not None
-                else None
-            ),
+            recovered_from_durable_state=bool(data.get("recovered_from_durable_state", False)),
+            recovery_status=str(data.get("recovery_status", _RECOVERY_STATUS_LIVE) or _RECOVERY_STATUS_LIVE),
+            recovered_at=(float(data["recovered_at"]) if data.get("recovered_at") is not None else None),
         )
 
 
@@ -863,9 +827,7 @@ class DelegatedExecutionTrackingRuntime:
     _CAPACITY: int = _RING_BUFFER_CAPACITY
 
     def __init__(self, *, state_path: Optional[str] = None) -> None:
-        self._buf: Deque[DelegatedExecutionTrackingRecord] = deque(
-            maxlen=self._CAPACITY
-        )
+        self._buf: Deque[DelegatedExecutionTrackingRecord] = deque(maxlen=self._CAPACITY)
         self._state_path: str = str(state_path or "").strip()
         self._last_restored_at: Optional[float] = None
         self._last_persisted_at: Optional[float] = None
@@ -892,18 +854,14 @@ class DelegatedExecutionTrackingRuntime:
         """Return records in a non-terminal phase, newest-first."""
         return [r for r in reversed(self._buf) if r.is_active()]
 
-    def get_latest_for_session(
-        self, session_id: str
-    ) -> Optional[DelegatedExecutionTrackingRecord]:
+    def get_latest_for_session(self, session_id: str) -> Optional[DelegatedExecutionTrackingRecord]:
         """Return the most recent record for *session_id*, or None."""
         for record in reversed(self._buf):
             if record.identity.session_id == session_id:
                 return record
         return None
 
-    def get_latest_for_contract(
-        self, contract_id: str
-    ) -> Optional[DelegatedExecutionTrackingRecord]:
+    def get_latest_for_contract(self, contract_id: str) -> Optional[DelegatedExecutionTrackingRecord]:
         """Return the most recent record for *contract_id*, or None."""
         for record in reversed(self._buf):
             if record.identity.contract_id == contract_id:
@@ -1011,9 +969,7 @@ def get_execution_tracking_runtime() -> DelegatedExecutionTrackingRuntime:
     """Return the process-singleton :class:`DelegatedExecutionTrackingRuntime`."""
     global _SINGLETON_RUNTIME  # noqa: PLW0603
     if _SINGLETON_RUNTIME is None:
-        _SINGLETON_RUNTIME = DelegatedExecutionTrackingRuntime(
-            state_path=_resolve_runtime_state_path()
-        )
+        _SINGLETON_RUNTIME = DelegatedExecutionTrackingRuntime(state_path=_resolve_runtime_state_path())
     return _SINGLETON_RUNTIME
 
 
@@ -1127,9 +1083,7 @@ def create_execution_tracking_record(
             phase=DelegatedExecutionPhase.cancelled,
             source_runtime_posture=source_runtime_posture,
             coordination_role=coordination_role,
-            reject_reason=(
-                "EXECUTION_TRACKING_REQUIRES_SESSION_ID: session_id is empty"
-            ),
+            reject_reason=("EXECUTION_TRACKING_REQUIRES_SESSION_ID: session_id is empty"),
             recovery_status=_RECOVERY_STATUS_LIVE,
         )
         _runtime.push(record)
@@ -1147,9 +1101,7 @@ def create_execution_tracking_record(
             phase=DelegatedExecutionPhase.cancelled,
             source_runtime_posture=source_runtime_posture,
             coordination_role=coordination_role,
-            reject_reason=(
-                "EXECUTION_TRACKING_REQUIRES_CONTRACT_ID: contract_id is empty"
-            ),
+            reject_reason=("EXECUTION_TRACKING_REQUIRES_CONTRACT_ID: contract_id is empty"),
             recovery_status=_RECOVERY_STATUS_LIVE,
         )
         _runtime.push(record)
@@ -1240,7 +1192,8 @@ def apply_acknowledgment_signal(
         recovered_from_durable_state=record.recovered_from_durable_state,
         recovery_status=(
             _RECOVERY_STATUS_REVALIDATED
-            if record.recovery_status in (
+            if record.recovery_status
+            in (
                 _RECOVERY_STATUS_RECOVERED_UNREVALIDATED,
                 _RECOVERY_STATUS_RECOVERED_STALE,
                 _RECOVERY_STATUS_RECOVERED_TERMINAL,
@@ -1286,11 +1239,7 @@ def apply_result(
 
     _runtime = runtime if runtime is not None else get_execution_tracking_runtime()
 
-    new_phase = (
-        DelegatedExecutionPhase.completed
-        if result.success
-        else DelegatedExecutionPhase.failed
-    )
+    new_phase = DelegatedExecutionPhase.completed if result.success else DelegatedExecutionPhase.failed
     updated = DelegatedExecutionTrackingRecord(
         identity=record.identity,
         phase=new_phase,
@@ -1304,7 +1253,8 @@ def apply_result(
         recovered_from_durable_state=record.recovered_from_durable_state,
         recovery_status=(
             _RECOVERY_STATUS_REVALIDATED
-            if record.recovery_status in (
+            if record.recovery_status
+            in (
                 _RECOVERY_STATUS_RECOVERED_UNREVALIDATED,
                 _RECOVERY_STATUS_RECOVERED_STALE,
                 _RECOVERY_STATUS_RECOVERED_TERMINAL,
@@ -1366,15 +1316,9 @@ def build_execution_tracking_snapshot(
         total_count=len(all_records),
         policy_sentinels=list(_ALL_POLICY_SENTINELS),
         recovered_unrevalidated_count=len(
-            [
-                r
-                for r in all_records
-                if r.recovery_status == _RECOVERY_STATUS_RECOVERED_UNREVALIDATED
-            ]
+            [r for r in all_records if r.recovery_status == _RECOVERY_STATUS_RECOVERED_UNREVALIDATED]
         ),
-        recovered_stale_count=len(
-            [r for r in all_records if r.recovery_status == _RECOVERY_STATUS_RECOVERED_STALE]
-        ),
+        recovered_stale_count=len([r for r in all_records if r.recovery_status == _RECOVERY_STATUS_RECOVERED_STALE]),
         recovered_terminal_count=len(
             [r for r in all_records if r.recovery_status == _RECOVERY_STATUS_RECOVERED_TERMINAL]
         ),

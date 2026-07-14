@@ -79,7 +79,6 @@ from typing import Any, Dict
 
 import pytest
 
-
 # ===========================================================================
 # A — Sentinel and policy accessibility
 # ===========================================================================
@@ -92,6 +91,7 @@ class TestSentinelAndPolicyAccessibility:
         from core.android_continuity_recovery_state_router import (
             ANDROID_CONTINUITY_RECOVERY_STATE_ROUTER_SENTINEL,
         )
+
         assert isinstance(ANDROID_CONTINUITY_RECOVERY_STATE_ROUTER_SENTINEL, str)
         assert len(ANDROID_CONTINUITY_RECOVERY_STATE_ROUTER_SENTINEL) > 0
         assert "PR4V2_RECOVERY" in ANDROID_CONTINUITY_RECOVERY_STATE_ROUTER_SENTINEL
@@ -100,6 +100,7 @@ class TestSentinelAndPolicyAccessibility:
         from core.android_continuity_recovery_state_router import (
             ANDROID_CONTINUITY_RECOVERY_STATE_ROUTER_CONTRACT_VERSION,
         )
+
         assert isinstance(ANDROID_CONTINUITY_RECOVERY_STATE_ROUTER_CONTRACT_VERSION, str)
         assert "4v2" in ANDROID_CONTINUITY_RECOVERY_STATE_ROUTER_CONTRACT_VERSION.lower()
 
@@ -107,6 +108,7 @@ class TestSentinelAndPolicyAccessibility:
         from core.android_continuity_recovery_state_router import (
             STALE_RECOVERY_ARTIFACT_MUST_BE_REJECTED_POLICY,
         )
+
         assert isinstance(STALE_RECOVERY_ARTIFACT_MUST_BE_REJECTED_POLICY, str)
         assert STALE_RECOVERY_ARTIFACT_MUST_BE_REJECTED_POLICY.startswith("POLICY::")
 
@@ -114,28 +116,23 @@ class TestSentinelAndPolicyAccessibility:
         from core.android_continuity_recovery_state_router import (
             RECONCILIATION_REQUIRED_MUST_TRIGGER_RECONCILIATION_PATH_POLICY,
         )
-        assert isinstance(
-            RECONCILIATION_REQUIRED_MUST_TRIGGER_RECONCILIATION_PATH_POLICY, str
-        )
-        assert RECONCILIATION_REQUIRED_MUST_TRIGGER_RECONCILIATION_PATH_POLICY.startswith(
-            "POLICY::"
-        )
+
+        assert isinstance(RECONCILIATION_REQUIRED_MUST_TRIGGER_RECONCILIATION_PATH_POLICY, str)
+        assert RECONCILIATION_REQUIRED_MUST_TRIGGER_RECONCILIATION_PATH_POLICY.startswith("POLICY::")
 
     def test_A05_lost_inflight_policy_importable(self) -> None:
         from core.android_continuity_recovery_state_router import (
             LOST_INFLIGHT_REQUIRES_RECONCILIATION_OR_CLOSURE_REVIEW_POLICY,
         )
-        assert isinstance(
-            LOST_INFLIGHT_REQUIRES_RECONCILIATION_OR_CLOSURE_REVIEW_POLICY, str
-        )
-        assert LOST_INFLIGHT_REQUIRES_RECONCILIATION_OR_CLOSURE_REVIEW_POLICY.startswith(
-            "POLICY::"
-        )
+
+        assert isinstance(LOST_INFLIGHT_REQUIRES_RECONCILIATION_OR_CLOSURE_REVIEW_POLICY, str)
+        assert LOST_INFLIGHT_REQUIRES_RECONCILIATION_OR_CLOSURE_REVIEW_POLICY.startswith("POLICY::")
 
     def test_A06_recovered_inflight_advisory_policy_importable(self) -> None:
         from core.android_continuity_recovery_state_router import (
             RECOVERED_INFLIGHT_IS_ADVISORY_ONLY_POLICY,
         )
+
         assert isinstance(RECOVERED_INFLIGHT_IS_ADVISORY_ONLY_POLICY, str)
         assert RECOVERED_INFLIGHT_IS_ADVISORY_ONLY_POLICY.startswith("POLICY::")
 
@@ -143,6 +140,7 @@ class TestSentinelAndPolicyAccessibility:
         from core.android_continuity_recovery_state_router import (
             RECONNECT_INITIATED_IS_NOT_COMPLETION_POLICY,
         )
+
         assert isinstance(RECONNECT_INITIATED_IS_NOT_COMPLETION_POLICY, str)
         assert RECONNECT_INITIATED_IS_NOT_COMPLETION_POLICY.startswith("POLICY::")
 
@@ -150,6 +148,7 @@ class TestSentinelAndPolicyAccessibility:
         from core.android_continuity_recovery_state_router import (
             RECOVERY_IN_PROGRESS_IS_TRANSIENT_POLICY,
         )
+
         assert isinstance(RECOVERY_IN_PROGRESS_IS_TRANSIENT_POLICY, str)
         assert RECOVERY_IN_PROGRESS_IS_TRANSIENT_POLICY.startswith("POLICY::")
 
@@ -157,15 +156,13 @@ class TestSentinelAndPolicyAccessibility:
         from core.android_continuity_recovery_state_router import (
             UNKNOWN_RECOVERY_PHASE_MUST_BE_HANDLED_CONSERVATIVELY_POLICY,
         )
-        assert isinstance(
-            UNKNOWN_RECOVERY_PHASE_MUST_BE_HANDLED_CONSERVATIVELY_POLICY, str
-        )
-        assert UNKNOWN_RECOVERY_PHASE_MUST_BE_HANDLED_CONSERVATIVELY_POLICY.startswith(
-            "POLICY::"
-        )
+
+        assert isinstance(UNKNOWN_RECOVERY_PHASE_MUST_BE_HANDLED_CONSERVATIVELY_POLICY, str)
+        assert UNKNOWN_RECOVERY_PHASE_MUST_BE_HANDLED_CONSERVATIVELY_POLICY.startswith("POLICY::")
 
     def test_A10_all_policies_have_policy_prefix(self) -> None:
         import core.android_continuity_recovery_state_router as mod
+
         policy_constants = [
             mod.STALE_RECOVERY_ARTIFACT_MUST_BE_REJECTED_POLICY,
             mod.RECONCILIATION_REQUIRED_MUST_TRIGGER_RECONCILIATION_PATH_POLICY,
@@ -189,42 +186,52 @@ class TestAndroidRecoveryPhase:
 
     def _phase(self, v: str):
         from core.android_continuity_recovery_state_router import AndroidRecoveryPhase
+
         return AndroidRecoveryPhase.from_string(v)
 
     def test_B01_reconnect_initiated(self) -> None:
         from core.android_continuity_recovery_state_router import AndroidRecoveryPhase
+
         assert self._phase("reconnect_initiated") == AndroidRecoveryPhase.reconnect_initiated
 
     def test_B02_recovery_in_progress(self) -> None:
         from core.android_continuity_recovery_state_router import AndroidRecoveryPhase
+
         assert self._phase("recovery_in_progress") == AndroidRecoveryPhase.recovery_in_progress
 
     def test_B03_recovered_inflight(self) -> None:
         from core.android_continuity_recovery_state_router import AndroidRecoveryPhase
+
         assert self._phase("recovered_inflight") == AndroidRecoveryPhase.recovered_inflight
 
     def test_B04_stale_recovery_artifact(self) -> None:
         from core.android_continuity_recovery_state_router import AndroidRecoveryPhase
+
         assert self._phase("stale_recovery_artifact") == AndroidRecoveryPhase.stale_recovery_artifact
 
     def test_B05_reconciliation_required(self) -> None:
         from core.android_continuity_recovery_state_router import AndroidRecoveryPhase
+
         assert self._phase("reconciliation_required") == AndroidRecoveryPhase.reconciliation_required
 
     def test_B06_lost_inflight(self) -> None:
         from core.android_continuity_recovery_state_router import AndroidRecoveryPhase
+
         assert self._phase("lost_inflight") == AndroidRecoveryPhase.lost_inflight
 
     def test_B07_unknown_explicit(self) -> None:
         from core.android_continuity_recovery_state_router import AndroidRecoveryPhase
+
         assert self._phase("unknown") == AndroidRecoveryPhase.unknown
 
     def test_B08_unknown_fallback_for_unrecognised(self) -> None:
         from core.android_continuity_recovery_state_router import AndroidRecoveryPhase
+
         assert self._phase("some_future_phase") == AndroidRecoveryPhase.unknown
 
     def test_B09_unknown_fallback_for_none(self) -> None:
         from core.android_continuity_recovery_state_router import AndroidRecoveryPhase
+
         assert self._phase(None) == AndroidRecoveryPhase.unknown  # type: ignore[arg-type]
 
 
@@ -238,6 +245,7 @@ class TestV2RecoveryRoute:
 
     def test_C01_all_routes_present(self) -> None:
         from core.android_continuity_recovery_state_router import V2RecoveryRoute
+
         routes = {r.value for r in V2RecoveryRoute}
         expected = {
             "reject_stale_artifact",
@@ -250,18 +258,22 @@ class TestV2RecoveryRoute:
 
     def test_C02_reject_stale_artifact_route(self) -> None:
         from core.android_continuity_recovery_state_router import V2RecoveryRoute
+
         assert V2RecoveryRoute("reject_stale_artifact") == V2RecoveryRoute.reject_stale_artifact
 
     def test_C03_trigger_reconciliation_route(self) -> None:
         from core.android_continuity_recovery_state_router import V2RecoveryRoute
+
         assert V2RecoveryRoute("trigger_reconciliation") == V2RecoveryRoute.trigger_reconciliation
 
     def test_C04_require_closure_review_route(self) -> None:
         from core.android_continuity_recovery_state_router import V2RecoveryRoute
+
         assert V2RecoveryRoute("require_closure_review") == V2RecoveryRoute.require_closure_review
 
     def test_C05_accept_advisory_evidence_route(self) -> None:
         from core.android_continuity_recovery_state_router import V2RecoveryRoute
+
         assert V2RecoveryRoute("accept_advisory_evidence") == V2RecoveryRoute.accept_advisory_evidence
 
 
@@ -278,21 +290,25 @@ class TestRouteAndroidRecoveryState:
             AndroidRecoveryPhase,
             route_android_recovery_state,
         )
+
         phase = AndroidRecoveryPhase.from_string(phase_str)
         return route_android_recovery_state(phase)
 
     def test_D01_reconnect_initiated_mark_recovery_pending(self) -> None:
         from core.android_continuity_recovery_state_router import V2RecoveryRoute
+
         decision = self._route("reconnect_initiated")
         assert decision.v2_route == V2RecoveryRoute.mark_recovery_pending
 
     def test_D02_recovery_in_progress_mark_recovery_pending(self) -> None:
         from core.android_continuity_recovery_state_router import V2RecoveryRoute
+
         decision = self._route("recovery_in_progress")
         assert decision.v2_route == V2RecoveryRoute.mark_recovery_pending
 
     def test_D03_recovered_inflight_accept_advisory_not_closure(self) -> None:
         from core.android_continuity_recovery_state_router import V2RecoveryRoute
+
         decision = self._route("recovered_inflight")
         assert decision.v2_route == V2RecoveryRoute.accept_advisory_evidence
         # Critically: closure is NOT blocked — it remains advisory, but V2 must
@@ -302,21 +318,25 @@ class TestRouteAndroidRecoveryState:
 
     def test_D04_stale_recovery_artifact_reject(self) -> None:
         from core.android_continuity_recovery_state_router import V2RecoveryRoute
+
         decision = self._route("stale_recovery_artifact")
         assert decision.v2_route == V2RecoveryRoute.reject_stale_artifact
 
     def test_D05_reconciliation_required_trigger_reconciliation(self) -> None:
         from core.android_continuity_recovery_state_router import V2RecoveryRoute
+
         decision = self._route("reconciliation_required")
         assert decision.v2_route == V2RecoveryRoute.trigger_reconciliation
 
     def test_D06_lost_inflight_require_closure_review(self) -> None:
         from core.android_continuity_recovery_state_router import V2RecoveryRoute
+
         decision = self._route("lost_inflight")
         assert decision.v2_route == V2RecoveryRoute.require_closure_review
 
     def test_D07_unknown_accept_advisory_degraded(self) -> None:
         from core.android_continuity_recovery_state_router import V2RecoveryRoute
+
         decision = self._route("unknown")
         assert decision.v2_route == V2RecoveryRoute.accept_advisory_evidence
         assert decision.is_degraded is True
@@ -335,6 +355,7 @@ class TestRecoveryStateRoutingDecisionFlags:
             AndroidRecoveryPhase,
             route_android_recovery_state,
         )
+
         return route_android_recovery_state(AndroidRecoveryPhase.from_string(phase_str))
 
     def test_E01_stale_artifact_closure_blocked(self) -> None:
@@ -389,37 +410,42 @@ class TestExtractRecoveryPhaseFromPayload:
         from core.android_continuity_recovery_state_router import (
             extract_recovery_phase_from_payload,
         )
+
         return extract_recovery_phase_from_payload(payload)
 
     def test_F01_recovery_phase_field(self) -> None:
         from core.android_continuity_recovery_state_router import AndroidRecoveryPhase
+
         result = self._extract({"recovery_phase": "reconciliation_required"})
         assert result == AndroidRecoveryPhase.reconciliation_required
 
     def test_F02_recovery_state_field(self) -> None:
         from core.android_continuity_recovery_state_router import AndroidRecoveryPhase
+
         result = self._extract({"recovery_state": "stale_recovery_artifact"})
         assert result == AndroidRecoveryPhase.stale_recovery_artifact
 
     def test_F03_continuity_recovery_phase_field(self) -> None:
         from core.android_continuity_recovery_state_router import AndroidRecoveryPhase
+
         result = self._extract({"continuity_recovery_phase": "recovered_inflight"})
         assert result == AndroidRecoveryPhase.recovered_inflight
 
     def test_F04_nested_recovery_state_subdict(self) -> None:
         from core.android_continuity_recovery_state_router import AndroidRecoveryPhase
-        result = self._extract({
-            "recovery_state": {"recovery_phase": "lost_inflight"}
-        })
+
+        result = self._extract({"recovery_state": {"recovery_phase": "lost_inflight"}})
         assert result == AndroidRecoveryPhase.lost_inflight
 
     def test_F05_unknown_for_absent_phase(self) -> None:
         from core.android_continuity_recovery_state_router import AndroidRecoveryPhase
+
         result = self._extract({})
         assert result == AndroidRecoveryPhase.unknown
 
     def test_F06_unknown_for_malformed_input(self) -> None:
         from core.android_continuity_recovery_state_router import AndroidRecoveryPhase
+
         assert self._extract(None) == AndroidRecoveryPhase.unknown  # type: ignore[arg-type]
         assert self._extract("not_a_dict") == AndroidRecoveryPhase.unknown  # type: ignore[arg-type]
         assert self._extract({"recovery_phase": 123}) == AndroidRecoveryPhase.unknown
@@ -437,6 +463,7 @@ class TestRouteRecoveryStateFromPayload:
         from core.android_continuity_recovery_state_router import (
             route_recovery_state_from_payload,
         )
+
         return route_recovery_state_from_payload(payload, **kwargs)
 
     def test_G01_valid_phase_in_payload(self) -> None:
@@ -444,6 +471,7 @@ class TestRouteRecoveryStateFromPayload:
             AndroidRecoveryPhase,
             V2RecoveryRoute,
         )
+
         d = self._route_payload(
             {"recovery_phase": "reconciliation_required"},
             device_id="dev-1",
@@ -459,6 +487,7 @@ class TestRouteRecoveryStateFromPayload:
             AndroidRecoveryPhase,
             V2RecoveryRoute,
         )
+
         d = self._route_payload({})
         assert d.recovery_phase == AndroidRecoveryPhase.unknown
         assert d.v2_route == V2RecoveryRoute.accept_advisory_evidence
@@ -481,6 +510,7 @@ class TestRecoveryStateRoutingDecisionSerialisation:
             AndroidRecoveryPhase,
             route_android_recovery_state,
         )
+
         return route_android_recovery_state(
             AndroidRecoveryPhase.from_string(phase_str),
             device_id="dev-42",
@@ -511,6 +541,7 @@ class TestRecoveryStateRoutingDecisionSerialisation:
 
     def test_H02_to_json_round_trips(self) -> None:
         import json
+
         decision = self._make_decision("stale_recovery_artifact")
         json_str = decision.to_json()
         parsed = json.loads(json_str)
@@ -521,6 +552,7 @@ class TestRecoveryStateRoutingDecisionSerialisation:
         from core.android_continuity_recovery_state_router import (
             ANDROID_CONTINUITY_RECOVERY_STATE_ROUTER_SENTINEL,
         )
+
         d = self._make_decision().to_dict()
         assert d["_sentinel"] == ANDROID_CONTINUITY_RECOVERY_STATE_ROUTER_SENTINEL
 
@@ -551,6 +583,7 @@ class TestIntegrationWithParticipantTruthIngress:
 
     def test_I01_recovery_state_truth_kind_parseable(self) -> None:
         from core.android_participant_truth_ingress import AndroidParticipantTruthKind
+
         kind = AndroidParticipantTruthKind.from_string("recovery_state")
         assert kind == AndroidParticipantTruthKind.recovery_state
 
@@ -558,6 +591,7 @@ class TestIntegrationWithParticipantTruthIngress:
         from core.android_participant_truth_ingress import (
             ingest_android_participant_truth_message,
         )
+
         msg = self._make_message("stale_recovery_artifact")
         outcome = ingest_android_participant_truth_message(msg)
         assert outcome.was_reconciled is False
@@ -567,6 +601,7 @@ class TestIntegrationWithParticipantTruthIngress:
         from core.android_participant_truth_ingress import (
             ingest_android_participant_truth_message,
         )
+
         msg = self._make_message("reconciliation_required")
         outcome = ingest_android_participant_truth_message(msg)
         assert outcome.was_reconciled is False
@@ -576,6 +611,7 @@ class TestIntegrationWithParticipantTruthIngress:
         from core.android_participant_truth_ingress import (
             ingest_android_participant_truth_message,
         )
+
         msg = self._make_message("lost_inflight")
         outcome = ingest_android_participant_truth_message(msg)
         assert outcome.was_reconciled is False
@@ -585,6 +621,7 @@ class TestIntegrationWithParticipantTruthIngress:
         from core.android_participant_truth_ingress import (
             ingest_android_participant_truth_message,
         )
+
         msg = self._make_message("recovered_inflight")
         outcome = ingest_android_participant_truth_message(msg)
         assert outcome.was_reconciled is False
@@ -595,6 +632,7 @@ class TestIntegrationWithParticipantTruthIngress:
         from core.android_participant_truth_ingress import (
             ingest_android_participant_truth_message,
         )
+
         msg = self._make_message("reconnect_initiated")
         outcome = ingest_android_participant_truth_message(msg)
         assert outcome.was_reconciled is False
@@ -603,12 +641,14 @@ class TestIntegrationWithParticipantTruthIngress:
 
     def test_I07_recovery_state_does_not_affect_canonical_state(self) -> None:
         from core.android_participant_truth_ingress import AndroidParticipantTruthKind
+
         assert not AndroidParticipantTruthKind.recovery_state.affects_canonical_state()
 
     def test_I08_new_policy_sentinel_importable_from_ingress(self) -> None:
         from core.android_participant_truth_ingress import (
             RECOVERY_STATE_MUST_BE_EXPLICITLY_ROUTED_POLICY,
         )
+
         assert isinstance(RECOVERY_STATE_MUST_BE_EXPLICITLY_ROUTED_POLICY, str)
         assert RECOVERY_STATE_MUST_BE_EXPLICITLY_ROUTED_POLICY.startswith("POLICY::")
 
@@ -616,6 +656,7 @@ class TestIntegrationWithParticipantTruthIngress:
         from core.android_participant_truth_ingress import (
             ingest_android_participant_truth_message,
         )
+
         msg = self._make_message("reconciliation_required")
         outcome = ingest_android_participant_truth_message(msg)
         assert outcome.recovery_state_routing["recovery_phase"] == "reconciliation_required"
@@ -633,20 +674,12 @@ class TestIntegrationWithParticipantTruthIngress:
         monkeypatch.setattr(ingress, "_REPLAY_AVAILABLE", True)
         monkeypatch.setattr(ingress, "_emit_runtime_event", _capture_event)
 
-        outcome = ingress.ingest_android_participant_truth_message(
-            self._make_message("stale_recovery_artifact")
-        )
+        outcome = ingress.ingest_android_participant_truth_message(self._make_message("stale_recovery_artifact"))
 
         assert outcome.replay_event_emitted is True
-        assert captured["payload"]["policy"] == (
-            ingress.RECOVERY_STATE_MUST_BE_EXPLICITLY_ROUTED_POLICY
-        )
-        assert captured["payload"]["recovery_state_routing"]["recovery_phase"] == (
-            "stale_recovery_artifact"
-        )
-        assert captured["payload"]["recovery_state_routing"]["v2_route"] == (
-            "reject_stale_artifact"
-        )
+        assert captured["payload"]["policy"] == (ingress.RECOVERY_STATE_MUST_BE_EXPLICITLY_ROUTED_POLICY)
+        assert captured["payload"]["recovery_state_routing"]["recovery_phase"] == ("stale_recovery_artifact")
+        assert captured["payload"]["recovery_state_routing"]["v2_route"] == ("reject_stale_artifact")
 
 
 # ===========================================================================
@@ -661,6 +694,7 @@ class TestAdvisoryRoutesDoNotProduceCanonicalClosure:
         from core.android_participant_truth_ingress import (
             ingest_android_participant_truth_message,
         )
+
         msg = {
             "truth_kind": "recovery_state",
             "device_id": "dev-j01",
@@ -679,6 +713,7 @@ class TestAdvisoryRoutesDoNotProduceCanonicalClosure:
             extract_participant_truth_envelope,
             reconcile_android_participant_truth,
         )
+
         msg = {
             "truth_kind": "recovery_state",
             "device_id": "dev-j02",
@@ -698,14 +733,16 @@ class TestAdvisoryRoutesDoNotProduceCanonicalClosure:
             ingest_android_participant_truth_message,
         )
 
-        ingest_android_participant_truth_message({
-            "truth_kind": "recovery_state",
-            "device_id": "dev-j03",
-            "payload": {
-                "recovery_phase": "future_android_phase",
-                "session_id": "sess-j03",
-            },
-        })
+        ingest_android_participant_truth_message(
+            {
+                "truth_kind": "recovery_state",
+                "device_id": "dev-j03",
+                "payload": {
+                    "recovery_phase": "future_android_phase",
+                    "session_id": "sess-j03",
+                },
+            }
+        )
 
         outcome = get_last_reconciliation_outcome()
         assert outcome is not None
@@ -726,14 +763,11 @@ class TestPhaseToRouteCompleteness:
             AndroidRecoveryPhase,
             route_android_recovery_state,
         )
+
         for phase in AndroidRecoveryPhase:
             decision = route_android_recovery_state(phase)
-            assert decision.v2_route is not None, (
-                f"Phase {phase.value!r} produced no v2_route"
-            )
-            assert decision.policy_reference.startswith("POLICY::"), (
-                f"Phase {phase.value!r} policy reference missing POLICY:: prefix"
-            )
-            assert decision.diagnosis, (
-                f"Phase {phase.value!r} produced empty diagnosis"
-            )
+            assert decision.v2_route is not None, f"Phase {phase.value!r} produced no v2_route"
+            assert decision.policy_reference.startswith(
+                "POLICY::"
+            ), f"Phase {phase.value!r} policy reference missing POLICY:: prefix"
+            assert decision.diagnosis, f"Phase {phase.value!r} produced empty diagnosis"

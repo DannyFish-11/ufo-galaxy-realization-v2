@@ -27,6 +27,7 @@ Also provides:
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
+
 logger = logging.getLogger(__name__)
 
 
@@ -211,6 +212,7 @@ def get_capability_runtime_snapshot() -> Dict[str, Any]:
     """
     try:
         from .capability_registry_runtime import CapabilityRuntimeRegistry
+
         registry = CapabilityRuntimeRegistry.get_instance()
         summaries = registry.list_summaries()
     except Exception as exc:
@@ -251,6 +253,7 @@ def attach_runtime_summary_to_projection(
     """
     try:
         from .capability_registry_runtime import CapabilityRuntimeRegistry
+
         registry = CapabilityRuntimeRegistry.get_instance()
         summary = registry.get_summary(capability_name)
     except Exception as exc:

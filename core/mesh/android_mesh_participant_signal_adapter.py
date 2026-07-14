@@ -626,7 +626,7 @@ def apply_android_participation_signal(
                     "input": signal.payload.get("input", ""),
                     "decision": signal.payload.get("decision", ""),
                     "timestamp": signal.payload.get("timestamp", ""),
-                }
+                },
             )
             method = "on_participant_result"
 
@@ -761,8 +761,7 @@ def evaluate_center_runtime_status_with_android_signals(
     if register_android_devices and android_signals:
         try:
             existing_device_ids: List[str] = [
-                getattr(p, "device_id", "")
-                for p in (getattr(coordinator_state, "participants", []) or [])
+                getattr(p, "device_id", "") for p in (getattr(coordinator_state, "participants", []) or [])
             ]
             seen_device_ids: List[str] = []
             for sig in android_signals:
@@ -797,9 +796,7 @@ def evaluate_center_runtime_status_with_android_signals(
         if outcome.applied:
             signals_applied += 1
         else:
-            errors.append(
-                f"signal_not_applied:{sig.signal_kind.value}:{did}:{outcome.error_reason}"
-            )
+            errors.append(f"signal_not_applied:{sig.signal_kind.value}:{did}:{outcome.error_reason}")
 
     # --- Resolve coordinator state for evaluation ---
     # When all participants are accounted-for (all completed or failed/dropped),
@@ -822,18 +819,14 @@ def evaluate_center_runtime_status_with_android_signals(
             post_signal_state = live_coord.state
     except Exception as exc:
         errors.append(f"coordinator_state_resolution_error:{exc}")
-        _logger.warning(
-            "evaluate_center_runtime_status_with_android_signals: state resolution: %s", exc
-        )
+        _logger.warning("evaluate_center_runtime_status_with_android_signals: state resolution: %s", exc)
         post_signal_state = live_coord.state
 
     try:
         center_state = evaluate_center_runtime_status(post_signal_state)
     except Exception as exc:
         errors.append(f"evaluate_center_runtime_status_error:{exc}")
-        _logger.warning(
-            "evaluate_center_runtime_status_with_android_signals: evaluation error: %s", exc
-        )
+        _logger.warning("evaluate_center_runtime_status_with_android_signals: evaluation error: %s", exc)
         center_state = evaluate_center_runtime_status(coordinator_state)
 
     # --- Build proof quality map ---

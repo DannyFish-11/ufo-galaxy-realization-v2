@@ -23,37 +23,46 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Policy sentinel tests
 # ---------------------------------------------------------------------------
 
+
 class TestSentinels:
     def test_authority_sentinel_present(self):
         from core.fusion_entry_adapter import FUSION_ENTRY_IS_EXECUTION_ADAPTER_AUTHORITY
+
         assert isinstance(FUSION_ENTRY_IS_EXECUTION_ADAPTER_AUTHORITY, str)
         assert "execution adapter" in FUSION_ENTRY_IS_EXECUTION_ADAPTER_AUTHORITY.lower()
 
     def test_pr5_sentinel_value(self):
         from core.fusion_entry_adapter import FUSION_ENTRY_ADAPTER_CONTRACT_PR5_SENTINEL
+
         assert FUSION_ENTRY_ADAPTER_CONTRACT_PR5_SENTINEL == "FUSION_ENTRY_ADAPTER::PR5_SENTINEL_V1"
 
     def test_not_registry_authority_policy_present(self):
         from core.fusion_entry_adapter import FUSION_ENTRY_NOT_A_REGISTRY_AUTHORITY_POLICY
-        assert "NOT" in FUSION_ENTRY_NOT_A_REGISTRY_AUTHORITY_POLICY or "not" in FUSION_ENTRY_NOT_A_REGISTRY_AUTHORITY_POLICY.lower()
+
+        assert (
+            "NOT" in FUSION_ENTRY_NOT_A_REGISTRY_AUTHORITY_POLICY
+            or "not" in FUSION_ENTRY_NOT_A_REGISTRY_AUTHORITY_POLICY.lower()
+        )
         assert "registry" in FUSION_ENTRY_NOT_A_REGISTRY_AUTHORITY_POLICY.lower()
 
     def test_not_discovery_authority_policy_present(self):
         from core.fusion_entry_adapter import FUSION_ENTRY_NOT_A_DISCOVERY_AUTHORITY_POLICY
+
         assert "discovery" in FUSION_ENTRY_NOT_A_DISCOVERY_AUTHORITY_POLICY.lower()
 
     def test_contract_standardised_policy_present(self):
         from core.fusion_entry_adapter import ADAPTER_CONTRACT_IS_STANDARDISED_POLICY
+
         assert "FusionNode" in ADAPTER_CONTRACT_IS_STANDARDISED_POLICY
         assert "get_node_instance" in ADAPTER_CONTRACT_IS_STANDARDISED_POLICY
 
     def test_canonical_loader_policy_present(self):
         from core.fusion_entry_adapter import UNIFIED_EXECUTOR_IS_CANONICAL_LOADER_POLICY
+
         assert "invoke_node" in UNIFIED_EXECUTOR_IS_CANONICAL_LOADER_POLICY
 
 
@@ -61,14 +70,17 @@ class TestSentinels:
 # FusionEntryAdapterContract dataclass
 # ---------------------------------------------------------------------------
 
+
 class TestFusionEntryAdapterContract:
     def test_default_non_compliant(self):
         from core.fusion_entry_adapter import FusionEntryAdapterContract
+
         c = FusionEntryAdapterContract()
         assert c.is_compliant is False
 
     def test_fully_compliant(self):
         from core.fusion_entry_adapter import FusionEntryAdapterContract
+
         c = FusionEntryAdapterContract(
             has_fusion_node_class=True,
             fusion_node_has_execute=True,
@@ -80,6 +92,7 @@ class TestFusionEntryAdapterContract:
 
     def test_missing_fusion_node_not_compliant(self):
         from core.fusion_entry_adapter import FusionEntryAdapterContract
+
         c = FusionEntryAdapterContract(
             has_fusion_node_class=False,
             fusion_node_has_execute=True,
@@ -90,6 +103,7 @@ class TestFusionEntryAdapterContract:
 
     def test_missing_execute_not_compliant(self):
         from core.fusion_entry_adapter import FusionEntryAdapterContract
+
         c = FusionEntryAdapterContract(
             has_fusion_node_class=True,
             fusion_node_has_execute=False,
@@ -100,6 +114,7 @@ class TestFusionEntryAdapterContract:
 
     def test_missing_get_node_instance_not_compliant(self):
         from core.fusion_entry_adapter import FusionEntryAdapterContract
+
         c = FusionEntryAdapterContract(
             has_fusion_node_class=True,
             fusion_node_has_execute=True,
@@ -110,6 +125,7 @@ class TestFusionEntryAdapterContract:
 
     def test_compliance_report_keys(self):
         from core.fusion_entry_adapter import FusionEntryAdapterContract
+
         c = FusionEntryAdapterContract()
         report = c.compliance_report()
         assert "is_compliant" in report
@@ -123,6 +139,7 @@ class TestFusionEntryAdapterContract:
 # ---------------------------------------------------------------------------
 # validate_fusion_entry_adapter
 # ---------------------------------------------------------------------------
+
 
 def _make_compliant_module():
     """Return a synthetic module that satisfies the adapter contract."""
@@ -161,6 +178,7 @@ def _make_non_compliant_module_sync_execute():
 class TestValidateFusionEntryAdapter:
     def test_compliant_module(self):
         from core.fusion_entry_adapter import validate_fusion_entry_adapter
+
         mod = _make_compliant_module()
         contract = validate_fusion_entry_adapter(mod)
         assert contract.is_compliant is True
@@ -172,6 +190,7 @@ class TestValidateFusionEntryAdapter:
 
     def test_no_fusion_node_class(self):
         from core.fusion_entry_adapter import validate_fusion_entry_adapter
+
         mod = _make_non_compliant_module_no_fusion_node()
         contract = validate_fusion_entry_adapter(mod)
         assert contract.is_compliant is False
@@ -179,6 +198,7 @@ class TestValidateFusionEntryAdapter:
 
     def test_sync_execute_still_detected(self):
         from core.fusion_entry_adapter import validate_fusion_entry_adapter
+
         mod = _make_non_compliant_module_sync_execute()
         contract = validate_fusion_entry_adapter(mod)
         assert contract.has_fusion_node_class is True
@@ -191,12 +211,14 @@ class TestValidateFusionEntryAdapter:
 
     def test_empty_module(self):
         from core.fusion_entry_adapter import validate_fusion_entry_adapter
+
         mod = types.ModuleType("empty_module")
         contract = validate_fusion_entry_adapter(mod)
         assert contract.is_compliant is False
 
     def test_compliance_report_from_validate(self):
         from core.fusion_entry_adapter import validate_fusion_entry_adapter
+
         mod = _make_compliant_module()
         contract = validate_fusion_entry_adapter(mod)
         report = contract.compliance_report()
@@ -207,14 +229,17 @@ class TestValidateFusionEntryAdapter:
 # check_fusion_entry_compliance
 # ---------------------------------------------------------------------------
 
+
 class TestCheckFusionEntryCompliance:
     def test_compliant_returns_true(self):
         from core.fusion_entry_adapter import check_fusion_entry_compliance
+
         mod = _make_compliant_module()
         assert check_fusion_entry_compliance(mod, "Node_TEST") is True
 
     def test_non_compliant_returns_false(self):
         from core.fusion_entry_adapter import check_fusion_entry_compliance
+
         mod = _make_non_compliant_module_no_fusion_node()
         # non-compliant: missing FusionNode class
         # manually break to ensure failure
@@ -223,6 +248,7 @@ class TestCheckFusionEntryCompliance:
 
     def test_node_id_optional(self):
         from core.fusion_entry_adapter import check_fusion_entry_compliance
+
         mod = _make_compliant_module()
         assert check_fusion_entry_compliance(mod) is True
 
@@ -231,13 +257,17 @@ class TestCheckFusionEntryCompliance:
 # Template fusion_entry.py carries adapter role marker
 # ---------------------------------------------------------------------------
 
+
 class TestTemplateAdapterMarker:
     def test_template_has_adapter_role_constant(self):
         import importlib.util
         import os
+
         template_path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
-            "templates", "node_template", "fusion_entry.py",
+            "templates",
+            "node_template",
+            "fusion_entry.py",
         )
         assert os.path.exists(template_path), "template fusion_entry.py not found"
         spec = importlib.util.spec_from_file_location(
@@ -247,18 +277,22 @@ class TestTemplateAdapterMarker:
         )
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
-        assert hasattr(mod, "FUSION_ENTRY_IS_EXECUTION_ADAPTER"), (
-            "template fusion_entry.py must define FUSION_ENTRY_IS_EXECUTION_ADAPTER"
-        )
+        assert hasattr(
+            mod, "FUSION_ENTRY_IS_EXECUTION_ADAPTER"
+        ), "template fusion_entry.py must define FUSION_ENTRY_IS_EXECUTION_ADAPTER"
         assert "EXECUTION_ADAPTER" in mod.FUSION_ENTRY_IS_EXECUTION_ADAPTER
 
     def test_template_satisfies_adapter_contract(self):
-        from core.fusion_entry_adapter import validate_fusion_entry_adapter
         import importlib.util
         import os
+
+        from core.fusion_entry_adapter import validate_fusion_entry_adapter
+
         template_path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
-            "templates", "node_template", "fusion_entry.py",
+            "templates",
+            "node_template",
+            "fusion_entry.py",
         )
         spec = importlib.util.spec_from_file_location(
             "test_template_fusion_entry2",
@@ -278,10 +312,12 @@ class TestTemplateAdapterMarker:
 # Projection sentinel
 # ---------------------------------------------------------------------------
 
+
 class TestProjectionSentinel:
     def test_fusion_entry_adapter_aligned_pr5_importable(self):
         try:
             from core.routes.projection import FUSION_ENTRY_ADAPTER_ALIGNED_PR5
+
             assert isinstance(FUSION_ENTRY_ADAPTER_ALIGNED_PR5, str)
             assert "UNAVAILABLE" not in FUSION_ENTRY_ADAPTER_ALIGNED_PR5
             assert "PR5" in FUSION_ENTRY_ADAPTER_ALIGNED_PR5
@@ -291,7 +327,11 @@ class TestProjectionSentinel:
     def test_pr5_sentinel_in_projection(self):
         try:
             from core.routes.projection import FUSION_ENTRY_ADAPTER_ALIGNED_PR5
-            assert "fusion_entry" in FUSION_ENTRY_ADAPTER_ALIGNED_PR5.lower() or "adapter" in FUSION_ENTRY_ADAPTER_ALIGNED_PR5.lower()
+
+            assert (
+                "fusion_entry" in FUSION_ENTRY_ADAPTER_ALIGNED_PR5.lower()
+                or "adapter" in FUSION_ENTRY_ADAPTER_ALIGNED_PR5.lower()
+            )
         except ImportError:
             pytest.skip("fastapi not available")
 
@@ -300,9 +340,11 @@ class TestProjectionSentinel:
 # core.fusion_entry_adapter standalone import test
 # ---------------------------------------------------------------------------
 
+
 class TestAdapterModuleImport:
     def test_module_imports_cleanly(self):
         import core.fusion_entry_adapter as m
+
         assert hasattr(m, "FUSION_ENTRY_IS_EXECUTION_ADAPTER_AUTHORITY")
         assert hasattr(m, "FUSION_ENTRY_ADAPTER_CONTRACT_PR5_SENTINEL")
         assert hasattr(m, "FusionEntryAdapterContract")
@@ -311,11 +353,13 @@ class TestAdapterModuleImport:
 
     def test_module_does_not_import_fastapi(self):
         import core.fusion_entry_adapter as m
+
         src = inspect.getsource(m)
         assert "fastapi" not in src.lower()
 
     def test_module_does_not_act_as_registry(self):
         import core.fusion_entry_adapter as m
+
         src = inspect.getsource(m)
         # No registry registration calls
         assert "register_node" not in src
@@ -326,11 +370,14 @@ class TestAdapterModuleImport:
 # Nodes route no longer uses direct _load_node/_execute_node
 # ---------------------------------------------------------------------------
 
+
 class TestNodesRouteAdapterRefactor:
     def test_autonomous_execute_uses_invoke_node(self):
         try:
             import inspect
+
             import core.routes.nodes as m
+
             src = inspect.getsource(m)
             # The autonomous_execute node_executor now calls invoke_node
             assert "invoke_node" in src
@@ -340,7 +387,9 @@ class TestNodesRouteAdapterRefactor:
     def test_autonomous_execute_no_direct_load_execute(self):
         try:
             import inspect
+
             import core.routes.nodes as m
+
             src = inspect.getsource(m)
             # _load_node and _execute_node are internal helpers; the route
             # module should no longer import or call them for the executor
@@ -352,6 +401,7 @@ class TestNodesRouteAdapterRefactor:
     def test_nodes_route_imports_invoke_node(self):
         try:
             import core.routes.nodes as m
+
             assert hasattr(m, "invoke_node") or hasattr(m, "InvocationSource")
         except ImportError:
             pytest.skip("fastapi not available")
@@ -361,9 +411,11 @@ class TestNodesRouteAdapterRefactor:
 # CONTRIBUTING.md reflects narrowed role
 # ---------------------------------------------------------------------------
 
+
 class TestContributingDocs:
     def _read_contributing(self) -> str:
         import os
+
         path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
             "CONTRIBUTING.md",

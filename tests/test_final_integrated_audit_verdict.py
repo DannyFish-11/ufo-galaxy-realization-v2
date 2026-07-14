@@ -29,8 +29,8 @@ Group I — Completeness-review alignment (dual_repo cross-check)
 
 from __future__ import annotations
 
-import sys
 import os
+import sys
 
 import pytest
 
@@ -38,55 +38,49 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-from core.final_integrated_audit_verdict import (
-    CapabilityVerdict,
-    SystemVerdict,
+from core.final_integrated_audit_verdict import (  # Transport; Lifecycle; Dispatch; Multi-device; Guard function
+    DISPATCH_COMPLETION_SETTLEMENT,
+    DISPATCH_DEVICE_ROUTING,
+    DISPATCH_DISCONNECT_RECONNECT_RISK,
+    DISPATCH_DURABILITY_ACROSS_RESTART,
+    DISPATCH_EXECUTION_NOTES,
+    DISPATCH_EXECUTION_OVERALL,
+    DISPATCH_LEGALITY_GATES_PRESENT,
+    DISPATCH_OFFLINE_BUFFERING,
+    DISPATCH_RESULT_INGESTION_OBSERVABLE,
     FINAL_AUDIT_VERDICT,
     FINAL_SYSTEM_VERDICT,
     FINAL_VERDICT_RATIONALE,
     GAPS_TO_COMPLETE,
-    # Transport
-    TRANSPORT_WS_PATH_ALIGNMENT,
-    TRANSPORT_LEGACY_ALIAS_COMPAT,
-    TRANSPORT_ANDROID_REPORT_TYPE_COVERAGE,
-    TRANSPORT_ACK_BEHAVIOR,
-    TRANSPORT_UNKNOWN_TYPE_HANDLING,
-    TRANSPORT_PROTOCOL_OVERALL,
-    TRANSPORT_PROTOCOL_NOTES,
-    # Lifecycle
-    LIFECYCLE_DEVICE_REGISTRATION,
-    LIFECYCLE_HEARTBEAT_V2_SIDE,
-    LIFECYCLE_STALE_CLEANUP,
+    LIFECYCLE_ANDROID_BOOT_STARTUP,
     LIFECYCLE_ANDROID_RECONNECT_BASIC,
     LIFECYCLE_ANDROID_RECONNECT_PERPETUAL,
-    LIFECYCLE_ANDROID_BOOT_STARTUP,
     LIFECYCLE_DEVICE_CONTINUOUS_USABILITY,
-    LIFECYCLE_OVERALL,
+    LIFECYCLE_DEVICE_REGISTRATION,
+    LIFECYCLE_HEARTBEAT_V2_SIDE,
     LIFECYCLE_NOTES,
-    # Dispatch
-    DISPATCH_LEGALITY_GATES_PRESENT,
-    DISPATCH_DEVICE_ROUTING,
-    DISPATCH_OFFLINE_BUFFERING,
-    DISPATCH_RESULT_INGESTION_OBSERVABLE,
-    DISPATCH_COMPLETION_SETTLEMENT,
-    DISPATCH_DISCONNECT_RECONNECT_RISK,
-    DISPATCH_DURABILITY_ACROSS_RESTART,
-    DISPATCH_EXECUTION_OVERALL,
-    DISPATCH_EXECUTION_NOTES,
-    # Multi-device
-    MULTI_DEVICE_SINGLE_DEVICE_LOCAL,
-    MULTI_DEVICE_MULTIPLE_DEVICES,
-    MULTI_DEVICE_REMOTE_ACCESS,
-    MULTI_DEVICE_PLUG_AND_RUN,
+    LIFECYCLE_OVERALL,
+    LIFECYCLE_STALE_CLEANUP,
     MULTI_DEVICE_COORDINATION_STRUCTURE,
-    MULTI_DEVICE_SIMULTANEOUS_RECONNECT_ORDERING,
     MULTI_DEVICE_CROSS_REPO_EVIDENCE_FLOW,
-    MULTI_DEVICE_OVERALL,
+    MULTI_DEVICE_MULTIPLE_DEVICES,
     MULTI_DEVICE_NOTES,
-    # Guard function
+    MULTI_DEVICE_OVERALL,
+    MULTI_DEVICE_PLUG_AND_RUN,
+    MULTI_DEVICE_REMOTE_ACCESS,
+    MULTI_DEVICE_SIMULTANEOUS_RECONNECT_ORDERING,
+    MULTI_DEVICE_SINGLE_DEVICE_LOCAL,
+    TRANSPORT_ACK_BEHAVIOR,
+    TRANSPORT_ANDROID_REPORT_TYPE_COVERAGE,
+    TRANSPORT_LEGACY_ALIAS_COMPAT,
+    TRANSPORT_PROTOCOL_NOTES,
+    TRANSPORT_PROTOCOL_OVERALL,
+    TRANSPORT_UNKNOWN_TYPE_HANDLING,
+    TRANSPORT_WS_PATH_ALIGNMENT,
+    CapabilityVerdict,
+    SystemVerdict,
     assert_final_verdict_invariants,
 )
-
 
 # ===========================================================================
 # Group A — Module importability and enum structure
@@ -97,6 +91,7 @@ class TestModuleStructure:
     def test_A01_module_importable(self) -> None:
         """Module imports without error."""
         import core.final_integrated_audit_verdict as m
+
         assert m is not None
 
     def test_A02_capability_verdict_has_four_values(self) -> None:
@@ -168,14 +163,16 @@ class TestTransportProtocol:
 
     def test_B07_compat_layer_functional(self) -> None:
         """Compat layer actually maps goal_result correctly (live code check)."""
-        from galaxy_gateway.protocol.compat import _LEGACY_TYPE_MAP
         from galaxy_gateway.protocol.aip_v3 import MessageType
+        from galaxy_gateway.protocol.compat import _LEGACY_TYPE_MAP
+
         assert "goal_result" in _LEGACY_TYPE_MAP
         assert _LEGACY_TYPE_MAP["goal_result"] == MessageType.GOAL_EXECUTION_RESULT
 
     def test_B08_report_types_in_enum(self) -> None:
         """All Android report types are in MessageType enum (live code check)."""
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         for type_str in [
             "cancel_result",
             "device_readiness_report",
@@ -238,8 +235,7 @@ class TestDeviceLifecycle:
     def test_C08_lifecycle_overall_not_complete(self) -> None:
         """Lifecycle overall is NOT COMPLETE due to terminal reconnect gap."""
         assert LIFECYCLE_OVERALL != CapabilityVerdict.COMPLETE, (
-            "Lifecycle overall must NOT be COMPLETE while Android perpetual "
-            "reconnect is MISSING."
+            "Lifecycle overall must NOT be COMPLETE while Android perpetual " "reconnect is MISSING."
         )
 
     def test_C09_lifecycle_overall_is_partial(self) -> None:
@@ -249,6 +245,7 @@ class TestDeviceLifecycle:
     def test_C10_stale_cleanup_background_task_in_lifecycle(self) -> None:
         """Stale cleanup background task code exists in bootstrap/lifecycle.py."""
         import os
+
         path = os.path.join(_PROJECT_ROOT, "galaxy_gateway", "bootstrap", "lifecycle.py")
         assert os.path.isfile(path), "galaxy_gateway/bootstrap/lifecycle.py must exist"
         with open(path) as f:
@@ -304,23 +301,25 @@ class TestDispatchExecution:
     def test_D09_pending_delivery_buffer_importable(self) -> None:
         """Pending delivery buffer module is importable (live code check)."""
         from galaxy_gateway.pending_delivery_buffer import (
+            PENDING_DELIVERY_MAX_QUEUE_PER_DEVICE,
+            PENDING_DELIVERY_TTL_SECONDS,
             PendingDeliveryBuffer,
             pending_delivery_buffer,
-            PENDING_DELIVERY_TTL_SECONDS,
-            PENDING_DELIVERY_MAX_QUEUE_PER_DEVICE,
         )
+
         assert PENDING_DELIVERY_TTL_SECONDS == 60.0
         assert PENDING_DELIVERY_MAX_QUEUE_PER_DEVICE == 32
 
     def test_D10_result_ingestion_error_counters_importable(self) -> None:
         """Result ingestion error counters are importable (live code check)."""
         from galaxy_gateway.android.handlers.task_lifecycle import (
-            RESULT_RECONCILE_ERRORS,
-            RESULT_TRUTH_INGRESS_ERRORS,
             RESULT_DEVICE_ROUTER_ERRORS,
             RESULT_MEMORY_BACKFLOW_ERRORS,
+            RESULT_RECONCILE_ERRORS,
+            RESULT_TRUTH_INGRESS_ERRORS,
             get_result_ingestion_error_counts,
         )
+
         counts = get_result_ingestion_error_counts()
         assert set(counts.keys()) == {
             "reconcile_errors",
@@ -410,12 +409,12 @@ class TestFinalSystemVerdict:
         """Rationale mentions key gaps: reconnect, ReconciliationSignal, buffer."""
         rationale_lower = FINAL_VERDICT_RATIONALE.lower()
         assert "reconnect" in rationale_lower, "Rationale must mention reconnect gap"
-        assert "reconciliation" in rationale_lower or "wire" in rationale_lower, (
-            "Rationale must mention ReconciliationSignal or wire layer gap"
-        )
-        assert "buffer" in rationale_lower or "restart" in rationale_lower, (
-            "Rationale must mention pending buffer or restart durability gap"
-        )
+        assert (
+            "reconciliation" in rationale_lower or "wire" in rationale_lower
+        ), "Rationale must mention ReconciliationSignal or wire layer gap"
+        assert (
+            "buffer" in rationale_lower or "restart" in rationale_lower
+        ), "Rationale must mention pending buffer or restart durability gap"
 
     def test_F05_gaps_to_complete_count(self) -> None:
         """There are exactly 4 documented remaining gaps to achieve COMPLETE (GAP-4 resolved)."""
@@ -432,15 +431,12 @@ class TestFinalSystemVerdict:
         assert "reconnect" in gaps_text, "gaps_to_complete must cover reconnect gap"
         assert "reconciliation" in gaps_text, "gaps_to_complete must cover ReconciliationSignal gap"
         assert "handoff" in gaps_text, "gaps_to_complete must cover HandoffEnvelopeV2 gap"
-        assert "governance" in gaps_text or "gate" in gaps_text, (
-            "gaps_to_complete must cover governance gate gap"
-        )
+        assert "governance" in gaps_text or "gate" in gaps_text, "gaps_to_complete must cover governance gate gap"
 
     def test_F07_system_is_not_missing_either(self) -> None:
         """System verdict is not MISSING: core loop does run."""
         assert FINAL_SYSTEM_VERDICT != SystemVerdict.MISSING, (
-            "The system is not MISSING — core dispatch can run with activation. "
-            "MISSING would overstate the gap."
+            "The system is not MISSING — core dispatch can run with activation. " "MISSING would overstate the gap."
         )
 
 
@@ -541,15 +537,20 @@ class TestVerdictDictCompleteness:
     def test_H01_all_required_keys_present(self) -> None:
         """FINAL_AUDIT_VERDICT contains all required keys."""
         missing = [k for k in self.REQUIRED_KEYS if k not in FINAL_AUDIT_VERDICT]
-        assert not missing, (
-            f"FINAL_AUDIT_VERDICT is missing required keys: {missing}"
-        )
+        assert not missing, f"FINAL_AUDIT_VERDICT is missing required keys: {missing}"
 
     def test_H02_all_capability_verdicts_are_valid_enum_values(self) -> None:
         """All CapabilityVerdict entries in the dict are valid enum members."""
-        capability_keys = [k for k in FINAL_AUDIT_VERDICT if k not in (
-            "final_system_verdict", "final_verdict_rationale", "gaps_to_complete",
-        )]
+        capability_keys = [
+            k
+            for k in FINAL_AUDIT_VERDICT
+            if k
+            not in (
+                "final_system_verdict",
+                "final_verdict_rationale",
+                "gaps_to_complete",
+            )
+        ]
         valid_values = {v.value for v in CapabilityVerdict}
         # Also allow SystemVerdict for final_system_verdict
         system_values = {v.value for v in SystemVerdict}
@@ -559,8 +560,7 @@ class TestVerdictDictCompleteness:
             if isinstance(val, (CapabilityVerdict, SystemVerdict)):
                 continue  # already a valid enum
             assert val in valid_values or val in system_values, (
-                f"FINAL_AUDIT_VERDICT['{key}'] = {val!r} is not a valid "
-                f"CapabilityVerdict or SystemVerdict value"
+                f"FINAL_AUDIT_VERDICT['{key}'] = {val!r} is not a valid " f"CapabilityVerdict or SystemVerdict value"
             )
 
     def test_H03_gaps_to_complete_is_list(self) -> None:
@@ -584,14 +584,15 @@ class TestCrossCheck:
     def test_I01_cross_device_reality_surface_consistent(self) -> None:
         """Final audit is consistent with cross_device_integration_reality sentinels."""
         from core.cross_device_integration_reality import (
-            WS_TRANSPORT_PROTOCOL_ALIGNED,
+            ANDROID_CROSS_DEVICE_DISABLED_BY_DEFAULT,
             ANDROID_RECONNECT_STOPS_PERMANENTLY_AT_LIMIT,
             INFLIGHT_TASK_LOSS_ON_DISCONNECT,
             PENDING_DELIVERY_BUFFER_PRESENT,
-            RESULT_INGESTION_ERROR_COUNTERS_PRESENT,
-            ANDROID_CROSS_DEVICE_DISABLED_BY_DEFAULT,
             REMOTE_ACCESS_REQUIRES_TAILSCALE_OR_VPNISH,
+            RESULT_INGESTION_ERROR_COUNTERS_PRESENT,
+            WS_TRANSPORT_PROTOCOL_ALIGNED,
         )
+
         # WS transport aligned → TRANSPORT_WS_PATH_ALIGNMENT must be COMPLETE
         if WS_TRANSPORT_PROTOCOL_ALIGNED:
             assert TRANSPORT_WS_PATH_ALIGNMENT == CapabilityVerdict.COMPLETE
@@ -619,9 +620,10 @@ class TestCrossCheck:
     def test_I02_dual_repo_verdict_not_fully_closed(self) -> None:
         """Dual-repo completeness review verdict is consistent: not fully_closed."""
         from core.dual_repo_system_completeness_review import (
-            build_completeness_review,
             CompletenessVerdict,
+            build_completeness_review,
         )
+
         report = build_completeness_review()
         assert report.verdict != CompletenessVerdict.fully_closed, (
             "dual_repo_system_completeness_review verdict must not be fully_closed. "
@@ -631,22 +633,24 @@ class TestCrossCheck:
     def test_I03_cross_repo_evidence_gap_consistent(self) -> None:
         """Cross-repo evidence gap is consistently MISSING in both surfaces."""
         from core.dual_repo_system_completeness_review import (
-            build_completeness_review,
             CompletenessDimension,
             CompletenessLabel,
+            build_completeness_review,
         )
+
         report = build_completeness_review()
         cross_repo = report.get_dimension(CompletenessDimension.cross_repo_evidence)
         assert cross_repo is not None
-        assert cross_repo.label == CompletenessLabel.evidence_gap, (
-            "cross_repo_evidence must be evidence_gap in completeness review."
-        )
+        assert (
+            cross_repo.label == CompletenessLabel.evidence_gap
+        ), "cross_repo_evidence must be evidence_gap in completeness review."
         # Final audit surface says MISSING — consistent (MISSING = more specific than evidence_gap)
         assert MULTI_DEVICE_CROSS_REPO_EVIDENCE_FLOW == CapabilityVerdict.MISSING
 
     def test_I04_completeness_review_has_blocking_gaps(self) -> None:
         """Dual-repo completeness review has blocking gaps (consistent with PARTIAL/MISSING areas)."""
         from core.dual_repo_system_completeness_review import build_completeness_review
+
         report = build_completeness_review()
         assert report.has_blocking_gaps, (
             "Completeness review must have blocking gaps, consistent with "

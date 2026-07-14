@@ -502,14 +502,13 @@ class TerminologyRegistry:
     def blocking_terms(self) -> FrozenSet[IssueClassification]:
         """Return the set of all :class:`IssueClassification` values that
         are hard release blocks."""
-        return frozenset(
-            term for term, entry in self._entries.items() if entry.is_blocking
-        )
+        return frozenset(term for term, entry in self._entries.items() if entry.is_blocking)
 
     def advisory_only_terms(self) -> FrozenSet[IssueClassification]:
         """Return the set of all strictly advisory (non-blocking) terms."""
         return frozenset(
-            term for term, entry in self._entries.items()
+            term
+            for term, entry in self._entries.items()
             if not entry.is_blocking and term == IssueClassification.advisory
         )
 
@@ -522,10 +521,7 @@ class TerminologyRegistry:
         lines = []
         for entry in self.all_entries():
             blocking_tag = "[BLOCKING]" if entry.is_blocking else "[advisory]"
-            lines.append(
-                f"  {blocking_tag:<12} {entry.term.value:<22} — "
-                f"{entry.short_definition}"
-            )
+            lines.append(f"  {blocking_tag:<12} {entry.term.value:<22} — " f"{entry.short_definition}")
         return lines
 
 
@@ -542,10 +538,8 @@ def _build_registry_entries() -> Dict[IssueClassification, TaxonomyEntry]:
             surface_examples=[
                 ("release_blocking_gate", "CriterionStatus.FAILED + is_blocking=True"),
                 ("governance_validation_gate", "ValidationOutcome.FAIL"),
-                ("distributed_release_gate_skeleton",
-                 "GateCategoryStrength.gate_worthy + ReleaseGateVerdict.blocked"),
-                ("system_final_acceptance_verdict",
-                 "DimensionStatus.unresolved (critical dimension)"),
+                ("distributed_release_gate_skeleton", "GateCategoryStrength.gate_worthy + ReleaseGateVerdict.blocked"),
+                ("system_final_acceptance_verdict", "DimensionStatus.unresolved (critical dimension)"),
             ],
             must_not_confuse_with=[
                 IssueClassification.advisory,
@@ -560,12 +554,9 @@ def _build_registry_entries() -> Dict[IssueClassification, TaxonomyEntry]:
             ),
             is_blocking=False,
             surface_examples=[
-                ("governance_validation_gate",
-                 "ValidationOutcome.WARN / CI_ADVISORY_DIMENSIONS"),
-                ("distributed_release_gate_skeleton",
-                 "GateCategoryStrength.advisory"),
-                ("governance_validation_gate",
-                 "ValidationFailReason.evidence_surface_unavailable"),
+                ("governance_validation_gate", "ValidationOutcome.WARN / CI_ADVISORY_DIMENSIONS"),
+                ("distributed_release_gate_skeleton", "GateCategoryStrength.advisory"),
+                ("governance_validation_gate", "ValidationFailReason.evidence_surface_unavailable"),
             ],
             must_not_confuse_with=[
                 IssueClassification.blocking,
@@ -581,10 +572,8 @@ def _build_registry_entries() -> Dict[IssueClassification, TaxonomyEntry]:
             ),
             is_blocking=False,
             surface_examples=[
-                ("distributed_release_gate_skeleton",
-                 "GATE_SKELETON_IS_NON_ENFORCING_POLICY"),
-                ("distributed_release_gate_skeleton",
-                 "ReleaseGateVerdict.open (skeleton, not final acceptance)"),
+                ("distributed_release_gate_skeleton", "GATE_SKELETON_IS_NON_ENFORCING_POLICY"),
+                ("distributed_release_gate_skeleton", "ReleaseGateVerdict.open (skeleton, not final acceptance)"),
             ],
             must_not_confuse_with=[
                 IssueClassification.blocking,
@@ -602,9 +591,10 @@ def _build_registry_entries() -> Dict[IssueClassification, TaxonomyEntry]:
             surface_examples=[
                 ("system_final_acceptance_verdict", "DimensionStatus.unresolved"),
                 ("distributed_release_gate_skeleton", "ReleaseGateVerdict.unknown"),
-                ("governance_validation_gate",
-                 "ValidationFailReason.evidence_surface_unavailable"
-                 " (strict_on_unavailable=True)"),
+                (
+                    "governance_validation_gate",
+                    "ValidationFailReason.evidence_surface_unavailable" " (strict_on_unavailable=True)",
+                ),
             ],
             must_not_confuse_with=[
                 IssueClassification.evidence_gap,
@@ -620,10 +610,8 @@ def _build_registry_entries() -> Dict[IssueClassification, TaxonomyEntry]:
             ),
             is_blocking=False,
             surface_examples=[
-                ("system_final_acceptance_verdict",
-                 "DimensionStatus.pending (with non-empty gap_description)"),
-                ("distributed_release_gate_skeleton",
-                 "GateCategoryEvaluation with partial evidence"),
+                ("system_final_acceptance_verdict", "DimensionStatus.pending (with non-empty gap_description)"),
+                ("distributed_release_gate_skeleton", "GateCategoryEvaluation with partial evidence"),
             ],
             must_not_confuse_with=[
                 IssueClassification.unresolved,
@@ -639,12 +627,9 @@ def _build_registry_entries() -> Dict[IssueClassification, TaxonomyEntry]:
             ),
             is_blocking=False,
             surface_examples=[
-                ("distributed_release_gate_skeleton",
-                 "GateCategoryStrength.deferred"),
-                ("distributed_release_gate_skeleton",
-                 "ReleaseGateVerdict.deferred"),
-                ("distributed_release_gate_skeleton",
-                 "DEFERRED_CATEGORIES_MUST_NOT_BLOCK_RELEASE_POLICY"),
+                ("distributed_release_gate_skeleton", "GateCategoryStrength.deferred"),
+                ("distributed_release_gate_skeleton", "ReleaseGateVerdict.deferred"),
+                ("distributed_release_gate_skeleton", "DEFERRED_CATEGORIES_MUST_NOT_BLOCK_RELEASE_POLICY"),
             ],
             must_not_confuse_with=[
                 IssueClassification.unresolved,
@@ -660,10 +645,8 @@ def _build_registry_entries() -> Dict[IssueClassification, TaxonomyEntry]:
             ),
             is_blocking=False,
             surface_examples=[
-                ("system_final_acceptance_verdict",
-                 "unresolved_risk_summary with explicit stakeholder annotation"),
-                ("governance_validation_gate",
-                 "ValidationResult.details['accepted_limitation'] (by convention)"),
+                ("system_final_acceptance_verdict", "unresolved_risk_summary with explicit stakeholder annotation"),
+                ("governance_validation_gate", "ValidationResult.details['accepted_limitation'] (by convention)"),
             ],
             must_not_confuse_with=[
                 IssueClassification.blocking,
@@ -680,8 +663,7 @@ def _build_registry_entries() -> Dict[IssueClassification, TaxonomyEntry]:
             is_blocking=False,
             surface_examples=[
                 ("release_blocking_gate", "CriterionStatus.PASSED (with CI evidence)"),
-                ("system_final_acceptance_verdict",
-                 "DimensionStatus.accepted (backed by automated tests)"),
+                ("system_final_acceptance_verdict", "DimensionStatus.accepted (backed by automated tests)"),
                 ("governance_validation_gate", "ValidationOutcome.PASS"),
             ],
             must_not_confuse_with=[

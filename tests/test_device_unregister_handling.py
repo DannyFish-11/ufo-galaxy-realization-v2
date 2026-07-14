@@ -55,8 +55,9 @@ class TestDeviceUnregisterDispatch:
         ws = self._make_ws()
         msg = _make_unregister_msg()
 
-        with patch("galaxy_gateway.websocket_handler.connection_manager.disconnect",
-                   new=AsyncMock()) as mock_disconnect:
+        with patch(
+            "galaxy_gateway.websocket_handler.connection_manager.disconnect", new=AsyncMock()
+        ) as mock_disconnect:
             _run_async(handle_message("conn-unreg-001", msg, ws))
 
         mock_disconnect.assert_awaited_once_with("conn-unreg-001")
@@ -73,9 +74,10 @@ class TestDeviceUnregisterDispatch:
         mock_bridge = MagicMock()
         mock_bridge.handle_message = AsyncMock(return_value=None)
 
-        with patch("galaxy_gateway.android_bridge.android_bridge", mock_bridge), \
-             patch("galaxy_gateway.websocket_handler.connection_manager.disconnect",
-                   new=AsyncMock()) as mock_disconnect:
+        with (
+            patch("galaxy_gateway.android_bridge.android_bridge", mock_bridge),
+            patch("galaxy_gateway.websocket_handler.connection_manager.disconnect", new=AsyncMock()) as mock_disconnect,
+        ):
             _run_async(handle_message("conn-unreg-002", msg, ws))
 
         mock_bridge.handle_message.assert_not_awaited()
@@ -89,7 +91,9 @@ class TestDeviceUnregisterDispatch:
         ws = self._make_ws()
         msg = _make_unregister_msg()
 
-        with patch("galaxy_gateway.websocket_handler.connection_manager.disconnect",
-                   new=AsyncMock(side_effect=RuntimeError("boom"))):
+        with patch(
+            "galaxy_gateway.websocket_handler.connection_manager.disconnect",
+            new=AsyncMock(side_effect=RuntimeError("boom")),
+        ):
             # Must not raise.
             _run_async(handle_message("conn-unreg-003", msg, ws))

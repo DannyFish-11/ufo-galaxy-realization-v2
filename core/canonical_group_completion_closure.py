@@ -480,9 +480,7 @@ class CompletionClosureContext:
         Optional trace identifier for observability.
     """
 
-    orchestration_id: str = field(
-        default_factory=lambda: f"ctx_{uuid.uuid4().hex[:10]}"
-    )
+    orchestration_id: str = field(default_factory=lambda: f"ctx_{uuid.uuid4().hex[:10]}")
     execution_mode: str = "single_device_remote"
     signals: List[DeviceResultSignal] = field(default_factory=list)
     expected_device_ids: List[str] = field(default_factory=list)
@@ -638,13 +636,9 @@ def _apply_closure_impl(
     expected_result_count: int = getattr(contract, "expected_result_count", 0)
     partial_failure_policy: str = getattr(contract, "partial_failure_policy", "best_effort")
     aggregation_mode: str = getattr(contract, "aggregation_mode", "all_required")
-    blocked_device_exclusion: str = getattr(
-        contract, "blocked_device_exclusion", "exclude_from_contract"
-    )
+    blocked_device_exclusion: str = getattr(contract, "blocked_device_exclusion", "exclude_from_contract")
     degraded_success_allowed: bool = getattr(contract, "degraded_success_allowed", False)
-    aggregate_timeout_seconds: Optional[float] = getattr(
-        contract, "aggregate_timeout_seconds", None
-    )
+    aggregate_timeout_seconds: Optional[float] = getattr(contract, "aggregate_timeout_seconds", None)
 
     # ----------------------------------------------------------------
     # Classify signals
@@ -696,9 +690,7 @@ def _apply_closure_impl(
         failure_count += blocked_count
     # "exclude_from_contract": reduce effective expected count by the number
     # of blocked devices so they do not count toward the required total.
-    exclusion_adjustment = (
-        blocked_count if blocked_device_exclusion == "exclude_from_contract" else 0
-    )
+    exclusion_adjustment = blocked_count if blocked_device_exclusion == "exclude_from_contract" else 0
     effective_expected_count = max(0, expected_result_count - exclusion_adjustment)
 
     # ----------------------------------------------------------------
@@ -850,9 +842,7 @@ def _apply_closure_impl(
             evidence={
                 "terminal_arrived": terminal_arrived,
                 "effective_expected_count": effective_expected_count,
-                "decision": (
-                    "in_progress: subtask results received but group not yet complete"
-                ),
+                "decision": ("in_progress: subtask results received but group not yet complete"),
             },
             orchestration_id=context.orchestration_id,
         )
@@ -863,10 +853,7 @@ def _apply_closure_impl(
     # At this point: terminal_arrived >= effective_expected_count
     # and success_count > 0 (aggregate_failure was already handled above).
 
-    has_excluded_devices = (
-        blocked_device_exclusion == "exclude_from_contract"
-        and blocked_count > 0
-    )
+    has_excluded_devices = blocked_device_exclusion == "exclude_from_contract" and blocked_count > 0
 
     if failure_count == 0:
         # All succeeded
@@ -977,9 +964,7 @@ class CompletionClosureCoordinator:
 
     def __init__(self) -> None:
         self._lock: threading.Lock = threading.Lock()
-        self._outcomes: Deque[CanonicalCompletionOutcome] = deque(
-            maxlen=self._MAX_ENTRIES
-        )
+        self._outcomes: Deque[CanonicalCompletionOutcome] = deque(maxlen=self._MAX_ENTRIES)
 
     def record(self, outcome: CanonicalCompletionOutcome) -> None:
         """Append *outcome* to the audit buffer."""

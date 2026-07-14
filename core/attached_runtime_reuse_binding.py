@@ -264,9 +264,7 @@ _RING_BUFFER_CAPACITY: int = 128
 # Lifecycle signals that trigger immediate invalidation of a reuse binding.
 # These mirror the terminal / connection-breaking signals from PR-7
 # AttachmentLifecycleSignal.
-_INVALIDATING_SIGNALS: frozenset = frozenset(
-    {"detach", "disconnect", "disable", "invalidate"}
-)
+_INVALIDATING_SIGNALS: frozenset = frozenset({"detach", "disconnect", "disable", "invalidate"})
 
 # ---------------------------------------------------------------------------
 # ReuseEligibilityStatus
@@ -417,14 +415,10 @@ class AttachedRuntimeReuseBindingIdentity:
         return json.dumps(self.to_dict())
 
     @classmethod
-    def from_dict(
-        cls, data: Dict[str, Any]
-    ) -> "AttachedRuntimeReuseBindingIdentity":
+    def from_dict(cls, data: Dict[str, Any]) -> "AttachedRuntimeReuseBindingIdentity":
         """Construct from a dict.  Raises ValueError if *data* is not a dict."""
         if not isinstance(data, dict):
-            raise ValueError(
-                "AttachedRuntimeReuseBindingIdentity.from_dict expects a dict"
-            )
+            raise ValueError("AttachedRuntimeReuseBindingIdentity.from_dict expects a dict")
         return cls(
             reuse_binding_id=data.get("reuse_binding_id") or str(uuid.uuid4()),
             session_id=data.get("session_id", ""),
@@ -599,9 +593,7 @@ class AttachedRuntimeReuseBindingRuntime:
 
     def __init__(self, capacity: int = _RING_BUFFER_CAPACITY) -> None:
         self._capacity = capacity
-        self._buf: Deque[AttachedRuntimeReuseBindingRecord] = deque(
-            maxlen=capacity
-        )
+        self._buf: Deque[AttachedRuntimeReuseBindingRecord] = deque(maxlen=capacity)
 
     # ------------------------------------------------------------------
     # Mutation
@@ -625,24 +617,16 @@ class AttachedRuntimeReuseBindingRuntime:
 
     def list_eligible(self) -> List[AttachedRuntimeReuseBindingRecord]:
         """Return all eligible records, newest-first."""
-        return [
-            r
-            for r in reversed(self._buf)
-            if r.reuse_eligibility_status == ReuseEligibilityStatus.eligible
-        ]
+        return [r for r in reversed(self._buf) if r.reuse_eligibility_status == ReuseEligibilityStatus.eligible]
 
-    def get_latest_for_session(
-        self, session_id: str
-    ) -> Optional[AttachedRuntimeReuseBindingRecord]:
+    def get_latest_for_session(self, session_id: str) -> Optional[AttachedRuntimeReuseBindingRecord]:
         """Return the most recent record for *session_id*, or ``None``."""
         for record in reversed(self._buf):
             if record.identity.session_id == session_id:
                 return record
         return None
 
-    def get_latest_for_device(
-        self, device_id: str
-    ) -> Optional[AttachedRuntimeReuseBindingRecord]:
+    def get_latest_for_device(self, device_id: str) -> Optional[AttachedRuntimeReuseBindingRecord]:
         """Return the most recent record for *device_id*, or ``None``."""
         for record in reversed(self._buf):
             if record.identity.device_id == device_id:
@@ -907,11 +891,7 @@ def evaluate_reuse_eligibility(
         session_posture = getattr(attached_session, "source_runtime_posture", None)
 
         # PR-7 AttachmentState.attached == "attached"
-        state_value = (
-            session_state.value
-            if hasattr(session_state, "value")
-            else str(session_state or "")
-        )
+        state_value = session_state.value if hasattr(session_state, "value") else str(session_state or "")
         if state_value != "attached":
             return ReuseEligibilityStatus.ineligible
 
@@ -1105,11 +1085,7 @@ def build_reuse_binding_snapshot(
     """
     _runtime = runtime if runtime is not None else get_reuse_binding_runtime()
     all_records = _runtime.list_all()
-    eligible = sum(
-        1
-        for r in all_records
-        if r.reuse_eligibility_status == ReuseEligibilityStatus.eligible
-    )
+    eligible = sum(1 for r in all_records if r.reuse_eligibility_status == ReuseEligibilityStatus.eligible)
     return AttachedRuntimeReuseBindingSnapshot(
         records=all_records,
         eligible_count=eligible,

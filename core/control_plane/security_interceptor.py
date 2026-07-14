@@ -59,6 +59,7 @@ Usage
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
+
 logger = logging.getLogger(__name__)
 
 
@@ -71,10 +72,10 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
-
 # ---------------------------------------------------------------------------
 # Exceptions
 # ---------------------------------------------------------------------------
+
 
 class ApprovalTimeoutError(TimeoutError):
     """Raised when an approval request is not resolved within the timeout."""
@@ -82,9 +83,7 @@ class ApprovalTimeoutError(TimeoutError):
     def __init__(self, request_id: str, timeout_seconds: float) -> None:
         self.request_id = request_id
         self.timeout_seconds = timeout_seconds
-        super().__init__(
-            f"Approval request '{request_id}' timed out after {timeout_seconds}s."
-        )
+        super().__init__(f"Approval request '{request_id}' timed out after {timeout_seconds}s.")
 
 
 class ApprovalDeniedError(PermissionError):
@@ -93,14 +92,13 @@ class ApprovalDeniedError(PermissionError):
     def __init__(self, request_id: str, reason: str = "") -> None:
         self.request_id = request_id
         self.reason = reason
-        super().__init__(
-            f"Approval request '{request_id}' was denied. Reason: {reason or 'none given'}"
-        )
+        super().__init__(f"Approval request '{request_id}' was denied. Reason: {reason or 'none given'}")
 
 
 # ---------------------------------------------------------------------------
 # Enumerations
 # ---------------------------------------------------------------------------
+
 
 class RiskLevel(str, Enum):
     """Qualitative risk classification for approval-gated actions."""
@@ -124,6 +122,7 @@ class ApprovalStatus(str, Enum):
 # ---------------------------------------------------------------------------
 # Pydantic models
 # ---------------------------------------------------------------------------
+
 
 class ApprovalRequest(BaseModel):
     """Represents a single HITL approval gate request."""
@@ -151,9 +150,7 @@ class ApprovalRequest(BaseModel):
         description="Arbitrary context data surfaced to the operator.",
     )
     status: ApprovalStatus = Field(default=ApprovalStatus.PENDING)
-    requested_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    requested_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     resolved_at: Optional[datetime] = Field(None)
     resolved_by: Optional[str] = Field(
         None,
@@ -185,6 +182,7 @@ class ApprovalAuditEntry(BaseModel):
 # ---------------------------------------------------------------------------
 # Approval registry
 # ---------------------------------------------------------------------------
+
 
 class ApprovalRegistry:
     """In-memory store for pending and resolved approval requests.
@@ -300,19 +298,12 @@ class ApprovalRegistry:
         request, _event, _denied = entry
         if request.status != ApprovalStatus.PENDING:
             return False
-        self._resolve(
-            request_id, ApprovalStatus.DENIED,
-            resolved_by=operator, deny_reason=reason
-        )
+        self._resolve(request_id, ApprovalStatus.DENIED, resolved_by=operator, deny_reason=reason)
         return True
 
     def list_pending(self) -> List[ApprovalRequest]:
         """Return all currently pending (unresolved) approval requests."""
-        return [
-            req
-            for req, _ev, _d in self._pending.values()
-            if req.status == ApprovalStatus.PENDING
-        ]
+        return [req for req, _ev, _d in self._pending.values() if req.status == ApprovalStatus.PENDING]
 
     def get_request(self, request_id: str) -> Optional[ApprovalRequest]:
         """Retrieve an approval request by ID (pending or resolved)."""
@@ -327,6 +318,7 @@ class ApprovalRegistry:
 # ---------------------------------------------------------------------------
 # Security interceptor
 # ---------------------------------------------------------------------------
+
 
 class SecurityInterceptor:
     """Async HITL gate that suspends execution pending operator approval.
@@ -497,6 +489,7 @@ class SecurityInterceptor:
         """
         try:
             from core.routes.security_policy import evaluate_policy
+
             evaluation = evaluate_policy(action=action, tool=tool)
         except Exception as exc:
             logger.debug("Fallback triggered: %s", exc)

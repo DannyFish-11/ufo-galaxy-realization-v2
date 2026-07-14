@@ -13,15 +13,16 @@
 import asyncio
 import logging
 import time
-from typing import Dict, List, Optional, Any, Set
+from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
-from collections import defaultdict
+from typing import Any, Dict, List, Optional, Set
 
 logger = logging.getLogger("Galaxy.Concurrency")
 
 
 # ───────────────────── 数据模型 ─────────────────────
+
 
 class LockType(Enum):
     EXCLUSIVE = "exclusive"
@@ -37,11 +38,12 @@ class LockState(Enum):
 @dataclass
 class LockInfo:
     """锁信息"""
+
     resource_id: str
     lock_type: LockType
-    holder_id: str          # 持有者 ID
+    holder_id: str  # 持有者 ID
     acquired_at: float = 0
-    timeout: float = 30.0   # 超时秒数
+    timeout: float = 30.0  # 超时秒数
     metadata: Dict = field(default_factory=dict)
 
     @property
@@ -52,6 +54,7 @@ class LockInfo:
 @dataclass
 class WaitEntry:
     """等待队列条目"""
+
     waiter_id: str
     resource_id: str
     lock_type: LockType
@@ -63,6 +66,7 @@ class WaitEntry:
 @dataclass
 class TaskSlot:
     """并发槽位"""
+
     task_id: str
     category: str
     started_at: float = field(default_factory=time.time)
@@ -74,6 +78,7 @@ class TaskSlot:
 
 
 # ───────────────────── 分布式锁管理器 ─────────────────────
+
 
 class LockManager:
     """
@@ -88,9 +93,9 @@ class LockManager:
         self._holder_resources: Dict[str, Set[str]] = defaultdict(set)  # holder → resources
         self._mu = asyncio.Lock()
 
-    async def acquire(self, resource_id: str, holder_id: str,
-                      lock_type: LockType = LockType.EXCLUSIVE,
-                      timeout: float = 30.0) -> bool:
+    async def acquire(
+        self, resource_id: str, holder_id: str, lock_type: LockType = LockType.EXCLUSIVE, timeout: float = 30.0
+    ) -> bool:
         """
         获取锁
 
@@ -104,9 +109,7 @@ class LockManager:
 
             # 死锁检测
             if self._would_deadlock(holder_id, resource_id):
-                logger.warning(
-                    f"[死锁预防] {holder_id} 尝试获取 {resource_id} 会导致死锁，拒绝"
-                )
+                logger.warning(f"[死锁预防] {holder_id} 尝试获取 {resource_id} 会导致死锁，拒绝")
                 return False
 
             # 加入等待队列
@@ -134,9 +137,7 @@ class LockManager:
         """释放锁"""
         async with self._mu:
             locks = self._locks.get(resource_id, [])
-            self._locks[resource_id] = [
-                l for l in locks if l.holder_id != holder_id
-            ]
+            self._locks[resource_id] = [lk for lk in locks if lk.holder_id != holder_id]
             self._holder_resources[holder_id].discard(resource_id)
 
             if not self._locks[resource_id]:
@@ -153,32 +154,30 @@ class LockManager:
             resources = list(self._holder_resources.get(holder_id, set()))
             for res in resources:
                 locks = self._locks.get(res, [])
-                self._locks[res] = [l for l in locks if l.holder_id != holder_id]
+                self._locks[res] = [lk for lk in locks if lk.holder_id != holder_id]
                 if not self._locks.get(res):
                     self._locks.pop(res, None)
                 self._wake_waiters(res)
             self._holder_resources.pop(holder_id, None)
 
-    def _can_acquire(self, resource_id: str, lock_type: LockType,
-                     holder_id: str) -> bool:
+    def _can_acquire(self, resource_id: str, lock_type: LockType, holder_id: str) -> bool:
         current_locks = self._locks.get(resource_id, [])
         if not current_locks:
             return True
 
         # 重入检测
-        for l in current_locks:
-            if l.holder_id == holder_id:
+        for lk in current_locks:
+            if lk.holder_id == holder_id:
                 return True
 
         if lock_type == LockType.SHARED:
             # 共享锁：只要没有排他锁就行
-            return all(l.lock_type == LockType.SHARED for l in current_locks)
+            return all(lk.lock_type == LockType.SHARED for lk in current_locks)
 
         # 排他锁：必须无锁
         return False
 
-    def _do_acquire(self, resource_id: str, holder_id: str,
-                    lock_type: LockType, timeout: float):
+    def _do_acquire(self, resource_id: str, holder_id: str, lock_type: LockType, timeout: float):
         info = LockInfo(
             resource_id=resource_id,
             lock_type=lock_type,
@@ -198,8 +197,10 @@ class LockManager:
         for entry in waiters:
             if self._can_acquire(resource_id, entry.lock_type, entry.waiter_id):
                 self._do_acquire(
-                    resource_id, entry.waiter_id,
-                    entry.lock_type, entry.timeout,
+                    resource_id,
+                    entry.waiter_id,
+                    entry.lock_type,
+                    entry.timeout,
                 )
                 entry.event.set()
             else:
@@ -218,14 +219,14 @@ class LockManager:
 
         # 现有等待关系
         for res, waiters in self._wait_queue.items():
-            holders = {l.holder_id for l in self._locks.get(res, [])}
+            holders = {lk.holder_id for lk in self._locks.get(res, [])}
             for w in waiters:
                 for h in holders:
                     if w.waiter_id != h:
                         graph[w.waiter_id].add(h)
 
         # 添加新的等待关系
-        target_holders = {l.holder_id for l in self._locks.get(target_resource, [])}
+        target_holders = {lk.holder_id for lk in self._locks.get(target_resource, [])}
         for h in target_holders:
             if holder_id != h:
                 graph[holder_id].add(h)
@@ -253,10 +254,10 @@ class LockManager:
         """清理过期锁"""
         expired = []
         for res, locks in list(self._locks.items()):
-            for l in locks:
-                if l.is_expired:
-                    expired.append(f"{l.holder_id}:{res}")
-            self._locks[res] = [l for l in locks if not l.is_expired]
+            for lk in locks:
+                if lk.is_expired:
+                    expired.append(f"{lk.holder_id}:{res}")
+            self._locks[res] = [lk for lk in locks if not lk.is_expired]
             if not self._locks[res]:
                 del self._locks[res]
                 self._wake_waiters(res)
@@ -275,6 +276,7 @@ class LockManager:
 
 # ───────────────────── 并发度控制器 ─────────────────────
 
+
 class ConcurrencyLimiter:
     """
     并发度限制器
@@ -282,8 +284,7 @@ class ConcurrencyLimiter:
     支持全局并发限制和按类别限制。
     """
 
-    def __init__(self, global_max: int = 50,
-                 category_limits: Optional[Dict[str, int]] = None):
+    def __init__(self, global_max: int = 50, category_limits: Optional[Dict[str, int]] = None):
         self.global_max = global_max
         self.category_limits = category_limits or {}
         self._global_sem = asyncio.Semaphore(global_max)
@@ -295,28 +296,21 @@ class ConcurrencyLimiter:
         for cat, limit in self.category_limits.items():
             self._category_sems[cat] = asyncio.Semaphore(limit)
 
-    async def acquire_slot(self, task_id: str, category: str = "default",
-                           timeout: float = 300.0) -> bool:
+    async def acquire_slot(self, task_id: str, category: str = "default", timeout: float = 300.0) -> bool:
         """获取执行槽位"""
         # 确保类别信号量存在
         if category not in self._category_sems:
-            self._category_sems[category] = asyncio.Semaphore(
-                self.category_limits.get(category, self.global_max)
-            )
+            self._category_sems[category] = asyncio.Semaphore(self.category_limits.get(category, self.global_max))
 
         try:
             # 先获取全局信号量
-            acquired_global = await asyncio.wait_for(
-                self._global_sem.acquire(), timeout=timeout
-            )
+            acquired_global = await asyncio.wait_for(self._global_sem.acquire(), timeout=timeout)
             if not acquired_global:
                 return False
 
             # 再获取类别信号量
             try:
-                await asyncio.wait_for(
-                    self._category_sems[category].acquire(), timeout=timeout
-                )
+                await asyncio.wait_for(self._category_sems[category].acquire(), timeout=timeout)
             except asyncio.TimeoutError:
                 self._global_sem.release()
                 return False
@@ -324,7 +318,9 @@ class ConcurrencyLimiter:
             # 记录槽位
             async with self._mu:
                 self._active_slots[task_id] = TaskSlot(
-                    task_id=task_id, category=category, timeout=timeout,
+                    task_id=task_id,
+                    category=category,
+                    timeout=timeout,
                 )
 
             logger.debug(f"并发槽位已获取: {task_id} ({category})")
@@ -376,6 +372,7 @@ class ConcurrencyLimiter:
 
 # ───────────────────── 资源竞争处理器 ─────────────────────
 
+
 class ResourceQueue:
     """
     公平资源队列
@@ -387,8 +384,7 @@ class ResourceQueue:
         self._queues: Dict[str, asyncio.PriorityQueue] = {}
         self._active: Dict[str, str] = {}  # resource → current_holder
 
-    async def request(self, resource_id: str, requester_id: str,
-                      priority: int = 5, timeout: float = 30.0) -> bool:
+    async def request(self, resource_id: str, requester_id: str, priority: int = 5, timeout: float = 30.0) -> bool:
         """请求资源"""
         if resource_id not in self._queues:
             self._queues[resource_id] = asyncio.PriorityQueue()
@@ -424,28 +420,26 @@ class ResourceQueue:
     def get_status(self) -> Dict:
         return {
             "active_resources": len(self._active),
-            "queued_resources": {
-                r: q.qsize() for r, q in self._queues.items() if not q.empty()
-            },
+            "queued_resources": {r: q.qsize() for r, q in self._queues.items() if not q.empty()},
         }
 
 
 # ───────────────────── 重试策略 ─────────────────────
 
+
 class RetryPolicy:
     """指数退避重试策略"""
 
-    def __init__(self, max_retries: int = 3,
-                 base_delay: float = 1.0,
-                 max_delay: float = 30.0,
-                 exponential_base: float = 2.0):
+    def __init__(
+        self, max_retries: int = 3, base_delay: float = 1.0, max_delay: float = 30.0, exponential_base: float = 2.0
+    ):
         self.max_retries = max_retries
         self.base_delay = base_delay
         self.max_delay = max_delay
         self.exponential_base = exponential_base
 
     def get_delay(self, attempt: int) -> float:
-        delay = self.base_delay * (self.exponential_base ** attempt)
+        delay = self.base_delay * (self.exponential_base**attempt)
         return min(delay, self.max_delay)
 
     async def execute(self, coro_factory, *args, **kwargs) -> Any:
@@ -464,10 +458,7 @@ class RetryPolicy:
                 last_error = e
                 if attempt < self.max_retries:
                     delay = self.get_delay(attempt)
-                    logger.warning(
-                        f"重试 {attempt + 1}/{self.max_retries}: {e}, "
-                        f"等待 {delay:.1f}s"
-                    )
+                    logger.warning(f"重试 {attempt + 1}/{self.max_retries}: {e}, " f"等待 {delay:.1f}s")
                     await asyncio.sleep(delay)
                 else:
                     logger.error(f"重试耗尽 ({self.max_retries}次): {e}")
@@ -477,6 +468,7 @@ class RetryPolicy:
 
 # ───────────────────── 统一并发管理器 ─────────────────────
 
+
 class ConcurrencyManager:
     """
     统一并发管理器
@@ -485,12 +477,12 @@ class ConcurrencyManager:
     增强：跟踪后台任务防止泄漏，异常安全的清理循环。
     """
 
-    def __init__(self, global_max_concurrency: int = 50,
-                 category_limits: Optional[Dict[str, int]] = None):
+    def __init__(self, global_max_concurrency: int = 50, category_limits: Optional[Dict[str, int]] = None):
         self.locks = LockManager()
         self.limiter = ConcurrencyLimiter(
             global_max=global_max_concurrency,
-            category_limits=category_limits or {
+            category_limits=category_limits
+            or {
                 "llm_call": 10,
                 "device_control": 5,
                 "file_io": 20,
@@ -549,9 +541,7 @@ class ConcurrencyManager:
         async with self._tracked_mu:
             if len(self._tracked_tasks) >= self._max_tracked_tasks:
                 # 清理已完成的任务腾出空间
-                self._tracked_tasks = {
-                    k: v for k, v in self._tracked_tasks.items() if not v.done()
-                }
+                self._tracked_tasks = {k: v for k, v in self._tracked_tasks.items() if not v.done()}
                 if len(self._tracked_tasks) >= self._max_tracked_tasks:
                     logger.warning(f"跟踪任务已达上限 ({self._max_tracked_tasks})，拒绝新任务")
                     task.cancel()
@@ -571,10 +561,7 @@ class ConcurrencyManager:
                 if self._tracked_mu:
                     async with self._tracked_mu:
                         before = len(self._tracked_tasks)
-                        self._tracked_tasks = {
-                            k: v for k, v in self._tracked_tasks.items()
-                            if not v.done()
-                        }
+                        self._tracked_tasks = {k: v for k, v in self._tracked_tasks.items() if not v.done()}
                         cleaned_tasks = before - len(self._tracked_tasks)
 
                 if expired_locks or expired_slots or cleaned_tasks:
@@ -591,10 +578,9 @@ class ConcurrencyManager:
 
     # ─── 便捷方法 ───
 
-    async def run_with_concurrency(self, task_id: str, category: str,
-                                   coro_factory, *args,
-                                   timeout: float = 300.0,
-                                   retries: int = 0, **kwargs) -> Any:
+    async def run_with_concurrency(
+        self, task_id: str, category: str, coro_factory, *args, timeout: float = 300.0, retries: int = 0, **kwargs
+    ) -> Any:
         """
         带并发控制的任务执行
 
@@ -614,18 +600,22 @@ class ConcurrencyManager:
         finally:
             await self.limiter.release_slot(task_id)
 
-    async def run_with_lock(self, resource_id: str, holder_id: str,
-                            coro_factory, *args,
-                            lock_type: LockType = LockType.EXCLUSIVE,
-                            timeout: float = 30.0, **kwargs) -> Any:
+    async def run_with_lock(
+        self,
+        resource_id: str,
+        holder_id: str,
+        coro_factory,
+        *args,
+        lock_type: LockType = LockType.EXCLUSIVE,
+        timeout: float = 30.0,
+        **kwargs,
+    ) -> Any:
         """
         带锁的任务执行
 
         自动获取锁 → 执行 → 释放锁
         """
-        acquired = await self.locks.acquire(
-            resource_id, holder_id, lock_type, timeout
-        )
+        acquired = await self.locks.acquire(resource_id, holder_id, lock_type, timeout)
         if not acquired:
             raise TimeoutError(f"无法获取锁: {holder_id} → {resource_id}")
 

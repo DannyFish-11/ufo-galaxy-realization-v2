@@ -125,10 +125,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers — mock objects
 # ---------------------------------------------------------------------------
+
 
 def _make_mock_rrd(
     *,
@@ -221,29 +221,42 @@ def _make_mock_rrd(
 # CanonicalDeviceIdentity tests
 # ===========================================================================
 
+
 class TestCanonicalDeviceIdentityConstruction:
     """Tests 1–5: Basic construction and serialisation."""
 
     def test_01_default_construction_with_device_id_only(self):
         from contracts.canonical_device_identity import CanonicalDeviceIdentity
+
         identity = CanonicalDeviceIdentity(device_id="dev_001")
         assert identity.device_id == "dev_001"
 
     def test_02_all_documented_fields_in_to_dict(self):
         from contracts.canonical_device_identity import CanonicalDeviceIdentity
+
         identity = CanonicalDeviceIdentity(device_id="dev_001")
         d = identity.to_dict()
         expected_keys = {
-            "device_id", "device_name", "owner_id",
-            "platform", "device_type", "form_factor",
-            "capabilities", "supported_actions", "capability_schemas",
-            "supports_local_autonomy", "supports_remote_handoff",
-            "groups", "tags", "metadata",
+            "device_id",
+            "device_name",
+            "owner_id",
+            "platform",
+            "device_type",
+            "form_factor",
+            "capabilities",
+            "supported_actions",
+            "capability_schemas",
+            "supports_local_autonomy",
+            "supports_remote_handoff",
+            "groups",
+            "tags",
+            "metadata",
         }
         assert expected_keys <= set(d.keys())
 
     def test_03_to_dict_is_json_serialisable(self):
         from contracts.canonical_device_identity import build_canonical_device_identity
+
         identity = build_canonical_device_identity(
             device_id="dev_001",
             capabilities=["screen"],
@@ -255,6 +268,7 @@ class TestCanonicalDeviceIdentityConstruction:
 
     def test_04_to_json_returns_valid_json(self):
         from contracts.canonical_device_identity import CanonicalDeviceIdentity
+
         identity = CanonicalDeviceIdentity(device_id="dev_001")
         s = identity.to_json()
         parsed = json.loads(s)
@@ -262,6 +276,7 @@ class TestCanonicalDeviceIdentityConstruction:
 
     def test_05_from_dict_round_trip_stable(self):
         from contracts.canonical_device_identity import build_canonical_device_identity
+
         identity = build_canonical_device_identity(
             device_id="dev_rt",
             platform="android",
@@ -270,6 +285,7 @@ class TestCanonicalDeviceIdentityConstruction:
         )
         d = identity.to_dict()
         from contracts.canonical_device_identity import CanonicalDeviceIdentity
+
         restored = CanonicalDeviceIdentity.from_dict(d)
         assert restored.device_id == identity.device_id
         assert restored.platform == identity.platform
@@ -282,95 +298,108 @@ class TestCanonicalDeviceIdentityFields:
 
     def test_06_device_id_preserved_exactly(self):
         from contracts.canonical_device_identity import CanonicalDeviceIdentity
+
         identity = CanonicalDeviceIdentity(device_id="abc-123-xyz")
         assert identity.device_id == "abc-123-xyz"
 
     def test_07_platform_defaults_to_unknown(self):
         from contracts.canonical_device_identity import CanonicalDeviceIdentity
+
         identity = CanonicalDeviceIdentity(device_id="dev_001")
         assert identity.platform == "unknown"
 
     def test_08_capabilities_round_trips(self):
         from contracts.canonical_device_identity import build_canonical_device_identity
+
         caps = ["screen", "camera", "microphone"]
         identity = build_canonical_device_identity(device_id="d", capabilities=caps)
         assert identity.capabilities == caps
 
     def test_09_supported_actions_round_trips(self):
         from contracts.canonical_device_identity import build_canonical_device_identity
+
         actions = ["click", "swipe", "type"]
         identity = build_canonical_device_identity(device_id="d", supported_actions=actions)
         assert identity.supported_actions == actions
 
     def test_10_capability_schemas_dict_round_trips(self):
         from contracts.canonical_device_identity import build_canonical_device_identity
+
         schemas = {"click": {"x": "int", "y": "int"}}
         identity = build_canonical_device_identity(device_id="d", capability_schemas=schemas)
         assert identity.capability_schemas == schemas
 
     def test_11_groups_and_tags_round_trip(self):
         from contracts.canonical_device_identity import build_canonical_device_identity
-        identity = build_canonical_device_identity(
-            device_id="d", groups=["team_a"], tags=["prod", "mobile"]
-        )
+
+        identity = build_canonical_device_identity(device_id="d", groups=["team_a"], tags=["prod", "mobile"])
         assert identity.groups == ["team_a"]
         assert identity.tags == ["prod", "mobile"]
 
     def test_12_supports_local_autonomy_default_false(self):
         from contracts.canonical_device_identity import CanonicalDeviceIdentity
+
         identity = CanonicalDeviceIdentity(device_id="d")
         assert identity.supports_local_autonomy is False
 
     def test_13_supports_remote_handoff_default_false(self):
         from contracts.canonical_device_identity import CanonicalDeviceIdentity
+
         identity = CanonicalDeviceIdentity(device_id="d")
         assert identity.supports_remote_handoff is False
 
     def test_14_has_capability_true_for_present_cap(self):
         from contracts.canonical_device_identity import build_canonical_device_identity
+
         identity = build_canonical_device_identity(device_id="d", capabilities=["screen"])
         assert identity.has_capability("screen") is True
 
     def test_15_has_capability_false_for_absent_cap(self):
         from contracts.canonical_device_identity import build_canonical_device_identity
+
         identity = build_canonical_device_identity(device_id="d", capabilities=["screen"])
         assert identity.has_capability("gps") is False
 
     def test_16_supports_action_true_for_present_action(self):
         from contracts.canonical_device_identity import build_canonical_device_identity
+
         identity = build_canonical_device_identity(device_id="d", supported_actions=["click"])
         assert identity.supports_action("click") is True
 
     def test_17_supports_action_false_for_absent_action(self):
         from contracts.canonical_device_identity import build_canonical_device_identity
+
         identity = build_canonical_device_identity(device_id="d", supported_actions=["click"])
         assert identity.supports_action("scroll") is False
 
     def test_18_metadata_preserved(self):
         from contracts.canonical_device_identity import build_canonical_device_identity
+
         meta = {"os_version": "Android 14", "model": "Pixel 7"}
         identity = build_canonical_device_identity(device_id="d", metadata=meta)
         assert identity.metadata == meta
 
     def test_19_no_transport_websocket_fields_in_to_dict(self):
         from contracts.canonical_device_identity import CanonicalDeviceIdentity
+
         identity = CanonicalDeviceIdentity(device_id="d")
         d = identity.to_dict()
         # Must not carry any transport/WebSocket fields
         forbidden = {"transport", "websocket", "ws_ref", "socket", "connection_id"}
-        assert not forbidden.intersection(d.keys()), (
-            f"Forbidden transport fields found: {forbidden.intersection(d.keys())}"
-        )
+        assert not forbidden.intersection(
+            d.keys()
+        ), f"Forbidden transport fields found: {forbidden.intersection(d.keys())}"
 
     def test_20_no_connection_state_or_session_id_in_to_dict(self):
         from contracts.canonical_device_identity import CanonicalDeviceIdentity
+
         identity = CanonicalDeviceIdentity(device_id="d")
         d = identity.to_dict()
         # Must not carry ephemeral presence fields
         forbidden = {"connection_state", "session_id", "online", "last_seen"}
-        assert not forbidden.intersection(d.keys()), (
-            f"Forbidden presence fields found: {forbidden.intersection(d.keys())}"
-        )
+        assert not forbidden.intersection(
+            d.keys()
+        ), f"Forbidden presence fields found: {forbidden.intersection(d.keys())}"
 
 
 class TestCanonicalDeviceIdentityFromRRD:
@@ -378,18 +407,21 @@ class TestCanonicalDeviceIdentityFromRRD:
 
     def test_21_device_id_preserved(self):
         from contracts.canonical_device_identity import from_registered_runtime_device
+
         rrd = _make_mock_rrd(device_id="rrd_dev_001")
         identity = from_registered_runtime_device(rrd)
         assert identity.device_id == "rrd_dev_001"
 
     def test_22_platform_extracted_from_enum(self):
         from contracts.canonical_device_identity import from_registered_runtime_device
+
         rrd = _make_mock_rrd(platform="android")
         identity = from_registered_runtime_device(rrd)
         assert identity.platform == "android"
 
     def test_23_capabilities_extracted_from_sub_object(self):
         from contracts.canonical_device_identity import from_registered_runtime_device
+
         rrd = _make_mock_rrd(capabilities=["screen", "camera", "gps"])
         identity = from_registered_runtime_device(rrd)
         assert "screen" in identity.capabilities
@@ -397,48 +429,56 @@ class TestCanonicalDeviceIdentityFromRRD:
 
     def test_24_supported_actions_extracted(self):
         from contracts.canonical_device_identity import from_registered_runtime_device
+
         rrd = _make_mock_rrd(supported_actions=["click", "swipe"])
         identity = from_registered_runtime_device(rrd)
         assert "click" in identity.supported_actions
 
     def test_25_supports_local_autonomy_propagated(self):
         from contracts.canonical_device_identity import from_registered_runtime_device
+
         rrd = _make_mock_rrd(supports_local_autonomy=True)
         identity = from_registered_runtime_device(rrd)
         assert identity.supports_local_autonomy is True
 
     def test_26_supports_remote_handoff_propagated(self):
         from contracts.canonical_device_identity import from_registered_runtime_device
+
         rrd = _make_mock_rrd(supports_remote_handoff=True)
         identity = from_registered_runtime_device(rrd)
         assert identity.supports_remote_handoff is True
 
     def test_27_groups_propagated(self):
         from contracts.canonical_device_identity import from_registered_runtime_device
+
         rrd = _make_mock_rrd(groups=["team_alpha", "team_beta"])
         identity = from_registered_runtime_device(rrd)
         assert "team_alpha" in identity.groups
 
     def test_28_tags_propagated(self):
         from contracts.canonical_device_identity import from_registered_runtime_device
+
         rrd = _make_mock_rrd(tags=["prod", "high-priority"])
         identity = from_registered_runtime_device(rrd)
         assert "prod" in identity.tags
 
     def test_29_metadata_dict_propagated(self):
         from contracts.canonical_device_identity import from_registered_runtime_device
+
         rrd = _make_mock_rrd(metadata={"os_version": "14"})
         identity = from_registered_runtime_device(rrd)
         assert identity.metadata.get("os_version") == "14"
 
     def test_30_graceful_degradation_on_none(self):
         from contracts.canonical_device_identity import from_registered_runtime_device
+
         result = from_registered_runtime_device(None)
         assert isinstance(result.device_id, str)
         assert len(result.device_id) > 0
 
     def test_31_no_transport_fields_leak_through_adapter(self):
         from contracts.canonical_device_identity import from_registered_runtime_device
+
         rrd = _make_mock_rrd()
         identity = from_registered_runtime_device(rrd)
         d = identity.to_dict()
@@ -451,54 +491,63 @@ class TestCanonicalDeviceIdentityFromAndroid:
 
     def test_32_device_id_extracted(self):
         from contracts.canonical_device_identity import from_android_registration
+
         data = {"device_id": "android_001", "platform": "android"}
         identity = from_android_registration(data)
         assert identity.device_id == "android_001"
 
     def test_33_platform_from_platform_key(self):
         from contracts.canonical_device_identity import from_android_registration
+
         data = {"device_id": "d", "platform": "android"}
         identity = from_android_registration(data)
         assert identity.platform == "android"
 
     def test_34_platform_falls_back_to_os_key(self):
         from contracts.canonical_device_identity import from_android_registration
+
         data = {"device_id": "d", "os": "android"}
         identity = from_android_registration(data)
         assert identity.platform == "android"
 
     def test_35_capabilities_list_extracted(self):
         from contracts.canonical_device_identity import from_android_registration
+
         data = {"device_id": "d", "capabilities": ["screen", "camera"]}
         identity = from_android_registration(data)
         assert "screen" in identity.capabilities
 
     def test_36_supported_actions_extracted(self):
         from contracts.canonical_device_identity import from_android_registration
+
         data = {"device_id": "d", "supported_actions": ["click"]}
         identity = from_android_registration(data)
         assert "click" in identity.supported_actions
 
     def test_37_groups_extracted(self):
         from contracts.canonical_device_identity import from_android_registration
+
         data = {"device_id": "d", "groups": ["formation_a"]}
         identity = from_android_registration(data)
         assert "formation_a" in identity.groups
 
     def test_38_tags_extracted(self):
         from contracts.canonical_device_identity import from_android_registration
+
         data = {"device_id": "d", "tags": ["primary"]}
         identity = from_android_registration(data)
         assert "primary" in identity.tags
 
     def test_39_extra_keys_stored_in_metadata(self):
         from contracts.canonical_device_identity import from_android_registration
+
         data = {"device_id": "d", "model": "Pixel 7", "os_version": "14"}
         identity = from_android_registration(data)
         assert identity.metadata.get("model") == "Pixel 7"
 
     def test_40_graceful_degradation_on_empty_dict(self):
         from contracts.canonical_device_identity import from_android_registration
+
         identity = from_android_registration({})
         assert isinstance(identity.device_id, str)
         assert len(identity.device_id) > 0
@@ -509,6 +558,7 @@ class TestCanonicalDeviceIdentityBuilder:
 
     def test_41_all_kwargs_map_correctly(self):
         from contracts.canonical_device_identity import build_canonical_device_identity
+
         identity = build_canonical_device_identity(
             device_id="dev_kw",
             device_name="KW Device",
@@ -536,21 +586,25 @@ class TestCanonicalDeviceIdentityBuilder:
 
     def test_42_default_platform_is_unknown(self):
         from contracts.canonical_device_identity import build_canonical_device_identity
+
         identity = build_canonical_device_identity(device_id="d")
         assert identity.platform == "unknown"
 
     def test_43_capabilities_none_defaults_to_empty_list(self):
         from contracts.canonical_device_identity import build_canonical_device_identity
+
         identity = build_canonical_device_identity(device_id="d", capabilities=None)
         assert identity.capabilities == []
 
     def test_44_supported_actions_none_defaults_empty(self):
         from contracts.canonical_device_identity import build_canonical_device_identity
+
         identity = build_canonical_device_identity(device_id="d", supported_actions=None)
         assert identity.supported_actions == []
 
     def test_45_metadata_none_defaults_to_empty_dict(self):
         from contracts.canonical_device_identity import build_canonical_device_identity
+
         identity = build_canonical_device_identity(device_id="d", metadata=None)
         assert identity.metadata == {}
 
@@ -560,18 +614,22 @@ class TestCanonicalDeviceIdentityContractsExports:
 
     def test_46_canonical_device_identity_importable_from_contracts(self):
         from contracts import CanonicalDeviceIdentity
+
         assert CanonicalDeviceIdentity is not None
 
     def test_47_build_canonical_device_identity_importable(self):
         from contracts import build_canonical_device_identity
+
         assert callable(build_canonical_device_identity)
 
     def test_48_canonical_identity_from_rrd_importable(self):
         from contracts import canonical_identity_from_rrd
+
         assert callable(canonical_identity_from_rrd)
 
     def test_49_canonical_identity_from_android_importable(self):
         from contracts import canonical_identity_from_android
+
         assert callable(canonical_identity_from_android)
 
 
@@ -579,29 +637,39 @@ class TestCanonicalDeviceIdentityContractsExports:
 # RuntimePresenceRecord tests
 # ===========================================================================
 
+
 class TestRuntimePresenceRecordConstruction:
     """Tests 50–54: Basic construction and serialisation."""
 
     def test_50_default_construction_with_device_id_only(self):
         from contracts.runtime_presence_record import RuntimePresenceRecord
+
         record = RuntimePresenceRecord(device_id="dev_001")
         assert record.device_id == "dev_001"
 
     def test_51_all_documented_fields_in_to_dict(self):
         from contracts.runtime_presence_record import RuntimePresenceRecord
+
         record = RuntimePresenceRecord(device_id="dev_001")
         d = record.to_dict()
         expected_keys = {
-            "device_id", "connection_id", "session_id",
-            "transport", "connection_state",
-            "online", "last_seen",
-            "routable", "degraded",
-            "current_task_id", "pending_task_ids",
+            "device_id",
+            "connection_id",
+            "session_id",
+            "transport",
+            "connection_state",
+            "online",
+            "last_seen",
+            "routable",
+            "degraded",
+            "current_task_id",
+            "pending_task_ids",
         }
         assert expected_keys <= set(d.keys())
 
     def test_52_to_dict_is_json_serialisable(self):
         from contracts.runtime_presence_record import build_runtime_presence_record
+
         record = build_runtime_presence_record(
             device_id="dev_001",
             online=True,
@@ -611,13 +679,15 @@ class TestRuntimePresenceRecordConstruction:
 
     def test_53_to_json_returns_valid_json(self):
         from contracts.runtime_presence_record import RuntimePresenceRecord
+
         record = RuntimePresenceRecord(device_id="dev_001")
         s = record.to_json()
         parsed = json.loads(s)
         assert parsed["device_id"] == "dev_001"
 
     def test_54_from_dict_round_trip_stable(self):
-        from contracts.runtime_presence_record import build_runtime_presence_record, RuntimePresenceRecord
+        from contracts.runtime_presence_record import RuntimePresenceRecord, build_runtime_presence_record
+
         record = build_runtime_presence_record(
             device_id="dev_rt",
             online=True,
@@ -638,86 +708,94 @@ class TestRuntimePresenceRecordDefaults:
 
     def test_55_online_defaults_false(self):
         from contracts.runtime_presence_record import RuntimePresenceRecord
+
         record = RuntimePresenceRecord(device_id="d")
         assert record.online is False
 
     def test_56_transport_defaults_unknown(self):
         from contracts.runtime_presence_record import RuntimePresenceRecord
+
         record = RuntimePresenceRecord(device_id="d")
         assert record.transport == "unknown"
 
     def test_57_connection_state_defaults_disconnected(self):
         from contracts.runtime_presence_record import RuntimePresenceRecord
+
         record = RuntimePresenceRecord(device_id="d")
         assert record.connection_state == "disconnected"
 
     def test_58_routable_defaults_false(self):
         from contracts.runtime_presence_record import RuntimePresenceRecord
+
         record = RuntimePresenceRecord(device_id="d")
         assert record.routable is False
 
     def test_59_degraded_defaults_false(self):
         from contracts.runtime_presence_record import RuntimePresenceRecord
+
         record = RuntimePresenceRecord(device_id="d")
         assert record.degraded is False
 
     def test_60_pending_task_ids_defaults_empty_list(self):
         from contracts.runtime_presence_record import RuntimePresenceRecord
+
         record = RuntimePresenceRecord(device_id="d")
         assert record.pending_task_ids == []
 
     def test_61_is_connected_true_when_state_connected(self):
         from contracts.runtime_presence_record import RuntimePresenceRecord
+
         record = RuntimePresenceRecord(device_id="d", connection_state="connected")
         assert record.is_connected() is True
 
     def test_62_is_connected_false_for_other_states(self):
         from contracts.runtime_presence_record import RuntimePresenceRecord
+
         for state in ("disconnected", "connecting", "reconnecting", "disconnecting"):
             record = RuntimePresenceRecord(device_id="d", connection_state=state)
             assert record.is_connected() is False
 
     def test_63_is_available_for_dispatch_true_all_conditions(self):
         from contracts.runtime_presence_record import build_runtime_presence_record
-        record = build_runtime_presence_record(
-            device_id="d", online=True, routable=True, degraded=False
-        )
+
+        record = build_runtime_presence_record(device_id="d", online=True, routable=True, degraded=False)
         assert record.is_available_for_dispatch() is True
 
     def test_64_is_available_for_dispatch_false_when_offline(self):
         from contracts.runtime_presence_record import build_runtime_presence_record
-        record = build_runtime_presence_record(
-            device_id="d", online=False, routable=True, degraded=False
-        )
+
+        record = build_runtime_presence_record(device_id="d", online=False, routable=True, degraded=False)
         assert record.is_available_for_dispatch() is False
 
     def test_65_is_available_for_dispatch_false_when_not_routable(self):
         from contracts.runtime_presence_record import build_runtime_presence_record
-        record = build_runtime_presence_record(
-            device_id="d", online=True, routable=False, degraded=False
-        )
+
+        record = build_runtime_presence_record(device_id="d", online=True, routable=False, degraded=False)
         assert record.is_available_for_dispatch() is False
 
     def test_66_is_available_for_dispatch_false_when_degraded(self):
         from contracts.runtime_presence_record import build_runtime_presence_record
-        record = build_runtime_presence_record(
-            device_id="d", online=True, routable=True, degraded=True
-        )
+
+        record = build_runtime_presence_record(device_id="d", online=True, routable=True, degraded=True)
         assert record.is_available_for_dispatch() is False
 
     def test_67_seconds_since_seen_inf_for_zero_last_seen(self):
-        from contracts.runtime_presence_record import RuntimePresenceRecord
         import math
+
+        from contracts.runtime_presence_record import RuntimePresenceRecord
+
         record = RuntimePresenceRecord(device_id="d", last_seen=0.0)
         assert math.isinf(record.seconds_since_seen())
 
     def test_68_seconds_since_seen_non_negative_for_recent(self):
         from contracts.runtime_presence_record import RuntimePresenceRecord
+
         record = RuntimePresenceRecord(device_id="d", last_seen=time.time())
         assert record.seconds_since_seen() >= 0
 
     def test_69_no_capability_or_platform_fields_in_to_dict(self):
         from contracts.runtime_presence_record import RuntimePresenceRecord
+
         record = RuntimePresenceRecord(device_id="d")
         d = record.to_dict()
         forbidden = {"capabilities", "platform", "supported_actions", "device_type"}
@@ -725,9 +803,8 @@ class TestRuntimePresenceRecordDefaults:
 
     def test_70_current_task_id_stored_and_retrieved(self):
         from contracts.runtime_presence_record import build_runtime_presence_record
-        record = build_runtime_presence_record(
-            device_id="d", current_task_id="task_xyz"
-        )
+
+        record = build_runtime_presence_record(device_id="d", current_task_id="task_xyz")
         assert record.current_task_id == "task_xyz"
 
 
@@ -736,30 +813,37 @@ class TestRuntimeTransport:
 
     def test_71_normalise_websocket(self):
         from contracts.runtime_presence_record import RuntimeTransport
+
         assert RuntimeTransport.normalise("websocket") == "websocket"
 
     def test_72_normalise_ws_alias(self):
         from contracts.runtime_presence_record import RuntimeTransport
+
         assert RuntimeTransport.normalise("ws") == "websocket"
 
     def test_73_normalise_wss_alias(self):
         from contracts.runtime_presence_record import RuntimeTransport
+
         assert RuntimeTransport.normalise("wss") == "websocket"
 
     def test_74_normalise_http(self):
         from contracts.runtime_presence_record import RuntimeTransport
+
         assert RuntimeTransport.normalise("http") == "http"
 
     def test_75_normalise_webrtc(self):
         from contracts.runtime_presence_record import RuntimeTransport
+
         assert RuntimeTransport.normalise("webrtc") == "webrtc"
 
     def test_76_normalise_none_returns_unknown(self):
         from contracts.runtime_presence_record import RuntimeTransport
+
         assert RuntimeTransport.normalise(None) == "unknown"
 
     def test_77_normalise_case_insensitive(self):
         from contracts.runtime_presence_record import RuntimeTransport
+
         assert RuntimeTransport.normalise("WEBSOCKET") == "websocket"
 
 
@@ -768,36 +852,42 @@ class TestRuntimePresenceRecordFromRRD:
 
     def test_78_device_id_preserved(self):
         from contracts.runtime_presence_record import from_registered_runtime_device
+
         rrd = _make_mock_rrd(device_id="presence_dev")
         record = from_registered_runtime_device(rrd)
         assert record.device_id == "presence_dev"
 
     def test_79_online_extracted(self):
         from contracts.runtime_presence_record import from_registered_runtime_device
+
         rrd = _make_mock_rrd(online=True)
         record = from_registered_runtime_device(rrd)
         assert record.online is True
 
     def test_80_transport_extracted_from_connection(self):
         from contracts.runtime_presence_record import from_registered_runtime_device
+
         rrd = _make_mock_rrd(transport="websocket")
         record = from_registered_runtime_device(rrd)
         assert record.transport == "websocket"
 
     def test_81_connection_state_extracted(self):
         from contracts.runtime_presence_record import from_registered_runtime_device
+
         rrd = _make_mock_rrd(connection_state="connected")
         record = from_registered_runtime_device(rrd)
         assert record.connection_state == "connected"
 
     def test_82_current_task_id_extracted(self):
         from contracts.runtime_presence_record import from_registered_runtime_device
+
         rrd = _make_mock_rrd(current_task_id="task_001")
         record = from_registered_runtime_device(rrd)
         assert record.current_task_id == "task_001"
 
     def test_83_pending_task_ids_extracted(self):
         from contracts.runtime_presence_record import from_registered_runtime_device
+
         rrd = _make_mock_rrd(pending_task_ids=["t1", "t2"])
         record = from_registered_runtime_device(rrd)
         assert "t1" in record.pending_task_ids
@@ -805,6 +895,7 @@ class TestRuntimePresenceRecordFromRRD:
 
     def test_84_graceful_degradation_on_none(self):
         from contracts.runtime_presence_record import from_registered_runtime_device
+
         result = from_registered_runtime_device(None)
         assert isinstance(result.device_id, str)
         assert len(result.device_id) > 0
@@ -815,6 +906,7 @@ class TestBuildRuntimePresenceRecordBuilder:
 
     def test_85_all_kwargs_map_correctly(self):
         from contracts.runtime_presence_record import build_runtime_presence_record
+
         record = build_runtime_presence_record(
             device_id="bld_dev",
             connection_id="conn_bld",
@@ -842,11 +934,13 @@ class TestBuildRuntimePresenceRecordBuilder:
 
     def test_86_transport_normalised_on_construction(self):
         from contracts.runtime_presence_record import build_runtime_presence_record
+
         record = build_runtime_presence_record(device_id="d", transport="ws")
         assert record.transport == "websocket"
 
     def test_87_last_seen_zero_when_not_provided(self):
         from contracts.runtime_presence_record import build_runtime_presence_record
+
         record = build_runtime_presence_record(device_id="d")
         assert record.last_seen == 0.0
 
@@ -856,16 +950,20 @@ class TestRuntimePresenceRecordContractsExports:
 
     def test_88_runtime_presence_record_importable(self):
         from contracts import RuntimePresenceRecord
+
         assert RuntimePresenceRecord is not None
 
     def test_89_runtime_transport_importable(self):
         from contracts import RuntimeTransport
+
         assert RuntimeTransport is not None
 
     def test_90_build_runtime_presence_record_importable(self):
         from contracts import build_runtime_presence_record
+
         assert callable(build_runtime_presence_record)
 
     def test_91_presence_record_from_rrd_importable(self):
         from contracts import presence_record_from_rrd
+
         assert callable(presence_record_from_rrd)

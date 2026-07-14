@@ -77,17 +77,12 @@ def ingest_device_acceptance_report(
 ) -> AndroidAcceptanceEvidenceRecord:
     """摄取 DEVICE_ACCEPTANCE_REPORT 并覆盖该设备最新记录。"""
     normalized_payload = payload if isinstance(payload, dict) else {}
-    acceptance_tag = _coerce_text(
-        normalized_payload.get("acceptance_tag")
-        or normalized_payload.get("acceptanceTag")
-    )
+    acceptance_tag = _coerce_text(normalized_payload.get("acceptance_tag") or normalized_payload.get("acceptanceTag"))
     dimension_states = _coerce_dict(
-        normalized_payload.get("dimension_states")
-        or normalized_payload.get("dimensionStates")
+        normalized_payload.get("dimension_states") or normalized_payload.get("dimensionStates")
     )
     missing_dimensions = _coerce_str_list(
-        normalized_payload.get("missing_dimensions")
-        or normalized_payload.get("missingDimensions")
+        normalized_payload.get("missing_dimensions") or normalized_payload.get("missingDimensions")
     )
     snapshot_id = _coerce_text(
         normalized_payload.get("snapshot_id")
@@ -95,10 +90,7 @@ def ingest_device_acceptance_report(
         or normalized_payload.get("evidence_snapshot_id")
         or normalized_payload.get("evidenceSnapshotId")
     )
-    st_gap_reason = _coerce_text(
-        normalized_payload.get("st_gap_reason")
-        or normalized_payload.get("stGapReason")
-    )
+    st_gap_reason = _coerce_text(normalized_payload.get("st_gap_reason") or normalized_payload.get("stGapReason"))
     mapped = _map_acceptance_tag(
         acceptance_tag,
         missing_dimensions=missing_dimensions,
@@ -117,9 +109,7 @@ def ingest_device_acceptance_report(
         evidence_authority=mapped["evidence_authority"],
         evidence_completeness=mapped["evidence_completeness"],
         closure_significance=mapped["closure_significance"],
-        canonical_confirmation_required=bool(
-            mapped["canonical_confirmation_required"]
-        ),
+        canonical_confirmation_required=bool(mapped["canonical_confirmation_required"]),
         snapshot_id=snapshot_id,
         st_gap_reason=st_gap_reason,
         message_id=_coerce_text(message_id),
@@ -260,11 +250,7 @@ def _coerce_dict(value: Any) -> Dict[str, Any]:
 
 def _coerce_str_list(value: Any) -> List[str]:
     if isinstance(value, list):
-        return [
-            str(item).strip()
-            for item in value
-            if item is not None and str(item).strip()
-        ]
+        return [str(item).strip() for item in value if item is not None and str(item).strip()]
     if isinstance(value, str):
         stripped = value.strip()
         return [stripped] if stripped else []

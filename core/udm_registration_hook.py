@@ -18,11 +18,10 @@ This module is Stage 2 of the Device Resolution pipeline:
 The hook itself is observe-only; it records decisions but does NOT
 start nodes.  Node starting is Stage 3 (launcher_adapter.py).
 """
+
 from __future__ import annotations
 
 import asyncio  # auto: missing import
-
-
 import logging
 import time
 from typing import Any, Dict, List, Optional
@@ -32,9 +31,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Sentinel
 # ---------------------------------------------------------------------------
-UDM_REGISTRATION_HOOK_SENTINEL = (
-    "UDM_REGISTRATION_HOOK::DEVICE_RESOLUTION_EVENT_INGRESS"
-)
+UDM_REGISTRATION_HOOK_SENTINEL = "UDM_REGISTRATION_HOOK::DEVICE_RESOLUTION_EVENT_INGRESS"
 
 
 # ---------------------------------------------------------------------------
@@ -91,9 +88,9 @@ class UDMRegistrationHook:
         Returns:
             Dict with resolution + decision, or None if resolution failed.
         """
+        from core.activation_policy import ActivationPolicyEngine
         from core.device_activation_registry import get_registry as get_act_registry
         from core.device_node_resolver import get_resolver
-        from core.activation_policy import ActivationPolicyEngine
 
         t0 = time.perf_counter()
 
@@ -105,7 +102,11 @@ class UDMRegistrationHook:
 
         logger.info(
             "[UDMHook] device_id=%s type=%s transport=%s caps=%s source=%s",
-            device_id, device_type, transport, capabilities, source,
+            device_id,
+            device_type,
+            transport,
+            capabilities,
+            source,
         )
 
         # Resolve to Node
@@ -146,7 +147,9 @@ class UDMRegistrationHook:
         if resolved is None:
             logger.info(
                 "[UDMHook] device_id=%s UNRESOLVED — no mapping for type=%s transport=%s",
-                device_id, device_type, transport,
+                device_id,
+                device_type,
+                transport,
             )
             return None
 
@@ -186,7 +189,7 @@ class UDMRegistrationHook:
             return
 
         try:
-            from core.state_event_bus import subscribe, StateEventType
+            from core.state_event_bus import StateEventType, subscribe
 
             def _on_device_event(event_type, payload):
                 asyncio.create_task(self._handle_device_event(payload))
@@ -257,6 +260,4 @@ async def on_device_registered(
     trace_id: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Convenience: process device using the module singleton."""
-    return await get_hook().on_device_registered(
-        device, source=source, trace_id=trace_id
-    )
+    return await get_hook().on_device_registered(device, source=source, trace_id=trace_id)

@@ -490,11 +490,7 @@ class InFlightTaskContinuityEvidence:
     @property
     def non_terminal_count(self) -> int:
         """Tasks that have some form of state or recovery potential."""
-        return (
-            self.resumed_count
-            + self.recoverable_count
-            + self.needs_reconcile_count
-        )
+        return self.resumed_count + self.recoverable_count + self.needs_reconcile_count
 
     def to_dict(self) -> Dict[str, Any]:
         """Return a JSON-serialisable dict."""
@@ -581,14 +577,10 @@ class InFlightTaskContinuityVerdict:
     verdict_id: str = field(default_factory=lambda: f"tctv_{uuid.uuid4().hex[:12]}")
     generated_at: float = field(default_factory=time.time)
     taxonomy_sentinel: str = INFLIGHT_TASK_CONTINUITY_TAXONOMY_IS_AUTHORITY
-    continuity_class: InFlightTaskContinuityClass = (
-        InFlightTaskContinuityClass.task_continuity_lost
-    )
+    continuity_class: InFlightTaskContinuityClass = InFlightTaskContinuityClass.task_continuity_lost
     reason: str = ""
     downgrade_reason: str = ""
-    evidence: InFlightTaskContinuityEvidence = field(
-        default_factory=InFlightTaskContinuityEvidence
-    )
+    evidence: InFlightTaskContinuityEvidence = field(default_factory=InFlightTaskContinuityEvidence)
 
     @property
     def is_authoritative(self) -> bool:
@@ -741,9 +733,7 @@ class InFlightTaskContinuityTaxonomyContract:
             and not evidence.partial_recovery_only
             and (not evidence.process_death_observed or evidence.execution_context_rebuilt)
         ):
-            verdict.continuity_class = (
-                InFlightTaskContinuityClass.authoritative_task_continuity_restored
-            )
+            verdict.continuity_class = InFlightTaskContinuityClass.authoritative_task_continuity_restored
             verdict.reason = (
                 f"All {evidence.total_evaluated} evaluated task(s) were already "
                 "present in the live lifecycle registry when recovery ran — no "
@@ -782,28 +772,21 @@ class InFlightTaskContinuityTaxonomyContract:
             )
         if evidence.recoverable_count > 0:
             downgrade_parts.append(
-                f"recoverable_count={evidence.recoverable_count} — "
-                "replay/reconnect still needed for some tasks"
+                f"recoverable_count={evidence.recoverable_count} — " "replay/reconnect still needed for some tasks"
             )
         if evidence.interrupted_count > 0:
             downgrade_parts.append(
-                f"interrupted_count={evidence.interrupted_count} — "
-                "some tasks require re-issuance"
+                f"interrupted_count={evidence.interrupted_count} — " "some tasks require re-issuance"
             )
         if evidence.abandoned_count > 0:
-            downgrade_parts.append(
-                f"abandoned_count={evidence.abandoned_count} — "
-                "some tasks are terminal"
-            )
+            downgrade_parts.append(f"abandoned_count={evidence.abandoned_count} — " "some tasks are terminal")
         if evidence.needs_reconcile_count > 0:
             downgrade_parts.append(
-                f"needs_reconcile_count={evidence.needs_reconcile_count} — "
-                "some tasks have snapshot integrity issues"
+                f"needs_reconcile_count={evidence.needs_reconcile_count} — " "some tasks have snapshot integrity issues"
             )
         if evidence.ambiguous_count > 0:
             downgrade_parts.append(
-                f"ambiguous_count={evidence.ambiguous_count} — "
-                "some tasks have insufficient information"
+                f"ambiguous_count={evidence.ambiguous_count} — " "some tasks have insufficient information"
             )
 
         # ------------------------------------------------------------------
@@ -818,9 +801,7 @@ class InFlightTaskContinuityTaxonomyContract:
         #   partial_recovery_only does not further downgrade this class.
         # ------------------------------------------------------------------
         if evidence.recoverable_count > 0:
-            verdict.continuity_class = (
-                InFlightTaskContinuityClass.resumable_with_replay_or_reconcile
-            )
+            verdict.continuity_class = InFlightTaskContinuityClass.resumable_with_replay_or_reconcile
             verdict.reason = (
                 f"{evidence.recoverable_count} task(s) have state present in "
                 "the live registry with dispatch confirmed, but execution "
@@ -849,9 +830,7 @@ class InFlightTaskContinuityTaxonomyContract:
         #   initiation alone does not elevate to resumable_with_replay_or_reconcile.
         # ------------------------------------------------------------------
         if evidence.non_terminal_count > 0:
-            verdict.continuity_class = (
-                InFlightTaskContinuityClass.state_restored_not_resumed
-            )
+            verdict.continuity_class = InFlightTaskContinuityClass.state_restored_not_resumed
             verdict.reason = (
                 "Task state is present in the registry or snapshot but execution "
                 "continuity has not been confirmed and no active replay/reconnect "
@@ -881,9 +860,7 @@ class InFlightTaskContinuityTaxonomyContract:
         #   history_or_evidence_only.
         # ------------------------------------------------------------------
         if evidence.result_or_history_visible:
-            verdict.continuity_class = (
-                InFlightTaskContinuityClass.history_or_evidence_only
-            )
+            verdict.continuity_class = InFlightTaskContinuityClass.history_or_evidence_only
             verdict.reason = (
                 "No live task state is present in the registry, but completed "
                 "task results or historical records are visible in the durable "

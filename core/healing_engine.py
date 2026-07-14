@@ -25,12 +25,8 @@ class SelfHealingEngine:
         return {
             "status": "healthy",
             "nodes_monitored": len(self._node_health),
-            "nodes_healthy": sum(
-                1 for n in self._node_health.values() if n.get("status") == "healthy"
-            ),
-            "nodes_degraded": sum(
-                1 for n in self._node_health.values() if n.get("status") == "degraded"
-            ),
+            "nodes_healthy": sum(1 for n in self._node_health.values() if n.get("status") == "healthy"),
+            "nodes_degraded": sum(1 for n in self._node_health.values() if n.get("status") == "degraded"),
             "heal_count": len(self._heal_history),
             "timestamp": time.time(),
         }

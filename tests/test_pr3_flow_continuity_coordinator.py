@@ -73,7 +73,6 @@ from typing import Any, Dict, List, Optional
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # A — Module importable; sentinels present
 # ---------------------------------------------------------------------------
@@ -87,6 +86,7 @@ class TestModuleSentinels:
         from core.flow_continuity_coordinator import (
             FLOW_CONTINUITY_COORDINATOR_AUTHORITY,
         )
+
         assert isinstance(FLOW_CONTINUITY_COORDINATOR_AUTHORITY, str)
         assert len(FLOW_CONTINUITY_COORDINATOR_AUTHORITY) > 0
         assert "FlowContinuityCoordinator" in FLOW_CONTINUITY_COORDINATOR_AUTHORITY
@@ -95,9 +95,13 @@ class TestModuleSentinels:
         from core.flow_continuity_coordinator import (
             FLOW_CONTINUITY_COORDINATOR_PR3_SENTINEL,
         )
+
         assert isinstance(FLOW_CONTINUITY_COORDINATOR_PR3_SENTINEL, str)
         assert "package=3" in FLOW_CONTINUITY_COORDINATOR_PR3_SENTINEL
-        assert "PR-3" in FLOW_CONTINUITY_COORDINATOR_PR3_SENTINEL or "package=3" in FLOW_CONTINUITY_COORDINATOR_PR3_SENTINEL
+        assert (
+            "PR-3" in FLOW_CONTINUITY_COORDINATOR_PR3_SENTINEL
+            or "package=3" in FLOW_CONTINUITY_COORDINATOR_PR3_SENTINEL
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -108,16 +112,17 @@ class TestModuleSentinels:
 class TestPolicySentinels:
     def _import_all_sentinels(self):
         from core.flow_continuity_coordinator import (
-            FLOW_CONTINUITY_COORDINATOR_AUTHORITY,
-            FLOW_CONTINUITY_COORDINATOR_PR3_SENTINEL,
             CONTINUITY_DECISION_IS_UNIFIED_ENTRY_POINT_POLICY,
             COORDINATOR_DOES_NOT_OWN_REGISTRY_STATE_POLICY,
-            FAIL_CLOSED_IS_SAFE_DEFAULT_POLICY,
-            STALE_IDENTITY_REJECTION_IS_NON_DESTRUCTIVE_POLICY,
             DUPLICATE_SIGNAL_SUPPRESSION_PRECEDES_RECONCILIATION_POLICY,
+            FAIL_CLOSED_IS_SAFE_DEFAULT_POLICY,
+            FLOW_CONTINUITY_COORDINATOR_AUTHORITY,
+            FLOW_CONTINUITY_COORDINATOR_PR3_SENTINEL,
             PARTIAL_RESULT_PRESERVATION_IS_COORDINATOR_OWNED_POLICY,
+            STALE_IDENTITY_REJECTION_IS_NON_DESTRUCTIVE_POLICY,
             V2_RESTART_CONTINUITY_USES_DURABLE_STORE_POLICY,
         )
+
         return [
             FLOW_CONTINUITY_COORDINATOR_AUTHORITY,
             FLOW_CONTINUITY_COORDINATOR_PR3_SENTINEL,
@@ -144,16 +149,19 @@ class TestPolicySentinels:
         from core.flow_continuity_coordinator import (
             CONTINUITY_DECISION_IS_UNIFIED_ENTRY_POINT_POLICY,
         )
+
         assert "FlowContinuityCoordinator" in CONTINUITY_DECISION_IS_UNIFIED_ENTRY_POINT_POLICY
 
     def test_fail_closed_policy_mentions_fail_closed(self):
         from core.flow_continuity_coordinator import FAIL_CLOSED_IS_SAFE_DEFAULT_POLICY
+
         assert "fail_closed" in FAIL_CLOSED_IS_SAFE_DEFAULT_POLICY
 
     def test_stale_rejection_policy_mentions_non_destructive(self):
         from core.flow_continuity_coordinator import (
             STALE_IDENTITY_REJECTION_IS_NON_DESTRUCTIVE_POLICY,
         )
+
         assert (
             "non-destructive" in STALE_IDENTITY_REJECTION_IS_NON_DESTRUCTIVE_POLICY
             or "non_destructive" in STALE_IDENTITY_REJECTION_IS_NON_DESTRUCTIVE_POLICY
@@ -163,18 +171,21 @@ class TestPolicySentinels:
         from core.flow_continuity_coordinator import (
             DUPLICATE_SIGNAL_SUPPRESSION_PRECEDES_RECONCILIATION_POLICY,
         )
+
         assert "reconciler" in DUPLICATE_SIGNAL_SUPPRESSION_PRECEDES_RECONCILIATION_POLICY.lower()
 
     def test_partial_result_policy_mentions_preserve(self):
         from core.flow_continuity_coordinator import (
             PARTIAL_RESULT_PRESERVATION_IS_COORDINATOR_OWNED_POLICY,
         )
+
         assert "preserve" in PARTIAL_RESULT_PRESERVATION_IS_COORDINATOR_OWNED_POLICY.lower()
 
     def test_v2_restart_policy_mentions_durable_store(self):
         from core.flow_continuity_coordinator import (
             V2_RESTART_CONTINUITY_USES_DURABLE_STORE_POLICY,
         )
+
         assert "durable" in V2_RESTART_CONTINUITY_USES_DURABLE_STORE_POLICY.lower()
 
 
@@ -186,6 +197,7 @@ class TestPolicySentinels:
 class TestContinuityDecisionEnum:
     def test_all_7_values_present(self):
         from core.flow_continuity_coordinator import ContinuityDecision
+
         expected = {
             "new_attachment",
             "continuity_resume",
@@ -200,30 +212,37 @@ class TestContinuityDecisionEnum:
 
     def test_new_attachment_value(self):
         from core.flow_continuity_coordinator import ContinuityDecision
+
         assert ContinuityDecision.new_attachment.value == "new_attachment"
 
     def test_continuity_resume_value(self):
         from core.flow_continuity_coordinator import ContinuityDecision
+
         assert ContinuityDecision.continuity_resume.value == "continuity_resume"
 
     def test_reject_stale_identity_value(self):
         from core.flow_continuity_coordinator import ContinuityDecision
+
         assert ContinuityDecision.reject_stale_identity.value == "reject_stale_identity"
 
     def test_dedupe_duplicate_signal_value(self):
         from core.flow_continuity_coordinator import ContinuityDecision
+
         assert ContinuityDecision.dedupe_duplicate_signal.value == "dedupe_duplicate_signal"
 
     def test_preserve_partial_and_wait_value(self):
         from core.flow_continuity_coordinator import ContinuityDecision
+
         assert ContinuityDecision.preserve_partial_and_wait.value == "preserve_partial_and_wait"
 
     def test_require_review_value(self):
         from core.flow_continuity_coordinator import ContinuityDecision
+
         assert ContinuityDecision.require_review.value == "require_review"
 
     def test_fail_closed_value(self):
         from core.flow_continuity_coordinator import ContinuityDecision
+
         assert ContinuityDecision.fail_closed.value == "fail_closed"
 
 
@@ -235,6 +254,7 @@ class TestContinuityDecisionEnum:
 class TestContinuityEventKindEnum:
     def test_all_8_values_present(self):
         from core.flow_continuity_coordinator import ContinuityEventKind
+
         expected = {
             "fresh_attach",
             "transport_reconnect",
@@ -257,6 +277,7 @@ class TestContinuityEventKindEnum:
 class TestContinuityEventContext:
     def test_default_fields(self):
         from core.flow_continuity_coordinator import ContinuityEventContext, ContinuityEventKind
+
         ctx = ContinuityEventContext()
         assert ctx.event_kind == ContinuityEventKind.unknown
         assert ctx.device_id == ""
@@ -269,6 +290,7 @@ class TestContinuityEventContext:
 
     def test_to_dict_contains_expected_keys(self):
         from core.flow_continuity_coordinator import ContinuityEventContext, ContinuityEventKind
+
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.fresh_attach,
             device_id="dev-1",
@@ -276,13 +298,20 @@ class TestContinuityEventContext:
         )
         d = ctx.to_dict()
         for key in (
-            "event_kind", "device_id", "session_id", "runtime_attachment_session_id",
-            "contract_id", "signal_key", "is_partial_result", "metadata",
+            "event_kind",
+            "device_id",
+            "session_id",
+            "runtime_attachment_session_id",
+            "contract_id",
+            "signal_key",
+            "is_partial_result",
+            "metadata",
         ):
             assert key in d
 
     def test_to_json_is_valid_json(self):
         from core.flow_continuity_coordinator import ContinuityEventContext, ContinuityEventKind
+
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.fresh_attach,
             device_id="dev-1",
@@ -300,10 +329,11 @@ class TestContinuityEventContext:
 class TestContinuityDecisionArtifact:
     def test_default_fields(self):
         from core.flow_continuity_coordinator import (
-            ContinuityDecisionArtifact,
             ContinuityDecision,
+            ContinuityDecisionArtifact,
             ContinuityEventKind,
         )
+
         a = ContinuityDecisionArtifact()
         assert isinstance(a.artifact_id, str)
         assert len(a.artifact_id) > 0
@@ -313,19 +343,34 @@ class TestContinuityDecisionArtifact:
 
     def test_to_dict_contains_expected_keys(self):
         from core.flow_continuity_coordinator import ContinuityDecisionArtifact
+
         a = ContinuityDecisionArtifact()
         d = a.to_dict()
         for key in (
-            "artifact_id", "event_kind", "decision", "policy_reference", "detail",
-            "device_id", "session_id", "runtime_attachment_session_id",
-            "contract_id", "flow_id", "flow_lineage_id", "registry_outcome",
-            "tracking_record_phase", "flow_entity_phase", "contract_verified",
-            "is_resumable", "extension_payload", "timestamp",
+            "artifact_id",
+            "event_kind",
+            "decision",
+            "policy_reference",
+            "detail",
+            "device_id",
+            "session_id",
+            "runtime_attachment_session_id",
+            "contract_id",
+            "flow_id",
+            "flow_lineage_id",
+            "registry_outcome",
+            "tracking_record_phase",
+            "flow_entity_phase",
+            "contract_verified",
+            "is_resumable",
+            "extension_payload",
+            "timestamp",
         ):
             assert key in d, f"missing key: {key}"
 
     def test_to_json_is_valid_json(self):
-        from core.flow_continuity_coordinator import ContinuityDecisionArtifact, ContinuityDecision
+        from core.flow_continuity_coordinator import ContinuityDecision, ContinuityDecisionArtifact
+
         a = ContinuityDecisionArtifact(decision=ContinuityDecision.new_attachment)
         parsed = json.loads(a.to_json())
         assert parsed["decision"] == "new_attachment"
@@ -339,10 +384,11 @@ class TestContinuityDecisionArtifact:
 class TestArtifactRoundTrip:
     def test_round_trip_preserves_all_fields(self):
         from core.flow_continuity_coordinator import (
-            ContinuityDecisionArtifact,
             ContinuityDecision,
+            ContinuityDecisionArtifact,
             ContinuityEventKind,
         )
+
         original = ContinuityDecisionArtifact(
             event_kind=ContinuityEventKind.transport_reconnect,
             decision=ContinuityDecision.continuity_resume,
@@ -373,6 +419,7 @@ class TestArtifactRoundTrip:
 
     def test_from_dict_tolerates_unknown_fields(self):
         from core.flow_continuity_coordinator import ContinuityDecisionArtifact
+
         d = ContinuityDecisionArtifact().to_dict()
         d["unknown_future_field"] = "some_value"
         # Should not raise
@@ -381,9 +428,10 @@ class TestArtifactRoundTrip:
 
     def test_from_dict_defaults_missing_fields(self):
         from core.flow_continuity_coordinator import (
-            ContinuityDecisionArtifact,
             ContinuityDecision,
+            ContinuityDecisionArtifact,
         )
+
         restored = ContinuityDecisionArtifact.from_dict({})
         assert restored.decision == ContinuityDecision.fail_closed
 
@@ -396,16 +444,19 @@ class TestArtifactRoundTrip:
 class TestToJson:
     def test_event_context_to_json(self):
         from core.flow_continuity_coordinator import ContinuityEventContext
+
         ctx = ContinuityEventContext()
         assert json.loads(ctx.to_json())
 
     def test_decision_artifact_to_json(self):
         from core.flow_continuity_coordinator import ContinuityDecisionArtifact
+
         a = ContinuityDecisionArtifact()
         assert json.loads(a.to_json())
 
     def test_coordinator_snapshot_to_json(self):
         from core.flow_continuity_coordinator import ContinuityCoordinatorSnapshot
+
         snap = ContinuityCoordinatorSnapshot()
         assert json.loads(snap.to_json())
 
@@ -418,6 +469,7 @@ class TestToJson:
 class TestCoordinatorSnapshot:
     def test_to_dict_contains_expected_keys(self):
         from core.flow_continuity_coordinator import ContinuityCoordinatorSnapshot
+
         snap = ContinuityCoordinatorSnapshot(
             total_decisions=5,
             decision_counts={"new_attachment": 3, "continuity_resume": 2},
@@ -426,8 +478,12 @@ class TestCoordinatorSnapshot:
         )
         d = snap.to_dict()
         for key in (
-            "snapshot_id", "total_decisions", "decision_counts",
-            "recent_artifacts", "policy_sentinels", "timestamp",
+            "snapshot_id",
+            "total_decisions",
+            "decision_counts",
+            "recent_artifacts",
+            "policy_sentinels",
+            "timestamp",
         ):
             assert key in d
 
@@ -440,16 +496,19 @@ class TestCoordinatorSnapshot:
 class TestCoordinatorInstantiation:
     def test_default_capacity(self):
         from core.flow_continuity_coordinator import FlowContinuityCoordinator
+
         c = FlowContinuityCoordinator()
         assert c._capacity == 256
 
     def test_custom_capacity(self):
         from core.flow_continuity_coordinator import FlowContinuityCoordinator
+
         c = FlowContinuityCoordinator(capacity=64)
         assert c._capacity == 64
 
     def test_initial_ring_buffer_empty(self):
         from core.flow_continuity_coordinator import FlowContinuityCoordinator
+
         c = FlowContinuityCoordinator()
         assert len(c.list_recent()) == 0
 
@@ -462,14 +521,17 @@ class TestCoordinatorInstantiation:
 class TestSingletonManagement:
     def setup_method(self):
         from core.flow_continuity_coordinator import reset_flow_continuity_coordinator
+
         reset_flow_continuity_coordinator()
 
     def teardown_method(self):
         from core.flow_continuity_coordinator import reset_flow_continuity_coordinator
+
         reset_flow_continuity_coordinator()
 
     def test_singleton_returns_same_instance(self):
         from core.flow_continuity_coordinator import get_flow_continuity_coordinator
+
         a = get_flow_continuity_coordinator()
         b = get_flow_continuity_coordinator()
         assert a is b
@@ -479,6 +541,7 @@ class TestSingletonManagement:
             get_flow_continuity_coordinator,
             reset_flow_continuity_coordinator,
         )
+
         a = get_flow_continuity_coordinator()
         reset_flow_continuity_coordinator()
         b = get_flow_continuity_coordinator()
@@ -489,8 +552,10 @@ class TestSingletonManagement:
 # Test helpers — isolated coordinator factory
 # ---------------------------------------------------------------------------
 
+
 def _fresh_coordinator():
     from core.flow_continuity_coordinator import FlowContinuityCoordinator
+
     return FlowContinuityCoordinator()
 
 
@@ -502,10 +567,11 @@ def _fresh_coordinator():
 class TestDecideAttach:
     def test_no_prior_entry_produces_new_attachment(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = _fresh_coordinator()
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.fresh_attach,
@@ -519,10 +585,11 @@ class TestDecideAttach:
 
     def test_prior_active_entry_produces_continuity_resume(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = _fresh_coordinator()
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.fresh_attach,
@@ -536,10 +603,11 @@ class TestDecideAttach:
 
     def test_prior_replaced_entry_produces_new_attachment(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = _fresh_coordinator()
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.fresh_attach,
@@ -553,10 +621,11 @@ class TestDecideAttach:
 
     def test_registry_entry_not_created_produces_fail_closed(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = _fresh_coordinator()
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.fresh_attach,
@@ -569,10 +638,11 @@ class TestDecideAttach:
 
     def test_prior_detached_entry_produces_continuity_resume(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = _fresh_coordinator()
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.fresh_attach,
@@ -586,10 +656,11 @@ class TestDecideAttach:
 
     def test_prior_invalidated_entry_produces_new_attachment(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = _fresh_coordinator()
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.fresh_attach,
@@ -606,6 +677,7 @@ class TestDecideAttach:
             ContinuityEventContext,
             ContinuityEventKind,
         )
+
         c = _fresh_coordinator()
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.fresh_attach,
@@ -639,10 +711,11 @@ class TestDecideReconnect:
 
     def test_registry_unavailable_produces_fail_closed(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = _fresh_coordinator()
         # No registry modules available — stays fail_closed
         ctx = ContinuityEventContext(
@@ -660,10 +733,11 @@ class TestDecideReconnect:
 
     def test_continuity_resume_with_attachment_id_gives_continuity_resume(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = self._make_coordinator_with_mock_registry("continuity_resume")
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.transport_reconnect,
@@ -676,10 +750,11 @@ class TestDecideReconnect:
 
     def test_continuity_resume_without_attachment_id_gives_require_review(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = self._make_coordinator_with_mock_registry("continuity_resume")
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.transport_reconnect,
@@ -691,10 +766,11 @@ class TestDecideReconnect:
 
     def test_new_attachment_gives_new_attachment(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = self._make_coordinator_with_mock_registry("new_attachment")
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.transport_reconnect,
@@ -706,10 +782,11 @@ class TestDecideReconnect:
 
     def test_unknown_registry_outcome_gives_fail_closed(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = self._make_coordinator_with_mock_registry("some_unknown_outcome")
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.transport_reconnect,
@@ -728,10 +805,11 @@ class TestDecideReconnect:
 class TestDecideReattachProcessRecreation:
     def test_active_and_id_matched_gives_continuity_resume(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = _fresh_coordinator()
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.process_recreation_reattach,
@@ -747,10 +825,11 @@ class TestDecideReattachProcessRecreation:
 
     def test_active_and_id_not_matched_gives_new_attachment(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = _fresh_coordinator()
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.process_recreation_reattach,
@@ -766,10 +845,11 @@ class TestDecideReattachProcessRecreation:
 
     def test_terminal_entry_gives_new_attachment(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = _fresh_coordinator()
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.process_recreation_reattach,
@@ -785,10 +865,11 @@ class TestDecideReattachProcessRecreation:
 
     def test_prior_state_active_inferred_from_context(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = _fresh_coordinator()
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.process_recreation_reattach,
@@ -815,6 +896,7 @@ class TestDecideStaleIdentity:
             def get_by_runtime_attachment_session_id(self, att_id, active_only=True):
                 class _Entry:
                     attachment_state = type("S", (), {"value": session_state})()
+
                 return _Entry() if session_state else None
 
             def get_active_for_device(self, device_id):
@@ -827,10 +909,11 @@ class TestDecideStaleIdentity:
 
     def test_session_replaced_gives_reject_stale_identity(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = self._make_coordinator_with_mock_session_state("replaced")
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.stale_identity,
@@ -842,10 +925,11 @@ class TestDecideStaleIdentity:
 
     def test_session_active_gives_continuity_resume(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = self._make_coordinator_with_mock_session_state("active")
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.stale_identity,
@@ -857,10 +941,11 @@ class TestDecideStaleIdentity:
 
     def test_no_registry_no_identifiers_gives_require_review(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = _fresh_coordinator()  # no registry available
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.stale_identity,
@@ -882,10 +967,11 @@ class TestDecideStaleIdentity:
 class TestDecideDuplicateSignal:
     def test_no_signal_key_gives_continuity_resume(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = _fresh_coordinator()
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.duplicate_signal,
@@ -898,10 +984,11 @@ class TestDecideDuplicateSignal:
 
     def test_tracker_unavailable_gives_require_review(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = _fresh_coordinator()  # tracker not available
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.duplicate_signal,
@@ -940,10 +1027,11 @@ class TestDecideDuplicateSignal:
 
     def test_novel_signal_gives_continuity_resume(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = self._make_coordinator_with_mock_tracker(seen_keys=["other-key"])
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.duplicate_signal,
@@ -955,10 +1043,11 @@ class TestDecideDuplicateSignal:
 
     def test_already_seen_signal_gives_dedupe(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = self._make_coordinator_with_mock_tracker(seen_keys=["dup-key-1"])
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.duplicate_signal,
@@ -996,10 +1085,11 @@ class TestDecidePartialResult:
 
     def test_tracker_unavailable_gives_require_review(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = _fresh_coordinator()
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.partial_result,
@@ -1014,10 +1104,11 @@ class TestDecidePartialResult:
 
     def test_terminal_phase_gives_reject_stale_identity(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = self._make_coordinator_with_mock_tracker("completed")
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.partial_result,
@@ -1029,10 +1120,11 @@ class TestDecidePartialResult:
 
     def test_executing_phase_gives_preserve_partial_and_wait(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = self._make_coordinator_with_mock_tracker("executing")
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.partial_result,
@@ -1046,9 +1138,9 @@ class TestDecidePartialResult:
 
     def test_no_tracking_record_gives_preserve_partial_and_wait(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
             FlowContinuityCoordinator,
         )
 
@@ -1075,10 +1167,11 @@ class TestDecidePartialResult:
 class TestDecideV2RestartRecovery:
     def test_recovery_not_completed_gives_require_review(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = _fresh_coordinator()
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.v2_restart_recovery,
@@ -1090,10 +1183,11 @@ class TestDecideV2RestartRecovery:
 
     def test_no_durable_store_gives_new_attachment(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = _fresh_coordinator()
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.v2_restart_recovery,
@@ -1105,9 +1199,9 @@ class TestDecideV2RestartRecovery:
 
     def test_durable_store_with_active_flow_gives_continuity_resume(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
             FlowContinuityCoordinator,
         )
 
@@ -1146,10 +1240,11 @@ class TestDecideV2RestartRecovery:
 class TestDecideDispatch:
     def test_unknown_event_kind_gives_fail_closed(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = _fresh_coordinator()
         ctx = ContinuityEventContext(event_kind=ContinuityEventKind.unknown)
         artifact = c.decide(ctx)
@@ -1157,10 +1252,11 @@ class TestDecideDispatch:
 
     def test_dispatches_fresh_attach(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = _fresh_coordinator()
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.fresh_attach,
@@ -1180,6 +1276,7 @@ class TestDecideDispatch:
             ContinuityEventContext,
             ContinuityEventKind,
         )
+
         c = _fresh_coordinator()
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.transport_reconnect,
@@ -1193,6 +1290,7 @@ class TestDecideDispatch:
             ContinuityEventContext,
             ContinuityEventKind,
         )
+
         c = _fresh_coordinator()
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.partial_result,
@@ -1211,6 +1309,7 @@ class TestDecideDispatch:
 class TestBuildSnapshot:
     def test_empty_coordinator_snapshot(self):
         from core.flow_continuity_coordinator import FlowContinuityCoordinator
+
         c = FlowContinuityCoordinator()
         snap = c.build_snapshot()
         assert snap.total_decisions == 0
@@ -1220,10 +1319,11 @@ class TestBuildSnapshot:
 
     def test_snapshot_counts_decisions(self):
         from core.flow_continuity_coordinator import (
+            ContinuityDecision,
             ContinuityEventContext,
             ContinuityEventKind,
-            ContinuityDecision,
         )
+
         c = _fresh_coordinator()
         # Make 3 decisions
         for _ in range(2):
@@ -1256,6 +1356,7 @@ class TestListRecent:
             ContinuityEventContext,
             ContinuityEventKind,
         )
+
         c = _fresh_coordinator()
         device_ids = [f"dev-{i}" for i in range(5)]
         for did in device_ids:
@@ -1284,6 +1385,7 @@ class TestGetByArtifactId:
             ContinuityEventContext,
             ContinuityEventKind,
         )
+
         c = _fresh_coordinator()
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.fresh_attach,
@@ -1308,17 +1410,20 @@ class TestGetByArtifactId:
 class TestConvenienceWrappers:
     def setup_method(self):
         from core.flow_continuity_coordinator import reset_flow_continuity_coordinator
+
         reset_flow_continuity_coordinator()
 
     def teardown_method(self):
         from core.flow_continuity_coordinator import reset_flow_continuity_coordinator
+
         reset_flow_continuity_coordinator()
 
     def test_coordinate_attach(self):
         from core.flow_continuity_coordinator import (
-            coordinate_attach,
             ContinuityDecisionArtifact,
+            coordinate_attach,
         )
+
         c = _fresh_coordinator()
         artifact = coordinate_attach(
             "dev-1",
@@ -1332,9 +1437,10 @@ class TestConvenienceWrappers:
 
     def test_coordinate_reconnect(self):
         from core.flow_continuity_coordinator import (
-            coordinate_reconnect,
             ContinuityDecisionArtifact,
+            coordinate_reconnect,
         )
+
         c = _fresh_coordinator()
         artifact = coordinate_reconnect("dev-1", "att-1", coordinator=c)
         assert isinstance(artifact, ContinuityDecisionArtifact)
@@ -1355,10 +1461,11 @@ class TestConvenienceWrappers:
 
     def test_coordinate_reattach_process_recreation(self):
         from core.flow_continuity_coordinator import (
-            coordinate_reattach_process_recreation,
-            ContinuityDecisionArtifact,
             ContinuityDecision,
+            ContinuityDecisionArtifact,
+            coordinate_reattach_process_recreation,
         )
+
         c = _fresh_coordinator()
         artifact = coordinate_reattach_process_recreation(
             "dev-1",
@@ -1372,9 +1479,10 @@ class TestConvenienceWrappers:
 
     def test_coordinate_stale_identity(self):
         from core.flow_continuity_coordinator import (
-            coordinate_stale_identity,
             ContinuityDecisionArtifact,
+            coordinate_stale_identity,
         )
+
         c = _fresh_coordinator()
         artifact = coordinate_stale_identity(
             session_id="sess-1",
@@ -1385,18 +1493,20 @@ class TestConvenienceWrappers:
 
     def test_coordinate_duplicate_signal(self):
         from core.flow_continuity_coordinator import (
-            coordinate_duplicate_signal,
             ContinuityDecisionArtifact,
+            coordinate_duplicate_signal,
         )
+
         c = _fresh_coordinator()
         artifact = coordinate_duplicate_signal("sig-key-1", session_id="sess-1", coordinator=c)
         assert isinstance(artifact, ContinuityDecisionArtifact)
 
     def test_coordinate_partial_result(self):
         from core.flow_continuity_coordinator import (
-            coordinate_partial_result,
             ContinuityDecisionArtifact,
+            coordinate_partial_result,
         )
+
         c = _fresh_coordinator()
         artifact = coordinate_partial_result(
             session_id="sess-1",
@@ -1407,9 +1517,10 @@ class TestConvenienceWrappers:
 
     def test_coordinate_v2_restart_recovery(self):
         from core.flow_continuity_coordinator import (
-            coordinate_v2_restart_recovery,
             ContinuityDecisionArtifact,
+            coordinate_v2_restart_recovery,
         )
+
         c = _fresh_coordinator()
         artifact = coordinate_v2_restart_recovery(
             flow_lineage_id="lineage-1",
@@ -1427,9 +1538,10 @@ class TestConvenienceWrappers:
 class TestIsResumable:
     def test_continuity_resume_is_resumable(self):
         from core.flow_continuity_coordinator import (
-            ContinuityDecisionArtifact,
             ContinuityDecision,
+            ContinuityDecisionArtifact,
         )
+
         a = ContinuityDecisionArtifact(decision=ContinuityDecision.continuity_resume)
         # is_resumable is set by _base_artifact, not in constructor
         # Verify via the coordinator
@@ -1437,6 +1549,7 @@ class TestIsResumable:
             ContinuityEventContext,
             ContinuityEventKind,
         )
+
         c = _fresh_coordinator()
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.fresh_attach,
@@ -1476,6 +1589,7 @@ class TestIsResumable:
             ContinuityEventContext,
             ContinuityEventKind,
         )
+
         c = _fresh_coordinator()
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.fresh_attach,
@@ -1491,6 +1605,7 @@ class TestIsResumable:
             ContinuityEventContext,
             ContinuityEventKind,
         )
+
         c = _fresh_coordinator()
         ctx = ContinuityEventContext(
             event_kind=ContinuityEventKind.fresh_attach,
@@ -1509,24 +1624,26 @@ class TestIsResumable:
 class TestFromString:
     def test_known_decision_value(self):
         from core.flow_continuity_coordinator import ContinuityDecision
+
         assert ContinuityDecision.from_string("new_attachment") == ContinuityDecision.new_attachment
         assert ContinuityDecision.from_string("continuity_resume") == ContinuityDecision.continuity_resume
         assert ContinuityDecision.from_string("fail_closed") == ContinuityDecision.fail_closed
 
     def test_unknown_decision_value_gives_fail_closed(self):
         from core.flow_continuity_coordinator import ContinuityDecision
+
         assert ContinuityDecision.from_string("not_a_valid_decision") == ContinuityDecision.fail_closed
 
     def test_non_string_gives_fail_closed(self):
         from core.flow_continuity_coordinator import ContinuityDecision
+
         assert ContinuityDecision.from_string(None) == ContinuityDecision.fail_closed
         assert ContinuityDecision.from_string(42) == ContinuityDecision.fail_closed
 
     def test_from_string_with_custom_default(self):
         from core.flow_continuity_coordinator import ContinuityDecision
-        result = ContinuityDecision.from_string(
-            "unknown_value", default=ContinuityDecision.require_review
-        )
+
+        result = ContinuityDecision.from_string("unknown_value", default=ContinuityDecision.require_review)
         assert result == ContinuityDecision.require_review
 
 
@@ -1538,15 +1655,18 @@ class TestFromString:
 class TestEventKindFromString:
     def test_known_value(self):
         from core.flow_continuity_coordinator import ContinuityEventKind
+
         assert ContinuityEventKind.from_string("fresh_attach") == ContinuityEventKind.fresh_attach
         assert ContinuityEventKind.from_string("partial_result") == ContinuityEventKind.partial_result
 
     def test_unknown_value_gives_unknown(self):
         from core.flow_continuity_coordinator import ContinuityEventKind
+
         assert ContinuityEventKind.from_string("foobar") == ContinuityEventKind.unknown
 
     def test_non_string_gives_unknown(self):
         from core.flow_continuity_coordinator import ContinuityEventKind
+
         assert ContinuityEventKind.from_string(None) == ContinuityEventKind.unknown
 
 
@@ -1558,10 +1678,11 @@ class TestEventKindFromString:
 class TestRingBufferCapacity:
     def test_oldest_evicted_when_full(self):
         from core.flow_continuity_coordinator import (
-            FlowContinuityCoordinator,
             ContinuityEventContext,
             ContinuityEventKind,
+            FlowContinuityCoordinator,
         )
+
         capacity = 3
         c = FlowContinuityCoordinator(capacity=capacity)
         for i in range(capacity + 2):
@@ -1584,10 +1705,11 @@ class TestRingBufferCapacity:
 class TestArtifactRoundTripFull:
     def test_all_fields_preserved(self):
         from core.flow_continuity_coordinator import (
-            ContinuityDecisionArtifact,
             ContinuityDecision,
+            ContinuityDecisionArtifact,
             ContinuityEventKind,
         )
+
         original = ContinuityDecisionArtifact(
             event_kind=ContinuityEventKind.stale_identity,
             decision=ContinuityDecision.reject_stale_identity,
@@ -1636,6 +1758,7 @@ class TestRingBufferRecording:
             ContinuityEventContext,
             ContinuityEventKind,
         )
+
         c = _fresh_coordinator()
         n = 5
         for i in range(n):

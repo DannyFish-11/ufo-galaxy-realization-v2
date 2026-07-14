@@ -100,8 +100,7 @@ __all__ = [
 # ---------------------------------------------------------------------------
 
 CAPABILITY_GRAPH_SELECTION_AUTHORITY: str = (
-    "core.capability_graph_selection"
-    " — canonical capability selection plane (PR-D)"
+    "core.capability_graph_selection" " — canonical capability selection plane (PR-D)"
 )
 """Sentinel: this module is the canonical capability selection plane.
 
@@ -320,8 +319,8 @@ def discover_providers(
     """
     try:
         from core.capability_assimilation import (
-            get_capability_assimilation_layer,
             AssimilationPresenceState,
+            get_capability_assimilation_layer,
         )
     except Exception as exc:  # pragma: no cover
         logger.warning("capability_graph_selection: assimilation layer unavailable — %s", exc)

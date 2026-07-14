@@ -83,25 +83,25 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.llm.route_authority import get_llm_route_authority
+
             router_inst = get_llm_route_authority().execution_router
             status = router_inst.get_status()
             providers = router_inst.get_provider_status()
             default_model = router_inst.get_default_model()
 
             # 构建 fallback 列表：把非 primary 的、可用的 provider 标为 fallback
-            fallbacks = [
-                p for p in providers
-                if not p.get("is_primary", False) and p.get("available", False)
-            ]
+            fallbacks = [p for p in providers if not p.get("is_primary", False) and p.get("available", False)]
 
-            return JSONResponse({
-                "default_model": default_model,
-                "active_provider": status.get("active_provider"),
-                "providers": providers,
-                "fallbacks": fallbacks,
-                "router_stats": status,
-                "uptime_seconds": round(_time.time() - _startup_time, 1),
-            })
+            return JSONResponse(
+                {
+                    "default_model": default_model,
+                    "active_provider": status.get("active_provider"),
+                    "providers": providers,
+                    "fallbacks": fallbacks,
+                    "router_stats": status,
+                    "uptime_seconds": round(_time.time() - _startup_time, 1),
+                }
+            )
         except Exception as exc:
             logger.warning("observability/model-route error: %s", exc)
             return JSONResponse(
@@ -124,6 +124,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         active_ws: list = []
         try:
             from core.routes._shared import connection_manager
+
             active_ws = connection_manager.online_device_ids()
         except Exception as exc:
             logger.debug("gateway_status ws error: %s", exc)
@@ -132,26 +133,29 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         online_count = 0
         try:
             from core.device_registry import DeviceRegistry
+
             registry = DeviceRegistry.get_instance()
             for dev in registry.list_devices():
                 online = dev.is_online()
                 # Serialize capabilities: DeviceCapability objects → strings / dicts
                 caps = []
-                for c in (dev.capabilities or []):
+                for c in dev.capabilities or []:
                     if hasattr(c, "to_dict"):
                         caps.append(c.to_dict())
                     elif hasattr(c, "name"):
                         caps.append(c.name)
                     else:
                         caps.append(str(c))
-                registered_devices.append({
-                    "device_id": dev.device_id,
-                    "device_type": dev.device_type,
-                    "online": online,
-                    "status": dev.status.value,
-                    "last_seen": dev.last_seen,
-                    "capabilities": caps,
-                })
+                registered_devices.append(
+                    {
+                        "device_id": dev.device_id,
+                        "device_type": dev.device_type,
+                        "online": online,
+                        "status": dev.status.value,
+                        "last_seen": dev.last_seen,
+                        "capabilities": caps,
+                    }
+                )
                 if online:
                     online_count += 1
         except Exception as exc:
@@ -160,18 +164,21 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         router_stats: dict = {}
         try:
             from core.command_router import get_command_router
+
             router_stats = get_command_router().get_stats()
         except Exception as exc:
             logger.debug("gateway_status router error: %s", exc)
 
-        return JSONResponse({
-            "websocket_active_devices": active_ws,
-            "websocket_active_count": len(active_ws),
-            "registered_devices": registered_devices,
-            "registered_count": len(registered_devices),
-            "online_count": online_count,
-            "command_router_stats": router_stats,
-        })
+        return JSONResponse(
+            {
+                "websocket_active_devices": active_ws,
+                "websocket_active_count": len(active_ws),
+                "registered_devices": registered_devices,
+                "registered_count": len(registered_devices),
+                "online_count": online_count,
+                "command_router_stats": router_stats,
+            }
+        )
 
     # ── 近期工具 / 设备调用 ───────────────────────────────────────────────
 
@@ -186,12 +193,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.command_router import get_gateway_trace_store
+
             store = get_gateway_trace_store()
             entries = store.recent(limit)
-            return JSONResponse({
-                "count": len(entries),
-                "calls": entries,
-            })
+            return JSONResponse(
+                {
+                    "count": len(entries),
+                    "calls": entries,
+                }
+            )
         except Exception as exc:
             logger.warning("observability/recent-calls error: %s", exc)
             return JSONResponse({"error": str(exc), "count": 0, "calls": []})
@@ -215,6 +225,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.command_router import get_gateway_trace_store
+
             store = get_gateway_trace_store()
 
             if id_type == "command_id":
@@ -228,12 +239,14 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 
             if id_type == "task_id":
                 entries = store.lookup_by_task_id(trace_id)
-                return JSONResponse({
-                    "found": bool(entries),
-                    "id_type": "task_id",
-                    "count": len(entries),
-                    "traces": entries,
-                })
+                return JSONResponse(
+                    {
+                        "found": bool(entries),
+                        "id_type": "task_id",
+                        "count": len(entries),
+                        "traces": entries,
+                    }
+                )
 
             # 自动尝试：先 command_id，再 task_id
             entry = store.lookup_by_command_id(trace_id)
@@ -241,12 +254,14 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 return JSONResponse({"found": True, "id_type": "command_id", "trace": entry})
 
             entries = store.lookup_by_task_id(trace_id)
-            return JSONResponse({
-                "found": bool(entries),
-                "id_type": "task_id",
-                "count": len(entries),
-                "traces": entries,
-            })
+            return JSONResponse(
+                {
+                    "found": bool(entries),
+                    "id_type": "task_id",
+                    "count": len(entries),
+                    "traces": entries,
+                }
+            )
 
         except Exception as exc:
             logger.warning("observability/trace error: %s", exc)
@@ -264,6 +279,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.command_router import get_gateway_trace_store
+
             store = get_gateway_trace_store()
             return JSONResponse(store.stats())
         except Exception as exc:
@@ -286,7 +302,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             }
         """
         try:
-            from core.nats_posture import evaluate_nats_posture, build_default_posture_snapshot
+            from core.nats_posture import build_default_posture_snapshot, evaluate_nats_posture
+
             posture = evaluate_nats_posture()
             bus_stats = posture.get("bus", {})
         except Exception as exc:
@@ -300,6 +317,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 
             if master_brain_enabled():
                 from core.master_brain import get_master_brain
+
                 brain = get_master_brain()
                 if brain is not None:
                     brain_status = brain.get_status()
@@ -327,23 +345,24 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             )
         else:
             message = (
-                f"NATS is not connected ({nats_url}). "
-                f"System is running in '{system_mode}' mode — NATS is optional."
+                f"NATS is not connected ({nats_url}). " f"System is running in '{system_mode}' mode — NATS is optional."
             )
 
-        return JSONResponse({
-            "status": status,
-            "system_mode": system_mode,
-            "required": nats_required,
-            "posture": posture.get("posture"),
-            "assertion_ok": posture.get("assertion_ok", True),
-            "violation_reason": posture.get("violation_reason", ""),
-            "nats_url": nats_url,
-            "noop_mode": noop,
-            "bus": bus_stats,
-            "master_brain": brain_status,
-            "message": message,
-        })
+        return JSONResponse(
+            {
+                "status": status,
+                "system_mode": system_mode,
+                "required": nats_required,
+                "posture": posture.get("posture"),
+                "assertion_ok": posture.get("assertion_ok", True),
+                "violation_reason": posture.get("violation_reason", ""),
+                "nats_url": nats_url,
+                "noop_mode": noop,
+                "bus": bus_stats,
+                "master_brain": brain_status,
+                "message": message,
+            }
+        )
 
     @router.get("/api/v1/observability/nats")
     async def nats_observability():
@@ -355,6 +374,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 
         try:
             from core.nats_bus import nats_bus
+
             result["bus"] = nats_bus.get_stats()
         except Exception as exc:
             logger.debug("Fallback triggered: %s", exc)
@@ -365,6 +385,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 
             if master_brain_enabled():
                 from core.master_brain import get_master_brain
+
                 brain = get_master_brain()
                 if brain is not None:
                     result["topology"] = brain.get_worker_topology()
@@ -375,6 +396,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 
         try:
             from core.command_router import get_nats_executor
+
             nats_exec = get_nats_executor()
             result["nats_executor"] = nats_exec.get_stats()
         except Exception as exc:
@@ -391,6 +413,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from integration.event_bus import event_bus
+
             # event_bus.recent_events() if it exists, otherwise fall back to stats
             if hasattr(event_bus, "recent_events"):
                 events = event_bus.recent_events(limit=limit)
@@ -418,33 +441,35 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         try:
             from core.execution_observability import ExecutorLevel, FallbackReason
 
-            return JSONResponse({
-                "schema_version": "pr7-v1",
-                "executor_levels": [e.value for e in ExecutorLevel],
-                "fallback_reasons": [r.value for r in FallbackReason],
-                "trace_fields": [
-                    "trace_id",
-                    "runtime_session_id",
-                    "task_id",
-                    "action_id",
-                ],
-                "event_fields": [
-                    "event_id",
-                    "timestamp",
-                    "trace",
-                    "executor_level",
-                    "fallback",
-                    "tri_state_phase",
-                    "runtime_domain",
-                    "message",
-                    "metadata",
-                ],
-                "description": (
-                    "Unified execution observability schema (PR-7). "
-                    "Use normalizers from core.execution_observability.normalizers "
-                    "to convert existing path payloads into ExecutionEvent objects."
-                ),
-            })
+            return JSONResponse(
+                {
+                    "schema_version": "pr7-v1",
+                    "executor_levels": [e.value for e in ExecutorLevel],
+                    "fallback_reasons": [r.value for r in FallbackReason],
+                    "trace_fields": [
+                        "trace_id",
+                        "runtime_session_id",
+                        "task_id",
+                        "action_id",
+                    ],
+                    "event_fields": [
+                        "event_id",
+                        "timestamp",
+                        "trace",
+                        "executor_level",
+                        "fallback",
+                        "tri_state_phase",
+                        "runtime_domain",
+                        "message",
+                        "metadata",
+                    ],
+                    "description": (
+                        "Unified execution observability schema (PR-7). "
+                        "Use normalizers from core.execution_observability.normalizers "
+                        "to convert existing path payloads into ExecutionEvent objects."
+                    ),
+                }
+            )
         except Exception as exc:
             logger.warning("execution/schema error: %s", exc)
             return JSONResponse({"error": str(exc)}, status_code=500)
@@ -475,11 +500,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     logger.debug("execution/recent-events: normalise error: %s", inner_exc)
                     events.append({"raw": entry, "normalise_error": str(inner_exc)})
 
-            return JSONResponse({
-                "count": len(events),
-                "schema_version": "pr7-v1",
-                "events": events,
-            })
+            return JSONResponse(
+                {
+                    "count": len(events),
+                    "schema_version": "pr7-v1",
+                    "events": events,
+                }
+            )
         except Exception as exc:
             logger.warning("execution/recent-events error: %s", exc)
             return JSONResponse({"error": str(exc), "count": 0, "events": []})
@@ -508,13 +535,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             entry = store.lookup_by_command_id(trace_id)
             if entry is not None:
                 ev = normalize_observability_payload(entry)
-                return JSONResponse({
-                    "found": True,
-                    "id_type": "command_id",
-                    "schema_version": "pr7-v1",
-                    "trace": ev.trace.to_dict(),
-                    "event": ev.to_dict(),
-                })
+                return JSONResponse(
+                    {
+                        "found": True,
+                        "id_type": "command_id",
+                        "schema_version": "pr7-v1",
+                        "trace": ev.trace.to_dict(),
+                        "event": ev.to_dict(),
+                    }
+                )
 
             entries = store.lookup_by_task_id(trace_id)
             if entries:
@@ -525,21 +554,23 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     try:
                         ev = normalize_observability_payload(raw)
                         events.append(ev.to_dict())
-                    except Exception as exc:
+                    except Exception:
                         events.append({"raw": raw})
                 first_trace = TraceCorrelation(
                     trace_id=entries[0].get("trace_id", trace_id),
                     runtime_session_id=entries[0].get("runtime_session_id", ""),
                     task_id=trace_id,
                 ).to_dict()
-                return JSONResponse({
-                    "found": True,
-                    "id_type": "task_id",
-                    "schema_version": "pr7-v1",
-                    "trace": first_trace,
-                    "count": len(events),
-                    "events": events,
-                })
+                return JSONResponse(
+                    {
+                        "found": True,
+                        "id_type": "task_id",
+                        "schema_version": "pr7-v1",
+                        "trace": first_trace,
+                        "count": len(events),
+                        "events": events,
+                    }
+                )
 
             return JSONResponse(
                 {
@@ -672,15 +703,17 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     "per_surface_counts": ld.per_surface_counts,
                 }
 
-            return JSONResponse({
-                "schema_version": "pr10-v1",
-                "assembled_at": snapshot.assembled_at,
-                "path": path_info,
-                "fallback": fallback_info,
-                "recovery": recovery_info,
-                "legacy_usage": legacy_info,
-                "_partial": snapshot._partial,
-            })
+            return JSONResponse(
+                {
+                    "schema_version": "pr10-v1",
+                    "assembled_at": snapshot.assembled_at,
+                    "path": path_info,
+                    "fallback": fallback_info,
+                    "recovery": recovery_info,
+                    "legacy_usage": legacy_info,
+                    "_partial": snapshot._partial,
+                }
+            )
         except Exception as exc:
             logger.warning("execution-legibility error: %s", exc)
             return JSONResponse(
@@ -718,6 +751,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             from core.operator_execution_observability_surface import (
                 build_operator_execution_observability_snapshot,
             )
+
             snapshot = build_operator_execution_observability_snapshot(
                 max_entries=max_entries,
                 device_id=device_id or None,
@@ -746,6 +780,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             from core.operator_execution_observability_surface import (
                 get_latest_operator_evidence_entry_for_task,
             )
+
             entry = get_latest_operator_evidence_entry_for_task(task_id)
             if entry is None:
                 return JSONResponse(

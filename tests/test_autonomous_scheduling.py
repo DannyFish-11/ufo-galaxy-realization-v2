@@ -23,10 +23,10 @@ from galaxy_gateway.autonomous_filter import (
     is_autonomous_device,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers / Stubs
 # ---------------------------------------------------------------------------
+
 
 class _FakeDevice:
     """Minimal device stub for filter tests."""
@@ -52,6 +52,7 @@ def _make_auto_meta(**overrides) -> dict:
 # ---------------------------------------------------------------------------
 # 1. is_autonomous_device
 # ---------------------------------------------------------------------------
+
 
 class TestIsAutonomousDevice:
     def test_full_meta_passes(self):
@@ -109,6 +110,7 @@ class TestIsAutonomousDevice:
 # 2. filter_autonomous_devices — prefer autonomous with fallback
 # ---------------------------------------------------------------------------
 
+
 class TestFilterAutonomousDevices:
     """Tests run with prefer_autonomous=True (the default)."""
 
@@ -121,9 +123,7 @@ class TestFilterAutonomousDevices:
         )
 
     def test_returns_only_autonomous_when_available(self, monkeypatch):
-        monkeypatch.setattr(
-            "galaxy_gateway.autonomous_filter._prefer_autonomous", lambda: True
-        )
+        monkeypatch.setattr("galaxy_gateway.autonomous_filter._prefer_autonomous", lambda: True)
         auto = _FakeDevice("auto1", metadata=_make_auto_meta())
         legacy = _FakeDevice("legacy1", metadata={})
         result = self._filter([auto, legacy])
@@ -131,9 +131,7 @@ class TestFilterAutonomousDevices:
         assert result[0].device_id == "auto1"
 
     def test_fallback_to_online_when_no_autonomous(self, monkeypatch):
-        monkeypatch.setattr(
-            "galaxy_gateway.autonomous_filter._prefer_autonomous", lambda: True
-        )
+        monkeypatch.setattr("galaxy_gateway.autonomous_filter._prefer_autonomous", lambda: True)
         legacy1 = _FakeDevice("legacy1", metadata={})
         legacy2 = _FakeDevice("legacy2", metadata={})
         result = self._filter([legacy1, legacy2])
@@ -141,9 +139,7 @@ class TestFilterAutonomousDevices:
         assert {d.device_id for d in result} == {"legacy1", "legacy2"}
 
     def test_offline_devices_excluded(self, monkeypatch):
-        monkeypatch.setattr(
-            "galaxy_gateway.autonomous_filter._prefer_autonomous", lambda: True
-        )
+        monkeypatch.setattr("galaxy_gateway.autonomous_filter._prefer_autonomous", lambda: True)
         offline = _FakeDevice("offline1", status="offline", metadata=_make_auto_meta())
         online_legacy = _FakeDevice("online1", status="online", metadata={})
         result = self._filter([offline, online_legacy])
@@ -152,22 +148,16 @@ class TestFilterAutonomousDevices:
         assert result[0].device_id == "online1"
 
     def test_empty_input_returns_empty(self, monkeypatch):
-        monkeypatch.setattr(
-            "galaxy_gateway.autonomous_filter._prefer_autonomous", lambda: True
-        )
+        monkeypatch.setattr("galaxy_gateway.autonomous_filter._prefer_autonomous", lambda: True)
         assert self._filter([]) == []
 
     def test_all_offline_returns_empty(self, monkeypatch):
-        monkeypatch.setattr(
-            "galaxy_gateway.autonomous_filter._prefer_autonomous", lambda: True
-        )
+        monkeypatch.setattr("galaxy_gateway.autonomous_filter._prefer_autonomous", lambda: True)
         d = _FakeDevice("d1", status="offline", metadata=_make_auto_meta())
         assert self._filter([d]) == []
 
     def test_cross_device_filter_applied(self, monkeypatch):
-        monkeypatch.setattr(
-            "galaxy_gateway.autonomous_filter._prefer_autonomous", lambda: True
-        )
+        monkeypatch.setattr("galaxy_gateway.autonomous_filter._prefer_autonomous", lambda: True)
         with_cd = _FakeDevice("cd1", metadata=_make_auto_meta(cross_device_enabled=True))
         without_cd = _FakeDevice("nocd1", metadata=_make_auto_meta(cross_device_enabled=False))
         result = self._filter([with_cd, without_cd], require_cross_device=True)
@@ -175,9 +165,7 @@ class TestFilterAutonomousDevices:
         assert result[0].device_id == "cd1"
 
     def test_task_role_filter(self, monkeypatch):
-        monkeypatch.setattr(
-            "galaxy_gateway.autonomous_filter._prefer_autonomous", lambda: True
-        )
+        monkeypatch.setattr("galaxy_gateway.autonomous_filter._prefer_autonomous", lambda: True)
         worker = _FakeDevice("w1", metadata=_make_auto_meta(device_role="worker"))
         agent = _FakeDevice("a1", metadata=_make_auto_meta(device_role="agent"))
         result = self._filter([worker, agent], task_role="worker")
@@ -189,11 +177,10 @@ class TestFilterAutonomousDevices:
 # 3. prefer_autonomous=False — filter disabled
 # ---------------------------------------------------------------------------
 
+
 class TestPreferAutonomousFalse:
     def test_returns_all_online_devices(self, monkeypatch):
-        monkeypatch.setattr(
-            "galaxy_gateway.autonomous_filter._prefer_autonomous", lambda: False
-        )
+        monkeypatch.setattr("galaxy_gateway.autonomous_filter._prefer_autonomous", lambda: False)
         auto = _FakeDevice("auto1", metadata=_make_auto_meta())
         legacy = _FakeDevice("legacy1", metadata={})
         offline = _FakeDevice("off1", status="offline", metadata=_make_auto_meta())
@@ -211,11 +198,10 @@ class TestPreferAutonomousFalse:
 # 4. Backward compatibility — devices without metadata
 # ---------------------------------------------------------------------------
 
+
 class TestBackwardCompatibility:
     def test_device_without_metadata_field(self, monkeypatch):
-        monkeypatch.setattr(
-            "galaxy_gateway.autonomous_filter._prefer_autonomous", lambda: True
-        )
+        monkeypatch.setattr("galaxy_gateway.autonomous_filter._prefer_autonomous", lambda: True)
 
         class _OldDevice:
             device_id = "old1"
@@ -242,6 +228,7 @@ class TestBackwardCompatibility:
 # ---------------------------------------------------------------------------
 # 5. Device.metadata stored via register_device(metadata=...)
 # ---------------------------------------------------------------------------
+
 
 class TestDeviceMetadataStorage:
     def test_device_stores_metadata(self):
@@ -287,6 +274,7 @@ class TestDeviceMetadataStorage:
 # 6. DeviceRouter._select_devices() prefers autonomous device
 # ---------------------------------------------------------------------------
 
+
 class TestDeviceRouterSelectDevices:
     """Integration-style tests for _select_devices autonomous preference."""
 
@@ -311,9 +299,7 @@ class TestDeviceRouterSelectDevices:
         return router
 
     def test_selects_autonomous_device_when_available(self, monkeypatch):
-        monkeypatch.setattr(
-            "galaxy_gateway.autonomous_filter._prefer_autonomous", lambda: True
-        )
+        monkeypatch.setattr("galaxy_gateway.autonomous_filter._prefer_autonomous", lambda: True)
         router = self._make_router_with_devices()
         analysis = {
             "target_device_type": "android",
@@ -325,9 +311,7 @@ class TestDeviceRouterSelectDevices:
         assert result[0].device_id == "auto_android"
 
     def test_falls_back_to_legacy_when_no_autonomous(self, monkeypatch):
-        monkeypatch.setattr(
-            "galaxy_gateway.autonomous_filter._prefer_autonomous", lambda: True
-        )
+        monkeypatch.setattr("galaxy_gateway.autonomous_filter._prefer_autonomous", lambda: True)
         from galaxy_gateway.device_router import DeviceRouter
 
         router = DeviceRouter()
@@ -342,9 +326,7 @@ class TestDeviceRouterSelectDevices:
         assert result[0].device_id == "legacy_only"
 
     def test_prefer_autonomous_false_returns_first_online(self, monkeypatch):
-        monkeypatch.setattr(
-            "galaxy_gateway.autonomous_filter._prefer_autonomous", lambda: False
-        )
+        monkeypatch.setattr("galaxy_gateway.autonomous_filter._prefer_autonomous", lambda: False)
         router = self._make_router_with_devices()
         analysis = {
             "target_device_type": "android",

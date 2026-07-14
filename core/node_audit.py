@@ -39,30 +39,29 @@ PACKAGING_POLICY_SKIP         — "skip"
 PACKAGING_POLICY_UNREGISTERED — "unregistered"
 """
 
-from scripts.node_audit import (  # re-export for importability
-    NodeTier,
-    RecommendedAction,
-    NodePackagingStatus,
-    NodeAuditEntry,
-    NodeAuditReport,
-    run_audit,
-    # PR-2: check category constants
-    CHECK_SOURCE_COMPLETENESS,
-    CHECK_SYNTAX_SAFETY,
+# re-export for importability; PR-2: check category/result constants;
+# PR-5: packaging policy-class constants
+from scripts.node_audit import (
+    CHECK_FAIL,
+    CHECK_HYGIENE,
     CHECK_PACKAGING,
+    CHECK_PASS,
     CHECK_REGISTRY_GOVERNANCE,
     CHECK_RUNTIME_CONTRACT,
-    CHECK_HYGIENE,
-    # PR-2: check result constants
-    CHECK_PASS,
-    CHECK_WARN,
-    CHECK_FAIL,
+    CHECK_SOURCE_COMPLETENESS,
+    CHECK_SYNTAX_SAFETY,
     CHECK_UNKNOWN,
-    # PR-5: packaging policy-class constants
+    CHECK_WARN,
     PACKAGING_POLICY_ACTIVE,
     PACKAGING_POLICY_OPTIONAL,
     PACKAGING_POLICY_SKIP,
     PACKAGING_POLICY_UNREGISTERED,
+    NodeAuditEntry,
+    NodeAuditReport,
+    NodePackagingStatus,
+    NodeTier,
+    RecommendedAction,
+    run_audit,
 )
 
 __all__ = [

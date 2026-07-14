@@ -25,14 +25,15 @@ import time
 
 import pytest
 
-
 # ============================================================================
 # 辅助工厂
 # ============================================================================
 
+
 def _make_memory(hot_limit=200, ttl_seconds=0.0):
     """每个测试使用独立的临时目录。"""
     from core.task_memory import TaskMemory
+
     tmp = tempfile.mkdtemp()
     return TaskMemory(data_dir=tmp, hot_limit=hot_limit, ttl_seconds=ttl_seconds)
 
@@ -40,6 +41,7 @@ def _make_memory(hot_limit=200, ttl_seconds=0.0):
 # ============================================================================
 # 1. TaskSummary 新字段 + 向后兼容
 # ============================================================================
+
 
 class TestTaskSummaryTaskType:
     def test_new_record_has_task_type(self):
@@ -55,6 +57,7 @@ class TestTaskSummaryTaskType:
     def test_from_dict_without_task_type_defaults_empty(self):
         """旧格式记录（无 task_type 字段）反序列化时默认为空字符串。"""
         from core.task_memory import TaskSummary
+
         old_data = {
             "summary_id": "abc123",
             "timestamp": 1000.0,
@@ -73,6 +76,7 @@ class TestTaskSummaryTaskType:
     def test_task_type_persisted_and_reloaded(self):
         """task_type 写入文件后，新实例能正常加载。"""
         from core.task_memory import TaskMemory
+
         tmp = tempfile.mkdtemp()
         mem1 = TaskMemory(data_dir=tmp)
         mem1.record_task(task="t1", task_type="automation")
@@ -93,6 +97,7 @@ class TestTaskSummaryTaskType:
 # 2. TTL（热区过期）
 # ============================================================================
 
+
 class TestTTL:
     def test_no_ttl_returns_all_records(self):
         mem = _make_memory(ttl_seconds=0)
@@ -106,6 +111,7 @@ class TestTTL:
         mem = _make_memory(ttl_seconds=1)
         # 插入一条带有过去时间戳的记录
         from core.task_memory import TaskSummary
+
         old_entry = TaskSummary(
             task="old task",
             result_summary="done",
@@ -122,6 +128,7 @@ class TestTTL:
     def test_evict_expired_removes_stale(self):
         mem = _make_memory(ttl_seconds=1)
         from core.task_memory import TaskSummary
+
         old = TaskSummary(task="stale", timestamp=time.time() - 100)
         mem._records.append(old)
         mem.record_task(task="fresh")
@@ -141,6 +148,7 @@ class TestTTL:
     def test_ttl_filters_on_load_recent(self):
         """加载文件时跳过已过期条目。"""
         from core.task_memory import TaskMemory, TaskSummary
+
         tmp = tempfile.mkdtemp()
         jsonl = os.path.join(tmp, "task_memory.jsonl")
 
@@ -159,6 +167,7 @@ class TestTTL:
 # ============================================================================
 # 3. 冷热分层
 # ============================================================================
+
 
 class TestHotColdTiering:
     def test_hot_limit_enforced(self):
@@ -180,6 +189,7 @@ class TestHotColdTiering:
     def test_query_cold_storage_returns_old_records(self):
         """冷区包含热区之外的历史记录。"""
         from core.task_memory import TaskMemory
+
         tmp = tempfile.mkdtemp()
         mem = TaskMemory(data_dir=tmp, hot_limit=3)
         for i in range(8):
@@ -200,6 +210,7 @@ class TestHotColdTiering:
 
     def test_query_cold_storage_filter_by_task_type(self):
         from core.task_memory import TaskMemory
+
         tmp = tempfile.mkdtemp()
         mem = TaskMemory(data_dir=tmp, hot_limit=2)
         mem.record_task(task="s1", task_type="search")
@@ -214,6 +225,7 @@ class TestHotColdTiering:
     def test_query_cold_respects_ttl(self):
         """冷区查询也跳过已过期记录（ttl_seconds > 0）。"""
         from core.task_memory import TaskMemory, TaskSummary
+
         tmp = tempfile.mkdtemp()
         jsonl = os.path.join(tmp, "task_memory.jsonl")
         expired = TaskSummary(task="cold_expired", timestamp=time.time() - 9999)
@@ -235,6 +247,7 @@ class TestHotColdTiering:
 # ============================================================================
 # 4. 按 task_type 过滤
 # ============================================================================
+
 
 class TestTaskTypeFilter:
     def test_get_recent_summaries_filter(self):
@@ -264,6 +277,7 @@ class TestTaskTypeFilter:
     def test_filter_falls_back_to_cold(self):
         """热区不足时，task_type 过滤会补充冷区结果。"""
         from core.task_memory import TaskMemory
+
         tmp = tempfile.mkdtemp()
         mem = TaskMemory(data_dir=tmp, hot_limit=2)
         for i in range(5):
@@ -278,26 +292,32 @@ class TestTaskTypeFilter:
 # 5. 漂移检测
 # ============================================================================
 
+
 class TestDriftDetection:
     def test_similarity_identical(self):
         from core.task_memory import _text_similarity
+
         assert _text_similarity("hello world", "hello world") == 1.0
 
     def test_similarity_disjoint(self):
         from core.task_memory import _text_similarity
+
         assert _text_similarity("aaa bbb ccc", "xxx yyy zzz") == 0.0
 
     def test_similarity_partial(self):
         from core.task_memory import _text_similarity
+
         sim = _text_similarity("hello world foo", "hello world bar")
         assert 0.0 < sim < 1.0
 
     def test_similarity_empty_both(self):
         from core.task_memory import _text_similarity
+
         assert _text_similarity("", "") == 1.0
 
     def test_similarity_one_empty(self):
         from core.task_memory import _text_similarity
+
         assert _text_similarity("", "something") == 0.0
         assert _text_similarity("something", "") == 0.0
 
@@ -388,6 +408,7 @@ class TestDriftDetection:
 # 6. 向后兼容（旧版签名 / 旧版文件）
 # ============================================================================
 
+
 class TestBackwardCompatibility:
     def test_record_task_without_task_type(self):
         """旧版调用方式不需要传 task_type。"""
@@ -399,6 +420,7 @@ class TestBackwardCompatibility:
     def test_old_jsonl_without_task_type_loads(self):
         """文件中无 task_type 字段的旧记录能正常加载。"""
         from core.task_memory import TaskMemory
+
         tmp = tempfile.mkdtemp()
         jsonl = os.path.join(tmp, "task_memory.jsonl")
         old_record = {
@@ -442,13 +464,15 @@ class TestBackwardCompatibility:
 
     def test_default_hot_limit_backward_compat(self):
         """默认 hot_limit=200 与旧版 _MAX_IN_MEMORY 一致。"""
-        from core.task_memory import TaskMemory, _MAX_IN_MEMORY
+        from core.task_memory import _MAX_IN_MEMORY, TaskMemory
+
         mem = TaskMemory(data_dir=tempfile.mkdtemp())
         assert mem._hot_limit == _MAX_IN_MEMORY
 
     def test_default_ttl_zero(self):
         """默认 ttl_seconds=0（不过期），向后兼容。"""
         from core.task_memory import TaskMemory
+
         mem = TaskMemory(data_dir=tempfile.mkdtemp())
         assert mem._ttl_seconds == 0.0
 
@@ -457,13 +481,15 @@ class TestBackwardCompatibility:
 # 7. API 路由集成测试
 # ============================================================================
 
+
 class TestAPIRoutes:
     """通过 FastAPI TestClient 测试 c_stage 路由。"""
 
     def _make_app(self, mem=None):
         """构建一个包含 c_stage 路由的最小 FastAPI 应用。"""
-        import core.task_memory as tm_module
         from fastapi import FastAPI
+
+        import core.task_memory as tm_module
         from core.routes.c_stage import create_router
 
         app = FastAPI()
@@ -475,7 +501,8 @@ class TestAPIRoutes:
         return app
 
     def _client(self, mem=None):
-        from httpx import AsyncClient, ASGITransport
+        from httpx import ASGITransport, AsyncClient
+
         app = self._make_app(mem=mem)
         return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
@@ -507,6 +534,7 @@ class TestAPIRoutes:
     @pytest.mark.asyncio
     async def test_memory_cold_endpoint(self):
         from core.task_memory import TaskMemory
+
         tmp = tempfile.mkdtemp()
         mem = TaskMemory(data_dir=tmp, hot_limit=2)
         for i in range(5):
@@ -520,6 +548,7 @@ class TestAPIRoutes:
     @pytest.mark.asyncio
     async def test_memory_cold_filter_by_task_type(self):
         from core.task_memory import TaskMemory
+
         tmp = tempfile.mkdtemp()
         mem = TaskMemory(data_dir=tmp, hot_limit=2)
         mem.record_task(task="s1", task_type="search")

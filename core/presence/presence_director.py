@@ -109,7 +109,8 @@ class PresenceDirector:
             session_id:      Session scope.
             trace_id:        Distributed trace identifier.
             android_presence_participation:
-                             Optional :class:`~core.presence.android_presence_participation.AndroidPresenceParticipationSummary`.
+                             Optional
+                             :class:`~core.presence.android_presence_participation.AndroidPresenceParticipationSummary`.
                              When provided, Android devices that are presence
                              participants receive elevated projection intensity
                              and their participation mode is stamped on the
@@ -133,16 +134,10 @@ class PresenceDirector:
         _android_participant_count = 0
         if android_presence_participation is not None:
             try:
-                _android_participant_count = int(
-                    android_presence_participation.presence_participant_count
-                )
+                _android_participant_count = int(android_presence_participation.presence_participant_count)
                 state["android_presence_participant_count"] = _android_participant_count
-                state["android_any_drives_liminal"] = bool(
-                    android_presence_participation.any_drives_liminal
-                )
-                state["android_any_drives_manifest"] = bool(
-                    android_presence_participation.any_drives_manifest
-                )
+                state["android_any_drives_liminal"] = bool(android_presence_participation.any_drives_liminal)
+                state["android_any_drives_manifest"] = bool(android_presence_participation.any_drives_manifest)
             except AttributeError:
                 pass
 
@@ -166,8 +161,7 @@ class PresenceDirector:
             result["hitl_approved"] = hitl_result.get("approved", True)
             if not hitl_result.get("approved", True):
                 logger.info(
-                    "PresenceDirector: HITL blocked manifest projection "
-                    "session=%s trace=%s",
+                    "PresenceDirector: HITL blocked manifest projection " "session=%s trace=%s",
                     session_id,
                     trace_id,
                 )
@@ -176,9 +170,8 @@ class PresenceDirector:
                 return result
 
         # ── Projection ────────────────────────────────────────────────────
-        should_project = (
-            (to_phase.lower() == "manifest" and self._config.project_on_manifest)
-            or (to_phase.lower() == "liminal" and self._config.project_on_liminal)
+        should_project = (to_phase.lower() == "manifest" and self._config.project_on_manifest) or (
+            to_phase.lower() == "liminal" and self._config.project_on_liminal
         )
 
         if should_project:
@@ -249,6 +242,7 @@ class PresenceDirector:
         """Delegate to :class:`~core.presence.presence_projection.PresenceProjection`."""
         try:
             from core.presence.presence_projection import get_presence_projection
+
             proj = get_presence_projection()
             return proj.project(
                 cognitive_state=cognitive_state,
@@ -270,6 +264,7 @@ class PresenceDirector:
         """Delegate to :class:`~core.policy.hitl_policy.HITLPolicy`."""
         try:
             from core.policy.hitl_policy import get_hitl_policy
+
             policy = get_hitl_policy()
             decision = policy.evaluate(
                 action=action,
@@ -311,7 +306,8 @@ class PresenceDirector:
     ) -> None:
         """Best-effort emission on the StateEventBus."""
         try:
-            from core.state_event_bus import get_state_event_bus, StateEventType
+            from core.state_event_bus import StateEventType, get_state_event_bus
+
             bus = get_state_event_bus()
             event_type = StateEventType.PRESENCE_PROJECTED
             bus.publish(

@@ -9,6 +9,7 @@ Validates:
 5. config.json PR-7 flags.
 6. core.multimodal package exports.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -19,6 +20,11 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 
+# Re-import from the correct modules for service classes
+from core.multimodal.audio_capture_service import (
+    AudioCaptureConfig,
+    AudioCaptureService,
+)
 from core.multimodal.multimodal_events import (
     AudioQualityDegradedEvent,
     AudioStreamErrorEvent,
@@ -33,22 +39,16 @@ from core.multimodal.multimodal_events import (
     WebRTCSessionStartedEvent,
     WebRTCSessionStoppedEvent,
 )
-
-# Re-import from the correct modules for service classes
-from core.multimodal.audio_capture_service import (
-    AudioCaptureConfig,
-    AudioCaptureService,
-)
+from core.multimodal.signal_quality import QualityFlag, SignalQuality
 from core.multimodal.webrtc_session_manager import (
     WebRTCManagerConfig,
     WebRTCSessionManager,
 )
-from core.multimodal.signal_quality import QualityFlag, SignalQuality
-
 
 # ===========================================================================
 # Helpers
 # ===========================================================================
+
 
 def _collect_events(service) -> List[MultimodalEvent]:
     """Wire an event listener to *service* and return the shared list."""
@@ -130,16 +130,12 @@ class TestMultimodalEventSchema:
         assert e.attempt == 2
 
     def test_webrtc_quality_metrics_event_fields(self):
-        e = WebRTCQualityMetricsEvent(
-            session_id="s1", bitrate_kbps=512.0, packet_loss_pct=0.5, rtt_ms=32.0
-        )
+        e = WebRTCQualityMetricsEvent(session_id="s1", bitrate_kbps=512.0, packet_loss_pct=0.5, rtt_ms=32.0)
         assert e.event_type == MultimodalEventType.WEBRTC_QUALITY_METRICS
         assert e.rtt_ms == 32.0
 
     def test_transport_fallback_event_fields(self):
-        e = TransportFallbackEvent(
-            from_method="webrtc", to_method="http", reason="unavailable", device_id="d1"
-        )
+        e = TransportFallbackEvent(from_method="webrtc", to_method="http", reason="unavailable", device_id="d1")
         assert e.event_type == MultimodalEventType.TRANSPORT_FALLBACK
         assert e.device_id == "d1"
 
@@ -239,24 +235,23 @@ class TestAudioCaptureService:
         from core.multimodal.audio_features import AudioState
 
         fake_state = AudioState(
-            energy=0.1, speaking_ratio=0.0, pause_density=0.0,
-            noise_level=0.0, audio_freshness_ms=300.0, is_speaking=False,
+            energy=0.1,
+            speaking_ratio=0.0,
+            pause_density=0.0,
+            noise_level=0.0,
+            audio_freshness_ms=300.0,
+            is_speaking=False,
         )
         # Quality with freshness_ms > threshold
         fake_quality = SignalQuality.ok(freshness_ms=300.0)
         svc._on_audio_chunk(fake_state, fake_quality)
 
-        degraded = [
-            e for e in received
-            if e.event_type == MultimodalEventType.AUDIO_QUALITY_DEGRADED
-        ]
+        degraded = [e for e in received if e.event_type == MultimodalEventType.AUDIO_QUALITY_DEGRADED]
         assert len(degraded) == 1
         assert degraded[0].latency_ms == 300.0
 
     def test_trace_id_propagated_to_events(self):
-        cfg = AudioCaptureConfig(
-            trace_id="trace-abc", runtime_session_id="sess-xyz"
-        )
+        cfg = AudioCaptureConfig(trace_id="trace-abc", runtime_session_id="sess-xyz")
         svc = AudioCaptureService(config=cfg)
         received: List[MultimodalEvent] = _collect_events(svc)
         asyncio.new_event_loop().run_until_complete(svc.stop())
@@ -273,6 +268,7 @@ class TestAudioCaptureService:
 
         with patch.object(type(svc), "is_available", new_callable=PropertyMock, return_value=True):
             with patch.object(svc._pipeline, "run", side_effect=_noop):
+
                 async def _double_start():
                     await svc.start()
                     task1 = svc._task
@@ -343,9 +339,7 @@ class TestWebRTCSessionManager:
         received: List[MultimodalEvent] = _collect_events(mgr)
 
         with patch.object(type(mgr), "is_available", new_callable=PropertyMock, return_value=True):
-            with patch.object(
-                mgr._session, "connect", new_callable=AsyncMock, return_value="answer-sdp"
-            ):
+            with patch.object(mgr._session, "connect", new_callable=AsyncMock, return_value="answer-sdp"):
                 answer = asyncio.new_event_loop().run_until_complete(mgr.connect("offer"))
 
         assert answer == "answer-sdp"
@@ -358,9 +352,7 @@ class TestWebRTCSessionManager:
         received: List[MultimodalEvent] = _collect_events(mgr)
 
         with patch.object(type(mgr), "is_available", new_callable=PropertyMock, return_value=True):
-            with patch.object(
-                mgr._session, "connect", new_callable=AsyncMock, return_value=None
-            ):
+            with patch.object(mgr._session, "connect", new_callable=AsyncMock, return_value=None):
                 result = asyncio.new_event_loop().run_until_complete(mgr.connect("offer"))
 
         assert result is None
@@ -373,27 +365,19 @@ class TestWebRTCSessionManager:
         assert result is None
 
     def test_reconnect_emits_reconnecting_event(self):
-        mgr = WebRTCSessionManager(
-            config=WebRTCManagerConfig(reconnect_delay_s=0.0, max_reconnects=3)
-        )
+        mgr = WebRTCSessionManager(config=WebRTCManagerConfig(reconnect_delay_s=0.0, max_reconnects=3))
         mgr._last_offer_sdp = "offer"
         received: List[MultimodalEvent] = _collect_events(mgr)
 
-        with patch.object(
-            mgr._session, "connect", new_callable=AsyncMock, return_value="answer"
-        ):
+        with patch.object(mgr._session, "connect", new_callable=AsyncMock, return_value="answer"):
             asyncio.new_event_loop().run_until_complete(mgr.reconnect())
 
-        reconnecting = [
-            e for e in received if e.event_type == MultimodalEventType.WEBRTC_RECONNECTING
-        ]
+        reconnecting = [e for e in received if e.event_type == MultimodalEventType.WEBRTC_RECONNECTING]
         assert len(reconnecting) >= 1
         assert reconnecting[0].attempt == 1
 
     def test_max_reconnects_exhausted_emits_stopped(self):
-        mgr = WebRTCSessionManager(
-            config=WebRTCManagerConfig(max_reconnects=2, reconnect_delay_s=0.0)
-        )
+        mgr = WebRTCSessionManager(config=WebRTCManagerConfig(max_reconnects=2, reconnect_delay_s=0.0))
         mgr._last_offer_sdp = "offer"
         mgr._reconnect_attempts = 2  # already at max
         received: List[MultimodalEvent] = _collect_events(mgr)
@@ -406,9 +390,7 @@ class TestWebRTCSessionManager:
         assert stopped[0].reason == "max_reconnects_exhausted"
 
     def test_trace_id_propagated_to_events(self):
-        cfg = WebRTCManagerConfig(
-            trace_id="trace-xyz", runtime_session_id="sess-abc"
-        )
+        cfg = WebRTCManagerConfig(trace_id="trace-xyz", runtime_session_id="sess-abc")
         mgr = WebRTCSessionManager(config=cfg)
         received: List[MultimodalEvent] = _collect_events(mgr)
         asyncio.new_event_loop().run_until_complete(mgr.close())
@@ -494,9 +476,7 @@ class TestTransportRouterFallback:
         received: List[MultimodalEvent] = []
         router.add_event_listener(received.append)
 
-        req = TransportRequest(
-            device_id="dev-3", task_type="interactive", realtime=True
-        )
+        req = TransportRequest(device_id="dev-3", task_type="interactive", realtime=True)
 
         async def _run():
             with patch.object(router, "_is_method_available", return_value=True):
@@ -556,33 +536,33 @@ class TestMultimodalPackageExports:
 
     def test_event_exports(self):
         from core.multimodal import (  # noqa: F401
-            MultimodalEventType,
-            MultimodalEvent,
+            AudioQualityDegradedEvent,
+            AudioStreamErrorEvent,
             AudioStreamStartedEvent,
             AudioStreamStoppedEvent,
-            AudioStreamErrorEvent,
-            AudioQualityDegradedEvent,
+            MultimodalEvent,
+            MultimodalEventType,
+            TransportFallbackEvent,
+            WebRTCQualityMetricsEvent,
+            WebRTCReconnectingEvent,
+            WebRTCSessionErrorEvent,
             WebRTCSessionStartedEvent,
             WebRTCSessionStoppedEvent,
-            WebRTCSessionErrorEvent,
-            WebRTCReconnectingEvent,
-            WebRTCQualityMetricsEvent,
-            TransportFallbackEvent,
         )
 
     def test_service_exports(self):
         from core.multimodal import (  # noqa: F401
-            AudioCaptureService,
             AudioCaptureConfig,
-            WebRTCSessionManager,
+            AudioCaptureService,
             WebRTCManagerConfig,
+            WebRTCSessionManager,
         )
 
     def test_existing_exports_still_present(self):
         from core.multimodal import (  # noqa: F401
-            SignalQuality,
-            QualityFlag,
-            PerceptionFrame,
-            SystemSignals,
             MultimodalIngressBus,
+            PerceptionFrame,
+            QualityFlag,
+            SignalQuality,
+            SystemSignals,
         )

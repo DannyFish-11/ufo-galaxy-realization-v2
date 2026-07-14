@@ -52,11 +52,11 @@ import pytest
 
 try:
     from core.runtime.source_dispatch_orchestrator import (
-        GATEWAY_FACING_REGISTRATION_CAPABILITY_ERROR_SEMANTICS_HARDENED_PR27_SENTINEL,
-        REGISTRATION_FAILURE_IS_DISTINGUISHABLE_FROM_CAPABILITY_FAILURE_PR27_POLICY,
-        READINESS_DEGRADED_BEHAVIOR_IS_REPORTED_THROUGH_STABLE_SIGNALS_PR27_POLICY,
         CAPABILITY_NOT_SATISFIED_FAILURE_IS_ACTIONABLE_PR27_POLICY,
+        GATEWAY_FACING_REGISTRATION_CAPABILITY_ERROR_SEMANTICS_HARDENED_PR27_SENTINEL,
         GATEWAY_SETUP_CONNECTION_SIGNALS_ARE_DETERMINISTIC_PR27_POLICY,
+        READINESS_DEGRADED_BEHAVIOR_IS_REPORTED_THROUGH_STABLE_SIGNALS_PR27_POLICY,
+        REGISTRATION_FAILURE_IS_DISTINGUISHABLE_FROM_CAPABILITY_FAILURE_PR27_POLICY,
     )
 
     _ORCHESTRATOR_AVAILABLE = True
@@ -73,13 +73,13 @@ except ImportError:
     _PROJECTION_AVAILABLE = False
 
 try:
+    from core.runtime import CAPABILITY_NOT_SATISFIED_FAILURE_IS_ACTIONABLE_PR27_POLICY as _rt_capability
     from core.runtime import (
         GATEWAY_FACING_REGISTRATION_CAPABILITY_ERROR_SEMANTICS_HARDENED_PR27_SENTINEL as _rt_sentinel,
-        REGISTRATION_FAILURE_IS_DISTINGUISHABLE_FROM_CAPABILITY_FAILURE_PR27_POLICY as _rt_reg,
-        READINESS_DEGRADED_BEHAVIOR_IS_REPORTED_THROUGH_STABLE_SIGNALS_PR27_POLICY as _rt_readiness,
-        CAPABILITY_NOT_SATISFIED_FAILURE_IS_ACTIONABLE_PR27_POLICY as _rt_capability,
-        GATEWAY_SETUP_CONNECTION_SIGNALS_ARE_DETERMINISTIC_PR27_POLICY as _rt_signals,
     )
+    from core.runtime import GATEWAY_SETUP_CONNECTION_SIGNALS_ARE_DETERMINISTIC_PR27_POLICY as _rt_signals
+    from core.runtime import READINESS_DEGRADED_BEHAVIOR_IS_REPORTED_THROUGH_STABLE_SIGNALS_PR27_POLICY as _rt_readiness
+    from core.runtime import REGISTRATION_FAILURE_IS_DISTINGUISHABLE_FROM_CAPABILITY_FAILURE_PR27_POLICY as _rt_reg
 
     _RUNTIME_EXPORTS_AVAILABLE = True
 except ImportError:
@@ -89,6 +89,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Shared helpers for constructing gateway signal payloads
 # ---------------------------------------------------------------------------
+
 
 def _make_registration_ack(
     device_id: str = "dev-test",
@@ -166,27 +167,22 @@ def _make_readiness_signal(
 # Group A — Orchestrator PR-27 sentinels present and non-empty
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(not _ORCHESTRATOR_AVAILABLE, reason="orchestrator not available")
 class TestOrchestratorPR27Sentinels:
     """All PR-27 sentinels must be present and non-empty strings."""
 
     def test_main_sentinel_present(self):
         assert GATEWAY_FACING_REGISTRATION_CAPABILITY_ERROR_SEMANTICS_HARDENED_PR27_SENTINEL
-        assert isinstance(
-            GATEWAY_FACING_REGISTRATION_CAPABILITY_ERROR_SEMANTICS_HARDENED_PR27_SENTINEL, str
-        )
+        assert isinstance(GATEWAY_FACING_REGISTRATION_CAPABILITY_ERROR_SEMANTICS_HARDENED_PR27_SENTINEL, str)
 
     def test_registration_policy_present(self):
         assert REGISTRATION_FAILURE_IS_DISTINGUISHABLE_FROM_CAPABILITY_FAILURE_PR27_POLICY
-        assert isinstance(
-            REGISTRATION_FAILURE_IS_DISTINGUISHABLE_FROM_CAPABILITY_FAILURE_PR27_POLICY, str
-        )
+        assert isinstance(REGISTRATION_FAILURE_IS_DISTINGUISHABLE_FROM_CAPABILITY_FAILURE_PR27_POLICY, str)
 
     def test_readiness_policy_present(self):
         assert READINESS_DEGRADED_BEHAVIOR_IS_REPORTED_THROUGH_STABLE_SIGNALS_PR27_POLICY
-        assert isinstance(
-            READINESS_DEGRADED_BEHAVIOR_IS_REPORTED_THROUGH_STABLE_SIGNALS_PR27_POLICY, str
-        )
+        assert isinstance(READINESS_DEGRADED_BEHAVIOR_IS_REPORTED_THROUGH_STABLE_SIGNALS_PR27_POLICY, str)
 
     def test_capability_policy_present(self):
         assert CAPABILITY_NOT_SATISFIED_FAILURE_IS_ACTIONABLE_PR27_POLICY
@@ -194,9 +190,7 @@ class TestOrchestratorPR27Sentinels:
 
     def test_signals_policy_present(self):
         assert GATEWAY_SETUP_CONNECTION_SIGNALS_ARE_DETERMINISTIC_PR27_POLICY
-        assert isinstance(
-            GATEWAY_SETUP_CONNECTION_SIGNALS_ARE_DETERMINISTIC_PR27_POLICY, str
-        )
+        assert isinstance(GATEWAY_SETUP_CONNECTION_SIGNALS_ARE_DETERMINISTIC_PR27_POLICY, str)
 
     def test_all_five_sentinels_non_empty(self):
         sentinels = [
@@ -214,6 +208,7 @@ class TestOrchestratorPR27Sentinels:
 # Group B — Projection PR-27 sentinel
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(not _PROJECTION_AVAILABLE, reason="projection not available")
 class TestProjectionPR27Sentinel:
     """Projection sentinel must be importable and not UNAVAILABLE."""
@@ -222,8 +217,10 @@ class TestProjectionPR27Sentinel:
         assert "UNAVAILABLE" not in GATEWAY_FACING_REGISTRATION_CAPABILITY_ERROR_SEMANTICS_HARDENED_ALIGNED_PR27
 
     def test_sentinel_contains_pr27_marker(self):
-        assert "PR27" in GATEWAY_FACING_REGISTRATION_CAPABILITY_ERROR_SEMANTICS_HARDENED_ALIGNED_PR27 or \
-               "PR-27" in GATEWAY_FACING_REGISTRATION_CAPABILITY_ERROR_SEMANTICS_HARDENED_ALIGNED_PR27
+        assert (
+            "PR27" in GATEWAY_FACING_REGISTRATION_CAPABILITY_ERROR_SEMANTICS_HARDENED_ALIGNED_PR27
+            or "PR-27" in GATEWAY_FACING_REGISTRATION_CAPABILITY_ERROR_SEMANTICS_HARDENED_ALIGNED_PR27
+        )
 
     def test_sentinel_mentions_registration(self):
         sentinel = GATEWAY_FACING_REGISTRATION_CAPABILITY_ERROR_SEMANTICS_HARDENED_ALIGNED_PR27.lower()
@@ -241,6 +238,7 @@ class TestProjectionPR27Sentinel:
 # ---------------------------------------------------------------------------
 # Group C — core.runtime re-exports
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(not _RUNTIME_EXPORTS_AVAILABLE, reason="core.runtime exports not available")
 class TestCoreRuntimePR27Exports:
@@ -278,6 +276,7 @@ class TestCoreRuntimePR27Exports:
 # ---------------------------------------------------------------------------
 # Group D — Registration failure semantics
 # ---------------------------------------------------------------------------
+
 
 class TestRegistrationFailureSemantics:
     """Registration failures must carry failure_kind='registration_failure'."""
@@ -340,6 +339,7 @@ class TestRegistrationFailureSemantics:
 # Group E — Capability failure semantics
 # ---------------------------------------------------------------------------
 
+
 class TestCapabilityFailureSemantics:
     """Capability failures must carry failure_kind='capability_failure'."""
 
@@ -372,12 +372,8 @@ class TestCapabilityFailureSemantics:
         assert ack["exec_mode_required"] == "local"
 
     def test_capability_failure_is_distinguishable_from_registration_failure(self):
-        reg_fail = _make_registration_ack(
-            success=False, failure_kind="registration_failure"
-        )
-        cap_fail = _make_capability_ack(
-            accepted=False, failure_kind="capability_failure"
-        )
+        reg_fail = _make_registration_ack(success=False, failure_kind="registration_failure")
+        cap_fail = _make_capability_ack(accepted=False, failure_kind="capability_failure")
         assert reg_fail["failure_kind"] != cap_fail["failure_kind"]
         assert reg_fail["failure_kind"] == "registration_failure"
         assert cap_fail["failure_kind"] == "capability_failure"
@@ -397,6 +393,7 @@ class TestCapabilityFailureSemantics:
 # ---------------------------------------------------------------------------
 # Group F — Readiness failure semantics
 # ---------------------------------------------------------------------------
+
 
 class TestReadinessFailureSemantics:
     """Readiness failures must carry failure_kind='readiness_failure'."""
@@ -429,12 +426,8 @@ class TestReadinessFailureSemantics:
         assert signal["blocked_by"] == "recovering"
 
     def test_readiness_failure_distinguishable_from_capability_failure(self):
-        readiness_fail = _make_readiness_signal(
-            status="blocked", failure_kind="readiness_failure"
-        )
-        cap_fail = _make_capability_ack(
-            accepted=False, failure_kind="capability_failure"
-        )
+        readiness_fail = _make_readiness_signal(status="blocked", failure_kind="readiness_failure")
+        cap_fail = _make_capability_ack(accepted=False, failure_kind="capability_failure")
         assert readiness_fail["failure_kind"] != cap_fail["failure_kind"]
 
     def test_readiness_signal_is_json_serialisable(self):
@@ -452,6 +445,7 @@ class TestReadinessFailureSemantics:
 # Group G — Config error semantics
 # ---------------------------------------------------------------------------
 
+
 class TestConfigErrorSemantics:
     """Configuration errors must carry failure_kind='config_error'."""
 
@@ -466,12 +460,8 @@ class TestConfigErrorSemantics:
         assert ack["reason_code"] == "missing_credentials"
 
     def test_config_error_is_distinguishable_from_registration_failure(self):
-        config_fail = _make_registration_ack(
-            success=False, failure_kind="config_error"
-        )
-        reg_fail = _make_registration_ack(
-            success=False, failure_kind="registration_failure"
-        )
+        config_fail = _make_registration_ack(success=False, failure_kind="config_error")
+        reg_fail = _make_registration_ack(success=False, failure_kind="registration_failure")
         assert config_fail["failure_kind"] != reg_fail["failure_kind"]
 
     def test_config_error_is_json_serialisable(self):
@@ -488,6 +478,7 @@ class TestConfigErrorSemantics:
 # ---------------------------------------------------------------------------
 # Group H — Capability-not-satisfied signals are actionable
 # ---------------------------------------------------------------------------
+
 
 class TestCapabilityNotSatisfiedActionable:
     """Capability-not-satisfied signals must identify what is missing and why."""
@@ -548,6 +539,7 @@ class TestCapabilityNotSatisfiedActionable:
 # Group I — Readiness degraded signals carry detail
 # ---------------------------------------------------------------------------
 
+
 class TestReadinessDegradedSignals:
     """Degraded readiness signals must carry BlockedBy / status detail."""
 
@@ -594,6 +586,7 @@ class TestReadinessDegradedSignals:
 # Group J — Gateway signal shape is deterministic
 # ---------------------------------------------------------------------------
 
+
 class TestGatewaySignalShapeDeterministic:
     """All gateway failure signals must have the same stable top-level field set."""
 
@@ -607,9 +600,7 @@ class TestGatewaySignalShapeDeterministic:
             assert field in ack, f"Missing field: {field}"
 
     def test_registration_ack_failure_has_base_fields(self):
-        ack = _make_registration_ack(
-            success=False, failure_kind="registration_failure"
-        )
+        ack = _make_registration_ack(success=False, failure_kind="registration_failure")
         for field in self._REGISTRATION_ACK_BASE_FIELDS:
             assert field in ack, f"Missing field: {field}"
 
@@ -619,9 +610,7 @@ class TestGatewaySignalShapeDeterministic:
             assert field in ack, f"Missing field: {field}"
 
     def test_capability_ack_rejected_has_base_fields(self):
-        ack = _make_capability_ack(
-            accepted=False, failure_kind="capability_failure"
-        )
+        ack = _make_capability_ack(accepted=False, failure_kind="capability_failure")
         for field in self._CAPABILITY_ACK_BASE_FIELDS:
             assert field in ack, f"Missing field: {field}"
 
@@ -654,6 +643,7 @@ class TestGatewaySignalShapeDeterministic:
 # ---------------------------------------------------------------------------
 # Group K — Sentinel keyword verification
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(not _ORCHESTRATOR_AVAILABLE, reason="orchestrator not available")
 class TestSentinelKeywords:
@@ -692,14 +682,13 @@ class TestSentinelKeywords:
 # Group L — Regression: registration ack surface invariance
 # ---------------------------------------------------------------------------
 
+
 class TestRegistrationAckSurfaceInvariance:
     """Registration ack must have same top-level field structure for success/failure."""
 
     def test_success_and_failure_share_base_fields(self):
         success_ack = _make_registration_ack(success=True, session_id="s1")
-        failure_ack = _make_registration_ack(
-            success=False, failure_kind="registration_failure"
-        )
+        failure_ack = _make_registration_ack(success=False, failure_kind="registration_failure")
         base_fields = {"type", "device_id", "success", "message"}
         for f in base_fields:
             assert f in success_ack
@@ -720,14 +709,13 @@ class TestRegistrationAckSurfaceInvariance:
 # Group M — Regression: capability report ack surface invariance
 # ---------------------------------------------------------------------------
 
+
 class TestCapabilityAckSurfaceInvariance:
     """Capability ack must have same top-level field structure for accepted/rejected."""
 
     def test_accepted_and_rejected_share_base_fields(self):
         accepted_ack = _make_capability_ack(accepted=True)
-        rejected_ack = _make_capability_ack(
-            accepted=False, failure_kind="capability_failure"
-        )
+        rejected_ack = _make_capability_ack(accepted=False, failure_kind="capability_failure")
         base_fields = {"type", "device_id", "accepted", "message"}
         for f in base_fields:
             assert f in accepted_ack
@@ -742,6 +730,7 @@ class TestCapabilityAckSurfaceInvariance:
 # ---------------------------------------------------------------------------
 # Group N — Retry/reconnect UX can branch on failure_kind
 # ---------------------------------------------------------------------------
+
 
 class TestRetryReconnectUXBranching:
     """Upstream retry/reconnect UX must be able to branch on failure_kind alone."""
@@ -801,16 +790,22 @@ class TestRetryReconnectUXBranching:
 # Group O — No new registration coordinator or alternate error authority
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(not _ORCHESTRATOR_AVAILABLE, reason="orchestrator not available")
 class TestNoParallelAuthority:
     """No new registration coordinator or alternate error authority must be introduced."""
 
     def test_registration_policy_affirms_no_parallel_coordinator(self):
         policy = REGISTRATION_FAILURE_IS_DISTINGUISHABLE_FROM_CAPABILITY_FAILURE_PR27_POLICY
-        assert "parallel" not in policy.lower() or "no parallel" in policy.lower() or \
-               "not introduced" in policy.lower() or "no new" in policy.lower() or \
-               "no alternate" in policy.lower() or \
-               "No parallel" in policy or "not permitted" in policy.lower()
+        assert (
+            "parallel" not in policy.lower()
+            or "no parallel" in policy.lower()
+            or "not introduced" in policy.lower()
+            or "no new" in policy.lower()
+            or "no alternate" in policy.lower()
+            or "No parallel" in policy
+            or "not permitted" in policy.lower()
+        )
 
     def test_signals_policy_affirms_stable_contract(self):
         policy = GATEWAY_SETUP_CONNECTION_SIGNALS_ARE_DETERMINISTIC_PR27_POLICY

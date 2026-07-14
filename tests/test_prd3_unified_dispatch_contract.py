@@ -55,7 +55,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -121,8 +120,8 @@ def _make_envelope_with_dcm(
     dispatch_plan_id: str = "plan_abc",
 ) -> Any:
     """Return a HandoffEnvelopeV2 that carries dispatch_contract_metadata."""
-    from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
     from contracts.dispatch_contract_metadata import build_dispatch_contract_metadata
+    from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
 
     dcm = build_dispatch_contract_metadata(
         dispatch_plan_id=dispatch_plan_id,
@@ -306,7 +305,7 @@ class TestExtractDispatchContractMetadata:
             build_dispatch_contract_metadata,
             extract_dispatch_contract_metadata,
         )
-        from contracts.source_dispatch import build_source_dispatch_result, SourceDispatchMode
+        from contracts.source_dispatch import SourceDispatchMode, build_source_dispatch_result
 
         dcm = build_dispatch_contract_metadata(
             dispatch_plan_id="plan_sdr",
@@ -456,7 +455,7 @@ class TestSourceDispatchResultIntegration:
         assert result.dispatch_contract_metadata is None
 
     def test_build_source_dispatch_result_accepts_dcm(self):
-        from contracts.source_dispatch import build_source_dispatch_result, SourceDispatchMode
+        from contracts.source_dispatch import SourceDispatchMode, build_source_dispatch_result
 
         dcm_dict = _make_dcm_dict(source_dispatch_strategy="local")
         result = build_source_dispatch_result(
@@ -467,7 +466,7 @@ class TestSourceDispatchResultIntegration:
         assert result.dispatch_contract_metadata == dcm_dict
 
     def test_source_dispatch_result_to_dict_includes_dcm(self):
-        from contracts.source_dispatch import build_source_dispatch_result, SourceDispatchMode
+        from contracts.source_dispatch import SourceDispatchMode, build_source_dispatch_result
 
         dcm_dict = _make_dcm_dict()
         result = build_source_dispatch_result(
@@ -506,8 +505,8 @@ class TestTargetTakeoverHandlerPropagation:
 
     def test_handle_dcm_present_on_rejected_by_policy(self):
         """Rejected-by-policy path also carries dispatch_contract_metadata."""
-        from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
         from contracts.dispatch_contract_metadata import build_dispatch_contract_metadata
+        from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
         from core.runtime.target_takeover import TargetTakeoverHandler
 
         dcm = build_dispatch_contract_metadata(
@@ -660,9 +659,7 @@ class TestThreePathFieldSymmetry:
         result = handler.handle(envelope)
         if result.dispatch_contract_metadata is not None:
             for key in self._required_dcm_keys():
-                assert key in result.dispatch_contract_metadata, (
-                    f"Missing key in takeover DCM: {key}"
-                )
+                assert key in result.dispatch_contract_metadata, f"Missing key in takeover DCM: {key}"
 
 
 # ---------------------------------------------------------------------------
@@ -697,7 +694,7 @@ class TestCompactSummaryDispatchFields:
         assert summary["dispatch_plan_id"] is None
 
     def test_source_dispatch_result_compact_summary_with_dcm(self):
-        from contracts.source_dispatch import build_source_dispatch_result, SourceDispatchMode
+        from contracts.source_dispatch import SourceDispatchMode, build_source_dispatch_result
 
         dcm_dict = _make_dcm_dict()
         result = build_source_dispatch_result(
@@ -711,7 +708,7 @@ class TestCompactSummaryDispatchFields:
         assert summary["source_dispatch_strategy"] == "remote_handoff"
 
     def test_source_dispatch_result_compact_summary_without_dcm(self):
-        from contracts.source_dispatch import build_source_dispatch_result, SourceDispatchMode
+        from contracts.source_dispatch import SourceDispatchMode, build_source_dispatch_result
 
         result = build_source_dispatch_result(trace_id="t", mode=SourceDispatchMode.local)
         summary = result.to_compact_summary()
@@ -729,20 +726,25 @@ class TestContractsPackageReExports:
 
     def test_dispatch_contract_metadata_importable_from_contracts(self):
         from contracts import DispatchContractMetadata
+
         assert DispatchContractMetadata is not None
 
     def test_build_dispatch_contract_metadata_importable_from_contracts(self):
         from contracts import build_dispatch_contract_metadata
+
         assert build_dispatch_contract_metadata is not None
 
     def test_extract_dispatch_contract_metadata_importable_from_contracts(self):
         from contracts import extract_dispatch_contract_metadata
+
         assert extract_dispatch_contract_metadata is not None
 
     def test_sentinel_importable_from_contracts(self):
         from contracts import UNIFIED_DISPATCH_CONTRACT_PR03_SENTINEL
+
         assert "PR03" in UNIFIED_DISPATCH_CONTRACT_PR03_SENTINEL
 
     def test_policy_importable_from_contracts(self):
         from contracts import DISPATCH_CONTRACT_METADATA_IS_STABLE_ANDROID_SURFACE_PR03_POLICY
+
         assert "PR03" in DISPATCH_CONTRACT_METADATA_IS_STABLE_ANDROID_SURFACE_PR03_POLICY

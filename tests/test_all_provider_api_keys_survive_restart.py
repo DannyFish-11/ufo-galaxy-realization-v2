@@ -39,7 +39,6 @@ from pathlib import Path
 
 import pytest
 
-
 ALL_ENV_CONTENT = """OPENAI_API_KEY=sk-openai-x
 ANTHROPIC_API_KEY=sk-ant-x
 GOOGLE_API_KEY=sk-google-x
@@ -94,9 +93,11 @@ def fresh_env_and_config(tmp_path):
     env_snapshot = dict(os.environ)
     try:
         from dotenv import load_dotenv
+
         load_dotenv(dotenv_path=str(env_path), override=True)
 
         import core.unified_config as uc
+
         cfg = uc.UnifiedConfig.__new__(uc.UnifiedConfig)
         cfg._config = {}
         cfg._callbacks = {}
@@ -128,7 +129,7 @@ class TestAllProviderKeysResolveAfterRestart:
         got = router._get_key(short_name)
         assert got == expected, (
             f"provider={short_name!r} 重启后应能取回 .env 里配置的 Key，"
-            f"实际取到 {got!r}（期望 {expected!r}）——用户反馈的\"保存后重启失效\""
+            f'实际取到 {got!r}（期望 {expected!r}）——用户反馈的"保存后重启失效"'
             f"问题不止 DeepSeek 一家，{short_name} 也必须修好"
         )
 
@@ -140,6 +141,7 @@ class TestAllProviderKeysResolveAfterRestart:
         assert router._get_key("mimo") == "" or router._get_key("mimo") == "sk-mimo-x"
         # MIMO 在 fixture 里其实配置了；换一个真正没配置的
         import core.unified_config as uc
+
         assert "unconfigured_provider_xyz" not in uc.config._config
 
 
@@ -147,10 +149,12 @@ def test_provider_env_key_map_covers_all_router_call_sites():
     """静态核实:_PROVIDER_ENV_KEY_MAP 覆盖 _discover_providers() 里全部
     _get_key() 调用的短名，不能有遗漏(遗漏的 provider 会继续悄悄读不到 .env)。"""
     import inspect
-    from core.multi_llm_router import MultiLLMRouter, _PROVIDER_ENV_KEY_MAP
+
+    from core.multi_llm_router import _PROVIDER_ENV_KEY_MAP, MultiLLMRouter
 
     src = inspect.getsource(MultiLLMRouter._discover_providers)
     import re
+
     call_sites = set(re.findall(r'self\._get_key\("([a-z_]+)"\)', src))
     missing = call_sites - set(_PROVIDER_ENV_KEY_MAP.keys())
     assert not missing, f"_discover_providers() 里这些短名调用没有对应的 env_key 映射: {missing}"

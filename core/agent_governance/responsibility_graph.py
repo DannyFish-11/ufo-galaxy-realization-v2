@@ -87,33 +87,45 @@ __all__ = [
 #: Stored as a dict from ``AgentRole`` to ``FrozenSet[AgentRole]`` of valid
 #: targets.  Missing keys mean no outgoing edges (role cannot initiate).
 HANDOFF_GRAPH: Dict[AgentRole, FrozenSet[AgentRole]] = {
-    AgentRole.PLANNER: frozenset({
-        AgentRole.EXECUTOR,
-        AgentRole.BRIDGE,
-        AgentRole.LOCAL_ASSISTANT,
-        AgentRole.REMOTE_SPECIALIST,
-    }),
-    AgentRole.EXECUTOR: frozenset({
-        AgentRole.BRIDGE,
-        AgentRole.REMOTE_SPECIALIST,
-        AgentRole.RECOVERY,
-    }),
-    AgentRole.LOCAL_ASSISTANT: frozenset({
-        AgentRole.BRIDGE,
-        AgentRole.REMOTE_SPECIALIST,
-        AgentRole.RECOVERY,
-    }),
-    AgentRole.BRIDGE: frozenset({
-        AgentRole.EXECUTOR,
-        AgentRole.REMOTE_SPECIALIST,
-        AgentRole.RECOVERY,
-    }),
-    AgentRole.RECOVERY: frozenset({
-        AgentRole.EXECUTOR,
-    }),
-    AgentRole.REMOTE_SPECIALIST: frozenset({
-        AgentRole.RECOVERY,
-    }),
+    AgentRole.PLANNER: frozenset(
+        {
+            AgentRole.EXECUTOR,
+            AgentRole.BRIDGE,
+            AgentRole.LOCAL_ASSISTANT,
+            AgentRole.REMOTE_SPECIALIST,
+        }
+    ),
+    AgentRole.EXECUTOR: frozenset(
+        {
+            AgentRole.BRIDGE,
+            AgentRole.REMOTE_SPECIALIST,
+            AgentRole.RECOVERY,
+        }
+    ),
+    AgentRole.LOCAL_ASSISTANT: frozenset(
+        {
+            AgentRole.BRIDGE,
+            AgentRole.REMOTE_SPECIALIST,
+            AgentRole.RECOVERY,
+        }
+    ),
+    AgentRole.BRIDGE: frozenset(
+        {
+            AgentRole.EXECUTOR,
+            AgentRole.REMOTE_SPECIALIST,
+            AgentRole.RECOVERY,
+        }
+    ),
+    AgentRole.RECOVERY: frozenset(
+        {
+            AgentRole.EXECUTOR,
+        }
+    ),
+    AgentRole.REMOTE_SPECIALIST: frozenset(
+        {
+            AgentRole.RECOVERY,
+        }
+    ),
     # OBSERVER and UNASSIGNED: no outgoing handoff edges
     AgentRole.OBSERVER: frozenset(),
     AgentRole.UNASSIGNED: frozenset(),
@@ -177,9 +189,7 @@ def describe_handoff_edge(
     status = "valid" if valid else "invalid"
     is_recovery = target_role == AgentRole.RECOVERY
     suffix = " [recovery path]" if is_recovery else ""
-    return (
-        f"{source_role.value} → {target_role.value} [{status}]{suffix}"
-    )
+    return f"{source_role.value} → {target_role.value} [{status}]{suffix}"
 
 
 # ---------------------------------------------------------------------------
@@ -247,11 +257,7 @@ class OwnershipRecord:
             "schema_version": self.schema_version,
             "dispatch_owner": self.dispatch_owner.value,
             "current_owner": self.current_owner.value,
-            "final_outcome_owner": (
-                self.final_outcome_owner.value
-                if self.final_outcome_owner is not None
-                else None
-            ),
+            "final_outcome_owner": (self.final_outcome_owner.value if self.final_outcome_owner is not None else None),
             "handoff_count": self.handoff_count,
             "is_recovery_active": self.is_recovery_active,
             "is_complete": self.is_complete,
@@ -266,6 +272,7 @@ class OwnershipRecord:
 
         Unknown or missing fields are silently defaulted.
         """
+
         def _parse_role(key: str, default: AgentRole = AgentRole.UNASSIGNED) -> AgentRole:
             raw = data.get(key)
             if raw is None:
@@ -393,9 +400,7 @@ def apply_ownership_transfer(
             new_owner=previous,
             is_valid_edge=False,
             is_recovery_transition=is_recovery,
-            rejection_reason=(
-                f"invalid handoff edge: {previous.value} → {target_role.value}"
-            ),
+            rejection_reason=(f"invalid handoff edge: {previous.value} → {target_role.value}"),
         )
 
     # Apply transfer

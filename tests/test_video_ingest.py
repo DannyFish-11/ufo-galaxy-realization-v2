@@ -1,4 +1,5 @@
 """Unit tests for WebRTC camera ingest pipeline and video features (PR-0B)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -8,19 +9,19 @@ from typing import List, Optional
 import numpy as np
 import pytest
 
+from core.multimodal.signal_quality import QualityFlag, SignalQuality
 from core.multimodal.video_features import VideoFeatureExtractor, VideoState
+from core.multimodal.video_ingest import VideoIngestConfig, VideoIngestPipeline
 from core.multimodal.webrtc_session import (
     WebRTCCameraSession,
     WebRTCSessionConfig,
     WebRTCSessionState,
 )
-from core.multimodal.video_ingest import VideoIngestPipeline, VideoIngestConfig
-from core.multimodal.signal_quality import SignalQuality, QualityFlag
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _black(h: int = 64, w: int = 64, channels: int = 3) -> np.ndarray:
     return np.zeros((h, w, channels), dtype=np.uint8)
@@ -37,6 +38,7 @@ def _gray_2d(h: int = 64, w: int = 64) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # VideoFeatureExtractor tests
 # ---------------------------------------------------------------------------
+
 
 class TestVideoFeatureExtractor:
     def test_first_frame_returns_valid_state(self):
@@ -123,6 +125,7 @@ class TestVideoFeatureExtractor:
 # WebRTCCameraSession tests
 # ---------------------------------------------------------------------------
 
+
 class TestWebRTCCameraSession:
     def test_initial_state_is_idle(self):
         session = WebRTCCameraSession()
@@ -130,6 +133,7 @@ class TestWebRTCCameraSession:
 
     def test_not_available_without_aiortc(self, monkeypatch):
         import core.multimodal.webrtc_session as mod
+
         monkeypatch.setattr(mod, "_AIORTC_AVAILABLE", False)
         session = WebRTCCameraSession()
         assert not session.is_available
@@ -137,6 +141,7 @@ class TestWebRTCCameraSession:
     @pytest.mark.asyncio
     async def test_connect_returns_none_without_aiortc(self, monkeypatch):
         import core.multimodal.webrtc_session as mod
+
         monkeypatch.setattr(mod, "_AIORTC_AVAILABLE", False)
         session = WebRTCCameraSession()
         result = await session.connect("dummy_sdp")
@@ -159,9 +164,7 @@ class TestWebRTCCameraSession:
         assert quality.is_usable
 
     def test_stale_frame_has_stale_quality(self):
-        session = WebRTCCameraSession(
-            config=WebRTCSessionConfig(frame_stale_threshold_ms=10.0)
-        )
+        session = WebRTCCameraSession(config=WebRTCSessionConfig(frame_stale_threshold_ms=10.0))
         session._latest_frame = _black()
         session._last_frame_ts = time.monotonic() - 1.0  # 1 second ago
         _, quality = session.get_latest_frame()
@@ -181,6 +184,7 @@ class TestWebRTCCameraSession:
     @pytest.mark.asyncio
     async def test_quality_becomes_device_unavailable_without_aiortc(self, monkeypatch):
         import core.multimodal.webrtc_session as mod
+
         monkeypatch.setattr(mod, "_AIORTC_AVAILABLE", False)
         session = WebRTCCameraSession()
         await session.connect("dummy_sdp")
@@ -190,6 +194,7 @@ class TestWebRTCCameraSession:
 # ---------------------------------------------------------------------------
 # VideoIngestPipeline tests
 # ---------------------------------------------------------------------------
+
 
 class TestVideoIngestPipeline:
     def test_instantiation_default_config(self):
@@ -203,6 +208,7 @@ class TestVideoIngestPipeline:
 
     def test_not_available_without_aiortc(self, monkeypatch):
         import core.multimodal.webrtc_session as mod
+
         monkeypatch.setattr(mod, "_AIORTC_AVAILABLE", False)
         pipeline = VideoIngestPipeline()
         assert not pipeline.is_available
@@ -253,6 +259,7 @@ class TestVideoIngestPipeline:
     @pytest.mark.asyncio
     async def test_run_without_frames_does_not_crash(self, monkeypatch):
         import core.multimodal.webrtc_session as mod
+
         monkeypatch.setattr(mod, "_AIORTC_AVAILABLE", False)
         pipeline = VideoIngestPipeline(config=VideoIngestConfig(sample_interval_ms=50))
         task = asyncio.create_task(pipeline.run())

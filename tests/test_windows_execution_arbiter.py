@@ -25,6 +25,7 @@ Test groups
   O) HybridExecutionArbiter — non-Windows device skips Windows path.
   P) HybridExecutionArbiter — _is_windows_device heuristic.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -34,16 +35,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from core.windows_execution_arbiter import (
+    WindowsExecutionArbiter,
     WinExecAttempt,
     WinExecLevel,
     WinExecResult,
     WinExecStatus,
-    WindowsExecutionArbiter,
     _build_action_summary,
     get_windows_arbiter,
     reset_windows_arbiter,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -112,6 +112,7 @@ async def _vlm_fail(device_id, instruction, screenshot):
 # A) Data classes
 # ===========================================================================
 
+
 class TestWinExecAttempt:
     def test_to_dict_keys(self):
         a = WinExecAttempt(
@@ -162,6 +163,7 @@ class TestWinExecResult:
 # B) No executors configured
 # ===========================================================================
 
+
 class TestNoExecutors:
     @pytest.mark.asyncio
     async def test_all_skipped_returns_failure(self):
@@ -179,6 +181,7 @@ class TestNoExecutors:
 # ===========================================================================
 # C) System API succeeds
 # ===========================================================================
+
 
 class TestSystemAPISucceeds:
     @pytest.mark.asyncio
@@ -201,6 +204,7 @@ class TestSystemAPISucceeds:
 # ===========================================================================
 # D) System API fails, UIA succeeds
 # ===========================================================================
+
 
 class TestUIAFallback:
     @pytest.mark.asyncio
@@ -225,6 +229,7 @@ class TestUIAFallback:
 # E) System API + UIA fail, GUI succeeds
 # ===========================================================================
 
+
 class TestGUIFallback:
     @pytest.mark.asyncio
     async def test_fallback_to_gui(self):
@@ -238,6 +243,7 @@ class TestGUIFallback:
 # ===========================================================================
 # F) All structural levels fail, VLM succeeds
 # ===========================================================================
+
 
 class TestVLMFallback:
     @pytest.mark.asyncio
@@ -258,6 +264,7 @@ class TestVLMFallback:
 # G) All levels fail
 # ===========================================================================
 
+
 class TestAllFailed:
     @pytest.mark.asyncio
     async def test_all_failed_result(self):
@@ -277,6 +284,7 @@ class TestAllFailed:
 # H) force_level
 # ===========================================================================
 
+
 class TestForceLevel:
     @pytest.mark.asyncio
     async def test_force_vlm_skips_chain(self):
@@ -284,9 +292,7 @@ class TestForceLevel:
             system_api=_sys_ok,  # would succeed if reached
             vlm=_vlm_ok,
         )
-        result = await arbiter.execute(
-            "click", {}, device_id="win-6", force_level=WinExecLevel.VLM
-        )
+        result = await arbiter.execute("click", {}, device_id="win-6", force_level=WinExecLevel.VLM)
         assert result.success is True
         assert result.final_level == WinExecLevel.VLM
         assert len(result.attempts) == 1
@@ -294,9 +300,7 @@ class TestForceLevel:
     @pytest.mark.asyncio
     async def test_force_gui_no_gui_executor_skips(self):
         arbiter = _make_arbiter()
-        result = await arbiter.execute(
-            "click", {}, device_id="win-6", force_level=WinExecLevel.GUI
-        )
+        result = await arbiter.execute("click", {}, device_id="win-6", force_level=WinExecLevel.GUI)
         assert result.success is False
         assert len(result.attempts) == 1
         assert result.attempts[0]["status"] == "skipped"
@@ -305,6 +309,7 @@ class TestForceLevel:
 # ===========================================================================
 # I) Executor raises exception
 # ===========================================================================
+
 
 class TestExecutorException:
     @pytest.mark.asyncio
@@ -325,6 +330,7 @@ class TestExecutorException:
 # J) set_executors
 # ===========================================================================
 
+
 class TestSetExecutors:
     @pytest.mark.asyncio
     async def test_runtime_swap(self):
@@ -342,6 +348,7 @@ class TestSetExecutors:
 # ===========================================================================
 # K) Stats and history
 # ===========================================================================
+
 
 class TestStatsAndHistory:
     @pytest.mark.asyncio
@@ -367,6 +374,7 @@ class TestStatsAndHistory:
 # ===========================================================================
 # L) VLM screenshot propagation
 # ===========================================================================
+
 
 class TestVLMScreenshot:
     @pytest.mark.asyncio
@@ -411,6 +419,7 @@ class TestVLMScreenshot:
 # M) Singleton helpers
 # ===========================================================================
 
+
 class TestSingleton:
     def test_get_returns_same_instance(self):
         reset_windows_arbiter()
@@ -433,6 +442,7 @@ class TestSingleton:
 # N) HybridExecutionArbiter — Windows fast-path
 # ===========================================================================
 
+
 class TestHybridWindowsDelegation:
     """Ensure HybridExecutionArbiter delegates Windows requests correctly."""
 
@@ -453,11 +463,12 @@ class TestHybridWindowsDelegation:
         assert result.success is True
         # final_level should map to A2A (system_api → A2A)
         from core.hybrid_executor import ExecutionLevel
+
         assert result.final_level == ExecutionLevel.A2A
 
     @pytest.mark.asyncio
     async def test_windows_device_vlm_fallback(self):
-        from core.hybrid_executor import HybridExecutionArbiter, ExecutionLevel
+        from core.hybrid_executor import ExecutionLevel, HybridExecutionArbiter
 
         win_arbiter = _make_arbiter(
             system_api=_sys_fail,
@@ -498,6 +509,7 @@ class TestHybridWindowsDelegation:
 # O) Non-Windows device skips Windows path
 # ===========================================================================
 
+
 class TestNonWindowsDevice:
     @pytest.mark.asyncio
     async def test_android_device_skips_windows_arbiter(self):
@@ -520,9 +532,11 @@ class TestNonWindowsDevice:
 # P) _is_windows_device heuristic
 # ===========================================================================
 
+
 class TestIsWindowsDevice:
     def _check(self, device_id: str) -> bool:
         from core.hybrid_executor import HybridExecutionArbiter
+
         return HybridExecutionArbiter._is_windows_device(device_id)
 
     def test_windows_prefix(self):
@@ -532,12 +546,14 @@ class TestIsWindowsDevice:
     def test_local_on_win32(self):
         import sys
         import unittest.mock as mock
+
         with mock.patch.object(sys, "platform", "win32"):
             assert self._check("local") is True
 
     def test_local_on_linux(self):
         import sys
         import unittest.mock as mock
+
         with mock.patch.object(sys, "platform", "linux"):
             assert self._check("local") is False
 
@@ -558,6 +574,7 @@ class TestIsWindowsDevice:
 # ===========================================================================
 # Helper function tests
 # ===========================================================================
+
 
 class TestBuildActionSummary:
     def test_with_key_params(self):

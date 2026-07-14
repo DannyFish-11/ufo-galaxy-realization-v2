@@ -66,12 +66,12 @@ import pytest
 
 try:
     from core.runtime.source_dispatch_orchestrator import (
-        CROSS_DEVICE_RUNTIME_ACCEPTANCE_PR34_SENTINEL,
-        DISPATCH_FALLBACK_RESULT_MERGE_STABILITY_PR34_POLICY,
         ANDROID_ATTACHED_RUNTIME_ORCHESTRATION_STABILITY_PR34_POLICY,
+        CROSS_DEVICE_RUNTIME_ACCEPTANCE_PR34_SENTINEL,
+        DIAGNOSTICS_READINESS_PARTICIPATION_FORMATION_USABILITY_PR34_POLICY,
+        DISPATCH_FALLBACK_RESULT_MERGE_STABILITY_PR34_POLICY,
         MULTI_TARGET_RANKING_MATURITY_PR34_POLICY,
         STAGED_MESH_CLOSURE_RUNNABLE_PR34_POLICY,
-        DIAGNOSTICS_READINESS_PARTICIPATION_FORMATION_USABILITY_PR34_POLICY,
     )
 
     _ORCHESTRATOR_AVAILABLE = True
@@ -86,26 +86,25 @@ except ImportError:
     _PROJECTION_AVAILABLE = False
 
 try:
-    from core.runtime import (
-        CROSS_DEVICE_RUNTIME_ACCEPTANCE_PR34_SENTINEL as _rt_sentinel,
-        DISPATCH_FALLBACK_RESULT_MERGE_STABILITY_PR34_POLICY as _rt_dispatch,
-        ANDROID_ATTACHED_RUNTIME_ORCHESTRATION_STABILITY_PR34_POLICY as _rt_android,
-        MULTI_TARGET_RANKING_MATURITY_PR34_POLICY as _rt_ranking,
-        STAGED_MESH_CLOSURE_RUNNABLE_PR34_POLICY as _rt_mesh,
-        DIAGNOSTICS_READINESS_PARTICIPATION_FORMATION_USABILITY_PR34_POLICY as _rt_diag,
-    )
+    from core.runtime import ANDROID_ATTACHED_RUNTIME_ORCHESTRATION_STABILITY_PR34_POLICY as _rt_android
+    from core.runtime import CROSS_DEVICE_RUNTIME_ACCEPTANCE_PR34_SENTINEL as _rt_sentinel
+    from core.runtime import DIAGNOSTICS_READINESS_PARTICIPATION_FORMATION_USABILITY_PR34_POLICY as _rt_diag
+    from core.runtime import DISPATCH_FALLBACK_RESULT_MERGE_STABILITY_PR34_POLICY as _rt_dispatch
+    from core.runtime import MULTI_TARGET_RANKING_MATURITY_PR34_POLICY as _rt_ranking
+    from core.runtime import STAGED_MESH_CLOSURE_RUNNABLE_PR34_POLICY as _rt_mesh
 
     _RUNTIME_EXPORTS_AVAILABLE = True
 except ImportError:
     _RUNTIME_EXPORTS_AVAILABLE = False
 
 try:
-    from core.runtime.source_dispatch_orchestrator import (
-        orchestrate_source_runtime_dispatch,
-        build_source_dispatch_plan,
-    )
     # Dispatch execution requires contracts which needs pydantic
     import pydantic  # noqa: F401 — availability check only
+
+    from core.runtime.source_dispatch_orchestrator import (
+        build_source_dispatch_plan,
+        orchestrate_source_runtime_dispatch,
+    )
 
     _DISPATCH_AVAILABLE = True
 except ImportError:
@@ -113,11 +112,11 @@ except ImportError:
 
 try:
     from core.android_delegated_signal_ingress import (
-        extract_delegated_signal_envelope,
-        ingest_delegated_execution_signal,
+        DelegatedExecutionSignalEnvelope,
         DelegatedSignalKind,
         ResultKind,
-        DelegatedExecutionSignalEnvelope,
+        extract_delegated_signal_envelope,
+        ingest_delegated_execution_signal,
     )
 
     _INGRESS_AVAILABLE = True
@@ -129,11 +128,11 @@ try:
         AttachedSessionRegistry,
         AttachedSessionRegistryEntry,
         RegistryEntryState,
-        register_session,
-        reconnect_session,
         detach_session,
         invalidate_session,
         list_active_sessions,
+        reconnect_session,
+        register_session,
     )
 
     _REGISTRY_AVAILABLE = True
@@ -143,12 +142,12 @@ except ImportError:
 try:
     from core.attached_runtime_recovery_readiness import (
         RecoveryReadinessRuntime,
-        build_idempotency_key,
-        check_signal_guard,
-        record_seen_signal,
-        guard_inbound_signal,
-        build_recovery_readiness_snapshot,
         SignalGuardDecision,
+        build_idempotency_key,
+        build_recovery_readiness_snapshot,
+        check_signal_guard,
+        guard_inbound_signal,
+        record_seen_signal,
     )
 
     _RECOVERY_AVAILABLE = True
@@ -157,9 +156,9 @@ except ImportError:
 
 try:
     from core.attached_runtime_reuse_dispatch import (
-        resolve_reuse_dispatch_surface,
-        ReuseDispatchResolutionKind,
         ReuseDispatchResolution,
+        ReuseDispatchResolutionKind,
+        resolve_reuse_dispatch_surface,
     )
 
     _REUSE_DISPATCH_AVAILABLE = True
@@ -168,15 +167,15 @@ except ImportError:
 
 try:
     from core.delegated_target_selection_policy import (
+        CandidateEvaluation,
+        CandidateRejectionReason,
+        SelectionCandidateContext,
+        SelectionDecision,
+        SelectionOutcome,
+        build_selection_explanation,
         evaluate_candidate,
         rank_candidates,
         select_delegated_target,
-        build_selection_explanation,
-        SelectionCandidateContext,
-        CandidateEvaluation,
-        SelectionDecision,
-        SelectionOutcome,
-        CandidateRejectionReason,
     )
 
     _RANKING_AVAILABLE = True
@@ -201,10 +200,10 @@ except ImportError:
 
 try:
     from core.runtime.source_dispatch_orchestrator import (
-        RECONNECT_RECOVERY_CONSISTENCY_PR33_SENTINEL,
-        RECONNECT_MUST_NOT_BREAK_HOST_SIDE_TRUTH_PR33_POLICY,
-        REGISTRY_RECONNECT_EVENT_IS_OBSERVABLE_PR33_POLICY,
         EXECUTION_TRACKER_SURVIVES_RECONNECT_PR33_POLICY,
+        RECONNECT_MUST_NOT_BREAK_HOST_SIDE_TRUTH_PR33_POLICY,
+        RECONNECT_RECOVERY_CONSISTENCY_PR33_SENTINEL,
+        REGISTRY_RECONNECT_EVENT_IS_OBSERVABLE_PR33_POLICY,
         RESULT_MERGE_CONSISTENT_THROUGH_RECOVERY_PR33_POLICY,
     )
 
@@ -216,42 +215,20 @@ except ImportError:
 # Skip markers
 # ---------------------------------------------------------------------------
 
-_skip_orchestrator = pytest.mark.skipif(
-    not _ORCHESTRATOR_AVAILABLE, reason="orchestrator module unavailable"
-)
+_skip_orchestrator = pytest.mark.skipif(not _ORCHESTRATOR_AVAILABLE, reason="orchestrator module unavailable")
 _skip_projection = pytest.mark.skipif(
     not _PROJECTION_AVAILABLE, reason="projection module unavailable (fastapi missing)"
 )
-_skip_runtime = pytest.mark.skipif(
-    not _RUNTIME_EXPORTS_AVAILABLE, reason="core.runtime exports unavailable"
-)
-_skip_dispatch = pytest.mark.skipif(
-    not _DISPATCH_AVAILABLE, reason="dispatch orchestrator unavailable"
-)
-_skip_ingress = pytest.mark.skipif(
-    not _INGRESS_AVAILABLE, reason="android delegated signal ingress unavailable"
-)
-_skip_registry = pytest.mark.skipif(
-    not _REGISTRY_AVAILABLE, reason="session registry unavailable"
-)
-_skip_recovery = pytest.mark.skipif(
-    not _RECOVERY_AVAILABLE, reason="recovery readiness module unavailable"
-)
-_skip_reuse = pytest.mark.skipif(
-    not _REUSE_DISPATCH_AVAILABLE, reason="reuse dispatch module unavailable"
-)
-_skip_ranking = pytest.mark.skipif(
-    not _RANKING_AVAILABLE, reason="delegated target selection policy unavailable"
-)
-_skip_mesh = pytest.mark.skipif(
-    not _MESH_COORDINATOR_AVAILABLE, reason="mesh session coordinator unavailable"
-)
-_skip_diagnostics = pytest.mark.skipif(
-    not _DIAGNOSTICS_AVAILABLE, reason="PR-30 diagnostics sentinel unavailable"
-)
-_skip_pr33 = pytest.mark.skipif(
-    not _PR33_SENTINELS_AVAILABLE, reason="PR-33 sentinels unavailable"
-)
+_skip_runtime = pytest.mark.skipif(not _RUNTIME_EXPORTS_AVAILABLE, reason="core.runtime exports unavailable")
+_skip_dispatch = pytest.mark.skipif(not _DISPATCH_AVAILABLE, reason="dispatch orchestrator unavailable")
+_skip_ingress = pytest.mark.skipif(not _INGRESS_AVAILABLE, reason="android delegated signal ingress unavailable")
+_skip_registry = pytest.mark.skipif(not _REGISTRY_AVAILABLE, reason="session registry unavailable")
+_skip_recovery = pytest.mark.skipif(not _RECOVERY_AVAILABLE, reason="recovery readiness module unavailable")
+_skip_reuse = pytest.mark.skipif(not _REUSE_DISPATCH_AVAILABLE, reason="reuse dispatch module unavailable")
+_skip_ranking = pytest.mark.skipif(not _RANKING_AVAILABLE, reason="delegated target selection policy unavailable")
+_skip_mesh = pytest.mark.skipif(not _MESH_COORDINATOR_AVAILABLE, reason="mesh session coordinator unavailable")
+_skip_diagnostics = pytest.mark.skipif(not _DIAGNOSTICS_AVAILABLE, reason="PR-30 diagnostics sentinel unavailable")
+_skip_pr33 = pytest.mark.skipif(not _PR33_SENTINELS_AVAILABLE, reason="PR-33 sentinels unavailable")
 
 
 # ---------------------------------------------------------------------------
@@ -829,10 +806,7 @@ class TestRankingRankCandidates:
         assert ev_first.score >= ev_last.score
 
     def test_AN4_ranking_is_deterministic(self):
-        contexts = [
-            _make_entry_context(device_id=f"dev-an4-{i}", recent_failure_count=i)
-            for i in range(5)
-        ]
+        contexts = [_make_entry_context(device_id=f"dev-an4-{i}", recent_failure_count=i) for i in range(5)]
         ranked1 = rank_candidates(list(contexts))
         ranked2 = rank_candidates(list(contexts))
         scores1 = [evaluate_candidate(c).score for c in ranked1]
@@ -966,8 +940,10 @@ class TestDiagnosticsUsability:
         assert len(OBSERVABILITY_DIAGNOSTICS_ROLLOUT_SAFETY_HARDENING_PR30_SENTINEL) > 10
 
     def test_AR2_pr30_sentinel_contains_pr30(self):
-        assert "PR30" in OBSERVABILITY_DIAGNOSTICS_ROLLOUT_SAFETY_HARDENING_PR30_SENTINEL or \
-               "30" in OBSERVABILITY_DIAGNOSTICS_ROLLOUT_SAFETY_HARDENING_PR30_SENTINEL
+        assert (
+            "PR30" in OBSERVABILITY_DIAGNOSTICS_ROLLOUT_SAFETY_HARDENING_PR30_SENTINEL
+            or "30" in OBSERVABILITY_DIAGNOSTICS_ROLLOUT_SAFETY_HARDENING_PR30_SENTINEL
+        )
 
 
 # ===========================================================================
@@ -1049,13 +1025,13 @@ class TestNoParallelAuthority:
 
     def test_AU2_dispatch_policy_prohibits_alternate_authority(self):
         policy = DISPATCH_FALLBACK_RESULT_MERGE_STABILITY_PR34_POLICY
-        assert "no alternate" in policy.lower() or "no new" in policy.lower() or \
-               "parallel" in policy.lower()
+        assert "no alternate" in policy.lower() or "no new" in policy.lower() or "parallel" in policy.lower()
 
     def test_AU3_android_policy_prohibits_new_control_system(self):
         policy = ANDROID_ATTACHED_RUNTIME_ORCHESTRATION_STABILITY_PR34_POLICY
-        assert "no new" in policy.lower() or "no new android" in policy.lower() or \
-               "sole orchestration" in policy.lower()
+        assert (
+            "no new" in policy.lower() or "no new android" in policy.lower() or "sole orchestration" in policy.lower()
+        )
 
     def test_AU4_mesh_policy_prohibits_new_mesh_authority(self):
         policy = STAGED_MESH_CLOSURE_RUNNABLE_PR34_POLICY
@@ -1063,8 +1039,7 @@ class TestNoParallelAuthority:
 
     def test_AU5_diagnostics_policy_prohibits_duplicate_subsystem(self):
         policy = DIAGNOSTICS_READINESS_PARTICIPATION_FORMATION_USABILITY_PR34_POLICY
-        assert "no duplicate" in policy.lower() or "no parallel" in policy.lower() or \
-               "no new" in policy.lower()
+        assert "no duplicate" in policy.lower() or "no parallel" in policy.lower() or "no new" in policy.lower()
 
 
 # ===========================================================================
@@ -1075,41 +1050,35 @@ class TestNoParallelAuthority:
 @_skip_pr33
 class TestPR33Regression:
     def test_AV1_pr33_main_sentinel_still_present(self):
-        from core.runtime.source_dispatch_orchestrator import (
-            RECONNECT_RECOVERY_CONSISTENCY_PR33_SENTINEL as _pr33,
-        )
+        from core.runtime.source_dispatch_orchestrator import RECONNECT_RECOVERY_CONSISTENCY_PR33_SENTINEL as _pr33
+
         assert _pr33
         assert len(_pr33) > 10
 
     def test_AV2_pr33_host_truth_policy_still_present(self):
-        from core.runtime.source_dispatch_orchestrator import (
-            RECONNECT_MUST_NOT_BREAK_HOST_SIDE_TRUTH_PR33_POLICY as _p,
-        )
+        from core.runtime.source_dispatch_orchestrator import RECONNECT_MUST_NOT_BREAK_HOST_SIDE_TRUTH_PR33_POLICY as _p
+
         assert _p
 
     def test_AV3_pr33_observable_policy_still_present(self):
-        from core.runtime.source_dispatch_orchestrator import (
-            REGISTRY_RECONNECT_EVENT_IS_OBSERVABLE_PR33_POLICY as _p,
-        )
+        from core.runtime.source_dispatch_orchestrator import REGISTRY_RECONNECT_EVENT_IS_OBSERVABLE_PR33_POLICY as _p
+
         assert _p
 
     def test_AV4_pr33_tracker_policy_still_present(self):
-        from core.runtime.source_dispatch_orchestrator import (
-            EXECUTION_TRACKER_SURVIVES_RECONNECT_PR33_POLICY as _p,
-        )
+        from core.runtime.source_dispatch_orchestrator import EXECUTION_TRACKER_SURVIVES_RECONNECT_PR33_POLICY as _p
+
         assert _p
 
     def test_AV5_pr33_merge_policy_still_present(self):
-        from core.runtime.source_dispatch_orchestrator import (
-            RESULT_MERGE_CONSISTENT_THROUGH_RECOVERY_PR33_POLICY as _p,
-        )
+        from core.runtime.source_dispatch_orchestrator import RESULT_MERGE_CONSISTENT_THROUGH_RECOVERY_PR33_POLICY as _p
+
         assert _p
 
     def test_AV6_pr33_sentinel_does_not_contain_pr34_keyword(self):
-        from core.runtime.source_dispatch_orchestrator import (
-            RECONNECT_RECOVERY_CONSISTENCY_PR33_SENTINEL as _pr33,
-            CROSS_DEVICE_RUNTIME_ACCEPTANCE_PR34_SENTINEL as _pr34,
-        )
+        from core.runtime.source_dispatch_orchestrator import CROSS_DEVICE_RUNTIME_ACCEPTANCE_PR34_SENTINEL as _pr34
+        from core.runtime.source_dispatch_orchestrator import RECONNECT_RECOVERY_CONSISTENCY_PR33_SENTINEL as _pr33
+
         assert _pr33 != _pr34
 
 
@@ -1134,8 +1103,10 @@ class TestSentinelContent:
         assert "rank" in policy or "select" in policy
 
     def test_AW5_mesh_policy_mentions_staged_mesh(self):
-        assert "staged" in STAGED_MESH_CLOSURE_RUNNABLE_PR34_POLICY.lower() or \
-               "mesh" in STAGED_MESH_CLOSURE_RUNNABLE_PR34_POLICY.lower()
+        assert (
+            "staged" in STAGED_MESH_CLOSURE_RUNNABLE_PR34_POLICY.lower()
+            or "mesh" in STAGED_MESH_CLOSURE_RUNNABLE_PR34_POLICY.lower()
+        )
 
     def test_AW6_diagnostics_policy_mentions_diagnostics(self):
         assert "diagnostic" in DIAGNOSTICS_READINESS_PARTICIPATION_FORMATION_USABILITY_PR34_POLICY.lower()

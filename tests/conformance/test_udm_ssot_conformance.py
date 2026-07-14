@@ -20,7 +20,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -29,18 +28,22 @@ import pytest
 def _reset_all() -> None:
     """全量重置所有单例（测试隔离）。"""
     from core.unified.device_manager import UnifiedDeviceManager
+
     UnifiedDeviceManager._instance = None
 
     from core.agent.capability_registry import CapabilityRegistry
+
     CapabilityRegistry._instance = None
 
     from core.nodes.node_fabric_registry import reset_node_fabric_registry
+
     reset_node_fabric_registry()
 
 
 def _make_device(device_id: str = "dev-001", **kwargs: Any):
     """构造 UnifiedDevice 用于测试。"""
-    from core.unified.models import UnifiedDevice, UnifiedDeviceType, UnifiedDeviceStatus
+    from core.unified.models import UnifiedDevice, UnifiedDeviceStatus, UnifiedDeviceType
+
     return UnifiedDevice(
         device_id=device_id,
         device_name=kwargs.get("device_name", f"device-{device_id}"),
@@ -62,6 +65,7 @@ class TestRegistrationHeartbeatUpsertConsistency:
 
     def test_register_then_heartbeat(self) -> None:
         from core.unified.device_manager import get_unified_device_manager
+
         udm = get_unified_device_manager()
         device = _make_device("dev-hb-01")
         udm.register_device(device)
@@ -78,6 +82,7 @@ class TestRegistrationHeartbeatUpsertConsistency:
 
     def test_upsert_after_registration(self) -> None:
         from core.unified.device_manager import get_unified_device_manager
+
         udm = get_unified_device_manager()
         device = _make_device("dev-upsert-01")
         udm.register_device(device)
@@ -96,6 +101,7 @@ class TestRegistrationHeartbeatUpsertConsistency:
         """重复注册不应丢失现有设备（幂等覆盖）。"""
         from core.unified.device_manager import get_unified_device_manager
         from core.unified.models import UnifiedDeviceStatus
+
         udm = get_unified_device_manager()
 
         d1 = _make_device("dev-dup-01")
@@ -110,12 +116,14 @@ class TestRegistrationHeartbeatUpsertConsistency:
 
     def test_heartbeat_unknown_device_does_not_raise(self) -> None:
         from core.unified.device_manager import get_unified_device_manager
+
         udm = get_unified_device_manager()
         # 对未注册设备调用 heartbeat 不得抛异常
         udm.heartbeat("nonexistent-device")
 
     def test_upsert_unknown_device_returns_none(self) -> None:
         from core.unified.device_manager import get_unified_device_manager
+
         udm = get_unified_device_manager()
         result = udm.upsert_device_state("ghost-device", {"status": "online"}, source="test")
         assert result is None
@@ -124,6 +132,7 @@ class TestRegistrationHeartbeatUpsertConsistency:
         """完整生命周期：注册 → 心跳 → upsert → 注销。"""
         from core.unified.device_manager import get_unified_device_manager
         from core.unified.models import UnifiedDeviceStatus
+
         udm = get_unified_device_manager()
 
         device = _make_device("dev-lifecycle-01")
@@ -156,11 +165,13 @@ class TestStateVersionMonotonicity:
 
     def test_state_version_starts_at_zero(self) -> None:
         from core.unified.models import UnifiedDevice
+
         d = UnifiedDevice(device_id="sv-test", device_name="test")
         assert d.state_version == 0
 
     def test_monotonic_on_upsert(self) -> None:
         from core.unified.device_manager import get_unified_device_manager
+
         udm = get_unified_device_manager()
         device = _make_device("sv-mono-01")
         udm.register_device(device)
@@ -177,12 +188,11 @@ class TestStateVersionMonotonicity:
 
         # 严格单调递增
         for i in range(1, len(versions)):
-            assert versions[i] > versions[i - 1], (
-                f"state_version not monotonic at index {i}: {versions}"
-            )
+            assert versions[i] > versions[i - 1], f"state_version not monotonic at index {i}: {versions}"
 
     def test_monotonic_on_heartbeat(self) -> None:
         from core.unified.device_manager import get_unified_device_manager
+
         udm = get_unified_device_manager()
         device = _make_device("sv-hb-mono-01")
         udm.register_device(device)
@@ -195,6 +205,7 @@ class TestStateVersionMonotonicity:
     def test_monotonic_on_update_status(self) -> None:
         from core.unified.device_manager import get_unified_device_manager
         from core.unified.models import UnifiedDeviceStatus
+
         udm = get_unified_device_manager()
         device = _make_device("sv-status-01")
         udm.register_device(device)
@@ -206,6 +217,7 @@ class TestStateVersionMonotonicity:
 
     def test_state_version_never_negative(self) -> None:
         from core.unified.device_manager import get_unified_device_manager
+
         udm = get_unified_device_manager()
         device = _make_device("sv-noneg-01")
         udm.register_device(device)
@@ -227,7 +239,8 @@ class TestCrossModuleConsistency:
         _reset_all()
 
     def test_capability_registry_inject_item(self) -> None:
-        from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
+        from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
+
         reg = CapabilityRegistry.get_instance()
 
         item = CapabilityItem(
@@ -245,6 +258,7 @@ class TestCrossModuleConsistency:
     def test_gateway_capability_available_after_device_register(self) -> None:
         """注册设备后，设备能力条目应在 CapabilityRegistry 中可见（若 refresh 已调用）。"""
         from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
+
         reg = CapabilityRegistry.get_instance()
 
         # 直接注入模拟 gateway 能力（不依赖 UDM 异步刷新）
@@ -261,7 +275,8 @@ class TestCrossModuleConsistency:
         assert any(r.name == "gateway__dev-001__screen" for r in results)
 
     def test_eject_removes_item(self) -> None:
-        from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
+        from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
+
         reg = CapabilityRegistry.get_instance()
 
         item = CapabilityItem(
@@ -277,16 +292,19 @@ class TestCrossModuleConsistency:
         assert reg.get("node__ejected-node__cap") is None
 
     def test_stats_reflects_injected_items(self) -> None:
-        from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
+        from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
+
         reg = CapabilityRegistry.get_instance()
 
         for i in range(3):
-            reg.inject_item(CapabilityItem(
-                name=f"node__stats-node__{i}",
-                description=f"cap {i}",
-                source="node",
-                source_id="stats-node",
-            ))
+            reg.inject_item(
+                CapabilityItem(
+                    name=f"node__stats-node__{i}",
+                    description=f"cap {i}",
+                    source="node",
+                    source_id="stats-node",
+                )
+            )
 
         stats = reg.stats()
         assert stats["by_source"].get("node", 0) >= 3
@@ -302,11 +320,9 @@ class TestNodeCapabilitySync:
         _reset_all()
 
     def _make_node(self, node_id: str, caps: list[str] | None = None):
-        from core.nodes.node_fabric_registry import NodeInfo, NodeCapability, NodeRole, NodeStatus
-        capabilities = [
-            NodeCapability(name=c, description=f"cap {c}")
-            for c in (caps or ["llm_inference"])
-        ]
+        from core.nodes.node_fabric_registry import NodeCapability, NodeInfo, NodeRole, NodeStatus
+
+        capabilities = [NodeCapability(name=c, description=f"cap {c}") for c in (caps or ["llm_inference"])]
         return NodeInfo(
             node_id=node_id,
             role=NodeRole.WORKER,
@@ -317,8 +333,8 @@ class TestNodeCapabilitySync:
         )
 
     def test_sync_injects_into_capability_registry(self) -> None:
-        from core.nodes.node_fabric_registry import get_node_fabric_registry
         from core.agent.capability_registry import CapabilityRegistry
+        from core.nodes.node_fabric_registry import get_node_fabric_registry
 
         reg_fab = get_node_fabric_registry()
         node = self._make_node("sync-node-01", caps=["llm_inference", "vision"])
@@ -332,10 +348,14 @@ class TestNodeCapabilitySync:
         assert cap_reg.get("node__sync-node-01__vision") is not None
 
     def test_unhealthy_node_not_synced(self) -> None:
-        from core.nodes.node_fabric_registry import (
-            get_node_fabric_registry, NodeInfo, NodeCapability, NodeRole, NodeStatus,
-        )
         from core.agent.capability_registry import CapabilityRegistry
+        from core.nodes.node_fabric_registry import (
+            NodeCapability,
+            NodeInfo,
+            NodeRole,
+            NodeStatus,
+            get_node_fabric_registry,
+        )
 
         reg_fab = get_node_fabric_registry()
         node = NodeInfo(
@@ -354,8 +374,8 @@ class TestNodeCapabilitySync:
         assert cap_reg.get("node__unhealthy-node-01__ghost_cap") is None
 
     def test_expire_stale_capabilities(self) -> None:
-        from core.nodes.node_fabric_registry import get_node_fabric_registry, NodeCapability
-        from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
+        from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
+        from core.nodes.node_fabric_registry import NodeCapability, get_node_fabric_registry
 
         reg_fab = get_node_fabric_registry()
         cap_reg = CapabilityRegistry.get_instance()
@@ -378,7 +398,7 @@ class TestNodeCapabilitySync:
         assert cap_reg.get("node__old-node__old_cap") is None
 
     def test_dependency_graph_consistent(self) -> None:
-        from core.nodes.node_fabric_registry import get_node_fabric_registry, NodeInfo, NodeRole
+        from core.nodes.node_fabric_registry import NodeInfo, NodeRole, get_node_fabric_registry
 
         fab = get_node_fabric_registry()
         n1 = NodeInfo(node_id="dep-n1", role=NodeRole.WORKER, dependencies=[])
@@ -400,15 +420,17 @@ class TestNodeCapabilitySync:
 
     def test_100_nodes_registered(self) -> None:
         """注册 100 个节点，确保 count() 正确且健康节点查询不崩溃。"""
-        from core.nodes.node_fabric_registry import get_node_fabric_registry, NodeInfo, NodeRole, NodeStatus
+        from core.nodes.node_fabric_registry import NodeInfo, NodeRole, NodeStatus, get_node_fabric_registry
 
         fab = get_node_fabric_registry()
         for i in range(100):
-            fab.register(NodeInfo(
-                node_id=f"fabric-node-{i:03d}",
-                role=NodeRole.WORKER,
-                status=NodeStatus.HEALTHY,
-            ))
+            fab.register(
+                NodeInfo(
+                    node_id=f"fabric-node-{i:03d}",
+                    role=NodeRole.WORKER,
+                    status=NodeStatus.HEALTHY,
+                )
+            )
 
         assert fab.count() >= 100
         healthy = fab.list_healthy()
@@ -416,15 +438,17 @@ class TestNodeCapabilitySync:
         assert len(healthy) >= 100
 
     def test_metrics_after_100_nodes(self) -> None:
-        from core.nodes.node_fabric_registry import get_node_fabric_registry, NodeInfo, NodeRole, NodeStatus
+        from core.nodes.node_fabric_registry import NodeInfo, NodeRole, NodeStatus, get_node_fabric_registry
 
         fab = get_node_fabric_registry()
         for i in range(100):
-            fab.register(NodeInfo(
-                node_id=f"metrics-node-{i:03d}",
-                role=NodeRole.WORKER,
-                status=NodeStatus.HEALTHY,
-            ))
+            fab.register(
+                NodeInfo(
+                    node_id=f"metrics-node-{i:03d}",
+                    role=NodeRole.WORKER,
+                    status=NodeStatus.HEALTHY,
+                )
+            )
 
         metrics = fab.get_metrics()
         assert metrics["total_nodes"] >= 100
@@ -446,6 +470,7 @@ class TestUDMAuditScript:
         import tempfile
         import textwrap
         from pathlib import Path
+
         from scripts.audit_udm_write_paths import _scan_file
 
         legal_code = textwrap.dedent("""\
@@ -470,6 +495,7 @@ class TestUDMAuditScript:
         import tempfile
         import textwrap
         from pathlib import Path
+
         from scripts.audit_udm_write_paths import _scan_file
 
         illegal_code = textwrap.dedent("""\
@@ -495,6 +521,7 @@ class TestUDMAuditScript:
         import tempfile
         import textwrap
         from pathlib import Path
+
         from scripts.audit_udm_write_paths import _scan_file
 
         illegal_code = textwrap.dedent("""\
@@ -507,22 +534,24 @@ class TestUDMAuditScript:
 
         try:
             violations, _ = _scan_file(fpath, fpath.parent)
-            assert any(v.kind == "direct_devices_access" for v in violations), (
-                f"Expected direct_devices_access violation, got {violations}"
-            )
+            assert any(
+                v.kind == "direct_devices_access" for v in violations
+            ), f"Expected direct_devices_access violation, got {violations}"
         finally:
             fpath.unlink(missing_ok=True)
 
     def test_state_version_monotonicity_check_passes(self) -> None:
         """state_version 单调性检查在正常环境下应无问题。"""
         from scripts.audit_udm_write_paths import _check_state_version_monotonicity
+
         issues = _check_state_version_monotonicity()
         # 不期望有错误
         assert issues == [], f"state_version issues: {issues}"
 
     def test_run_audit_returns_result(self, tmp_path) -> None:
         """run_audit() 正常返回 AuditResult，illegal_count 为整数。"""
-        from scripts.audit_udm_write_paths import run_audit, REPO_ROOT
+        from scripts.audit_udm_write_paths import REPO_ROOT, run_audit
+
         result = run_audit(root=REPO_ROOT)
         assert isinstance(result.illegal_count, int)
         assert result.scanned_files > 0
@@ -539,7 +568,7 @@ class TestNodeFabricLifecycle:
         _reset_all()
 
     def test_register_unregister(self) -> None:
-        from core.nodes.node_fabric_registry import get_node_fabric_registry, NodeInfo, NodeRole
+        from core.nodes.node_fabric_registry import NodeInfo, NodeRole, get_node_fabric_registry
 
         fab = get_node_fabric_registry()
         n = NodeInfo(node_id="lc-node-01", role=NodeRole.AGENT)
@@ -551,7 +580,7 @@ class TestNodeFabricLifecycle:
         assert fab.get("lc-node-01") is None
 
     def test_heartbeat_updates_timestamp(self) -> None:
-        from core.nodes.node_fabric_registry import get_node_fabric_registry, NodeInfo, NodeRole
+        from core.nodes.node_fabric_registry import NodeInfo, NodeRole, get_node_fabric_registry
 
         fab = get_node_fabric_registry()
         n = NodeInfo(node_id="hb-node-01", role=NodeRole.WORKER)
@@ -565,7 +594,10 @@ class TestNodeFabricLifecycle:
 
     def test_mark_offline_if_stale(self) -> None:
         from core.nodes.node_fabric_registry import (
-            get_node_fabric_registry, NodeInfo, NodeRole, NodeStatus,
+            NodeInfo,
+            NodeRole,
+            NodeStatus,
+            get_node_fabric_registry,
         )
 
         fab = get_node_fabric_registry()
@@ -581,14 +613,15 @@ class TestNodeFabricLifecycle:
 
     def test_list_by_capability(self) -> None:
         from core.nodes.node_fabric_registry import (
-            get_node_fabric_registry, NodeInfo, NodeCapability, NodeRole,
+            NodeCapability,
+            NodeInfo,
+            NodeRole,
+            get_node_fabric_registry,
         )
 
         fab = get_node_fabric_registry()
-        n1 = NodeInfo(node_id="cap-node-01", role=NodeRole.TOOL,
-                      capabilities=[NodeCapability(name="search")])
-        n2 = NodeInfo(node_id="cap-node-02", role=NodeRole.TOOL,
-                      capabilities=[NodeCapability(name="ocr")])
+        n1 = NodeInfo(node_id="cap-node-01", role=NodeRole.TOOL, capabilities=[NodeCapability(name="search")])
+        n2 = NodeInfo(node_id="cap-node-02", role=NodeRole.TOOL, capabilities=[NodeCapability(name="ocr")])
         fab.register(n1)
         fab.register(n2)
 
@@ -597,7 +630,7 @@ class TestNodeFabricLifecycle:
         assert any(n.node_id == "cap-node-01" for n in search_nodes)
 
     def test_record_error_degrades_health(self) -> None:
-        from core.nodes.node_fabric_registry import get_node_fabric_registry, NodeInfo, NodeRole
+        from core.nodes.node_fabric_registry import NodeInfo, NodeRole, get_node_fabric_registry
 
         fab = get_node_fabric_registry()
         n = NodeInfo(node_id="err-node-01", role=NodeRole.WORKER)

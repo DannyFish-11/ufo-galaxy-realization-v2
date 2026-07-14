@@ -293,16 +293,12 @@ class TestRecordTakeoverResponse:
         reset_takeover_tracking_runtime()
 
     def test_E01_accepted_record(self):
-        rec = record_takeover_response(
-            takeover_id="tko1", device_id="dev1", accepted=True
-        )
+        rec = record_takeover_response(takeover_id="tko1", device_id="dev1", accepted=True)
         assert rec.decision == TakeoverDecision.accepted
         assert rec.was_accepted is True
 
     def test_E02_rejected_record(self):
-        rec = record_takeover_response(
-            takeover_id="tko2", device_id="dev2", accepted=False, reason="busy"
-        )
+        rec = record_takeover_response(takeover_id="tko2", device_id="dev2", accepted=False, reason="busy")
         assert rec.decision == TakeoverDecision.rejected
         assert rec.reason == "busy"
 
@@ -434,9 +430,15 @@ class TestAndroidParticipantSessionSignal:
     def test_J01_all_signals_present(self):
         signals = [s.value for s in AndroidParticipantSessionSignal]
         for expected in [
-            "handoff_dispatched", "takeover_requested", "takeover_accepted",
-            "takeover_rejected", "execution_started", "execution_progressed",
-            "reconciliation_started", "result_success", "result_failure",
+            "handoff_dispatched",
+            "takeover_requested",
+            "takeover_accepted",
+            "takeover_rejected",
+            "execution_started",
+            "execution_progressed",
+            "reconciliation_started",
+            "result_success",
+            "result_failure",
             "result_cancelled",
         ]:
             assert expected in signals
@@ -475,9 +477,7 @@ class TestCreateParticipantSessionRecord:
         assert rec.phase == AndroidParticipantSessionPhase.pre_dispatch
 
     def test_L02_fields_propagated(self):
-        rec = create_participant_session_record(
-            session_id="s", device_id="d", task_id="t", contract_id="c"
-        )
+        rec = create_participant_session_record(session_id="s", device_id="d", task_id="t", contract_id="c")
         assert rec.session_id == "s"
         assert rec.device_id == "d"
         assert rec.task_id == "t"
@@ -1000,7 +1000,10 @@ class TestOnTakeoverRequested:
         assert rec.phase == AndroidParticipantSessionPhase.takeover_pending
 
 
-@pytest.mark.skipif(not _LC_AVAILABLE or not _SS_AVAILABLE or not _TT_AVAILABLE, reason="coordinator, session state, or takeover tracking unavailable")
+@pytest.mark.skipif(
+    not _LC_AVAILABLE or not _SS_AVAILABLE or not _TT_AVAILABLE,
+    reason="coordinator, session state, or takeover tracking unavailable",
+)
 class TestOnTakeoverResponse:
     def setup_method(self):
         if _SS_AVAILABLE:
@@ -1026,9 +1029,7 @@ class TestOnTakeoverResponse:
         tid = _uid()
         lc.on_handoff_dispatched(session_id=sid)
         lc.on_takeover_requested(session_id=sid, takeover_id=tid)
-        out = lc.on_takeover_response(
-            session_id=sid, takeover_id=tid, accepted=False, reason="busy"
-        )
+        out = lc.on_takeover_response(session_id=sid, takeover_id=tid, accepted=False, reason="busy")
         assert out.was_handled is True
         rec = get_takeover_record(tid)
         assert rec is not None
@@ -1039,9 +1040,7 @@ class TestOnTakeoverResponse:
 class TestOnReconciliationSignal:
     def test_AP01_returns_outcome(self):
         lc = get_lifecycle_coordinator()
-        out = lc.on_reconciliation_signal(
-            message={"type": "reconciliation_signal", "device_id": "d"}
-        )
+        out = lc.on_reconciliation_signal(message={"type": "reconciliation_signal", "device_id": "d"})
         assert out.event_type == "reconciliation_signal"
         assert out.was_handled is True
 
@@ -1050,9 +1049,7 @@ class TestOnReconciliationSignal:
 class TestOnExecutionSignal:
     def test_AQ01_returns_outcome(self):
         lc = get_lifecycle_coordinator()
-        out = lc.on_execution_signal(
-            message={"type": "delegated_execution_signal", "device_id": "d"}
-        )
+        out = lc.on_execution_signal(message={"type": "delegated_execution_signal", "device_id": "d"})
         assert out.event_type == "execution_signal"
         assert out.was_handled is True
 
@@ -1061,9 +1058,7 @@ class TestOnExecutionSignal:
 class TestOnParticipantTruthUpdate:
     def test_AR01_returns_outcome(self):
         lc = get_lifecycle_coordinator()
-        out = lc.on_participant_truth_update(
-            message={"type": "participant_truth", "device_id": "d"}
-        )
+        out = lc.on_participant_truth_update(message={"type": "participant_truth", "device_id": "d"})
         assert out.event_type == "participant_truth_update"
         assert out.was_handled is True
 
@@ -1163,9 +1158,7 @@ class TestTakeoverHandlerIntegration:
         # Verify the specific import the handler uses
         try:
             m = importlib.import_module("core.takeover_tracking")
-            assert hasattr(m, "record_takeover_response"), (
-                "core.takeover_tracking must expose record_takeover_response"
-            )
+            assert hasattr(m, "record_takeover_response"), "core.takeover_tracking must expose record_takeover_response"
         except ImportError:
             pytest.fail("core.takeover_tracking must be importable")
 

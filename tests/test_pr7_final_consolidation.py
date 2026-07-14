@@ -47,12 +47,14 @@ if str(_REPO_ROOT) not in sys.path:
 def _import_readiness():
     """Import generate_system_readiness_report."""
     import scripts.generate_system_readiness_report as mod
+
     return mod
 
 
 def _import_audit():
     """Import audit_unified_paths."""
     import scripts.audit_unified_paths as mod
+
     return mod
 
 
@@ -88,9 +90,9 @@ class TestDocumentationArtifacts:
         path = _REPO_ROOT / "docs" / "acceptance" / "u1_u33_final_acceptance.md"
         content = path.read_text(encoding="utf-8")
         for i in range(1, 34):
-            assert f"U{i}" in content or f"| U{i} |" in content or f"U{i}:" in content, (
-                f"Acceptance doc does not reference U{i}"
-            )
+            assert (
+                f"U{i}" in content or f"| U{i} |" in content or f"U{i}:" in content
+            ), f"Acceptance doc does not reference U{i}"
 
     def test_acceptance_doc_has_summary_table(self) -> None:
         path = _REPO_ROOT / "docs" / "acceptance" / "u1_u33_final_acceptance.md"
@@ -331,9 +333,7 @@ class TestAuditUnifiedPaths:
 
     def test_print_report_with_findings_no_raise(self, capsys) -> None:
         mod = _import_audit()
-        f = mod.BypassFinding(
-            file="core/bad.py", line=5, col=0, kind="direct_submit", detail="bad call"
-        )
+        f = mod.BypassFinding(file="core/bad.py", line=5, col=0, kind="direct_submit", detail="bad call")
         mod.print_report([f], _REPO_ROOT)
         captured = capsys.readouterr()
         assert "FAIL" in captured.out or "finding" in captured.out.lower()

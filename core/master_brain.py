@@ -17,13 +17,13 @@ Constraints (see plan 强约束):
 
 from __future__ import annotations
 
-import logging
-import os
-import time
-import uuid
 import asyncio
 import json
+import logging
+import os
 import tempfile
+import time
+import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
@@ -45,7 +45,7 @@ from core.schemas.contracts import (
 def _try_emit_event(event_type_name: str, data: dict) -> None:
     """Best-effort emit to EventBus.  Never raises."""
     try:
-        from integration.event_bus import event_bus, EventType
+        from integration.event_bus import EventType, event_bus
 
         et = getattr(EventType, event_type_name, None)
         if et is not None:
@@ -157,11 +157,13 @@ class MasterBrain:
                 ("task_results", self._nats.subscribe_task_results, self._on_task_result),
             ]
             if hasattr(self._nats, "subscribe_worker_registrations"):
-                subscription_calls.append((
-                    "worker_registrations",
-                    self._nats.subscribe_worker_registrations,
-                    self._on_worker_event,
-                ))
+                subscription_calls.append(
+                    (
+                        "worker_registrations",
+                        self._nats.subscribe_worker_registrations,
+                        self._on_worker_event,
+                    )
+                )
             else:
                 subscriptions_ok = False
                 logger.warning(
@@ -170,43 +172,49 @@ class MasterBrain:
                 )
 
             if hasattr(self._nats, "subscribe_worker_shutdowns"):
-                subscription_calls.append((
-                    "worker_shutdowns",
-                    self._nats.subscribe_worker_shutdowns,
-                    self._on_worker_shutdown,
-                ))
+                subscription_calls.append(
+                    (
+                        "worker_shutdowns",
+                        self._nats.subscribe_worker_shutdowns,
+                        self._on_worker_shutdown,
+                    )
+                )
             else:
                 subscriptions_ok = False
                 logger.warning(
-                    "MasterBrain: NATS bus missing subscribe_worker_shutdowns; "
-                    "worker shutdown visibility not active"
+                    "MasterBrain: NATS bus missing subscribe_worker_shutdowns; " "worker shutdown visibility not active"
                 )
 
             if hasattr(self._nats, "subscribe_task_deadletters"):
-                subscription_calls.append((
-                    "task_deadletters",
-                    self._nats.subscribe_task_deadletters,
-                    self._on_deadletter,
-                ))
+                subscription_calls.append(
+                    (
+                        "task_deadletters",
+                        self._nats.subscribe_task_deadletters,
+                        self._on_deadletter,
+                    )
+                )
             else:
                 subscriptions_ok = False
                 logger.warning(
-                    "MasterBrain: NATS bus missing subscribe_task_deadletters; "
-                    "dead-letter recovery not active"
+                    "MasterBrain: NATS bus missing subscribe_task_deadletters; " "dead-letter recovery not active"
                 )
 
             # Legacy compatibility: still accept event bus wrappers if published.
             if hasattr(self._nats, "subscribe_events"):
-                subscription_calls.append((
-                    "worker_registered_event",
-                    lambda cb: self._nats.subscribe_events("worker_registered", cb),
-                    self._on_worker_event,
-                ))
-                subscription_calls.append((
-                    "worker_shutdown_event",
-                    lambda cb: self._nats.subscribe_events("worker_shutdown", cb),
-                    self._on_worker_shutdown,
-                ))
+                subscription_calls.append(
+                    (
+                        "worker_registered_event",
+                        lambda cb: self._nats.subscribe_events("worker_registered", cb),
+                        self._on_worker_event,
+                    )
+                )
+                subscription_calls.append(
+                    (
+                        "worker_shutdown_event",
+                        lambda cb: self._nats.subscribe_events("worker_shutdown", cb),
+                        self._on_worker_shutdown,
+                    )
+                )
 
             for name, subscribe_fn, callback in subscription_calls:
                 result = await subscribe_fn(callback)
@@ -355,8 +363,7 @@ class MasterBrain:
 
         task: TaskDispatchModel = validated["data"]
         trace_id = str(
-            raw_task.get("trace_id", "")
-            or (task.context.get("trace_id") if isinstance(task.context, dict) else "")
+            raw_task.get("trace_id", "") or (task.context.get("trace_id") if isinstance(task.context, dict) else "")
         )
         self._register_task_graph_node(task=task, trace_id=trace_id)
         self._transition_task_graph(
@@ -542,11 +549,14 @@ class MasterBrain:
                 reason="nats_dispatch_accepted",
                 transport_path="nats_distributed",
             )
-            _try_emit_event("TASK_DISPATCHED", {
-                "task_id": task.task_id,
-                "worker_id": target,
-                "task_type": task.task_type.value,
-            })
+            _try_emit_event(
+                "TASK_DISPATCHED",
+                {
+                    "task_id": task.task_id,
+                    "worker_id": target,
+                    "task_type": task.task_type.value,
+                },
+            )
             if not wait_for_completion:
                 return {
                     "success": True,
@@ -664,7 +674,9 @@ class MasterBrain:
             "error": self._extract_task_error(result_dump),
             "closure_complete": closure_complete,
             "task_outcome_known": closure_complete,
-            "dispatch_accepted": record.get("dispatch_accepted", False) or status in (
+            "dispatch_accepted": record.get("dispatch_accepted", False)
+            or status
+            in (
                 TaskStatus.DISPATCHED.value,
                 TaskStatus.RUNNING.value,
                 TaskStatus.SUCCESS.value,
@@ -673,7 +685,9 @@ class MasterBrain:
                 TaskStatus.CANCELLED.value,
                 TaskStatus.LSP_FAILED.value,
             ),
-            "execution_started": record.get("execution_started", False) or status in (
+            "execution_started": record.get("execution_started", False)
+            or status
+            in (
                 TaskStatus.RUNNING.value,
                 TaskStatus.SUCCESS.value,
                 TaskStatus.FAILED.value,
@@ -692,20 +706,21 @@ class MasterBrain:
             updates.setdefault("dispatch_accepted_at", datetime.now().isoformat())
         if status == TaskStatus.RUNNING.value:
             updates["started_at"] = (
-                self._timestamp_to_iso(result.started_at)
-                or record.get("started_at")
-                or datetime.now().isoformat()
+                self._timestamp_to_iso(result.started_at) or record.get("started_at") or datetime.now().isoformat()
             )
         if closure_complete:
             updates["completed_at"] = self._timestamp_to_iso(result.completed_at) or datetime.now().isoformat()
         snapshot = self._update_task_record(task_id, **updates)
         self._apply_task_graph_result(task_id, status=status, completion_state=snapshot.get("completion_state", ""))
 
-        _try_emit_event("TASK_RESULT_RECEIVED", {
-            "task_id": task_id,
-            "worker_id": result.worker_id,
-            "status": status,
-        })
+        _try_emit_event(
+            "TASK_RESULT_RECEIVED",
+            {
+                "task_id": task_id,
+                "worker_id": result.worker_id,
+                "status": status,
+            },
+        )
 
         if closure_complete:
             waiter = self._task_waiters.get(task_id)
@@ -713,7 +728,9 @@ class MasterBrain:
                 waiter.set_result(snapshot)
         self._reevaluate_scaling_state(trigger="task_result", reason=status)
 
-        logger.info("MasterBrain: task %s result status=%s completion=%s", task_id, status, snapshot.get("completion_state"))
+        logger.info(
+            "MasterBrain: task %s result status=%s completion=%s", task_id, status, snapshot.get("completion_state")
+        )
         return {
             "success": closure_complete and task_success,
             "task_id": task_id,
@@ -910,7 +927,7 @@ class MasterBrain:
             "device_type": registration.device_type,
             "platform": registration.platform,
             "capabilities": [c.model_dump() for c in registration.capabilities],
-            "supported_languages": [l.value for l in registration.supported_languages],
+            "supported_languages": [lang.value for lang in registration.supported_languages],
             "has_docker": registration.has_docker,
             "has_gpu": registration.has_gpu,
             "memory_total_mb": registration.memory_total_mb,
@@ -944,13 +961,15 @@ class MasterBrain:
         entry.setdefault("cpu_cores", 0)
         entry.setdefault("last_heartbeat", 0.0)
         entry.setdefault("registered_at", now_iso)
-        entry.update({
-            "status": "offline",
-            "force_offline": True,
-            "shutdown_reason": shutdown.reason,
-            "shutdown_at": now_iso,
-            "drain_timeout_s": shutdown.drain_timeout_s,
-        })
+        entry.update(
+            {
+                "status": "offline",
+                "force_offline": True,
+                "shutdown_reason": shutdown.reason,
+                "shutdown_at": now_iso,
+                "drain_timeout_s": shutdown.drain_timeout_s,
+            }
+        )
         self._workers[wid] = entry
         affected_tasks = self._mark_inflight_tasks_for_worker(
             wid,
@@ -971,14 +990,16 @@ class MasterBrain:
         if wid not in self._workers:
             return {"success": False, "error": f"Unknown worker: {wid}"}
 
-        self._workers[wid].update({
-            "status": heartbeat.status.value,
-            "last_heartbeat": time.time(),
-            "active_tasks": heartbeat.active_tasks,
-            "cpu_usage_percent": heartbeat.cpu_usage_percent,
-            "memory_usage_percent": heartbeat.memory_usage_percent,
-            "force_offline": False,
-        })
+        self._workers[wid].update(
+            {
+                "status": heartbeat.status.value,
+                "last_heartbeat": time.time(),
+                "active_tasks": heartbeat.active_tasks,
+                "cpu_usage_percent": heartbeat.cpu_usage_percent,
+                "memory_usage_percent": heartbeat.memory_usage_percent,
+                "force_offline": False,
+            }
+        )
         self._reevaluate_scaling_state(trigger="worker_heartbeat", reason=str(heartbeat.status.value))
         self._persist_state()
         return {"success": True}
@@ -1130,10 +1151,7 @@ class MasterBrain:
 
         original = payload.get("original") if isinstance(payload.get("original"), dict) else {}
         worker_id = (
-            payload.get("worker_id")
-            or original.get("target_worker_id")
-            or original.get("target_device_id")
-            or ""
+            payload.get("worker_id") or original.get("target_worker_id") or original.get("target_device_id") or ""
         )
         trace_id = (
             payload.get("trace_id")
@@ -1371,23 +1389,23 @@ class MasterBrain:
 
                 platform_name = str(info.get("platform", "")).lower()
                 device_type = str(worker_device_type).lower()
-                candidates.append(DeviceScoreInput(
-                    device_id=wid,
-                    status=DeviceStatus.DRAINING if info.get("status") == "draining" else DeviceStatus.ONLINE,
-                    ping_latency_ms=float(info.get("heartbeat_latency_ms", 0.0) or 0.0),
-                    load_pct=min(float(info.get("memory_usage_percent", 0.0) or 0.0), 100.0),
-                    sandbox_level=(
-                        SandboxLevel.STANDARD
-                        if "android" in (platform_name, device_type)
-                        else SandboxLevel.NONE
-                    ),
-                    capabilities=[str(c.get("name", c)) for c in info.get("capabilities", [])],
-                    health_score=max(
-                        0.0,
-                        100.0 - float(info.get("cpu_usage_percent", 0.0) or 0.0),
-                    ),
-                    metadata={"worker_info": dict(info)},
-                ))
+                candidates.append(
+                    DeviceScoreInput(
+                        device_id=wid,
+                        status=DeviceStatus.DRAINING if info.get("status") == "draining" else DeviceStatus.ONLINE,
+                        ping_latency_ms=float(info.get("heartbeat_latency_ms", 0.0) or 0.0),
+                        load_pct=min(float(info.get("memory_usage_percent", 0.0) or 0.0), 100.0),
+                        sandbox_level=(
+                            SandboxLevel.STANDARD if "android" in (platform_name, device_type) else SandboxLevel.NONE
+                        ),
+                        capabilities=[str(c.get("name", c)) for c in info.get("capabilities", [])],
+                        health_score=max(
+                            0.0,
+                            100.0 - float(info.get("cpu_usage_percent", 0.0) or 0.0),
+                        ),
+                        metadata={"worker_info": dict(info)},
+                    )
+                )
             except Exception as exc:
                 logger.debug("MasterBrain: candidate scoring input skipped for %s: %s", wid, exc)
 
@@ -1451,11 +1469,7 @@ class MasterBrain:
         return busy_workers / max(len(alive_workers), 1)
 
     def _estimate_pending_work_complexity(self) -> float:
-        pending_records = [
-            record
-            for record in self._task_log.values()
-            if not bool(record.get("closure_complete"))
-        ]
+        pending_records = [record for record in self._task_log.values() if not bool(record.get("closure_complete"))]
         if not pending_records:
             return _COMPLEXITY_BASELINE
         backlog_weight = min(len(pending_records) / 20.0, 0.4)
@@ -1683,27 +1697,29 @@ class MasterBrain:
             record["dead_lettered"] = False
             record["dead_letter_reason"] = ""
             record["terminal_source"] = ""
-        record.update({
-            "task_id": task_id,
-            "worker_id": worker_id,
-            "trace_id": trace_id,
-            "status": status,
-            "success": success,
-            "error": error,
-            "distributed_dispatch": distributed_dispatch,
-            "execution_path": execution_path,
-            "dispatch_attempted": dispatch_attempted,
-            "dispatch_accepted": dispatch_accepted,
-            "execution_started": execution_started,
-            "result_received": result_received,
-            "result_pending_closure": False,
-            "closure_complete": closure_complete,
-            "task_outcome_known": task_outcome_known,
-            "completion_state": completion_state,
-            "lifecycle_state": lifecycle_state,
-            "nats_publish_state": nats_publish_state,
-            "correlation_valid": True,
-        })
+        record.update(
+            {
+                "task_id": task_id,
+                "worker_id": worker_id,
+                "trace_id": trace_id,
+                "status": status,
+                "success": success,
+                "error": error,
+                "distributed_dispatch": distributed_dispatch,
+                "execution_path": execution_path,
+                "dispatch_attempted": dispatch_attempted,
+                "dispatch_accepted": dispatch_accepted,
+                "execution_started": execution_started,
+                "result_received": result_received,
+                "result_pending_closure": False,
+                "closure_complete": closure_complete,
+                "task_outcome_known": task_outcome_known,
+                "completion_state": completion_state,
+                "lifecycle_state": lifecycle_state,
+                "nats_publish_state": nats_publish_state,
+                "correlation_valid": True,
+            }
+        )
         record.setdefault("_result_ids", set())
         self._refresh_task_derived_fields(record)
         self._persist_state()
@@ -1928,10 +1944,7 @@ class MasterBrain:
                 "version": 1,
                 "saved_at": datetime.now().isoformat(),
                 "workers": self._workers,
-                "tasks": {
-                    task_id: self._serialize_task_record(record)
-                    for task_id, record in self._task_log.items()
-                },
+                "tasks": {task_id: self._serialize_task_record(record) for task_id, record in self._task_log.items()},
             }
             tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
             tmp_path.replace(self._state_path)

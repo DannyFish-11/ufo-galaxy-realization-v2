@@ -53,15 +53,12 @@ class MemoryCache:
         async with self._lock:
             now = time.time()
             if pattern == "*":
-                return [
-                    k for k, v in self._store.items()
-                    if not v["expires_at"] or now <= v["expires_at"]
-                ]
+                return [k for k, v in self._store.items() if not v["expires_at"] or now <= v["expires_at"]]
             prefix = pattern.rstrip("*")
             return [
-                k for k, v in self._store.items()
-                if k.startswith(prefix)
-                and (not v["expires_at"] or now <= v["expires_at"])
+                k
+                for k, v in self._store.items()
+                if k.startswith(prefix) and (not v["expires_at"] or now <= v["expires_at"])
             ]
 
     async def flush(self):
@@ -71,10 +68,7 @@ class MemoryCache:
     async def info(self) -> Dict[str, Any]:
         async with self._lock:
             now = time.time()
-            active = sum(
-                1 for v in self._store.values()
-                if not v["expires_at"] or now <= v["expires_at"]
-            )
+            active = sum(1 for v in self._store.values() if not v["expires_at"] or now <= v["expires_at"])
             return {
                 "backend": "memory",
                 "total_keys": len(self._store),
@@ -95,6 +89,7 @@ class RedisCache:
     async def connect(self):
         try:
             import redis.asyncio as aioredis
+
             self._redis = aioredis.from_url(
                 self.url,
                 encoding="utf-8",

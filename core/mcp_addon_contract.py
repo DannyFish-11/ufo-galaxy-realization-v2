@@ -229,9 +229,7 @@ def validate_mcp_addon_contract(
         When *raw* is not a dict.
     """
     if not isinstance(raw, dict):
-        raise TypeError(
-            f"mcp_tool.json must be a JSON object (dict), got {type(raw).__name__}"
-        )
+        raise TypeError(f"mcp_tool.json must be a JSON object (dict), got {type(raw).__name__}")
 
     violations: List[str] = []
     name: str = raw.get("name", "")
@@ -240,9 +238,7 @@ def validate_mcp_addon_contract(
     if not name or not isinstance(name, str):
         violations.append("'name' is required and must be a non-empty string")
     elif not _NAME_RE.match(name):
-        violations.append(
-            f"'name' must match [A-Za-z0-9_-]+, got {name!r}"
-        )
+        violations.append(f"'name' must match [A-Za-z0-9_-]+, got {name!r}")
 
     # ── Required: entrypoint ─────────────────────────────────────────────────
     entrypoint = raw.get("entrypoint")
@@ -257,17 +253,12 @@ def validate_mcp_addon_contract(
         elif not all(isinstance(part, str) for part in entrypoint):
             violations.append("'entrypoint' list entries must all be strings")
     else:
-        violations.append(
-            f"'entrypoint' must be a string or list of strings, got {type(entrypoint).__name__}"
-        )
+        violations.append(f"'entrypoint' must be a string or list of strings, got {type(entrypoint).__name__}")
 
     # ── Optional: schema_version ─────────────────────────────────────────────
     schema_version = str(raw.get("schema_version", CURRENT_SCHEMA_VERSION))
     if schema_version != CURRENT_SCHEMA_VERSION:
-        msg = (
-            f"'schema_version' {schema_version!r} is not supported; "
-            f"expected {CURRENT_SCHEMA_VERSION!r}"
-        )
+        msg = f"'schema_version' {schema_version!r} is not supported; " f"expected {CURRENT_SCHEMA_VERSION!r}"
         if allow_future_schema:
             logger.warning("MCPAddonContract: %s (accepted via allow_future_schema)", msg)
         else:
@@ -276,16 +267,12 @@ def validate_mcp_addon_contract(
     # ── Optional: protocol ───────────────────────────────────────────────────
     protocol = raw.get("protocol", SUPPORTED_PROTOCOL)
     if protocol is not None and protocol != SUPPORTED_PROTOCOL:
-        violations.append(
-            f"'protocol' must be {SUPPORTED_PROTOCOL!r}, got {protocol!r}"
-        )
+        violations.append(f"'protocol' must be {SUPPORTED_PROTOCOL!r}, got {protocol!r}")
 
     # ── Optional: transport ──────────────────────────────────────────────────
     transport = raw.get("transport", "stdio")
     if transport is not None and transport not in SUPPORTED_TRANSPORTS:
-        violations.append(
-            f"'transport' must be one of {sorted(SUPPORTED_TRANSPORTS)}, got {transport!r}"
-        )
+        violations.append(f"'transport' must be one of {sorted(SUPPORTED_TRANSPORTS)}, got {transport!r}")
 
     # ── Optional: dependencies ───────────────────────────────────────────────
     deps = raw.get("dependencies")

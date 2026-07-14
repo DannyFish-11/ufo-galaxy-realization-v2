@@ -216,9 +216,16 @@ class TestLocalChainView:
     def test_to_dict_expected_keys(self):
         v = LocalChainView()
         d = v.to_dict()
-        for k in ("total_executions", "canonical_executions", "legacy_executions",
-                   "canonical_chain_order", "last_task_id", "last_step",
-                   "is_active", "timestamp"):
+        for k in (
+            "total_executions",
+            "canonical_executions",
+            "legacy_executions",
+            "canonical_chain_order",
+            "last_task_id",
+            "last_step",
+            "is_active",
+            "timestamp",
+        ):
             assert k in d, f"expected key '{k}' in LocalChainView.to_dict()"
 
     def test_to_dict_no_prohibited_fields(self):
@@ -268,9 +275,16 @@ class TestCrossDeviceChainView:
     def test_to_dict_expected_keys(self):
         v = CrossDeviceChainView()
         d = v.to_dict()
-        for k in ("total_executions", "canonical_executions", "legacy_executions",
-                   "canonical_chain_order", "last_device_id", "last_step",
-                   "is_active", "timestamp"):
+        for k in (
+            "total_executions",
+            "canonical_executions",
+            "legacy_executions",
+            "canonical_chain_order",
+            "last_device_id",
+            "last_step",
+            "is_active",
+            "timestamp",
+        ):
             assert k in d, f"expected key '{k}' in CrossDeviceChainView.to_dict()"
 
     def test_to_dict_no_prohibited_fields(self):
@@ -316,9 +330,17 @@ class TestSimulationSummary:
     def test_to_dict_expected_keys(self):
         s = SimulationSummary()
         d = s.to_dict()
-        for k in ("summary_id", "is_active", "simulation_kind", "candidate_paths",
-                   "committed_path", "scenario_label", "step_count",
-                   "is_committed", "timestamp"):
+        for k in (
+            "summary_id",
+            "is_active",
+            "simulation_kind",
+            "candidate_paths",
+            "committed_path",
+            "scenario_label",
+            "step_count",
+            "is_committed",
+            "timestamp",
+        ):
             assert k in d, f"expected key '{k}' in SimulationSummary.to_dict()"
 
     def test_to_dict_no_prohibited_fields(self):
@@ -673,6 +695,7 @@ class TestBoundaryProhibitedFields:
 class TestLiminalSurface:
     def setup_method(self):
         from windows_client.status_board_v2.liminal_surface import LiminalSurface
+
         self.surface = LiminalSurface()
         self.projection = {
             "tri_state_phase": "liminal",
@@ -734,6 +757,7 @@ class TestDocumentationGuardrails:
 
     def test_module_docstring_mentions_three_content_classes(self):
         import core.liminal_space_mapping as mod
+
         doc = mod.__doc__ or ""
         assert "Local execution chain" in doc
         assert "Cross-device execution chain" in doc

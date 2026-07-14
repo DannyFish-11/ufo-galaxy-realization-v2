@@ -74,9 +74,7 @@ def _make_ucp_dict(
         "chosen_model_decision": {
             "provider_id": "p1",
             "model_id": "m1",
-            "is_native_multimodal": route_decision.get("is_native_multimodal", False)
-            if route_decision
-            else False,
+            "is_native_multimodal": route_decision.get("is_native_multimodal", False) if route_decision else False,
             "selection_reason": None,
             "fallback_chain": [],
         },
@@ -324,15 +322,11 @@ class TestCanonicalStateAdapterRouteDecision:
         from core.perception.canonical_state_adapter import CanonicalStateAdapter
 
         # UCP has advisory route; compat top-level has native route
-        ucp = _make_ucp_dict(
-            route_decision=_make_multimodal_route(route_type="advisory", is_native=False)
-        )
+        ucp = _make_ucp_dict(route_decision=_make_multimodal_route(route_type="advisory", is_native=False))
         meta = {
             "unified_control_plan": ucp,
             # Compat key has a different value — should be ignored
-            "multimodal_route_decision": _make_multimodal_route(
-                route_type="native_multimodal", is_native=True
-            ),
+            "multimodal_route_decision": _make_multimodal_route(route_type="native_multimodal", is_native=True),
         }
         adapter = CanonicalStateAdapter(meta)
 
@@ -376,9 +370,7 @@ class TestCanonicalStateAdapterRouteDecision:
     def test_is_native_multimodal_route_false_advisory(self):
         from core.perception.canonical_state_adapter import CanonicalStateAdapter
 
-        ucp = _make_ucp_dict(
-            route_decision=_make_multimodal_route(route_type="advisory", is_native=False)
-        )
+        ucp = _make_ucp_dict(route_decision=_make_multimodal_route(route_type="advisory", is_native=False))
         adapter = CanonicalStateAdapter({"unified_control_plan": ucp})
 
         assert adapter.is_native_multimodal_route() is False
@@ -560,14 +552,8 @@ class TestNoDuplicateStateDrift:
         """Text-only flow must have no native multimodal signal in any state path."""
         from core.perception.canonical_state_adapter import CanonicalStateAdapter
 
-        cps = _make_canonical_perception(
-            has_multimodal=False, requires_native=False, modalities=[]
-        )
-        ucp = _make_ucp_dict(
-            route_decision=_make_multimodal_route(
-                route_type="advisory", is_native=False
-            )
-        )
+        cps = _make_canonical_perception(has_multimodal=False, requires_native=False, modalities=[])
+        ucp = _make_ucp_dict(route_decision=_make_multimodal_route(route_type="advisory", is_native=False))
         meta = {"canonical_perception_state": cps, "unified_control_plan": ucp}
         adapter = CanonicalStateAdapter(meta)
 

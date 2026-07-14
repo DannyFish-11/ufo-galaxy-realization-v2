@@ -104,28 +104,32 @@ import json
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _reset_registry() -> None:
     from core.hybrid_orchestration_continuity import reset_continuity_registry
+
     reset_continuity_registry()
 
 
 def _make_registry():
     from core.hybrid_orchestration_continuity import HybridOrchestrationContinuityRegistry
+
     return HybridOrchestrationContinuityRegistry()
 
 
 def _make_record(**kwargs):
     from core.hybrid_orchestration_continuity import HybridOrchestrationRecord
+
     return HybridOrchestrationRecord(**kwargs)
 
 
 def _state(name: str):
     from core.hybrid_orchestration_continuity import HybridOrchestrationLifecycleState
+
     return HybridOrchestrationLifecycleState(name)
 
 
@@ -133,11 +137,13 @@ def _state(name: str):
 # 1–7: Sentinels
 # ---------------------------------------------------------------------------
 
+
 class TestSentinels:
     def test_01_continuity_is_authority_non_empty(self):
         from core.hybrid_orchestration_continuity import (
             HYBRID_ORCHESTRATION_CONTINUITY_IS_AUTHORITY,
         )
+
         assert isinstance(HYBRID_ORCHESTRATION_CONTINUITY_IS_AUTHORITY, str)
         assert len(HYBRID_ORCHESTRATION_CONTINUITY_IS_AUTHORITY) > 0
 
@@ -145,36 +151,42 @@ class TestSentinels:
         from core.hybrid_orchestration_continuity import (
             HYBRID_LIFECYCLE_IS_CANONICAL_ORCHESTRATION_PATH_POLICY,
         )
+
         assert len(HYBRID_LIFECYCLE_IS_CANONICAL_ORCHESTRATION_PATH_POLICY) > 0
 
     def test_03_serialisable_policy_non_empty(self):
         from core.hybrid_orchestration_continuity import (
             HYBRID_RECORD_IS_SERIALISABLE_POLICY,
         )
+
         assert len(HYBRID_RECORD_IS_SERIALISABLE_POLICY) > 0
 
     def test_04_interruption_recoverable_policy_non_empty(self):
         from core.hybrid_orchestration_continuity import (
             HYBRID_INTERRUPTION_IS_RECOVERABLE_POLICY,
         )
+
         assert len(HYBRID_INTERRUPTION_IS_RECOVERABLE_POLICY) > 0
 
     def test_05_terminal_immutable_policy_non_empty(self):
         from core.hybrid_orchestration_continuity import (
             HYBRID_TERMINAL_STATE_IS_IMMUTABLE_POLICY,
         )
+
         assert len(HYBRID_TERMINAL_STATE_IS_IMMUTABLE_POLICY) > 0
 
     def test_06_ephemeral_policy_non_empty(self):
         from core.hybrid_orchestration_continuity import (
             HYBRID_TRANSPORT_HANDLES_ARE_EPHEMERAL_POLICY,
         )
+
         assert len(HYBRID_TRANSPORT_HANDLES_ARE_EPHEMERAL_POLICY) > 0
 
     def test_07_pr59_sentinel_contains_pr59(self):
         from core.hybrid_orchestration_continuity import (
             HYBRID_ORCHESTRATION_CONTINUITY_PR59_SENTINEL,
         )
+
         assert "pr59" in HYBRID_ORCHESTRATION_CONTINUITY_PR59_SENTINEL.lower()
 
 
@@ -182,13 +194,21 @@ class TestSentinels:
 # 8–14: HybridOrchestrationLifecycleState
 # ---------------------------------------------------------------------------
 
+
 class TestLifecycleStateEnum:
     def test_08_all_states_present(self):
         from core.hybrid_orchestration_continuity import HybridOrchestrationLifecycleState
+
         names = {s.value for s in HybridOrchestrationLifecycleState}
         expected = {
-            "created", "dispatched", "running", "interrupted",
-            "resuming", "completed", "failed", "cancelled",
+            "created",
+            "dispatched",
+            "running",
+            "interrupted",
+            "resuming",
+            "completed",
+            "failed",
+            "cancelled",
         }
         assert expected.issubset(names)
 
@@ -221,6 +241,7 @@ class TestLifecycleStateEnum:
 # 15–20: HybridOrchestrationRecord construction
 # ---------------------------------------------------------------------------
 
+
 class TestRecordConstruction:
     def test_15_execution_id_starts_with_hexec(self):
         r = _make_record()
@@ -251,6 +272,7 @@ class TestRecordConstruction:
 # 21–28: HybridOrchestrationRecord serialisation
 # ---------------------------------------------------------------------------
 
+
 class TestRecordSerialisation:
     def test_21_to_dict_is_json_serialisable(self):
         r = _make_record(session_id="s1", task_id="t1")
@@ -262,21 +284,31 @@ class TestRecordSerialisation:
         r = _make_record()
         d = r.to_dict()
         for key in (
-            "execution_id", "session_id", "task_id", "mode",
-            "lifecycle_state", "started_at", "updated_at",
-            "completed_at", "result_snapshot", "interruption_reason",
-            "resume_count", "is_terminal",
+            "execution_id",
+            "session_id",
+            "task_id",
+            "mode",
+            "lifecycle_state",
+            "started_at",
+            "updated_at",
+            "completed_at",
+            "result_snapshot",
+            "interruption_reason",
+            "resume_count",
+            "is_terminal",
         ):
             assert key in d, f"missing key {key!r}"
 
     def test_23_from_dict_round_trip_execution_id(self):
         from core.hybrid_orchestration_continuity import HybridOrchestrationRecord
+
         r = _make_record()
         r2 = HybridOrchestrationRecord.from_dict(r.to_dict())
         assert r2.execution_id == r.execution_id
 
     def test_24_from_dict_round_trip_lifecycle_state(self):
         from core.hybrid_orchestration_continuity import HybridOrchestrationRecord
+
         r = _make_record()
         r.transition(_state("dispatched"))
         r.transition(_state("running"))
@@ -285,12 +317,14 @@ class TestRecordSerialisation:
 
     def test_25_from_dict_round_trip_mode(self):
         from core.hybrid_orchestration_continuity import HybridOrchestrationRecord
+
         r = _make_record(mode="parallel_race")
         r2 = HybridOrchestrationRecord.from_dict(r.to_dict())
         assert r2.mode == "parallel_race"
 
     def test_26_from_dict_round_trip_resume_count(self):
         from core.hybrid_orchestration_continuity import HybridOrchestrationRecord
+
         r = _make_record()
         r.transition(_state("dispatched"))
         r.transition(_state("running"))
@@ -301,11 +335,13 @@ class TestRecordSerialisation:
 
     def test_27_from_dict_unknown_state_defaults_to_created(self):
         from core.hybrid_orchestration_continuity import HybridOrchestrationRecord
+
         r = HybridOrchestrationRecord.from_dict({"lifecycle_state": "bogus_state"})
         assert r.lifecycle_state.value == "created"
 
     def test_28_from_dict_raises_for_non_dict(self):
         from core.hybrid_orchestration_continuity import HybridOrchestrationRecord
+
         with pytest.raises(ValueError):
             HybridOrchestrationRecord.from_dict("not a dict")
 
@@ -313,6 +349,7 @@ class TestRecordSerialisation:
 # ---------------------------------------------------------------------------
 # 29–39: HybridOrchestrationRecord transitions
 # ---------------------------------------------------------------------------
+
 
 class TestRecordTransitions:
     def test_29_created_to_dispatched(self):
@@ -405,6 +442,7 @@ class TestRecordTransitions:
 # ---------------------------------------------------------------------------
 # 40–50: HybridOrchestrationContinuityRegistry — basic operations
 # ---------------------------------------------------------------------------
+
 
 class TestRegistryBasicOperations:
     def setup_method(self):
@@ -500,6 +538,7 @@ class TestRegistryBasicOperations:
 # 51–58: HybridOrchestrationContinuityRegistry — recovery operations
 # ---------------------------------------------------------------------------
 
+
 class TestRegistryRecovery:
     def test_51_running_marked_as_interrupted(self):
         reg = _make_registry()
@@ -591,15 +630,18 @@ class TestRegistryRecovery:
 # 59–60: RuntimeRecoveryReport — new field
 # ---------------------------------------------------------------------------
 
+
 class TestRecoveryReportNewField:
     def test_59_hybrid_executions_interrupted_field_exists(self):
         from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         report = RuntimeRecoveryReport()
         assert hasattr(report, "hybrid_executions_interrupted")
         assert report.hybrid_executions_interrupted == 0
 
     def test_60_to_dict_includes_hybrid_field(self):
         from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         report = RuntimeRecoveryReport()
         d = report.to_dict()
         assert "hybrid_executions_interrupted" in d
@@ -609,12 +651,14 @@ class TestRecoveryReportNewField:
 # 61–65: RuntimeRestartRecoveryCoordinator — hybrid step
 # ---------------------------------------------------------------------------
 
+
 class TestCoordinatorHybridStep:
     def setup_method(self):
         _reset_registry()
 
     def test_61_run_recovery_sets_hybrid_field(self):
         from core.runtime_restart_recovery import RuntimeRestartRecoveryCoordinator
+
         reg = _make_registry()
         coordinator = RuntimeRestartRecoveryCoordinator(
             hybrid_continuity_registry=reg,
@@ -624,6 +668,7 @@ class TestCoordinatorHybridStep:
 
     def test_62_run_recovery_marks_inflight_interrupted(self):
         from core.runtime_restart_recovery import RuntimeRestartRecoveryCoordinator
+
         reg = _make_registry()
         r = reg.create_and_register()
         r.transition(_state("dispatched"))
@@ -637,6 +682,7 @@ class TestCoordinatorHybridStep:
 
     def test_63_run_recovery_terminal_only_marks_zero(self):
         from core.runtime_restart_recovery import RuntimeRestartRecoveryCoordinator
+
         reg = _make_registry()
         r = reg.create_and_register()
         r.transition(_state("dispatched"))
@@ -650,6 +696,7 @@ class TestCoordinatorHybridStep:
 
     def test_64_non_goals_includes_hybrid_transport_note(self):
         from core.runtime_restart_recovery import RuntimeRestartRecoveryCoordinator
+
         reg = _make_registry()
         coordinator = RuntimeRestartRecoveryCoordinator(
             hybrid_continuity_registry=reg,
@@ -661,6 +708,7 @@ class TestCoordinatorHybridStep:
 
     def test_65_run_recovery_empty_registry_no_error(self):
         from core.runtime_restart_recovery import RuntimeRestartRecoveryCoordinator
+
         reg = _make_registry()
         coordinator = RuntimeRestartRecoveryCoordinator(
             hybrid_continuity_registry=reg,
@@ -674,18 +722,21 @@ class TestCoordinatorHybridStep:
 # 66–67: run_startup_recovery — hybrid parameter
 # ---------------------------------------------------------------------------
 
+
 class TestRunStartupRecoveryHybrid:
     def setup_method(self):
         _reset_registry()
 
     def test_66_accepts_hybrid_continuity_registry_parameter(self):
         from core.runtime_restart_recovery import run_startup_recovery
+
         reg = _make_registry()
         report = run_startup_recovery(hybrid_continuity_registry=reg)
         assert report is not None
 
     def test_67_returns_report_with_hybrid_field(self):
         from core.runtime_restart_recovery import run_startup_recovery
+
         reg = _make_registry()
         r = reg.create_and_register()
         r.transition(_state("dispatched"))
@@ -698,11 +749,13 @@ class TestRunStartupRecoveryHybrid:
 # 68–70: Durability boundary assertions
 # ---------------------------------------------------------------------------
 
+
 class TestDurabilityBoundaryAssertions:
     def test_68_ephemeral_sentinel_mentions_a2a_gui_vlm(self):
         from core.hybrid_orchestration_continuity import (
             HYBRID_TRANSPORT_HANDLES_ARE_EPHEMERAL_POLICY,
         )
+
         text = HYBRID_TRANSPORT_HANDLES_ARE_EPHEMERAL_POLICY.upper()
         assert "A2A" in text
         assert "GUI" in text
@@ -712,6 +765,7 @@ class TestDurabilityBoundaryAssertions:
         from core.hybrid_orchestration_continuity import (
             HYBRID_LIFECYCLE_IS_CANONICAL_ORCHESTRATION_PATH_POLICY,
         )
+
         text = HYBRID_LIFECYCLE_IS_CANONICAL_ORCHESTRATION_PATH_POLICY.lower()
         # Should affirm canonical path, not just degrade-only
         assert "canonical" in text
@@ -720,6 +774,7 @@ class TestDurabilityBoundaryAssertions:
         from core.hybrid_orchestration_continuity import (
             HybridOrchestrationLifecycleState,
         )
+
         interrupted = HybridOrchestrationLifecycleState.interrupted
         assert interrupted.is_terminal is False
         assert interrupted.is_recoverable is True

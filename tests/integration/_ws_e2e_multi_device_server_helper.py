@@ -100,9 +100,7 @@ def run(port: int) -> None:
             "payload": {"command": command},
         }
 
-        asyncio.ensure_future(
-            _bridge.send_to_device(device_id, task_assign_msg, wait_response=False)
-        )
+        asyncio.ensure_future(_bridge.send_to_device(device_id, task_assign_msg, wait_response=False))
         return {"dispatched": True, "task_id": task_id, "target_device_id": device_id}
 
     @app.post("/test/takeover-dispatch/{task_id}/{takeover_device_id}")
@@ -155,11 +153,7 @@ def run(port: int) -> None:
             },
         }
 
-        asyncio.ensure_future(
-            _bridge.send_to_device(
-                takeover_device_id, task_assign_msg, wait_response=False
-            )
-        )
+        asyncio.ensure_future(_bridge.send_to_device(takeover_device_id, task_assign_msg, wait_response=False))
         return {
             "dispatched": True,
             "task_id": task_id,
@@ -204,11 +198,7 @@ def run(port: int) -> None:
             "devices": [
                 {
                     "device_id": d.device_id,
-                    "platform": (
-                        d.platform.value
-                        if hasattr(d.platform, "value")
-                        else str(d.platform)
-                    ),
+                    "platform": (d.platform.value if hasattr(d.platform, "value") else str(d.platform)),
                     "connected": d.connected,
                 }
                 for d in devices

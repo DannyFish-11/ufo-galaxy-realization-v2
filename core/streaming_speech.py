@@ -15,6 +15,7 @@
 设计为可测：合成/播放/打断都通过注入的可调用对象完成，单测无需真实
 edge-tts 或音频设备即可验证分句、顺序、打断语义。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -25,7 +26,7 @@ logger = logging.getLogger("Galaxy.StreamingSpeech")
 
 # 句末标点（中英）+ 换行 —— 在这些位置切句，便于"说一句合成下一句"。
 _SENTENCE_END = "。！？；…!?;\n"
-_MIN_CHUNK_CHARS = 6   # 太短的碎片（如单独一个"好。"）并入邻句，避免频繁启停播放器
+_MIN_CHUNK_CHARS = 6  # 太短的碎片（如单独一个"好。"）并入邻句，避免频繁启停播放器
 
 
 def split_into_speakable_chunks(text: str, *, min_chars: int = _MIN_CHUNK_CHARS) -> List[str]:
@@ -48,7 +49,7 @@ def split_into_speakable_chunks(text: str, *, min_chars: int = _MIN_CHUNK_CHARS)
         # 缩写(U.S.A.)、域名等。
         if ch == ".":
             nxt = normalized[i + 1] if i + 1 < n else ""
-            is_boundary = (nxt == "" or nxt.isspace())
+            is_boundary = nxt == "" or nxt.isspace()
         if is_boundary:
             piece = "".join(buf).strip()
             if piece:
@@ -226,7 +227,7 @@ def extract_speakable_prefix(buf: str, *, min_chars: int = _MIN_CHUNK_CHARS) -> 
     if last_boundary < 0:
         return [], buf
     prefix = buf[: last_boundary + 1]
-    remainder = buf[last_boundary + 1:]
+    remainder = buf[last_boundary + 1 :]
     if len(prefix.strip(_SENTENCE_END + " ")) < min_chars:
         return [], buf  # 攒够再切
     return split_into_speakable_chunks(prefix, min_chars=min_chars), remainder
@@ -430,12 +431,12 @@ class IncrementalSpeaker:
             # 可见化兜底:句子确实入过队、却一句都没播出去(且不是被打断)——
             # 每句的合成/播放失败都被内部按 debug 吞掉,不升这条 WARNING 的话
             # 用户看到的就是"彻底静默零线索"(真机复现过)。
-            if (self.chunks_enqueued > 0 and self.chunks_spoken == 0
-                    and not self._interrupted):
+            if self.chunks_enqueued > 0 and self.chunks_spoken == 0 and not self._interrupted:
                 logger.warning(
                     "增量朗读:%d 句全部合成/播放失败,一句未播出——常见原因:"
                     "TTS 引擎不可用(edge-tts 无法访问微软服务/缺包)且所有兜底"
-                    "引擎均失败、或无音频设备。", self.chunks_enqueued,
+                    "引擎均失败、或无音频设备。",
+                    self.chunks_enqueued,
                 )
 
     async def _play_one(self, handle: str) -> None:

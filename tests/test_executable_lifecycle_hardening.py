@@ -43,7 +43,6 @@ from typing import TYPE_CHECKING, List
 import pytest
 
 from core.executable_lifecycle_hardening import (
-    _clear_lifecycle_transition_runtime_state,
     EXECUTABLE_LIFECYCLE_HARDENING_AUTHORITY,
     EXECUTABLE_LIFECYCLE_HARDENING_VERSION,
     AdmissionDecision,
@@ -54,6 +53,7 @@ from core.executable_lifecycle_hardening import (
     LifecycleStage,
     ResultClosureState,
     TaskInitiationGateResult,
+    _clear_lifecycle_transition_runtime_state,
     build_executable_lifecycle_state,
 )
 
@@ -1175,6 +1175,7 @@ class TestV2UnifiedStateContractIntegration:
 
     def test_contract_version_updated(self) -> None:
         from core.v2_unified_state_contract import V2_UNIFIED_STATE_CONTRACT_VERSION
+
         parts = V2_UNIFIED_STATE_CONTRACT_VERSION.split(".")
         assert len(parts) == 3
 

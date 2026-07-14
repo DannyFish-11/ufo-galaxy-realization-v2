@@ -19,10 +19,10 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from galaxy_gateway.android_bridge import AndroidBridge, MessageType
 
-
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def bridge():
@@ -42,6 +42,7 @@ DEVICE_ID = "test-android-device-001"
 # ---------------------------------------------------------------------------
 # 1. device_register -> device_register_ack
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_device_register_ack(bridge, mock_ws):
@@ -67,16 +68,20 @@ async def test_device_register_ack(bridge, mock_ws):
 # 2. capability_report -> accepted and persisted
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_capability_report_accepted(bridge, mock_ws):
     """Sending capability_report must be accepted and supported_actions persisted."""
     # Register the device first so the bridge knows about it
-    await bridge.handle_message(mock_ws, {
-        "type": "device_register",
-        "version": "3.0",
-        "device_id": DEVICE_ID,
-        "platform": "android",
-    })
+    await bridge.handle_message(
+        mock_ws,
+        {
+            "type": "device_register",
+            "version": "3.0",
+            "device_id": DEVICE_ID,
+            "platform": "android",
+        },
+    )
 
     message = {
         "type": "capability_report",
@@ -102,16 +107,20 @@ async def test_capability_report_accepted(bridge, mock_ws):
 # 3. heartbeat -> heartbeat_ack
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_heartbeat_ack(bridge, mock_ws):
     """Sending heartbeat must return heartbeat_ack."""
     # Register first
-    await bridge.handle_message(mock_ws, {
-        "type": "device_register",
-        "version": "3.0",
-        "device_id": DEVICE_ID,
-        "platform": "android",
-    })
+    await bridge.handle_message(
+        mock_ws,
+        {
+            "type": "device_register",
+            "version": "3.0",
+            "device_id": DEVICE_ID,
+            "platform": "android",
+        },
+    )
 
     message = {
         "type": "heartbeat",
@@ -129,6 +138,7 @@ async def test_heartbeat_ack(bridge, mock_ws):
 # ---------------------------------------------------------------------------
 # 4. task_result -> processed (fire-and-forget, returns None)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_task_result_processed(bridge, mock_ws):
@@ -150,6 +160,7 @@ async def test_task_result_processed(bridge, mock_ws):
 # ---------------------------------------------------------------------------
 # 5. diagnostics_payload -> accepted
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_diagnostics_payload_processed(bridge, mock_ws):

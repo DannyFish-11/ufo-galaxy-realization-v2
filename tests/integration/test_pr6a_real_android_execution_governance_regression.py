@@ -29,7 +29,6 @@ from core.unified_execution_governance import (
 )
 from core.unified_governance_semantics import build_unified_governance_state
 
-
 _REAL_ANDROID_EVIDENCE_ENV = "REAL_ANDROID_GOVERNANCE_EVIDENCE_PATH"
 _ACTIVE_OR_TERMINAL_QUALITY = {
     "android_remote_confirmed",
@@ -54,11 +53,7 @@ def _load_real_android_runtime_evidence() -> Dict[str, Any]:
 def _find_message_by_type(messages: list[Any], message_type: str) -> Dict[str, Any] | None:
     """Return first AIP message matching *message_type* after strip/lower normalization."""
     return next(
-        (
-            m
-            for m in messages
-            if isinstance(m, dict) and str(m.get("type", "")).strip().lower() == message_type
-        ),
+        (m for m in messages if isinstance(m, dict) and str(m.get("type", "")).strip().lower() == message_type),
         None,
     )
 
@@ -149,25 +144,22 @@ def test_real_android_runtime_participation_drives_v2_governance_regression_path
         assert blocked.active_conflicting_type == ExecutionType.takeover_request
 
         snapshot = get_execution_runtime_snapshot(device_ids=[device_id])
-        per_device = next(
-            d for d in snapshot.get("devices", []) if d.get("device_id") == device_id
-        )
+        per_device = next(d for d in snapshot.get("devices", []) if d.get("device_id") == device_id)
         assert per_device["active_execution_count"] == 2
         assert "goal_execution" in per_device["blocked_execution_types"]
         assert per_device["android_lifecycle_truth_quality"] in _ACTIVE_OR_TERMINAL_QUALITY
 
         governance = build_unified_governance_state(device_ids=[device_id])
-        device_view = next(
-            d for d in governance.get("devices", []) if d.get("device_id") == device_id
-        )
+        device_view = next(d for d in governance.get("devices", []) if d.get("device_id") == device_id)
         delegated = device_view["governance_precedence"]["delegated_execution"]
         causality = delegated["decision_causality"]
         assert causality["active_execution_count"] == 2
         assert "goal_execution" in causality["blocked_execution_types"]
         assert causality["android_lifecycle_truth_quality"] == per_device["android_lifecycle_truth_quality"]
-        assert causality["android_lifecycle_truth_governance_impact"] == per_device[
-            "android_lifecycle_truth_governance_impact"
-        ]
+        assert (
+            causality["android_lifecycle_truth_governance_impact"]
+            == per_device["android_lifecycle_truth_governance_impact"]
+        )
     finally:
         _clear_execution_governance_runtime_state()
         reset_android_device_state_store()

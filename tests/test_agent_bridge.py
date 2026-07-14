@@ -46,10 +46,10 @@ from galaxy_gateway.agent_bridge import (  # noqa: E402
     get_agent_bridge,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _fresh_bridge(
     *,
@@ -58,9 +58,7 @@ def _fresh_bridge(
     enabled: bool = True,
 ) -> AgentBridge:
     """Return a new AgentBridge with explicit config (no env reads)."""
-    return AgentBridge(
-        AgentBridgeConfig(runtime_url=runtime_url, timeout=timeout, enabled=enabled)
-    )
+    return AgentBridge(AgentBridgeConfig(runtime_url=runtime_url, timeout=timeout, enabled=enabled))
 
 
 def _contract(trace_id: str | None = None, **kwargs) -> HandoffContract:
@@ -82,6 +80,7 @@ async def _fail_fallback(task: dict) -> dict:
 # ===========================================================================
 # 1. AgentBridgeConfig.from_env()
 # ===========================================================================
+
 
 class TestAgentBridgeConfigFromEnv:
     def test_defaults(self, monkeypatch):
@@ -124,6 +123,7 @@ class TestAgentBridgeConfigFromEnv:
 # 2. HandoffContract.to_dict()
 # ===========================================================================
 
+
 class TestHandoffContract:
     def test_to_dict_all_fields(self):
         trace_id = str(uuid.uuid4())
@@ -158,6 +158,7 @@ class TestHandoffContract:
 # 3. AgentBridgeMetrics
 # ===========================================================================
 
+
 class TestAgentBridgeMetrics:
     def test_initial_state(self):
         m = AgentBridgeMetrics()
@@ -189,6 +190,7 @@ class TestAgentBridgeMetrics:
 # 4. Bridge disabled (GALAXY_RUNTIME_ENABLED=0)
 # ===========================================================================
 
+
 class TestBridgeDisabled:
     @pytest.mark.asyncio
     async def test_stays_local_when_disabled(self, monkeypatch):
@@ -212,6 +214,7 @@ class TestBridgeDisabled:
 # ===========================================================================
 # 5. Cross-device switch OFF
 # ===========================================================================
+
 
 class TestCrossDeviceSwitchOff:
     @pytest.mark.asyncio
@@ -244,6 +247,7 @@ class TestCrossDeviceSwitchOff:
 # 6. Successful runtime handoff
 # ===========================================================================
 
+
 class TestSuccessfulHandoff:
     @pytest.mark.asyncio
     async def test_runtime_result_returned(self, monkeypatch):
@@ -271,6 +275,7 @@ class TestSuccessfulHandoff:
 # ===========================================================================
 # 7. Deduplication by trace_id
 # ===========================================================================
+
 
 class TestDeduplication:
     @pytest.mark.asyncio
@@ -308,6 +313,7 @@ class TestDeduplication:
 # 8. Timeout fallback
 # ===========================================================================
 
+
 class TestTimeoutFallback:
     @pytest.mark.asyncio
     async def test_timeout_triggers_local_fallback(self, monkeypatch):
@@ -319,9 +325,7 @@ class TestTimeoutFallback:
             return {"success": True}
 
         bridge._call_runtime = _slow_runtime
-        result = await bridge.handoff(
-            contract=_contract(), local_fallback=_ok_fallback
-        )
+        result = await bridge.handoff(contract=_contract(), local_fallback=_ok_fallback)
         assert result["bridge_source"] == "local_fallback"
         assert result["from_fallback"] is True
 
@@ -344,6 +348,7 @@ class TestTimeoutFallback:
 # 9. Runtime unreachable (OSError)
 # ===========================================================================
 
+
 class TestRuntimeUnreachable:
     @pytest.mark.asyncio
     async def test_oserror_triggers_fallback(self, monkeypatch):
@@ -354,9 +359,7 @@ class TestRuntimeUnreachable:
             raise OSError("Connection refused")
 
         bridge._call_runtime = _broken_runtime
-        result = await bridge.handoff(
-            contract=_contract(), local_fallback=_ok_fallback
-        )
+        result = await bridge.handoff(contract=_contract(), local_fallback=_ok_fallback)
         assert result["bridge_source"] == "local_fallback"
 
     @pytest.mark.asyncio
@@ -368,9 +371,7 @@ class TestRuntimeUnreachable:
             raise RuntimeError("HTTP 503")
 
         bridge._call_runtime = _bad_runtime
-        result = await bridge.handoff(
-            contract=_contract(), local_fallback=_ok_fallback
-        )
+        result = await bridge.handoff(contract=_contract(), local_fallback=_ok_fallback)
         assert result["bridge_source"] == "local_fallback"
         assert bridge.metrics.handoff_failure == 1
         assert bridge.metrics.fallback_count == 1
@@ -379,6 +380,7 @@ class TestRuntimeUnreachable:
 # ===========================================================================
 # 10. No fallback supplied
 # ===========================================================================
+
 
 class TestNoFallback:
     @pytest.mark.asyncio
@@ -401,11 +403,10 @@ class TestNoFallback:
 # 11. DeviceRouter.route_task() cross-device ON → bridge delegation
 # ===========================================================================
 
+
 class TestDeviceRouterBridgeIntegration:
     @pytest.mark.asyncio
-    async def test_route_task_delegates_to_bridge_when_cross_device_on(
-        self, monkeypatch
-    ):
+    async def test_route_task_delegates_to_bridge_when_cross_device_on(self, monkeypatch):
         monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "1")
 
         # Patch bridge singleton to return a known response
@@ -494,9 +495,12 @@ class TestDeviceRouterBridgeIntegration:
         mock_coordinator = MagicMock()
         mock_coordinator.execute_cross_device_task = AsyncMock(return_value={"success": True})
 
-        with patch("galaxy_gateway.agent_bridge.get_agent_bridge", return_value=mock_bridge), patch(
-            "galaxy_gateway.device_router.get_cross_device_coordinator",
-            return_value=mock_coordinator,
+        with (
+            patch("galaxy_gateway.agent_bridge.get_agent_bridge", return_value=mock_bridge),
+            patch(
+                "galaxy_gateway.device_router.get_cross_device_coordinator",
+                return_value=mock_coordinator,
+            ),
         ):
             from galaxy_gateway.device_router import DeviceRouter
 
@@ -535,6 +539,7 @@ class TestDeviceRouterBridgeIntegration:
 # 13. Fallback propagates trace_id
 # ===========================================================================
 
+
 class TestTracePropagation:
     @pytest.mark.asyncio
     async def test_fallback_result_carries_trace_id(self, monkeypatch):
@@ -567,6 +572,7 @@ class TestTracePropagation:
 # 14. Metrics snapshot keys
 # ===========================================================================
 
+
 class TestMetricsSnapshot:
     def test_snapshot_has_all_required_keys(self):
         m = AgentBridgeMetrics()
@@ -596,6 +602,7 @@ class TestMetricsSnapshot:
 # 15. Singleton get_agent_bridge()
 # ===========================================================================
 
+
 class TestSingleton:
     def test_same_instance(self, monkeypatch):
         # Reset singleton
@@ -608,6 +615,7 @@ class TestSingleton:
 
     def test_module_exports(self):
         from galaxy_gateway.agent_bridge import __all__
+
         required = {
             "AgentBridge",
             "AgentBridgeConfig",

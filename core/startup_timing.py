@@ -21,6 +21,7 @@
     ...do work...; mark("核心服务")       # 记录『距上次 mark 到现在』归到该名下
     ...do work...; mark("网关")           # 依此类推
 """
+
 from __future__ import annotations
 
 import logging
@@ -38,17 +39,22 @@ _last_mark: Dict[str, Optional[float]] = {"t": None}
 
 def _enabled() -> bool:
     return os.environ.get("GALAXY_PHASE_TIMING", "1").strip().lower() not in (
-        "0", "false", "no", "off",
+        "0",
+        "false",
+        "no",
+        "off",
     )
 
 
 def _record(name: str, seconds: float) -> None:
     try:
-        _timings.append({
-            "name": str(name)[:60],
-            "seconds": round(float(seconds), 3),
-            "ts": time.strftime("%H:%M:%S"),
-        })
+        _timings.append(
+            {
+                "name": str(name)[:60],
+                "seconds": round(float(seconds), 3),
+                "ts": time.strftime("%H:%M:%S"),
+            }
+        )
         # INFO → 进 logs/lumiv.log,不上控制台(控制台阈值 WARNING),隐蔽。
         logger.info("[PHASE-TIMING] %-30s %8.2fs", str(name)[:30], seconds)
     except Exception:  # noqa: BLE001

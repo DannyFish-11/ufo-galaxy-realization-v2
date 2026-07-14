@@ -78,9 +78,7 @@ UNIFIED_NODE_INVOCATION_AUTHORITY: str = (
     "_load_node / _execute_node directly."
 )
 
-UNIFIED_NODE_INVOCATION_PR4_SENTINEL: str = (
-    "UNIFIED_NODE_INVOCATION::PR4_SENTINEL_V1"
-)
+UNIFIED_NODE_INVOCATION_PR4_SENTINEL: str = "UNIFIED_NODE_INVOCATION::PR4_SENTINEL_V1"
 
 ALL_INVOCATION_PATHS_CONVERGE_ON_UNIFIED_EXECUTOR_POLICY: str = (
     "UNIFIED_NODE_INVOCATION::ALL_PATHS_CONVERGE_POLICY_V1: "
@@ -125,6 +123,7 @@ CANONICAL_INVOCATION_DENIES_INELIGIBLE_NODES_PR11_POLICY: str = (
 # InvocationSource enum
 # ---------------------------------------------------------------------------
 
+
 class InvocationSource(str, Enum):
     """Identifies which ingress path triggered a node invocation."""
 
@@ -139,6 +138,7 @@ class InvocationSource(str, Enum):
 # ---------------------------------------------------------------------------
 # Canonical invocation envelope
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class NodeInvocationEnvelope:
@@ -184,6 +184,7 @@ class NodeInvocationEnvelope:
 # ---------------------------------------------------------------------------
 # Canonical result envelope
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class NodeInvocationResult:
@@ -245,6 +246,7 @@ class NodeInvocationResult:
 # UnifiedNodeExecutor
 # ---------------------------------------------------------------------------
 
+
 class UnifiedNodeExecutor:
     """Single canonical node executor.
 
@@ -262,12 +264,11 @@ class UnifiedNodeExecutor:
         if self._nodes_root is None:
             try:
                 from core.routes._helpers import nodes_root
+
                 UnifiedNodeExecutor._nodes_root = nodes_root
             except Exception as exc:
                 logger.debug("Fallback triggered: %s", exc)
-                UnifiedNodeExecutor._nodes_root = os.path.join(
-                    os.path.dirname(os.path.dirname(__file__)), "nodes"
-                )
+                UnifiedNodeExecutor._nodes_root = os.path.join(os.path.dirname(os.path.dirname(__file__)), "nodes")
         return self._nodes_root  # type: ignore[return-value]
 
     async def execute(self, envelope: NodeInvocationEnvelope) -> NodeInvocationResult:
@@ -304,8 +305,8 @@ class UnifiedNodeExecutor:
         try:
             from core.node_invocation_governance import (  # noqa: PLC0415
                 NodeInvocationGovernanceOverride,
-                evaluate_invocation_governance,
                 build_invocation_denial_diagnostics,
+                evaluate_invocation_governance,
             )
 
             gov_override_raw = envelope.governance_override
@@ -321,8 +322,7 @@ class UnifiedNodeExecutor:
             if not gov_decision.invocation_allowed:
                 denial_payload = build_invocation_denial_diagnostics(gov_decision)
                 logger.warning(
-                    "invoke node DENIED by governance gate | node_id=%s reasons=%s "
-                    "request_id=%s",
+                    "invoke node DENIED by governance gate | node_id=%s reasons=%s " "request_id=%s",
                     node_id,
                     gov_decision.denial_reasons,
                     envelope.request_id,
@@ -363,9 +363,11 @@ class UnifiedNodeExecutor:
             perm = evaluate_action_permission(node_id, action)
             if not perm.allowed:
                 logger.warning(
-                    "invoke node DENIED by action-permission gate | node_id=%s action=%s "
-                    "reason=%s request_id=%s",
-                    node_id, action, perm.reason, envelope.request_id,
+                    "invoke node DENIED by action-permission gate | node_id=%s action=%s " "reason=%s request_id=%s",
+                    node_id,
+                    action,
+                    perm.reason,
+                    envelope.request_id,
                 )
                 result = NodeInvocationResult(
                     success=False,
@@ -374,8 +376,7 @@ class UnifiedNodeExecutor:
                     request_id=envelope.request_id,
                     trace_id=envelope.trace_id,
                     error=(
-                        f"Node {node_id} denied action {action!r} by declared "
-                        f"permission manifest: {perm.reason}"
+                        f"Node {node_id} denied action {action!r} by declared " f"permission manifest: {perm.reason}"
                     ),
                     duration_ms=(time.time() - started) * 1000.0,
                     execution_mode=envelope.execution_domain,
@@ -387,7 +388,8 @@ class UnifiedNodeExecutor:
         except Exception as _perm_exc:  # noqa: BLE001 — 门禁自身故障不拦执行
             logger.warning(
                 "invoke node: action-permission gate unavailable for node_id=%s: %s; proceeding",
-                node_id, _perm_exc,
+                node_id,
+                _perm_exc,
             )
 
         # -- 自治拨盘门(GALAXY_AUTONOMY: safe/guided/autonomous) ---------------
@@ -395,19 +397,22 @@ class UnifiedNodeExecutor:
         # ApprovalRegistry(人不在线就排队,不执行也不静默跳过),返回结构化
         # approval_required;用户放行(仅此次/本会话/永久)后重试即通过。
         try:
-            from core.autonomy_policy import evaluate_autonomy, ensure_approval_request  # noqa: PLC0415
+            from core.autonomy_policy import ensure_approval_request, evaluate_autonomy  # noqa: PLC0415
 
             auto_dec = evaluate_autonomy(node_id, action)
             if auto_dec.needs_approval:
                 pending = ensure_approval_request(
-                    node_id, action,
+                    node_id,
+                    action,
                     envelope.params if isinstance(envelope.params, dict) else {},
                 )
                 logger.info(
-                    "invoke node HELD for approval | node_id=%s action=%s request_id=%s "
-                    "approval_id=%s level=%s",
-                    node_id, action, envelope.request_id,
-                    pending.get("request_id"), auto_dec.level,
+                    "invoke node HELD for approval | node_id=%s action=%s request_id=%s " "approval_id=%s level=%s",
+                    node_id,
+                    action,
+                    envelope.request_id,
+                    pending.get("request_id"),
+                    auto_dec.level,
                 )
                 result = NodeInvocationResult(
                     success=False,
@@ -432,7 +437,8 @@ class UnifiedNodeExecutor:
         except Exception as _auto_exc:  # noqa: BLE001 — 拨盘门故障不拦执行
             logger.warning(
                 "invoke node: autonomy gate unavailable for node_id=%s: %s; proceeding",
-                node_id, _auto_exc,
+                node_id,
+                _auto_exc,
             )
 
         # -- PR-GOLDEN-PATH: Golden Path node resolution + local facade ----
@@ -456,8 +462,7 @@ class UnifiedNodeExecutor:
         # 也逃不出根)。在 sink 处消毒,任何调用方都受保护。
         _root_real = os.path.realpath(nodes_root)
         node_dir = os.path.realpath(os.path.join(nodes_root, node_id))
-        _bad_id = (os.sep in node_id or (os.altsep and os.altsep in node_id)
-                   or ".." in node_id or os.path.isabs(node_id))
+        _bad_id = os.sep in node_id or (os.altsep and os.altsep in node_id) or ".." in node_id or os.path.isabs(node_id)
         if _bad_id or not (node_dir == _root_real or node_dir.startswith(_root_real + os.sep)):
             return self._fail(envelope, f"非法 node_id(疑似路径穿越): {node_id!r}", started)
 
@@ -561,9 +566,7 @@ class UnifiedNodeExecutor:
     # PR-GOLDEN-PATH: Golden Path local facade integration
     # ------------------------------------------------------------------
 
-    async def _try_golden_path(
-        self, envelope: NodeInvocationEnvelope
-    ) -> Optional[NodeInvocationResult]:
+    async def _try_golden_path(self, envelope: NodeInvocationEnvelope) -> Optional[NodeInvocationResult]:
         """Route invocation through the Golden Path (device_node_map → resolver → facade).
 
         PR-GOLDEN-PATH: This is the primary path for device-node execution.
@@ -633,9 +636,7 @@ class UnifiedNodeExecutor:
 
     # PR-AIPV3-LOCAL: AIP v3 message emission for local node tracing
 
-    def _record_feedback(
-        self, envelope: NodeInvocationEnvelope, result: NodeInvocationResult
-    ) -> None:
+    def _record_feedback(self, envelope: NodeInvocationEnvelope, result: NodeInvocationResult) -> None:
         """Record execution result to feedback loop for learning.
 
         PR-STABILITY-FEEDBACK: Every node invocation result is recorded
@@ -664,9 +665,10 @@ class UnifiedNodeExecutor:
         This makes local node invocation observable in the unified AIP v3 trace.
         """
         try:
-            from core.schemas.aip_v3 import TaskAssignMsg  # noqa: PLC0415
-            from core.nats_bus import get_nats_bus  # noqa: PLC0415
             import asyncio
+
+            from core.nats_bus import get_nats_bus  # noqa: PLC0415
+            from core.schemas.aip_v3 import TaskAssignMsg  # noqa: PLC0415
 
             msg = TaskAssignMsg(
                 device_id="local",
@@ -684,17 +686,16 @@ class UnifiedNodeExecutor:
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
 
-    def _emit_aip_v3_task_result(
-        self, envelope: NodeInvocationEnvelope, result: NodeInvocationResult
-    ) -> None:
+    def _emit_aip_v3_task_result(self, envelope: NodeInvocationEnvelope, result: NodeInvocationResult) -> None:
         """Emit TASK_RESULT AIP v3 message after local node execution.
 
         Best-effort: published via NATS if connected, otherwise logged only.
         """
         try:
-            from core.schemas.aip_v3 import TaskResultMsg  # noqa: PLC0415
-            from core.nats_bus import get_nats_bus  # noqa: PLC0415
             import asyncio
+
+            from core.nats_bus import get_nats_bus  # noqa: PLC0415
+            from core.schemas.aip_v3 import TaskResultMsg  # noqa: PLC0415
 
             msg = TaskResultMsg(
                 device_id="local",
@@ -758,6 +759,7 @@ def get_unified_node_executor() -> UnifiedNodeExecutor:
 # ---------------------------------------------------------------------------
 # Convenience entry-point
 # ---------------------------------------------------------------------------
+
 
 async def invoke_node(
     node_id: str,

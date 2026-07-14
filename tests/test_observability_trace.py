@@ -37,14 +37,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # 1–3. TraceContext
 # ---------------------------------------------------------------------------
 
+
 class TestTraceContext:
     def test_new_generates_valid_uuids(self):
         from galaxy_gateway.observability import TraceContext
+
         ctx = TraceContext.new()
         uuid.UUID(ctx.trace_id)  # raises if invalid
         uuid.UUID(ctx.span_id)
@@ -52,6 +53,7 @@ class TestTraceContext:
 
     def test_from_message_uses_existing_trace_id(self):
         from galaxy_gateway.observability import TraceContext
+
         existing = str(uuid.uuid4())
         ctx = TraceContext.from_message({"trace_id": existing, "foo": "bar"})
         assert ctx.trace_id == existing
@@ -60,18 +62,21 @@ class TestTraceContext:
 
     def test_from_message_generates_missing_trace_id(self):
         from galaxy_gateway.observability import TraceContext
+
         ctx = TraceContext.from_message({})
         uuid.UUID(ctx.trace_id)
         uuid.UUID(ctx.span_id)
 
     def test_from_message_accepts_x_trace_id_header(self):
         from galaxy_gateway.observability import TraceContext
+
         existing = str(uuid.uuid4())
         ctx = TraceContext.from_message({"x-trace-id": existing})
         assert ctx.trace_id == existing
 
     def test_child_span_preserves_trace_id(self):
         from galaxy_gateway.observability import TraceContext
+
         parent = TraceContext.new()
         child = parent.child_span()
         assert child.trace_id == parent.trace_id
@@ -79,6 +84,7 @@ class TestTraceContext:
 
     def test_to_dict(self):
         from galaxy_gateway.observability import TraceContext
+
         ctx = TraceContext.new()
         d = ctx.to_dict()
         assert d["trace_id"] == ctx.trace_id
@@ -88,6 +94,7 @@ class TestTraceContext:
 # ---------------------------------------------------------------------------
 # 4–5. emit_gateway_log
 # ---------------------------------------------------------------------------
+
 
 class TestEmitGatewayLog:
     def _capture_log(self):
@@ -111,6 +118,7 @@ class TestEmitGatewayLog:
 
     def test_emits_valid_json(self):
         from galaxy_gateway.observability import TraceContext, emit_gateway_log
+
         records, h, logger, orig = self._capture_log()
         try:
             ctx = TraceContext.new()
@@ -128,6 +136,7 @@ class TestEmitGatewayLog:
 
     def test_sample_rate_zero_suppresses_info(self):
         from galaxy_gateway.observability import TraceContext, emit_gateway_log
+
         os.environ["GALAXY_TRACE_SAMPLE_RATE"] = "0"
         records, h, logger, orig = self._capture_log()
         try:
@@ -141,6 +150,7 @@ class TestEmitGatewayLog:
 
     def test_error_events_bypass_sampling(self):
         from galaxy_gateway.observability import TraceContext, emit_gateway_log
+
         os.environ["GALAXY_TRACE_SAMPLE_RATE"] = "0"
         records, h, logger, orig = self._capture_log()
         try:
@@ -156,6 +166,7 @@ class TestEmitGatewayLog:
 
     def test_no_trace_ctx_still_works(self):
         from galaxy_gateway.observability import emit_gateway_log
+
         records, h, logger, orig = self._capture_log()
         try:
             emit_gateway_log("headless_event", device_id="x")
@@ -172,9 +183,11 @@ class TestEmitGatewayLog:
 # 6–9. GatewayMetrics
 # ---------------------------------------------------------------------------
 
+
 class TestGatewayMetrics:
     def _fresh_metrics(self):
         from galaxy_gateway.observability import GatewayMetrics
+
         return GatewayMetrics()
 
     def test_inc_counter(self):
@@ -192,9 +205,10 @@ class TestGatewayMetrics:
 
     def test_latency_histogram_observe_and_snapshot(self):
         from galaxy_gateway.observability import _LatencyHistogram
+
         h = _LatencyHistogram()
-        h.observe(5.0)    # ≤10ms bucket
-        h.observe(80.0)   # ≤100ms bucket
+        h.observe(5.0)  # ≤10ms bucket
+        h.observe(80.0)  # ≤100ms bucket
         h.observe(99999)  # +inf bucket
         snap = h.snapshot()
         assert snap["count"] == 3
@@ -245,6 +259,7 @@ class TestGatewayMetrics:
 
     def test_get_gateway_metrics_singleton(self):
         from galaxy_gateway.observability import get_gateway_metrics
+
         m1 = get_gateway_metrics()
         m2 = get_gateway_metrics()
         assert m1 is m2
@@ -254,25 +269,28 @@ class TestGatewayMetrics:
 # 10–13. webrtc_proxy integration (mocked Node_95)
 # ---------------------------------------------------------------------------
 
+
 class TestWebRTCProxyObservability:
     """Verify GatewayMetrics counters via webrtc_proxy on success / failure paths."""
 
     def setup_method(self, _method):
         # Reset the module-level gateway metrics singleton for isolation.
         import galaxy_gateway.observability as obs_module
+
         obs_module._gateway_metrics = None
         os.environ["GALAXY_CROSS_DEVICE_ENABLED"] = "1"
 
     def teardown_method(self, _method):
         import galaxy_gateway.observability as obs_module
+
         obs_module._gateway_metrics = None
         os.environ.pop("GALAXY_CROSS_DEVICE_ENABLED", None)
 
     @pytest.mark.asyncio
     async def test_success_path_increments_counters(self):
         """Metrics: signaling_total +1, signaling_success +1 on clean session."""
-        from galaxy_gateway.observability import get_gateway_metrics
         from galaxy_gateway import webrtc_proxy
+        from galaxy_gateway.observability import get_gateway_metrics
 
         # Patch out the actual websocket tunnel and just run the session logic.
         mock_client_ws = AsyncMock()
@@ -281,12 +299,16 @@ class TestWebRTCProxyObservability:
         class _FakeNodeWS:
             async def __aenter__(self):
                 return self
+
             async def __aexit__(self, *_):
                 pass
+
             async def send(self, data):
                 pass
+
             def __aiter__(self):
                 return self
+
             async def __anext__(self):
                 raise StopAsyncIteration
 
@@ -302,8 +324,8 @@ class TestWebRTCProxyObservability:
     @pytest.mark.asyncio
     async def test_timeout_path_increments_timeout_counter(self):
         """Metrics: signaling_timeout +1 on asyncio.TimeoutError."""
-        from galaxy_gateway.observability import get_gateway_metrics
         from galaxy_gateway import webrtc_proxy
+        from galaxy_gateway.observability import get_gateway_metrics
 
         mock_client_ws = AsyncMock()
 
@@ -321,8 +343,8 @@ class TestWebRTCProxyObservability:
     @pytest.mark.asyncio
     async def test_node95_error_increments_failure_counter(self):
         """Metrics: signaling_failure +1 on OSError from node_ws."""
-        from galaxy_gateway.observability import get_gateway_metrics
         from galaxy_gateway import webrtc_proxy
+        from galaxy_gateway.observability import get_gateway_metrics
 
         mock_client_ws = AsyncMock()
 
@@ -363,36 +385,42 @@ class TestWebRTCProxyObservability:
 # 14–15. agent_bridge GatewayMetrics wiring
 # ---------------------------------------------------------------------------
 
+
 class TestAgentBridgeMetricsWiring:
     def setup_method(self, _method):
         import galaxy_gateway.observability as obs_module
+
         obs_module._gateway_metrics = None
         os.environ["GALAXY_CROSS_DEVICE_ENABLED"] = "1"
         os.environ["GALAXY_RUNTIME_ENABLED"] = "1"
 
     def teardown_method(self, _method):
         import galaxy_gateway.observability as obs_module
+
         obs_module._gateway_metrics = None
         import galaxy_gateway.agent_bridge as ab
+
         ab._bridge_instance = None
         os.environ.pop("GALAXY_CROSS_DEVICE_ENABLED", None)
         os.environ.pop("GALAXY_RUNTIME_ENABLED", None)
 
     @pytest.mark.asyncio
     async def test_success_increments_bridge_success(self):
-        from galaxy_gateway.observability import get_gateway_metrics
+        import galaxy_gateway.agent_bridge as ab
         from galaxy_gateway.agent_bridge import (
             AgentBridge,
             AgentBridgeConfig,
             HandoffContract,
         )
-        import galaxy_gateway.agent_bridge as ab
+        from galaxy_gateway.observability import get_gateway_metrics
 
-        bridge = AgentBridge(AgentBridgeConfig(
-            runtime_url="http://localhost:9999",
-            timeout=5.0,
-            enabled=True,
-        ))
+        bridge = AgentBridge(
+            AgentBridgeConfig(
+                runtime_url="http://localhost:9999",
+                timeout=5.0,
+                enabled=True,
+            )
+        )
         ab._bridge_instance = bridge
 
         success_result = {"success": True, "output": "done"}
@@ -416,19 +444,21 @@ class TestAgentBridgeMetricsWiring:
 
     @pytest.mark.asyncio
     async def test_failure_increments_bridge_failure_and_fallback(self):
-        from galaxy_gateway.observability import get_gateway_metrics
+        import galaxy_gateway.agent_bridge as ab
         from galaxy_gateway.agent_bridge import (
             AgentBridge,
             AgentBridgeConfig,
             HandoffContract,
         )
-        import galaxy_gateway.agent_bridge as ab
+        from galaxy_gateway.observability import get_gateway_metrics
 
-        bridge = AgentBridge(AgentBridgeConfig(
-            runtime_url="http://localhost:9999",
-            timeout=0.01,
-            enabled=True,
-        ))
+        bridge = AgentBridge(
+            AgentBridgeConfig(
+                runtime_url="http://localhost:9999",
+                timeout=0.01,
+                enabled=True,
+            )
+        )
         ab._bridge_instance = bridge
 
         async def _slow(*_):
@@ -455,28 +485,32 @@ class TestAgentBridgeMetricsWiring:
 # 16–17. device_router trace propagation and routing metrics
 # ---------------------------------------------------------------------------
 
+
 class TestDeviceRouterObservability:
     def setup_method(self, _method):
         import galaxy_gateway.observability as obs_module
+
         obs_module._gateway_metrics = None
         os.environ["GALAXY_CROSS_DEVICE_ENABLED"] = "1"
 
     def teardown_method(self, _method):
         import galaxy_gateway.observability as obs_module
+
         obs_module._gateway_metrics = None
         os.environ.pop("GALAXY_CROSS_DEVICE_ENABLED", None)
 
     @pytest.mark.asyncio
     async def test_trace_id_generated_when_missing(self):
         """route_task injects trace_id into context when absent."""
-        from galaxy_gateway.observability import get_gateway_metrics, TraceContext
         from galaxy_gateway.device_router import DeviceRouter
+        from galaxy_gateway.observability import TraceContext, get_gateway_metrics
 
         router = DeviceRouter()
 
         injected_trace_ids = []
         # Must patch the name as used inside device_router
         import galaxy_gateway.device_router as dr_module
+
         original_emit = dr_module.emit_gateway_log
 
         def _capture(event, *, trace_ctx=None, **fields):
@@ -486,8 +520,12 @@ class TestDeviceRouterObservability:
 
         # Provide a context without trace_id and no devices.
         with patch.object(dr_module, "emit_gateway_log", side_effect=_capture):
-            with patch.object(router, "_analyze_command", new_callable=AsyncMock,
-                              return_value={"requires_cross_device": False, "task_type": "query"}):
+            with patch.object(
+                router,
+                "_analyze_command",
+                new_callable=AsyncMock,
+                return_value={"requires_cross_device": False, "task_type": "query"},
+            ):
                 with patch.object(router, "_select_devices", return_value=[]):
                     await router.route_task("hello", context={})
 
@@ -497,15 +535,19 @@ class TestDeviceRouterObservability:
     @pytest.mark.asyncio
     async def test_routing_failure_counter_on_no_device(self):
         """routing_failure increments when no device is available."""
-        from galaxy_gateway.observability import get_gateway_metrics
         from galaxy_gateway.device_router import DeviceRouter
+        from galaxy_gateway.observability import get_gateway_metrics
 
         router = DeviceRouter()
         m = get_gateway_metrics()
         before = m.routing_failure
 
-        with patch.object(router, "_analyze_command", new_callable=AsyncMock,
-                          return_value={"requires_cross_device": False, "task_type": "query"}):
+        with patch.object(
+            router,
+            "_analyze_command",
+            new_callable=AsyncMock,
+            return_value={"requires_cross_device": False, "task_type": "query"},
+        ):
             with patch.object(router, "_select_devices", return_value=[]):
                 result = await router.route_task("test cmd", context={"trace_id": str(uuid.uuid4())})
 
@@ -515,9 +557,9 @@ class TestDeviceRouterObservability:
     @pytest.mark.asyncio
     async def test_existing_trace_id_preserved(self):
         """route_task preserves existing trace_id and does not overwrite it."""
-        from galaxy_gateway.observability import get_gateway_metrics
-        from galaxy_gateway.device_router import DeviceRouter
         import galaxy_gateway.device_router as dr_module
+        from galaxy_gateway.device_router import DeviceRouter
+        from galaxy_gateway.observability import get_gateway_metrics
 
         router = DeviceRouter()
         existing_trace = str(uuid.uuid4())
@@ -531,12 +573,16 @@ class TestDeviceRouterObservability:
             original_emit(event, trace_ctx=trace_ctx, **fields)
 
         with patch.object(dr_module, "emit_gateway_log", side_effect=_capture):
-            with patch.object(router, "_analyze_command", new_callable=AsyncMock,
-                              return_value={"requires_cross_device": False, "task_type": "query"}):
+            with patch.object(
+                router,
+                "_analyze_command",
+                new_callable=AsyncMock,
+                return_value={"requires_cross_device": False, "task_type": "query"},
+            ):
                 with patch.object(router, "_select_devices", return_value=[]):
                     await router.route_task("cmd", context={"trace_id": existing_trace})
 
         # Every emitted log in this call must use the same trace_id
-        assert all(t == existing_trace for t in captured_trace_ids), (
-            f"trace_id was not preserved: {set(captured_trace_ids)}"
-        )
+        assert all(
+            t == existing_trace for t in captured_trace_ids
+        ), f"trace_id was not preserved: {set(captured_trace_ids)}"

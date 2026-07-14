@@ -89,23 +89,73 @@ FOREGROUND_STATUS_NOT_DONE = "操作未完成"
 
 # States where android_lifecycle_phase should not override current_action_state
 # (the V2-derived state is already more specific).
-_ANDROID_PHASE_OVERRIDE_EXCLUDED_STATES: frozenset[str] = frozenset(
-    {"blocked", "awaiting_confirmation"}
-)
+_ANDROID_PHASE_OVERRIDE_EXCLUDED_STATES: frozenset[str] = frozenset({"blocked", "awaiting_confirmation"})
 
 # ── 动作意图判断关键词集合 ──────────────────────────────────────────────────────
-_ACTION_KEYWORDS = frozenset([
-    # 操作动词
-    "打开", "关闭", "启动", "停止", "运行", "执行", "发送", "发出", "拍摄",
-    "截图", "录制", "下载", "上传", "安装", "卸载", "设置", "调整", "切换",
-    "搜索", "查找", "浏览", "播放", "暂停", "跳转", "跳过", "重启", "关机",
-    "帮我", "帮助我", "请帮", "请你帮",
-    # 英文动词
-    "open", "close", "start", "stop", "run", "execute", "send", "take",
-    "screenshot", "record", "download", "upload", "install", "uninstall",
-    "set", "adjust", "switch", "search", "find", "browse", "play", "pause",
-    "restart", "shutdown", "launch", "help me", "please",
-])
+_ACTION_KEYWORDS = frozenset(
+    [
+        # 操作动词
+        "打开",
+        "关闭",
+        "启动",
+        "停止",
+        "运行",
+        "执行",
+        "发送",
+        "发出",
+        "拍摄",
+        "截图",
+        "录制",
+        "下载",
+        "上传",
+        "安装",
+        "卸载",
+        "设置",
+        "调整",
+        "切换",
+        "搜索",
+        "查找",
+        "浏览",
+        "播放",
+        "暂停",
+        "跳转",
+        "跳过",
+        "重启",
+        "关机",
+        "帮我",
+        "帮助我",
+        "请帮",
+        "请你帮",
+        # 英文动词
+        "open",
+        "close",
+        "start",
+        "stop",
+        "run",
+        "execute",
+        "send",
+        "take",
+        "screenshot",
+        "record",
+        "download",
+        "upload",
+        "install",
+        "uninstall",
+        "set",
+        "adjust",
+        "switch",
+        "search",
+        "find",
+        "browse",
+        "play",
+        "pause",
+        "restart",
+        "shutdown",
+        "launch",
+        "help me",
+        "please",
+    ]
+)
 
 
 def _is_action_intent(message: str) -> bool:
@@ -174,15 +224,9 @@ def _apply_hidden_visible_boundary(
         visible_metadata[key] = value
 
     lifecycle_surface = (
-        result.get("action_lifecycle_surface")
-        if isinstance(result.get("action_lifecycle_surface"), dict)
-        else {}
+        result.get("action_lifecycle_surface") if isinstance(result.get("action_lifecycle_surface"), dict) else {}
     )
-    lifecycle_visible_action = (
-        result.get("visible_action")
-        if isinstance(result.get("visible_action"), dict)
-        else {}
-    )
+    lifecycle_visible_action = result.get("visible_action") if isinstance(result.get("visible_action"), dict) else {}
 
     # Prefer canonical key `blocker_summary`; keep legacy fallback
     # `execution_blocker_summary` while older runtime producers migrate.
@@ -200,9 +244,7 @@ def _apply_hidden_visible_boundary(
         or lifecycle_visible_action.get("confirmation_needed")
         or visible_metadata.get("confirmation_needed", False)
     )
-    current_presence_mode = (
-        str(visible_metadata.get("presence_mode", "")).strip() or "unknown"
-    )
+    current_presence_mode = str(visible_metadata.get("presence_mode", "")).strip() or "unknown"
     lifecycle_phase = str(lifecycle_surface.get("phase") or "")
     if lifecycle_phase == "blocked" or blocker_summary:
         current_action_state = "blocked"
@@ -219,9 +261,7 @@ def _apply_hidden_visible_boundary(
     else:
         current_action_state = "failed"
     lifecycle_status_feedback = str(
-        lifecycle_visible_action.get("status_feedback")
-        or result.get("status_feedback")
-        or ""
+        lifecycle_visible_action.get("status_feedback") or result.get("status_feedback") or ""
     ).strip()
     visible_action_surface = {
         "current_presence_mode": current_presence_mode,
@@ -236,11 +276,7 @@ def _apply_hidden_visible_boundary(
         "lightweight_status_feedback": visible_metadata.get(
             "lightweight_status_feedback",
             lifecycle_status_feedback
-            or (
-                FOREGROUND_STATUS_DONE
-                if current_action_state == "completed"
-                else FOREGROUND_STATUS_NOT_DONE
-            ),
+            or (FOREGROUND_STATUS_DONE if current_action_state == "completed" else FOREGROUND_STATUS_NOT_DONE),
         ),
     }
     if blocker_summary or confirmation_needed:
@@ -316,7 +352,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
     from core.unified import get_unified_llm_router
 
-    llm_router = get_unified_llm_router()  # 统一 LLM 路由器入口（委派到 MultiLLMRouter）
+    get_unified_llm_router()  # 统一 LLM 路由器入口（委派到 MultiLLMRouter）
 
     @router.post("/api/v1/chat")
     async def chat(req: ChatRequest):
@@ -346,6 +382,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         跨设备统一会话：同一 user_id 的不同设备共享会话历史。
         """
         import time as _time
+
         _t0 = _time.monotonic()
 
         # ── PR-1 Block-1: stamp entry metadata via EntrypointRouter ──
@@ -354,26 +391,22 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         _trace_id_for_entry = ""
         try:
             from core.unified.entrypoint_router import get_entrypoint_router as _get_er
+
             _er = _get_er()
             _er_stats = _er.stats()  # just touch to ensure singleton is warm
-            _routing_meta = {
-                "entry_path": "canonical",
-                "via_legacy_adapter": False,
-                "source": "chat",
-            }
             logger.debug(
                 "EntrypointRouter | entry_path=canonical source=chat stats=%s",
                 _er_stats,
             )
         except Exception as _er_exc:
             logger.debug("EntrypointRouter unavailable (non-fatal): %s", _er_exc)
-            _routing_meta = {}
 
         # ── PR-1 EntryMode: resolve execution mode for this request ──
         # Respects explicit override from the caller; falls back to auto-detection.
         _entry_mode = "local"
         try:
             from core.unified.entrypoint_router import resolve_entry_mode as _resolve_em
+
             _entry_mode = _resolve_em(
                 explicit_entry_mode=req.entry_mode or None,
                 target_device=req.target_device or None,
@@ -388,6 +421,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         # OpenClawd 内部嵌入 AgentKernel；SOUL 注入规则由 OpenClawd 统一管理。
         try:
             from core.desktop_presence_runtime import get_desktop_presence_runtime
+
             runtime = get_desktop_presence_runtime()
             result = await runtime.handle_request(
                 message=req.message,
@@ -399,12 +433,14 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 required_capabilities=req.required_capabilities,
                 multimodal_context=req.multimodal_context,
                 entry_mode=_entry_mode,
-                runtime_attachment_session_id=req.context[-1].get(
-                    "runtime_attachment_session_id",
-                    "",
-                )
-                if req.context
-                else "",
+                runtime_attachment_session_id=(
+                    req.context[-1].get(
+                        "runtime_attachment_session_id",
+                        "",
+                    )
+                    if req.context
+                    else ""
+                ),
             )
             metadata = result.get("metadata", {})
             if not isinstance(metadata, dict):
@@ -493,9 +529,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             # audience.  It is now demoted to operator-only: users see
             # subject_foreground (subject lifecycle) instead.
             if is_operator_request:
-                resp_dict["problem_execution_spine"] = metadata.get(
-                    "problem_execution_spine", {}
-                )
+                resp_dict["problem_execution_spine"] = metadata.get("problem_execution_spine", {})
 
             # ── InteractionEnvelope (PR-4) — non-breaking, absent when None ──
             _ie = result.get("interaction_envelope")
@@ -508,6 +542,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 _latency_ms = (_time.monotonic() - _t0) * 1000
                 try:
                     from core.task_logger import emit_task_log
+
                     emit_task_log(
                         "aggregation_done",
                         trace_id=trace_id,
@@ -560,7 +595,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     # 有出入(hidden/visible 边界降级),最终展示一定正确。
     # 兜底:整条链路没流出任何增量时(适配器不支持流式/辅助路径),退回旧的
     # "整段假流式"逐字观感,行为与真流式前完全一致。
-    _STREAM_CHUNK_CHARS = 2      # 假流式兜底:每帧字符数(中文逐字观感)
+    _STREAM_CHUNK_CHARS = 2  # 假流式兜底:每帧字符数(中文逐字观感)
     _STREAM_CHUNK_DELAY = 0.012  # 假流式兜底:帧间隔(秒)
 
     def _sse(payload: Dict[str, Any]) -> str:
@@ -577,6 +612,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             _turn_id = req.session_id or ""
             try:
                 from core.lumiv_websocket_bridge import emit_conversation as _emit_conv
+
                 _emit_conv("user", req.message or "", source="text", turn_id=_turn_id)
             except Exception:
                 _emit_conv = None  # type: ignore
@@ -600,6 +636,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     begin_incremental_speech,
                     suppress_final_speak_in_context,
                 )
+
                 speaker = begin_incremental_speech(source="chat")
             except Exception as exc:  # noqa: BLE001
                 logger.debug("增量朗读建立失败(退回整段): %s", exc)
@@ -611,6 +648,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     if speaker is not None:
                         suppress_final_speak_in_context()
                     from core.desktop_presence_runtime import get_desktop_presence_runtime
+
                     runtime = get_desktop_presence_runtime()
                     return await runtime.handle_request(
                         message=req.message,
@@ -675,12 +713,14 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 model = metadata.get("model", "")
                 runtime_session_id = result.get("runtime_session_id", "")
 
-                yield _sse({
-                    "type": "meta",
-                    "session_id": session_id,
-                    "model": model,
-                    "runtime_session_id": runtime_session_id,
-                })
+                yield _sse(
+                    {
+                        "type": "meta",
+                        "session_id": session_id,
+                        "model": model,
+                        "runtime_session_id": runtime_session_id,
+                    }
+                )
 
                 text = foreground_response or ""
                 # 一体化：AI 回应实时推给面板"实时上下文"视图。
@@ -693,7 +733,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     if not manifested:
                         yield _sse({"type": "phase", "phase": "manifest"})
                     for i in range(0, len(text), _STREAM_CHUNK_CHARS):
-                        yield _sse({"type": "delta", "text": text[i:i + _STREAM_CHUNK_CHARS]})
+                        yield _sse({"type": "delta", "text": text[i : i + _STREAM_CHUNK_CHARS]})
                         await asyncio.sleep(_STREAM_CHUNK_DELAY)
 
                 # 边生成边念收尾:真增量场景冲刷尾句;零增量场景把权威全文整段
@@ -706,17 +746,19 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     except Exception:  # noqa: BLE001
                         pass
 
-                yield _sse({
-                    "type": "done",
-                    "success": result.get("success", False),
-                    "response": text,
-                    "intent": result.get("intent", "chat"),
-                    "suggestions": metadata.get("suggestions", []) or [],
-                    "session_id": session_id,
-                    "model": model,
-                    "runtime_session_id": runtime_session_id,
-                    "visible_action_surface": visible_action_surface,
-                })
+                yield _sse(
+                    {
+                        "type": "done",
+                        "success": result.get("success", False),
+                        "response": text,
+                        "intent": result.get("intent", "chat"),
+                        "suggestions": metadata.get("suggestions", []) or [],
+                        "session_id": session_id,
+                        "model": model,
+                        "runtime_session_id": runtime_session_id,
+                        "visible_action_surface": visible_action_surface,
+                    }
+                )
                 # 回到待机态。
                 yield _sse({"type": "phase", "phase": "silent"})
             except asyncio.TimeoutError:
@@ -727,13 +769,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                         await speaker.interrupt()
                     except Exception:  # noqa: BLE001
                         pass
-                yield _sse({
-                    "type": "error",
-                    "error": (
-                        f"响应超时（{int(_chat_timeout)}s 未返回）。"
-                        "请在「模型」tab 配置可用的 API Key 或本地 Ollama 后重试。"
-                    ),
-                })
+                yield _sse(
+                    {
+                        "type": "error",
+                        "error": (
+                            f"响应超时（{int(_chat_timeout)}s 未返回）。"
+                            "请在「模型」tab 配置可用的 API Key 或本地 Ollama 后重试。"
+                        ),
+                    }
+                )
                 yield _sse({"type": "phase", "phase": "silent"})
             except Exception as exc:  # noqa: BLE001 — surface any failure to the client
                 logger.error("chat_stream 处理异常: %s", exc, exc_info=True)

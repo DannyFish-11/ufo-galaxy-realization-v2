@@ -65,7 +65,6 @@ from core.distributed_truth_ownership_convergence import (
     get_surfaces_by_truth_domain,
 )
 
-
 # ---------------------------------------------------------------------------
 # 1. Authority and sentinel non-empty with expected keywords
 # ---------------------------------------------------------------------------
@@ -74,9 +73,7 @@ from core.distributed_truth_ownership_convergence import (
 def test_authority_sentinel_non_empty_and_keywords() -> None:
     assert isinstance(DISTRIBUTED_TRUTH_OWNERSHIP_CONVERGENCE_AUTHORITY, str)
     assert DISTRIBUTED_TRUTH_OWNERSHIP_CONVERGENCE_AUTHORITY
-    assert "distributed_truth_ownership_convergence" in (
-        DISTRIBUTED_TRUTH_OWNERSHIP_CONVERGENCE_AUTHORITY.lower()
-    )
+    assert "distributed_truth_ownership_convergence" in (DISTRIBUTED_TRUTH_OWNERSHIP_CONVERGENCE_AUTHORITY.lower())
     assert "authority" in DISTRIBUTED_TRUTH_OWNERSHIP_CONVERGENCE_AUTHORITY.lower()
 
 
@@ -93,9 +90,7 @@ def test_pr9v2_sentinel_non_empty_and_keywords() -> None:
 
 def test_projection_must_not_redefine_policy_present() -> None:
     assert PROJECTION_MUST_NOT_REDEFINE_AUTHORITY_TRUTH_POLICY
-    assert "PROJECTION_MUST_NOT_REDEFINE_AUTHORITY_TRUTH" in (
-        PROJECTION_MUST_NOT_REDEFINE_AUTHORITY_TRUTH_POLICY
-    )
+    assert "PROJECTION_MUST_NOT_REDEFINE_AUTHORITY_TRUTH" in (PROJECTION_MUST_NOT_REDEFINE_AUTHORITY_TRUTH_POLICY)
     assert "compile_outward_truth" in PROJECTION_MUST_NOT_REDEFINE_AUTHORITY_TRUTH_POLICY
 
 
@@ -104,9 +99,7 @@ def test_android_uplink_ssot_policy_present() -> None:
     assert "ANDROID_UPLINK_ENTERS_V2_CANONICAL_CHAIN_VIA_SSOT" in (
         ANDROID_UPLINK_ENTERS_V2_CANONICAL_CHAIN_VIA_SSOT_POLICY
     )
-    assert "build_v2_android_truth_block" in (
-        ANDROID_UPLINK_ENTERS_V2_CANONICAL_CHAIN_VIA_SSOT_POLICY
-    )
+    assert "build_v2_android_truth_block" in (ANDROID_UPLINK_ENTERS_V2_CANONICAL_CHAIN_VIA_SSOT_POLICY)
 
 
 def test_ownership_prototype_evidence_policy_present() -> None:
@@ -125,9 +118,7 @@ def test_no_new_parallel_truth_fabric_policy_present() -> None:
 
 def test_diagnostics_not_read_back_policy_present() -> None:
     assert DIAGNOSTICS_MUST_NOT_BE_READ_BACK_AS_AUTHORITY_POLICY
-    assert "DIAGNOSTICS_MUST_NOT_BE_READ_BACK_AS_AUTHORITY" in (
-        DIAGNOSTICS_MUST_NOT_BE_READ_BACK_AS_AUTHORITY_POLICY
-    )
+    assert "DIAGNOSTICS_MUST_NOT_BE_READ_BACK_AS_AUTHORITY" in (DIAGNOSTICS_MUST_NOT_BE_READ_BACK_AS_AUTHORITY_POLICY)
 
 
 # ---------------------------------------------------------------------------
@@ -208,9 +199,7 @@ def test_registry_contains_all_domain_kinds() -> None:
     registry = get_ownership_truth_registry()
     present_domains = {s.truth_domain for s in registry}
     for kind in OwnershipTruthDomainKind:
-        assert kind in present_domains, (
-            f"Domain kind {kind!r} has no surfaces in the registry"
-        )
+        assert kind in present_domains, f"Domain kind {kind!r} has no surfaces in the registry"
 
 
 # ---------------------------------------------------------------------------
@@ -224,9 +213,7 @@ def test_classify_known_surface_id() -> None:
 
 
 def test_classify_known_module_path() -> None:
-    result = classify_ownership_truth_domain(
-        "core.v2_android_truth_ssot.build_v2_android_truth_block"
-    )
+    result = classify_ownership_truth_domain("core.v2_android_truth_ssot.build_v2_android_truth_block")
     assert result == OwnershipTruthDomainKind.authority_truth.value
 
 
@@ -253,31 +240,21 @@ def test_get_surfaces_authority_truth_non_empty() -> None:
 
 
 def test_get_surfaces_acceptance_closure_non_empty() -> None:
-    surfaces = get_surfaces_by_truth_domain(
-        OwnershipTruthDomainKind.acceptance_closure_readiness_truth
-    )
+    surfaces = get_surfaces_by_truth_domain(OwnershipTruthDomainKind.acceptance_closure_readiness_truth)
     assert len(surfaces) > 0
     for s in surfaces:
-        assert s.truth_domain is (
-            OwnershipTruthDomainKind.acceptance_closure_readiness_truth
-        )
+        assert s.truth_domain is (OwnershipTruthDomainKind.acceptance_closure_readiness_truth)
 
 
 def test_get_surfaces_outward_projection_non_empty() -> None:
-    surfaces = get_surfaces_by_truth_domain(
-        OwnershipTruthDomainKind.outward_projection_operator_truth
-    )
+    surfaces = get_surfaces_by_truth_domain(OwnershipTruthDomainKind.outward_projection_operator_truth)
     assert len(surfaces) > 0
     for s in surfaces:
-        assert s.truth_domain is (
-            OwnershipTruthDomainKind.outward_projection_operator_truth
-        )
+        assert s.truth_domain is (OwnershipTruthDomainKind.outward_projection_operator_truth)
 
 
 def test_get_surfaces_diagnostics_audit_non_empty() -> None:
-    surfaces = get_surfaces_by_truth_domain(
-        OwnershipTruthDomainKind.diagnostics_audit_artifact
-    )
+    surfaces = get_surfaces_by_truth_domain(OwnershipTruthDomainKind.diagnostics_audit_artifact)
     assert len(surfaces) > 0
     for s in surfaces:
         assert s.truth_domain is OwnershipTruthDomainKind.diagnostics_audit_artifact
@@ -316,9 +293,7 @@ def test_snapshot_android_uplink_entries_non_empty() -> None:
 
 
 def test_v2_android_truth_ssot_is_authority_truth() -> None:
-    result = classify_ownership_truth_domain(
-        "core.v2_android_truth_ssot.build_v2_android_truth_block"
-    )
+    result = classify_ownership_truth_domain("core.v2_android_truth_ssot.build_v2_android_truth_block")
     assert result == "authority_truth"
 
 
@@ -364,9 +339,7 @@ def test_canonical_handoff_path_is_acceptance_closure_not_authority() -> None:
 
 
 def test_android_delegated_lifecycle_coordinator_is_evidence() -> None:
-    result = classify_ownership_truth_domain(
-        "android_delegated_lifecycle_coordinator_evidence"
-    )
+    result = classify_ownership_truth_domain("android_delegated_lifecycle_coordinator_evidence")
     assert result == "acceptance_closure_readiness_truth"
 
 
@@ -382,8 +355,7 @@ def test_no_handoff_prototype_is_authority_truth() -> None:
         for fragment in prototype_module_fragments:
             if fragment in s.module_path:
                 assert s.truth_domain is not OwnershipTruthDomainKind.authority_truth, (
-                    f"Handoff/prototype surface {s.surface_id!r} must not be "
-                    f"classified as authority_truth"
+                    f"Handoff/prototype surface {s.surface_id!r} must not be " f"classified as authority_truth"
                 )
 
 
@@ -393,13 +365,10 @@ def test_no_handoff_prototype_is_authority_truth() -> None:
 
 
 def test_outward_projection_surfaces_may_not_redefine_authority() -> None:
-    surfaces = get_surfaces_by_truth_domain(
-        OwnershipTruthDomainKind.outward_projection_operator_truth
-    )
+    surfaces = get_surfaces_by_truth_domain(OwnershipTruthDomainKind.outward_projection_operator_truth)
     for s in surfaces:
         assert s.may_not_redefine_authority_truth is True, (
-            f"Outward projection surface {s.surface_id!r} must have "
-            f"may_not_redefine_authority_truth=True"
+            f"Outward projection surface {s.surface_id!r} must have " f"may_not_redefine_authority_truth=True"
         )
 
 
@@ -409,13 +378,10 @@ def test_outward_projection_surfaces_may_not_redefine_authority() -> None:
 
 
 def test_diagnostics_audit_surfaces_may_not_redefine_authority() -> None:
-    surfaces = get_surfaces_by_truth_domain(
-        OwnershipTruthDomainKind.diagnostics_audit_artifact
-    )
+    surfaces = get_surfaces_by_truth_domain(OwnershipTruthDomainKind.diagnostics_audit_artifact)
     for s in surfaces:
         assert s.may_not_redefine_authority_truth is True, (
-            f"Diagnostics surface {s.surface_id!r} must have "
-            f"may_not_redefine_authority_truth=True"
+            f"Diagnostics surface {s.surface_id!r} must have " f"may_not_redefine_authority_truth=True"
         )
 
 
@@ -432,23 +398,23 @@ def test_android_uplink_chain_path_non_empty() -> None:
 
 def test_android_uplink_chain_path_contains_ssot() -> None:
     path = get_android_uplink_canonical_chain_path()
-    assert any("v2_android_truth_ssot" in step for step in path), (
-        "Canonical Android uplink chain must include v2_android_truth_ssot step"
-    )
+    assert any(
+        "v2_android_truth_ssot" in step for step in path
+    ), "Canonical Android uplink chain must include v2_android_truth_ssot step"
 
 
 def test_android_uplink_chain_path_contains_canonical_session_truth() -> None:
     path = get_android_uplink_canonical_chain_path()
-    assert any("canonical_session_truth" in step for step in path), (
-        "Canonical Android uplink chain must include canonical_session_truth step"
-    )
+    assert any(
+        "canonical_session_truth" in step for step in path
+    ), "Canonical Android uplink chain must include canonical_session_truth step"
 
 
 def test_android_uplink_chain_path_contains_android_handlers() -> None:
     path = get_android_uplink_canonical_chain_path()
-    assert any("android" in step.lower() for step in path), (
-        "Canonical Android uplink chain must include an android gateway step"
-    )
+    assert any(
+        "android" in step.lower() for step in path
+    ), "Canonical Android uplink chain must include an android gateway step"
 
 
 # ---------------------------------------------------------------------------
@@ -535,9 +501,7 @@ def test_no_authority_truth_surface_has_may_not_redefine_true() -> None:
 def test_every_surface_has_non_empty_notes() -> None:
     registry = get_ownership_truth_registry()
     for s in registry:
-        assert s.notes and s.notes.strip(), (
-            f"Surface {s.surface_id!r} has an empty notes field"
-        )
+        assert s.notes and s.notes.strip(), f"Surface {s.surface_id!r} has an empty notes field"
 
 
 # ---------------------------------------------------------------------------

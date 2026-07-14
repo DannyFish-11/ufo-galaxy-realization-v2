@@ -46,7 +46,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
-from .authority_roles import AuthorityRole, ROLE_CATALOG, is_authoritative
+from .authority_roles import ROLE_CATALOG, AuthorityRole, is_authoritative
 from .legacy_paths import LEGACY_PATH_REGISTRY, LegacyPathStatus
 
 logger = logging.getLogger("Galaxy.OrchestrationAuthority")
@@ -235,9 +235,7 @@ def authority_catalog(*, include_legacy: bool = True) -> Dict[str, Any]:
     }
 
     if include_legacy:
-        catalog["legacy_paths"] = [
-            entry.to_dict() for entry in LEGACY_PATH_REGISTRY.values()
-        ]
+        catalog["legacy_paths"] = [entry.to_dict() for entry in LEGACY_PATH_REGISTRY.values()]
 
     return catalog
 
@@ -279,11 +277,7 @@ def resolve_trace_authority(
     """
     try:
         result = dict(trace_dict)
-        role = (
-            classify_module(source_module)
-            if source_module
-            else AuthorityRole.UNKNOWN
-        )
+        role = classify_module(source_module) if source_module else AuthorityRole.UNKNOWN
         result["authority"] = {
             "role": role.value,
             "label": ROLE_CATALOG[role]["label"],

@@ -252,8 +252,7 @@ def evaluate_evidence_closure_gate(
     if level == ClosureLevel.strict:
         if report.overall_verdict != V3BaselineVerdict.closed_and_evidenced:
             fail_reasons.append(
-                f"Overall verdict is {report.overall_verdict.value!r}; "
-                f"strict level requires 'closed_and_evidenced'"
+                f"Overall verdict is {report.overall_verdict.value!r}; " f"strict level requires 'closed_and_evidenced'"
             )
 
     gate_passed = len(fail_reasons) == 0

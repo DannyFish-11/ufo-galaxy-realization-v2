@@ -41,7 +41,6 @@ from typing import Any, Dict
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -50,6 +49,7 @@ import pytest
 def _reset_registry() -> None:
     """Reset the CapabilityRuntimeRegistry singleton between tests."""
     from core.capability_runtime.capability_registry_runtime import CapabilityRuntimeRegistry
+
     with CapabilityRuntimeRegistry._instance_lock:
         CapabilityRuntimeRegistry._instance = None
 
@@ -112,7 +112,7 @@ class TestCapabilityAvailability:
             assert len(desc) > 10
 
     def test_descriptions_dict_covers_all_postures(self) -> None:
-        from core.capability_runtime import CapabilityAvailability, AVAILABILITY_DESCRIPTIONS
+        from core.capability_runtime import AVAILABILITY_DESCRIPTIONS, CapabilityAvailability
 
         for posture in CapabilityAvailability:
             assert posture.value in AVAILABILITY_DESCRIPTIONS
@@ -125,7 +125,7 @@ class TestCapabilityAvailability:
 
 class TestCapabilityRuntimeState:
     def test_basic_construction(self) -> None:
-        from core.capability_runtime import CapabilityRuntimeState, CapabilityAvailability
+        from core.capability_runtime import CapabilityAvailability, CapabilityRuntimeState
 
         state = CapabilityRuntimeState(name="cap_a")
         assert state.name == "cap_a"
@@ -138,23 +138,29 @@ class TestCapabilityRuntimeState:
 
         state = CapabilityRuntimeState(name="cap_b")
         d = state.to_dict()
-        for key in ("state_id", "name", "availability", "device_bindings",
-                    "preferred_device_ids", "constraint_flags", "reliability_flags",
-                    "last_updated", "metadata"):
+        for key in (
+            "state_id",
+            "name",
+            "availability",
+            "device_bindings",
+            "preferred_device_ids",
+            "constraint_flags",
+            "reliability_flags",
+            "last_updated",
+            "metadata",
+        ):
             assert key in d
 
     def test_to_dict_availability_is_string(self) -> None:
-        from core.capability_runtime import CapabilityRuntimeState, CapabilityAvailability
+        from core.capability_runtime import CapabilityAvailability, CapabilityRuntimeState
 
-        state = CapabilityRuntimeState(
-            name="cap_c", availability=CapabilityAvailability.AVAILABLE
-        )
+        state = CapabilityRuntimeState(name="cap_c", availability=CapabilityAvailability.AVAILABLE)
         d = state.to_dict()
         assert d["availability"] == "available"
         assert isinstance(d["availability"], str)
 
     def test_roundtrip(self) -> None:
-        from core.capability_runtime import CapabilityRuntimeState, CapabilityAvailability
+        from core.capability_runtime import CapabilityAvailability, CapabilityRuntimeState
 
         state = CapabilityRuntimeState(
             name="cap_rt",
@@ -175,14 +181,14 @@ class TestCapabilityRuntimeState:
         assert restored.reliability_flags == state.reliability_flags
 
     def test_from_dict_unknown_availability_degrades(self) -> None:
-        from core.capability_runtime import CapabilityRuntimeState, CapabilityAvailability
+        from core.capability_runtime import CapabilityAvailability, CapabilityRuntimeState
 
         d = {"name": "cap_x", "availability": "totally_unknown_value"}
         state = CapabilityRuntimeState.from_dict(d)
         assert state.availability == CapabilityAvailability.UNKNOWN
 
     def test_is_routable(self) -> None:
-        from core.capability_runtime import CapabilityRuntimeState, CapabilityAvailability
+        from core.capability_runtime import CapabilityAvailability, CapabilityRuntimeState
 
         assert CapabilityRuntimeState(name="a", availability=CapabilityAvailability.AVAILABLE).is_routable()
         assert CapabilityRuntimeState(name="b", availability=CapabilityAvailability.DEGRADED).is_routable()
@@ -190,7 +196,7 @@ class TestCapabilityRuntimeState:
         assert not CapabilityRuntimeState(name="d", availability=CapabilityAvailability.UNKNOWN).is_routable()
 
     def test_is_healthy(self) -> None:
-        from core.capability_runtime import CapabilityRuntimeState, CapabilityAvailability
+        from core.capability_runtime import CapabilityAvailability, CapabilityRuntimeState
 
         assert CapabilityRuntimeState(name="a", availability=CapabilityAvailability.AVAILABLE).is_healthy()
         assert not CapabilityRuntimeState(name="b", availability=CapabilityAvailability.DEGRADED).is_healthy()
@@ -198,7 +204,7 @@ class TestCapabilityRuntimeState:
         assert not CapabilityRuntimeState(name="d", availability=CapabilityAvailability.UNKNOWN).is_healthy()
 
     def test_json_serialisable(self) -> None:
-        from core.capability_runtime import CapabilityRuntimeState, CapabilityAvailability
+        from core.capability_runtime import CapabilityAvailability, CapabilityRuntimeState
 
         state = CapabilityRuntimeState(
             name="cap_json",
@@ -229,8 +235,13 @@ class TestCapabilityConstraintFlags:
 
         cf = CapabilityConstraintFlags()
         d = cf.to_dict()
-        for key in ("requires_confirmation", "cross_device_restricted",
-                    "latency_sensitive", "device_exclusive", "requires_elevated_privilege"):
+        for key in (
+            "requires_confirmation",
+            "cross_device_restricted",
+            "latency_sensitive",
+            "device_exclusive",
+            "requires_elevated_privilege",
+        ):
             assert key in d
 
     def test_roundtrip(self) -> None:
@@ -276,12 +287,13 @@ class TestCapabilityConstraintFlags:
 
     def test_sentinels(self) -> None:
         from core.capability_runtime import (
-            NO_CONSTRAINTS,
             CONFIRMATION_REQUIRED,
-            LOCAL_ONLY,
-            LATENCY_CRITICAL,
             EXCLUSIVE_LOCAL,
+            LATENCY_CRITICAL,
+            LOCAL_ONLY,
+            NO_CONSTRAINTS,
         )
+
         assert not NO_CONSTRAINTS.has_any_constraint()
         assert CONFIRMATION_REQUIRED.requires_confirmation
         assert LOCAL_ONLY.cross_device_restricted
@@ -374,9 +386,9 @@ class TestCapabilityRuntimeRegistry:
 
     def test_register_and_get_state(self) -> None:
         from core.capability_runtime import (
+            CapabilityAvailability,
             CapabilityRuntimeRegistry,
             CapabilityRuntimeState,
-            CapabilityAvailability,
         )
 
         registry = CapabilityRuntimeRegistry.get_instance()
@@ -422,9 +434,9 @@ class TestCapabilityRuntimeRegistry:
 
     def test_update_existing_availability(self) -> None:
         from core.capability_runtime import (
+            CapabilityAvailability,
             CapabilityRuntimeRegistry,
             CapabilityRuntimeState,
-            CapabilityAvailability,
         )
 
         registry = CapabilityRuntimeRegistry.get_instance()
@@ -436,8 +448,8 @@ class TestCapabilityRuntimeRegistry:
 
     def test_update_creates_unknown_state_if_missing(self) -> None:
         from core.capability_runtime import (
-            CapabilityRuntimeRegistry,
             CapabilityAvailability,
+            CapabilityRuntimeRegistry,
         )
 
         registry = CapabilityRuntimeRegistry.get_instance()
@@ -457,9 +469,9 @@ class TestCapabilityRuntimeRegistry:
 
     def test_get_summary_returns_summary_type(self) -> None:
         from core.capability_runtime import (
+            CapabilityAvailability,
             CapabilityRuntimeRegistry,
             CapabilityRuntimeState,
-            CapabilityAvailability,
             CapabilityRuntimeSummary,
         )
 
@@ -482,8 +494,8 @@ class TestCapabilityRuntimeRegistry:
 
     def test_get_summary_unknown_returns_sentinel(self) -> None:
         from core.capability_runtime import (
-            CapabilityRuntimeRegistry,
             UNKNOWN_CAPABILITY_SUMMARY,
+            CapabilityRuntimeRegistry,
         )
 
         registry = CapabilityRuntimeRegistry.get_instance()
@@ -516,18 +528,14 @@ class TestCapabilityRuntimeRegistry:
 
     def test_stats_shape(self) -> None:
         from core.capability_runtime import (
+            CapabilityAvailability,
             CapabilityRuntimeRegistry,
             CapabilityRuntimeState,
-            CapabilityAvailability,
         )
 
         registry = CapabilityRuntimeRegistry.get_instance()
-        registry.register(
-            CapabilityRuntimeState(name="st_a", availability=CapabilityAvailability.AVAILABLE)
-        )
-        registry.register(
-            CapabilityRuntimeState(name="st_b", availability=CapabilityAvailability.DEGRADED)
-        )
+        registry.register(CapabilityRuntimeState(name="st_a", availability=CapabilityAvailability.AVAILABLE))
+        registry.register(CapabilityRuntimeState(name="st_b", availability=CapabilityAvailability.DEGRADED))
         stats = registry.stats()
         assert "total_registered" in stats
         assert "available_count" in stats
@@ -546,7 +554,7 @@ class TestCapabilityRuntimeRegistry:
 
 class TestCapabilityRuntimeSummary:
     def test_basic_construction(self) -> None:
-        from core.capability_runtime import CapabilityRuntimeSummary, CapabilityAvailability
+        from core.capability_runtime import CapabilityAvailability, CapabilityRuntimeSummary
 
         s = CapabilityRuntimeSummary(capability_name="my_cap")
         assert s.capability_name == "my_cap"
@@ -560,9 +568,17 @@ class TestCapabilityRuntimeSummary:
 
         s = CapabilityRuntimeSummary(capability_name="c")
         d = s.to_dict()
-        for key in ("capability_name", "availability", "preferred_device_ids",
-                    "constraint_flags", "reliability_notes", "device_bindings",
-                    "last_updated", "metadata", "schema_version"):
+        for key in (
+            "capability_name",
+            "availability",
+            "preferred_device_ids",
+            "constraint_flags",
+            "reliability_notes",
+            "device_bindings",
+            "last_updated",
+            "metadata",
+            "schema_version",
+        ):
             assert key in d
 
     def test_roundtrip(self) -> None:
@@ -584,12 +600,14 @@ class TestCapabilityRuntimeSummary:
         assert restored.constraint_flags == s.constraint_flags
 
     def test_from_dict_unknown_availability_degrades(self) -> None:
-        from core.capability_runtime import CapabilityRuntimeSummary, CapabilityAvailability
+        from core.capability_runtime import CapabilityAvailability, CapabilityRuntimeSummary
 
-        s = CapabilityRuntimeSummary.from_dict({
-            "capability_name": "x",
-            "availability": "totally_bogus",
-        })
+        s = CapabilityRuntimeSummary.from_dict(
+            {
+                "capability_name": "x",
+                "availability": "totally_bogus",
+            }
+        )
         assert s.availability == CapabilityAvailability.UNKNOWN.value
 
     def test_json_serialisable(self) -> None:
@@ -633,7 +651,7 @@ class TestMakeCapabilitySummary:
         assert s.metadata == {"k": "v"}
 
     def test_unknown_availability_coerced(self) -> None:
-        from core.capability_runtime import make_capability_summary, CapabilityAvailability
+        from core.capability_runtime import CapabilityAvailability, make_capability_summary
 
         s = make_capability_summary("cap_bad_avail", availability="not_valid")
         assert s.availability == CapabilityAvailability.UNKNOWN.value
@@ -666,10 +684,10 @@ class TestGetCapabilityRuntimeSnapshot:
 
     def test_snapshot_includes_registered_capabilities(self) -> None:
         from core.capability_runtime import (
-            get_capability_runtime_snapshot,
+            CapabilityAvailability,
             CapabilityRuntimeRegistry,
             CapabilityRuntimeState,
-            CapabilityAvailability,
+            get_capability_runtime_snapshot,
         )
 
         registry = CapabilityRuntimeRegistry.get_instance()
@@ -685,10 +703,10 @@ class TestGetCapabilityRuntimeSnapshot:
 
     def test_snapshot_is_json_serialisable(self) -> None:
         from core.capability_runtime import (
-            get_capability_runtime_snapshot,
+            CapabilityAvailability,
             CapabilityRuntimeRegistry,
             CapabilityRuntimeState,
-            CapabilityAvailability,
+            get_capability_runtime_snapshot,
         )
 
         registry = CapabilityRuntimeRegistry.get_instance()
@@ -704,18 +722,26 @@ class TestGetCapabilityRuntimeSnapshot:
 
     def test_capability_entry_has_expected_fields(self) -> None:
         from core.capability_runtime import (
-            get_capability_runtime_snapshot,
             CapabilityRuntimeRegistry,
             CapabilityRuntimeState,
+            get_capability_runtime_snapshot,
         )
 
         registry = CapabilityRuntimeRegistry.get_instance()
         registry.register(CapabilityRuntimeState(name="field_check"))
         snap = get_capability_runtime_snapshot()
         entry = snap["capabilities"]["field_check"]
-        for key in ("capability_name", "availability", "preferred_device_ids",
-                    "constraint_flags", "reliability_notes", "device_bindings",
-                    "last_updated", "metadata", "schema_version"):
+        for key in (
+            "capability_name",
+            "availability",
+            "preferred_device_ids",
+            "constraint_flags",
+            "reliability_notes",
+            "device_bindings",
+            "last_updated",
+            "metadata",
+            "schema_version",
+        ):
             assert key in entry
 
 
@@ -727,10 +753,10 @@ class TestGetCapabilityRuntimeSnapshot:
 class TestAttachRuntimeSummaryToProjection:
     def test_additive(self) -> None:
         from core.capability_runtime import (
-            attach_runtime_summary_to_projection,
+            CapabilityAvailability,
             CapabilityRuntimeRegistry,
             CapabilityRuntimeState,
-            CapabilityAvailability,
+            attach_runtime_summary_to_projection,
         )
 
         registry = CapabilityRuntimeRegistry.get_instance()
@@ -754,8 +780,8 @@ class TestAttachRuntimeSummaryToProjection:
 
     def test_unknown_capability_uses_sentinel(self) -> None:
         from core.capability_runtime import (
-            attach_runtime_summary_to_projection,
             CapabilityAvailability,
+            attach_runtime_summary_to_projection,
         )
 
         enriched = attach_runtime_summary_to_projection({}, "no_such_cap")
@@ -771,6 +797,7 @@ class TestAttachRuntimeSummaryToProjection:
 class TestCapabilitiesRuntimeEndpoint:
     def _get_router(self):
         from core.routes.capabilities_runtime import create_router
+
         return create_router()
 
     def test_router_creates_without_error(self) -> None:
@@ -789,9 +816,10 @@ class TestCapabilitiesRuntimeEndpoint:
 
     @pytest.mark.asyncio
     async def test_snapshot_endpoint_returns_expected_shape(self) -> None:
-        from core.routes.capabilities_runtime import create_router
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
+        from core.routes.capabilities_runtime import create_router
 
         app = FastAPI()
         app.include_router(create_router())
@@ -807,9 +835,10 @@ class TestCapabilitiesRuntimeEndpoint:
 
     @pytest.mark.asyncio
     async def test_single_endpoint_returns_404_for_unknown(self) -> None:
-        from core.routes.capabilities_runtime import create_router
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
+        from core.routes.capabilities_runtime import create_router
 
         app = FastAPI()
         app.include_router(create_router())
@@ -822,14 +851,15 @@ class TestCapabilitiesRuntimeEndpoint:
 
     @pytest.mark.asyncio
     async def test_single_endpoint_returns_200_for_registered(self) -> None:
-        from core.routes.capabilities_runtime import create_router
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
         from core.capability_runtime import (
+            CapabilityAvailability,
             CapabilityRuntimeRegistry,
             CapabilityRuntimeState,
-            CapabilityAvailability,
         )
+        from core.routes.capabilities_runtime import create_router
 
         registry = CapabilityRuntimeRegistry.get_instance()
         registry.register(

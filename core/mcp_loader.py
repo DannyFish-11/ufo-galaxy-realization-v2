@@ -32,18 +32,19 @@ import json
 import logging
 import os
 import subprocess
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
-from pathlib import Path
 from enum import Enum
-import uuid
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.MCP")
 
 # C阶段 2C: 工具调用守护（可选依赖，默认不启用）
 try:
-    from core.tool_guardian import GuardedCallConfig, call_with_guardian, ToolGuardianBlockedError
+    from core.tool_guardian import GuardedCallConfig, ToolGuardianBlockedError, call_with_guardian
+
     _GUARDIAN_AVAILABLE = True
 except ImportError:
     _GUARDIAN_AVAILABLE = False
@@ -55,8 +56,10 @@ except ImportError:
 # MCP 标准协议定义
 # ============================================================================
 
+
 class MCPMessageType(str, Enum):
     """MCP 消息类型"""
+
     REQUEST = "request"
     RESPONSE = "response"
     NOTIFICATION = "notification"
@@ -65,23 +68,27 @@ class MCPMessageType(str, Enum):
 @dataclass
 class MCPRequest:
     """MCP 请求 - 标准格式"""
+
     jsonrpc: str = "2.0"
     id: Optional[int] = None
     method: str = ""
     params: Dict[str, Any] = field(default_factory=dict)
 
     def to_json(self) -> str:
-        return json.dumps({
-            "jsonrpc": self.jsonrpc,
-            "id": self.id,
-            "method": self.method,
-            "params": self.params,
-        })
+        return json.dumps(
+            {
+                "jsonrpc": self.jsonrpc,
+                "id": self.id,
+                "method": self.method,
+                "params": self.params,
+            }
+        )
 
 
 @dataclass
 class MCPResponse:
     """MCP 响应 - 标准格式"""
+
     jsonrpc: str = "2.0"
     id: Optional[int] = None
     result: Optional[Any] = None
@@ -101,6 +108,7 @@ class MCPResponse:
 @dataclass
 class MCPTool:
     """MCP 工具定义 - 标准格式"""
+
     name: str
     description: str
     inputSchema: Dict[str, Any] = field(default_factory=dict)
@@ -117,6 +125,7 @@ class MCPTool:
 @dataclass
 class MCPResource:
     """MCP 资源定义 - 标准格式"""
+
     uri: str
     name: str
     description: str = ""
@@ -135,6 +144,7 @@ class MCPResource:
 @dataclass
 class MCPPrompt:
     """MCP 提示定义 - 标准格式"""
+
     name: str
     description: str
     arguments: List[Dict] = field(default_factory=list)
@@ -152,8 +162,10 @@ class MCPPrompt:
 # MCP 服务器实例
 # ============================================================================
 
+
 class MCPServerStatus(str, Enum):
     """服务器状态"""
+
     STOPPED = "stopped"
     STARTING = "starting"
     RUNNING = "running"
@@ -163,6 +175,7 @@ class MCPServerStatus(str, Enum):
 @dataclass
 class MCPServerInstance:
     """MCP 服务器实例"""
+
     id: str
     name: str
     command: List[str]
@@ -206,6 +219,7 @@ class MCPServerInstance:
 # MCP 加载器
 # ============================================================================
 
+
 class MCPLoader:
     """
     标准 MCP 加载器
@@ -242,6 +256,7 @@ class MCPLoader:
         # 刷新能力总线
         try:
             from core.agent.capability_registry import get_capability_registry
+
             reg = get_capability_registry()
             await reg.refresh(force=True)
             logger.info("CapabilityRegistry 已刷新（MCP %s: %s）", server_id, event)
@@ -250,7 +265,8 @@ class MCPLoader:
 
         # 广播能力更新事件（最佳努力，事件总线不可用时静默降级）
         try:
-            from integration.event_bus import event_bus, EventType
+            from integration.event_bus import EventType, event_bus
+
             event_bus.publish_sync(
                 EventType.CAPABILITY_UPDATED,
                 "mcp_loader",
@@ -261,8 +277,10 @@ class MCPLoader:
 
         # PR4: 推送 mcp_update + capability_update 到 /ws/status 和 /api/v1/stream 订阅者
         try:
-            from core.routes._shared import broadcast_event
             import asyncio as _aio
+
+            from core.routes._shared import broadcast_event
+
             loop = None
             try:
                 loop = _aio.get_running_loop()
@@ -366,9 +384,7 @@ class MCPLoader:
 
         # 最佳努力刷新 CapabilityRegistry 并广播事件（fire-and-forget）
         try:
-            asyncio.ensure_future(
-                self._refresh_capability_registry(server_id, "unload")
-            )
+            asyncio.ensure_future(self._refresh_capability_registry(server_id, "unload"))
         except Exception as exc:
             logger.warning("Capability registry refresh failed on unload: %s", exc)
 
@@ -382,6 +398,7 @@ class MCPLoader:
         """将 MCP 服务器的工具注入能力总线（在初始化完成后调用）。"""
         try:
             from core.agent.capability_registry import CapabilityRegistry
+
             server = self.servers.get(server_id)
             if not server:
                 return
@@ -396,7 +413,9 @@ class MCPLoader:
                 )
             logger.info(
                 "MCP 服务器 %s (%s) 的 %d 个工具已注入能力总线",
-                server.name, server_id, len(server.tools),
+                server.name,
+                server_id,
+                len(server.tools),
             )
         except Exception as exc:
             logger.debug("MCP 工具注入能力总线失败（不影响正常运行）: %s", exc)
@@ -405,6 +424,7 @@ class MCPLoader:
         """从能力总线移除 MCP 服务器的所有工具。"""
         try:
             from core.agent.capability_registry import CapabilityRegistry
+
             reg = CapabilityRegistry.get_instance()
             for tool in getattr(server, "tools", []):
                 reg.eject(f"mcp__{server_id}__{tool.name}")
@@ -559,9 +579,7 @@ class MCPLoader:
 
             # 最佳努力刷新 CapabilityRegistry 并广播事件（fire-and-forget）
             try:
-                asyncio.ensure_future(
-                    self._refresh_capability_registry(server_id, "load")
-                )
+                asyncio.ensure_future(self._refresh_capability_registry(server_id, "load"))
             except Exception as exc:
                 logger.warning("Capability registry refresh failed on load: %s", exc)
 
@@ -589,30 +607,21 @@ class MCPLoader:
         response = await self._send_request(server_id, "tools/list", {})
         if response and response.result:
             server = self.servers[server_id]
-            server.tools = [
-                MCPTool.from_dict(t)
-                for t in response.result.get("tools", [])
-            ]
+            server.tools = [MCPTool.from_dict(t) for t in response.result.get("tools", [])]
 
     async def _refresh_resources(self, server_id: str):
         """刷新资源列表"""
         response = await self._send_request(server_id, "resources/list", {})
         if response and response.result:
             server = self.servers[server_id]
-            server.resources = [
-                MCPResource.from_dict(r)
-                for r in response.result.get("resources", [])
-            ]
+            server.resources = [MCPResource.from_dict(r) for r in response.result.get("resources", [])]
 
     async def _refresh_prompts(self, server_id: str):
         """刷新提示列表"""
         response = await self._send_request(server_id, "prompts/list", {})
         if response and response.result:
             server = self.servers[server_id]
-            server.prompts = [
-                MCPPrompt.from_dict(p)
-                for p in response.result.get("prompts", [])
-            ]
+            server.prompts = [MCPPrompt.from_dict(p) for p in response.result.get("prompts", [])]
 
     # ========================================================================
     # 工具调用
@@ -658,11 +667,7 @@ class MCPLoader:
             }
 
         # C阶段 2C: 守护包装（enabled=False 时直通）
-        if (
-            _GUARDIAN_AVAILABLE
-            and guardian_config is not None
-            and getattr(guardian_config, "enabled", False)
-        ):
+        if _GUARDIAN_AVAILABLE and guardian_config is not None and getattr(guardian_config, "enabled", False):
             try:
                 return await call_with_guardian(
                     fn=self._raw_call_tool,
@@ -875,14 +880,16 @@ class MCPLoader:
             for name, spec in config["mcpServers"].items():
                 cmd = spec.get("command", "")
                 args = spec.get("args", [])
-                server_defs.append({
-                    "name": name,
-                    "command": cmd,
-                    "args": args,
-                    "env": spec.get("env", {}),
-                    "cwd": spec.get("cwd", ""),
-                    "auto_start": spec.get("auto_start", False),
-                })
+                server_defs.append(
+                    {
+                        "name": name,
+                        "command": cmd,
+                        "args": args,
+                        "env": spec.get("env", {}),
+                        "cwd": spec.get("cwd", ""),
+                        "auto_start": spec.get("auto_start", False),
+                    }
+                )
 
         # Galaxy 格式（servers 是 list）
         elif "servers" in config and isinstance(config["servers"], list):
@@ -890,14 +897,16 @@ class MCPLoader:
                 name = spec.get("name", "")
                 cmd = spec.get("command", "")
                 args = spec.get("args", [])
-                server_defs.append({
-                    "name": name,
-                    "command": cmd,
-                    "args": args,
-                    "env": spec.get("env", {}),
-                    "cwd": spec.get("cwd", ""),
-                    "auto_start": spec.get("auto_start", False),
-                })
+                server_defs.append(
+                    {
+                        "name": name,
+                        "command": cmd,
+                        "args": args,
+                        "env": spec.get("env", {}),
+                        "cwd": spec.get("cwd", ""),
+                        "auto_start": spec.get("auto_start", False),
+                    }
+                )
         else:
             return {"loaded": 0, "errors": ["未知配置格式：需要 'mcpServers' 或 'servers' 键"]}
 

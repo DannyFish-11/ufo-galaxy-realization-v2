@@ -230,8 +230,7 @@ class RuntimeHarnessResult:
             "errors": list(self.errors),
             "runtime_decision": (
                 self.runtime_decision.to_dict()
-                if self.runtime_decision is not None
-                and hasattr(self.runtime_decision, "to_dict")
+                if self.runtime_decision is not None and hasattr(self.runtime_decision, "to_dict")
                 else None
             ),
         }
@@ -277,6 +276,7 @@ class MultiDeviceRuntimeHarness:
             return self._persistence_store
         try:
             from core.mesh.mesh_session_persistence import get_persistence_store
+
             self._persistence_store = get_persistence_store()
             return self._persistence_store
         except Exception as exc:
@@ -288,6 +288,7 @@ class MultiDeviceRuntimeHarness:
             return self._scheduling_harness
         try:
             from core.scheduling_truth_harness import get_scheduling_truth_harness
+
             self._scheduling_harness = get_scheduling_truth_harness()
             return self._scheduling_harness
         except Exception as exc:
@@ -334,11 +335,7 @@ class MultiDeviceRuntimeHarness:
         return RuntimeHarnessResult(
             operation="on_coordinator_state_updated",
             success=snapshot_saved or not errors,
-            details=(
-                "snapshot saved"
-                if snapshot_saved
-                else f"snapshot not saved: {'; '.join(errors)}"
-            ),
+            details=("snapshot saved" if snapshot_saved else f"snapshot not saved: {'; '.join(errors)}"),
             snapshot_saved=snapshot_saved,
             errors=errors,
         )
@@ -381,6 +378,7 @@ class MultiDeviceRuntimeHarness:
                         FormationHealthSignal,
                         apply_rebalance,
                     )
+
                     health_map = {
                         event.device_id: FormationHealthSignal(
                             device_id=event.device_id,
@@ -390,9 +388,7 @@ class MultiDeviceRuntimeHarness:
                         )
                     }
                     new_formation, decision = apply_rebalance(formation, health_map)
-                    rebalance_triggered = bool(
-                        decision is not None and decision.rebalance_needed
-                    )
+                    rebalance_triggered = bool(decision is not None and decision.rebalance_needed)
                     if rebalance_triggered:
                         logger.info(
                             "on_device_health_changed: formation rebalance triggered "
@@ -485,14 +481,10 @@ class MultiDeviceRuntimeHarness:
                 errors.append("scheduling truth harness unavailable")
             else:
                 # 1. Ensure task is registered
-                task_registered = sh.ensure_task_registered(
-                    canonical_task, trace_id=trace_id
-                )
+                task_registered = sh.ensure_task_registered(canonical_task, trace_id=trace_id)
 
                 # 2. Query routable executors
-                routable_ids = sh.query_routable_executors(
-                    canonical_task, candidate_device_ids=candidate_device_ids
-                )
+                routable_ids = sh.query_routable_executors(canonical_task, candidate_device_ids=candidate_device_ids)
 
         except Exception as exc:
             errors.append(f"scheduling harness error: {exc}")
@@ -501,10 +493,7 @@ class MultiDeviceRuntimeHarness:
         return RuntimeHarnessResult(
             operation="on_task_admitted_for_dispatch",
             success=True,  # graceful degradation — never blocks dispatch
-            details=(
-                f"task_registered={task_registered} "
-                f"routable_executors={len(routable_ids)}"
-            ),
+            details=(f"task_registered={task_registered} " f"routable_executors={len(routable_ids)}"),
             task_registered=task_registered,
             routable_executor_ids=routable_ids,
             errors=errors,
@@ -521,6 +510,7 @@ class MultiDeviceRuntimeHarness:
         """
         try:
             from core.mesh.mesh_session_persistence import recover_mesh_sessions
+
             return recover_mesh_sessions()
         except Exception as exc:
             logger.debug("MultiDeviceRuntimeHarness.recover_sessions: error: %s", exc)
@@ -620,9 +610,7 @@ class MultiDeviceRuntimeHarness:
                         )
                 except Exception as exc:
                     errors.append(f"formation runtime coordinator error: {exc}")
-                    logger.warning(
-                        "on_participant_readiness_changed: coordinator error: %s", exc
-                    )
+                    logger.warning("on_participant_readiness_changed: coordinator error: %s", exc)
 
             # Update session snapshot if session_id is provided
             if session_id and participant_state in (
@@ -656,16 +644,13 @@ class MultiDeviceRuntimeHarness:
 
         except Exception as exc:
             errors.append(f"unexpected harness error: {exc}")
-            logger.warning(
-                "on_participant_readiness_changed: unexpected error: %s", exc
-            )
+            logger.warning("on_participant_readiness_changed: unexpected error: %s", exc)
 
         return RuntimeHarnessResult(
             operation="on_participant_readiness_changed",
             success=not errors or rebalance_triggered,
             details=(
-                f"device={device_id} readiness={new_readiness} "
-                f"rebalance={'yes' if rebalance_triggered else 'no'}"
+                f"device={device_id} readiness={new_readiness} " f"rebalance={'yes' if rebalance_triggered else 'no'}"
             ),
             rebalance_triggered=rebalance_triggered,
             snapshot_saved=snapshot_saved,

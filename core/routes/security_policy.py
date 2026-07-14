@@ -74,7 +74,11 @@ _DEFAULT_POLICY: Dict[str, Any] = {
         {"match": {"action_prefix": "destroy_"}, "risk_level": "critical", "require_hitl": True},
         {"match": {"action_prefix": "rm_"}, "risk_level": "high", "require_hitl": True},
         # Format / wipe operations
-        {"match": {"action_regex": r"(?i)(format|wipe|erase|drop_table)"}, "risk_level": "critical", "require_hitl": True},
+        {
+            "match": {"action_regex": r"(?i)(format|wipe|erase|drop_table)"},
+            "risk_level": "critical",
+            "require_hitl": True,
+        },
         # File write operations
         {"match": {"action_prefix": "write_"}, "risk_level": "medium", "require_hitl": False},
         {"match": {"action_prefix": "upload_"}, "risk_level": "medium", "require_hitl": False},
@@ -158,6 +162,7 @@ def evaluate_policy(
 # ---------------------------------------------------------------------------
 # Router factory
 # ---------------------------------------------------------------------------
+
 
 def create_router() -> APIRouter:
     """Create and return the security policy routes router."""

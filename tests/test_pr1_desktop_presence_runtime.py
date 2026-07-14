@@ -36,7 +36,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ──────────────────────────────────────────────────────────────────────────────
 # 1. 模块可导入
 # ──────────────────────────────────────────────────────────────────────────────
@@ -48,10 +47,11 @@ class TestModuleImport:
     def test_import_desktop_presence_runtime(self):
         from core.desktop_presence_runtime import (
             DesktopPresenceRuntime,
-            TriState,
             RuntimeSession,
+            TriState,
             get_desktop_presence_runtime,
         )
+
         assert DesktopPresenceRuntime is not None
         assert TriState is not None
         assert RuntimeSession is not None
@@ -59,6 +59,7 @@ class TestModuleImport:
 
     def test_tristate_values(self):
         from core.desktop_presence_runtime import TriState
+
         assert TriState.SILENT.value == "silent"
         assert TriState.LIMINAL.value == "liminal"
         assert TriState.MANIFEST.value == "manifest"
@@ -74,6 +75,7 @@ class TestSingleton:
 
     def test_singleton_identity(self):
         from core.desktop_presence_runtime import get_desktop_presence_runtime
+
         a = get_desktop_presence_runtime()
         b = get_desktop_presence_runtime()
         assert a is b
@@ -89,11 +91,13 @@ class TestRuntimeSession:
 
     def test_initial_state_is_silent(self):
         from core.desktop_presence_runtime import RuntimeSession, TriState
+
         s = RuntimeSession(source="chat")
         assert s.tristate == TriState.SILENT
 
     def test_advance_records_transitions(self):
         from core.desktop_presence_runtime import RuntimeSession, TriState
+
         s = RuntimeSession(source="chat")
         s.advance(TriState.LIMINAL)
         s.advance(TriState.MANIFEST)
@@ -103,11 +107,13 @@ class TestRuntimeSession:
 
     def test_elapsed_ms_is_non_negative(self):
         from core.desktop_presence_runtime import RuntimeSession
+
         s = RuntimeSession(source="e2e")
         assert s.elapsed_ms() >= 0.0
 
     def test_runtime_session_id_is_hex_string(self):
         from core.desktop_presence_runtime import RuntimeSession
+
         s = RuntimeSession(source="chat")
         assert isinstance(s.runtime_session_id, str)
         assert len(s.runtime_session_id) == 32  # uuid4().hex
@@ -133,6 +139,7 @@ class TestHandleRequestProtocol:
     @pytest.mark.asyncio
     async def test_handle_request_returns_runtime_session_id(self):
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         rt = DesktopPresenceRuntime()
 
         with patch("core.openclawd.get_openclawd") as mock_get:
@@ -149,6 +156,7 @@ class TestHandleRequestProtocol:
     @pytest.mark.asyncio
     async def test_handle_request_final_tristate_is_silent(self):
         from core.desktop_presence_runtime import DesktopPresenceRuntime, TriState
+
         rt = DesktopPresenceRuntime()
 
         with patch("core.openclawd.get_openclawd") as mock_get:
@@ -163,6 +171,7 @@ class TestHandleRequestProtocol:
     @pytest.mark.asyncio
     async def test_handle_request_entrypoint_source(self):
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         rt = DesktopPresenceRuntime()
 
         with patch("core.openclawd.get_openclawd") as mock_get:
@@ -178,6 +187,7 @@ class TestHandleRequestProtocol:
     async def test_handle_request_error_still_returns_silent(self):
         """Even when the handler raises, final tristate must be SILENT."""
         from core.desktop_presence_runtime import DesktopPresenceRuntime, TriState
+
         rt = DesktopPresenceRuntime()
 
         with patch("core.openclawd.get_openclawd") as mock_get:
@@ -194,6 +204,7 @@ class TestHandleRequestProtocol:
     async def test_runtime_session_id_forwarded_to_openclawd(self):
         """handle_request() must pass runtime_session_id to OpenClawd.process()."""
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         rt = DesktopPresenceRuntime()
         captured = {}
 
@@ -227,26 +238,18 @@ class TestChatRouteUsesRuntime:
     def test_chat_py_imports_runtime(self):
         chat_file = pathlib.Path(__file__).parent.parent / "core" / "routes" / "chat.py"
         source = chat_file.read_text(encoding="utf-8")
-        assert "desktop_presence_runtime" in source, (
-            "core/routes/chat.py 必须导入 DesktopPresenceRuntime"
-        )
-        assert "get_desktop_presence_runtime" in source, (
-            "core/routes/chat.py 必须调用 get_desktop_presence_runtime()"
-        )
+        assert "desktop_presence_runtime" in source, "core/routes/chat.py 必须导入 DesktopPresenceRuntime"
+        assert "get_desktop_presence_runtime" in source, "core/routes/chat.py 必须调用 get_desktop_presence_runtime()"
 
     def test_chat_py_uses_runtime_handle_request(self):
         chat_file = pathlib.Path(__file__).parent.parent / "core" / "routes" / "chat.py"
         source = chat_file.read_text(encoding="utf-8")
-        assert "runtime.handle_request" in source, (
-            "core/routes/chat.py 必须调用 runtime.handle_request()"
-        )
+        assert "runtime.handle_request" in source, "core/routes/chat.py 必须调用 runtime.handle_request()"
 
     def test_chat_py_includes_runtime_session_id_in_response(self):
         chat_file = pathlib.Path(__file__).parent.parent / "core" / "routes" / "chat.py"
         source = chat_file.read_text(encoding="utf-8")
-        assert "runtime_session_id" in source, (
-            "core/routes/chat.py 必须在响应中包含 runtime_session_id"
-        )
+        assert "runtime_session_id" in source, "core/routes/chat.py 必须在响应中包含 runtime_session_id"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -259,15 +262,17 @@ class TestOpenClawdAcceptsRuntimeSessionId:
 
     def test_process_signature_has_runtime_session_id(self):
         import inspect
+
         from core.openclawd import OpenClawd
+
         sig = inspect.signature(OpenClawd.process)
-        assert "runtime_session_id" in sig.parameters, (
-            "OpenClawd.process() 必须接受 runtime_session_id 参数"
-        )
+        assert "runtime_session_id" in sig.parameters, "OpenClawd.process() 必须接受 runtime_session_id 参数"
 
     def test_process_runtime_session_id_default_is_none(self):
         import inspect
+
         from core.openclawd import OpenClawd
+
         sig = inspect.signature(OpenClawd.process)
         param = sig.parameters["runtime_session_id"]
         assert param.default is None
@@ -283,22 +288,16 @@ class TestContinuumOrchestratorAcceptsRuntimeSessionId:
 
     def test_run_signature_has_runtime_session_id(self):
         """Check the source file directly to avoid heavy numpy/audio imports."""
-        orchestrator_file = (
-            pathlib.Path(__file__).parent.parent / "core" / "continuum" / "orchestrator.py"
-        )
+        orchestrator_file = pathlib.Path(__file__).parent.parent / "core" / "continuum" / "orchestrator.py"
         source = orchestrator_file.read_text(encoding="utf-8")
-        assert "runtime_session_id" in source, (
-            "core/continuum/orchestrator.py: run() 必须接受 runtime_session_id 参数"
-        )
+        assert "runtime_session_id" in source, "core/continuum/orchestrator.py: run() 必须接受 runtime_session_id 参数"
 
     def test_run_docstring_mentions_runtime_session_id(self):
-        orchestrator_file = (
-            pathlib.Path(__file__).parent.parent / "core" / "continuum" / "orchestrator.py"
-        )
+        orchestrator_file = pathlib.Path(__file__).parent.parent / "core" / "continuum" / "orchestrator.py"
         source = orchestrator_file.read_text(encoding="utf-8")
-        assert "DesktopPresenceRuntime" in source, (
-            "core/continuum/orchestrator.py 应在文档中提及 DesktopPresenceRuntime"
-        )
+        assert (
+            "DesktopPresenceRuntime" in source
+        ), "core/continuum/orchestrator.py 应在文档中提及 DesktopPresenceRuntime"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -312,9 +311,7 @@ class TestE2EOrchestratorUsesRuntime:
     def test_e2e_orchestrator_imports_runtime(self):
         e2e_file = pathlib.Path(__file__).parent.parent / "core" / "e2e_orchestrator.py"
         source = e2e_file.read_text(encoding="utf-8")
-        assert "desktop_presence_runtime" in source, (
-            "core/e2e_orchestrator.py 必须通过 DesktopPresenceRuntime 路由"
-        )
+        assert "desktop_presence_runtime" in source, "core/e2e_orchestrator.py 必须通过 DesktopPresenceRuntime 路由"
 
     @pytest.mark.asyncio
     async def test_process_user_input_returns_runtime_session_id(self):
@@ -357,6 +354,7 @@ class TestUnknownSourceGuardrail:
     @pytest.mark.asyncio
     async def test_unknown_source_falls_back_to_openclawd(self):
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         rt = DesktopPresenceRuntime()
         called_with_source = {}
 
@@ -394,22 +392,22 @@ class TestUnifiedSubjectArchitectureDocstrings:
     def test_dpr_module_doc_declares_runtime_shell(self):
         """desktop_presence_runtime.py module docstring must declare 'runtime shell'."""
         src = self._read_module("core/desktop_presence_runtime.py")
-        assert "runtime shell" in src, (
-            "core/desktop_presence_runtime.py must describe itself as the runtime shell"
-        )
+        assert "runtime shell" in src, "core/desktop_presence_runtime.py must describe itself as the runtime shell"
 
     def test_dpr_module_doc_declares_openclawd_as_core(self):
         """desktop_presence_runtime.py must explicitly name OpenClawd as the subject core."""
         src = self._read_module("core/desktop_presence_runtime.py")
-        assert "subject core" in src, (
-            "core/desktop_presence_runtime.py must reference OpenClawd as the subject core"
-        )
+        assert "subject core" in src, "core/desktop_presence_runtime.py must reference OpenClawd as the subject core"
 
     def test_dpr_module_doc_not_parallel_subjects(self):
         """desktop_presence_runtime.py must say they are not parallel subjects."""
         src = self._read_module("core/desktop_presence_runtime.py")
-        assert "not parallel" in src.lower() or "not two parallel" in src.lower() or \
-               "not** two parallel" in src.lower() or "NOT** two parallel" in src, (
+        assert (
+            "not parallel" in src.lower()
+            or "not two parallel" in src.lower()
+            or "not** two parallel" in src.lower()
+            or "NOT** two parallel" in src
+        ), (
             "core/desktop_presence_runtime.py must clarify DesktopPresenceRuntime "
             "and OpenClawd are not parallel subjects"
         )
@@ -419,59 +417,55 @@ class TestUnifiedSubjectArchitectureDocstrings:
         src = self._read_module("core/desktop_presence_runtime.py")
         # The TriState class docstring should mention that UI shell states are different
         assert "DORMANT" in src or "UI shell" in src or "desktop clothing" in src, (
-            "TriState docstring must distinguish from UI shell states "
-            "(DORMANT/ISLAND/SIDESHEET/FULLAGENT)"
+            "TriState docstring must distinguish from UI shell states " "(DORMANT/ISLAND/SIDESHEET/FULLAGENT)"
         )
 
     def test_source_param_described_as_observability_tag(self):
         """handle_request() docstring must describe source as observability tag only."""
         src = self._read_module("core/desktop_presence_runtime.py")
-        assert "observability tag" in src or "Observability tag" in src, (
-            "handle_request() must describe 'source' as an observability tag only"
-        )
+        assert (
+            "observability tag" in src or "Observability tag" in src
+        ), "handle_request() must describe 'source' as an observability tag only"
 
     def test_try_start_ingest_bus_doc_mentions_shell_ownership(self):
         """_try_start_ingest_bus docstring must mention runtime shell ownership."""
         src = self._read_module("core/desktop_presence_runtime.py")
-        assert "shell" in src and ("ingest" in src or "ingress" in src), (
-            "_try_start_ingest_bus must describe runtime shell ownership of ingress"
-        )
+        assert "shell" in src and (
+            "ingest" in src or "ingress" in src
+        ), "_try_start_ingest_bus must describe runtime shell ownership of ingress"
 
     def test_openclawd_module_doc_declares_subject_core(self):
         """openclawd.py module docstring must declare it as the subject core."""
         src = self._read_module("core/openclawd.py")
-        assert "subject core" in src.lower() or "Subject Core" in src, (
-            "core/openclawd.py must describe itself as the subject core"
-        )
+        assert (
+            "subject core" in src.lower() or "Subject Core" in src
+        ), "core/openclawd.py must describe itself as the subject core"
 
     def test_openclawd_module_doc_mentions_liminal(self):
         """openclawd.py must describe operating inside liminal phase."""
         src = self._read_module("core/openclawd.py")
-        assert "liminal" in src, (
-            "core/openclawd.py must mention it operates inside the liminal phase"
-        )
+        assert "liminal" in src, "core/openclawd.py must mention it operates inside the liminal phase"
 
     def test_openclawd_module_doc_execution_path_semantics(self):
         """openclawd.py must document execution_path semantics."""
         src = self._read_module("core/openclawd.py")
-        assert "local" in src and "cross_device" in src, (
-            "core/openclawd.py must document execution_path: local/cross_device/hybrid/none"
-        )
+        assert (
+            "local" in src and "cross_device" in src
+        ), "core/openclawd.py must document execution_path: local/cross_device/hybrid/none"
 
     def test_decision_executor_doc_local_manifestation_layer(self):
         """decision_executor.py must describe itself as local manifestation layer."""
         src = self._read_module("core/execution/decision_executor.py")
         assert "local manifestation" in src or "Local Manifestation" in src, (
-            "core/execution/decision_executor.py must describe itself as the "
-            "subject's local manifestation layer"
+            "core/execution/decision_executor.py must describe itself as the " "subject's local manifestation layer"
         )
 
     def test_multimodal_ingest_runtime_doc_shell_ownership(self):
         """ingest_runtime.py must describe runtime shell ownership."""
         src = self._read_module("core/multimodal/ingest_runtime.py")
-        assert "runtime shell" in src or "Runtime Shell" in src, (
-            "core/multimodal/ingest_runtime.py must describe runtime shell ownership"
-        )
+        assert (
+            "runtime shell" in src or "Runtime Shell" in src
+        ), "core/multimodal/ingest_runtime.py must describe runtime shell ownership"
 
     def test_multimodal_ingest_runtime_doc_distinguishes_paths(self):
         """ingest_runtime.py must distinguish continuous host ingress from request-bound."""
@@ -485,16 +479,15 @@ class TestUnifiedSubjectArchitectureDocstrings:
         """SystemState in hardware_trigger.py must say it's UI clothing, not tri-state."""
         src = self._read_module("system_integration/hardware_trigger.py")
         assert "clothing" in src or "presentation" in src or "not" in src.lower(), (
-            "system_integration/hardware_trigger.py SystemState must clarify "
-            "it is not the tri-state lifecycle"
+            "system_integration/hardware_trigger.py SystemState must clarify " "it is not the tri-state lifecycle"
         )
 
     def test_chat_route_doc_demoted_to_adapter(self):
         """core/routes/chat.py docstring must mention adapter role."""
         src = self._read_module("core/routes/chat.py")
-        assert "adapter" in src.lower() or "Adapter" in src, (
-            "core/routes/chat.py must be described as an adapter, not a subject entrypoint"
-        )
+        assert (
+            "adapter" in src.lower() or "Adapter" in src
+        ), "core/routes/chat.py must be described as an adapter, not a subject entrypoint"
 
     def test_gateway_app_doc_internal_substrate_not_primary_entrypoint(self):
         """galaxy_gateway/app.py must describe gateway as internal substrate."""
@@ -537,46 +530,48 @@ class TestUIShellStatesNotTristate:
     def test_tristate_values_do_not_include_dormant(self):
         """TriState must not include DORMANT (that's a UI shell state)."""
         from core.desktop_presence_runtime import TriState
+
         values = {s.value for s in TriState}
-        assert "dormant" not in values, (
-            "DORMANT is a UI shell state, not a tri-state lifecycle value"
-        )
+        assert "dormant" not in values, "DORMANT is a UI shell state, not a tri-state lifecycle value"
 
     def test_tristate_values_do_not_include_island(self):
         from core.desktop_presence_runtime import TriState
+
         values = {s.value for s in TriState}
-        assert "island" not in values, (
-            "ISLAND is a UI shell state, not a tri-state lifecycle value"
-        )
+        assert "island" not in values, "ISLAND is a UI shell state, not a tri-state lifecycle value"
 
     def test_tristate_values_do_not_include_sidesheet(self):
         from core.desktop_presence_runtime import TriState
+
         values = {s.value for s in TriState}
-        assert "sidesheet" not in values, (
-            "SIDESHEET is a UI shell state, not a tri-state lifecycle value"
-        )
+        assert "sidesheet" not in values, "SIDESHEET is a UI shell state, not a tri-state lifecycle value"
 
     def test_tristate_values_do_not_include_fullagent(self):
         from core.desktop_presence_runtime import TriState
+
         values = {s.value for s in TriState}
-        assert "fullagent" not in values, (
-            "FULLAGENT is a UI shell state, not a tri-state lifecycle value"
-        )
+        assert "fullagent" not in values, "FULLAGENT is a UI shell state, not a tri-state lifecycle value"
 
     def test_tristate_has_exactly_three_values(self):
         """TriState must have exactly SILENT, LIMINAL, MANIFEST."""
         from core.desktop_presence_runtime import TriState
+
         values = {s.value for s in TriState}
-        assert values == {"silent", "liminal", "manifest"}, (
-            f"TriState must have exactly silent/liminal/manifest, got: {values}"
-        )
+        assert values == {
+            "silent",
+            "liminal",
+            "manifest",
+        }, f"TriState must have exactly silent/liminal/manifest, got: {values}"
 
     def test_hardware_trigger_system_state_has_dormant_island_etc(self):
         """hardware_trigger.SystemState has DORMANT/ISLAND/SIDESHEET/FULLAGENT."""
         import pathlib
-        src = pathlib.Path(__file__).parent.parent.joinpath(
-            "system_integration/hardware_trigger.py"
-        ).read_text(encoding="utf-8")
+
+        src = (
+            pathlib.Path(__file__)
+            .parent.parent.joinpath("system_integration/hardware_trigger.py")
+            .read_text(encoding="utf-8")
+        )
         for state in ("DORMANT", "ISLAND", "SIDESHEET", "FULLAGENT"):
             assert state in src, f"hardware_trigger.py must define {state}"
 
@@ -604,15 +599,13 @@ class TestGatewayAuthorityChain:
 
     def _read_chat_route(self) -> str:
         """Read the chat adapter surface (where chat_endpoint is implemented)."""
-        return pathlib.Path(__file__).parent.parent.joinpath(
-            "galaxy_gateway/routes/chat.py"
-        ).read_text(encoding="utf-8")
+        return (
+            pathlib.Path(__file__).parent.parent.joinpath("galaxy_gateway/routes/chat.py").read_text(encoding="utf-8")
+        )
 
     def _read_gateway_app(self) -> str:
         """Read the gateway app module (architectural declaration, not endpoint impl)."""
-        return pathlib.Path(__file__).parent.parent.joinpath(
-            "galaxy_gateway/app.py"
-        ).read_text(encoding="utf-8")
+        return pathlib.Path(__file__).parent.parent.joinpath("galaxy_gateway/app.py").read_text(encoding="utf-8")
 
     # Keep _read_gateway() as a backward-compat alias — delegates to _read_chat_route()
     # since chat_endpoint now lives in galaxy_gateway/routes/chat.py.
@@ -674,12 +667,10 @@ class TestGatewayAuthorityChain:
     def test_gateway_app_declares_internal_substrate(self):
         """galaxy_gateway/app.py must describe gateway as internal substrate."""
         src = self._read_gateway_app()
-        assert "internal" in src.lower(), (
-            "galaxy_gateway/app.py must describe itself as an internal substrate"
-        )
-        assert "NOT" in src or "not a primary" in src.lower() or "not a subject" in src.lower(), (
-            "galaxy_gateway/app.py must clarify it is NOT a primary subject entrypoint"
-        )
+        assert "internal" in src.lower(), "galaxy_gateway/app.py must describe itself as an internal substrate"
+        assert (
+            "NOT" in src or "not a primary" in src.lower() or "not a subject" in src.lower()
+        ), "galaxy_gateway/app.py must clarify it is NOT a primary subject entrypoint"
 
     def test_gateway_chat_doc_includes_authority_chain(self):
         """chat_endpoint module docstring must document the authority chain."""
@@ -689,9 +680,7 @@ class TestGatewayAuthorityChain:
             "galaxy_gateway/routes/chat.py must mention DesktopPresenceRuntime in the "
             "module or chat endpoint docstring to document the authority chain"
         )
-        assert "handle_request" in src, (
-            "galaxy_gateway/routes/chat.py must mention handle_request in the chat endpoint"
-        )
+        assert "handle_request" in src, "galaxy_gateway/routes/chat.py must mention handle_request in the chat endpoint"
 
     def test_gateway_chat_endpoint_authority_chain_static(self):
         """Static analysis: chat_endpoint code must reflect the authority chain.
@@ -720,12 +709,10 @@ class TestGatewayAuthorityChain:
         next_boundary = min(valid) if valid else -1
         func_body = src[chat_ep_start:next_boundary] if next_boundary != -1 else src[chat_ep_start:]
 
-        assert "get_desktop_presence_runtime" in func_body, (
-            "chat_endpoint body must call get_desktop_presence_runtime()"
-        )
-        assert "runtime.handle_request" in func_body, (
-            "chat_endpoint body must call runtime.handle_request()"
-        )
+        assert (
+            "get_desktop_presence_runtime" in func_body
+        ), "chat_endpoint body must call get_desktop_presence_runtime()"
+        assert "runtime.handle_request" in func_body, "chat_endpoint body must call runtime.handle_request()"
         assert "openclawd_instance.process(" not in func_body, (
             "chat_endpoint must NOT call openclawd_instance.process() directly — "
             "this bypasses DesktopPresenceRuntime and violates the authority chain"
@@ -736,18 +723,16 @@ class TestCompatWebSocketAuthorityChain:
     """Legacy core-direct websocket chat must still enter via the runtime shell."""
 
     def _read_api_routes(self) -> str:
-        return pathlib.Path(__file__).parent.parent.joinpath(
-            "core/api_routes.py"
-        ).read_text(encoding="utf-8")
+        return pathlib.Path(__file__).parent.parent.joinpath("core/api_routes.py").read_text(encoding="utf-8")
 
     def test_compat_ws_chat_uses_runtime_shell(self):
         src = self._read_api_routes()
-        assert "get_desktop_presence_runtime" in src, (
-            "core/api_routes.py compat websocket chat must obtain DesktopPresenceRuntime"
-        )
-        assert "runtime.handle_request(" in src, (
-            "core/api_routes.py compat websocket chat must call runtime.handle_request()"
-        )
+        assert (
+            "get_desktop_presence_runtime" in src
+        ), "core/api_routes.py compat websocket chat must obtain DesktopPresenceRuntime"
+        assert (
+            "runtime.handle_request(" in src
+        ), "core/api_routes.py compat websocket chat must call runtime.handle_request()"
 
     def test_compat_ws_chat_does_not_call_openclawd_directly(self):
         src = self._read_api_routes()
@@ -760,12 +745,12 @@ class TestCompatWebSocketAuthorityChain:
         valid = [c for c in candidates if c > branch_start]
         next_boundary = min(valid) if valid else -1
         branch_body = src[branch_start:next_boundary] if next_boundary != -1 else src[branch_start:]
-        assert "clawd.process(" not in branch_body, (
-            'compat websocket "chat" branch must not call OpenClawd.process() directly'
-        )
-        assert 'source="chat"' in branch_body or "source='chat'" in branch_body, (
-            'compat websocket "chat" branch must keep source="chat" when calling runtime.handle_request()'
-        )
+        assert (
+            "clawd.process(" not in branch_body
+        ), 'compat websocket "chat" branch must not call OpenClawd.process() directly'
+        assert (
+            'source="chat"' in branch_body or "source='chat'" in branch_body
+        ), 'compat websocket "chat" branch must keep source="chat" when calling runtime.handle_request()'
 
     def test_compat_ws_chat_context_normalization_helper(self):
         from core.api_routes import _normalize_chat_context
@@ -779,27 +764,25 @@ class TestAndroidVisionAuthorityChain:
     """Android vision requests must enter through DesktopPresenceRuntime."""
 
     def _read_android_vision_handler(self) -> str:
-        return pathlib.Path(__file__).parent.parent.joinpath(
-            "galaxy_gateway/android/handlers/vision.py"
-        ).read_text(encoding="utf-8")
+        return (
+            pathlib.Path(__file__)
+            .parent.parent.joinpath("galaxy_gateway/android/handlers/vision.py")
+            .read_text(encoding="utf-8")
+        )
 
     def test_android_vision_handler_uses_runtime_shell(self):
         src = self._read_android_vision_handler()
-        assert "get_desktop_presence_runtime" in src, (
-            "android vision handler must obtain DesktopPresenceRuntime"
-        )
-        assert "runtime.handle_request(" in src, (
-            "android vision handler must route requests through runtime.handle_request()"
-        )
+        assert "get_desktop_presence_runtime" in src, "android vision handler must obtain DesktopPresenceRuntime"
+        assert (
+            "runtime.handle_request(" in src
+        ), "android vision handler must route requests through runtime.handle_request()"
 
     def test_android_vision_handler_does_not_instantiate_openclawd(self):
         src = self._read_android_vision_handler()
-        assert "OpenClawd()" not in src, (
-            "android vision handler must not instantiate OpenClawd directly"
-        )
-        assert "oc.process(" not in src and "clawd.process(" not in src, (
-            "android vision primary path must not call OpenClawd.process() directly"
-        )
+        assert "OpenClawd()" not in src, "android vision handler must not instantiate OpenClawd directly"
+        assert (
+            "oc.process(" not in src and "clawd.process(" not in src
+        ), "android vision primary path must not call OpenClawd.process() directly"
 
     @pytest.mark.asyncio
     async def test_android_vision_runtime_session_id_propagated(self):
@@ -833,24 +816,18 @@ class TestVisionSamplerAuthorityChain:
     """Vision sampler ingress must also enter through the runtime shell."""
 
     def _read_vision_sampler(self) -> str:
-        return pathlib.Path(__file__).parent.parent.joinpath(
-            "core/services/vision_sampler.py"
-        ).read_text(encoding="utf-8")
+        return (
+            pathlib.Path(__file__).parent.parent.joinpath("core/services/vision_sampler.py").read_text(encoding="utf-8")
+        )
 
     def test_vision_sampler_uses_runtime_shell(self):
         src = self._read_vision_sampler()
-        assert "get_desktop_presence_runtime" in src, (
-            "VisionSampler must obtain DesktopPresenceRuntime"
-        )
-        assert "runtime.handle_request(" in src, (
-            "VisionSampler must route multimodal sampling through runtime.handle_request()"
-        )
+        assert "get_desktop_presence_runtime" in src, "VisionSampler must obtain DesktopPresenceRuntime"
+        assert (
+            "runtime.handle_request(" in src
+        ), "VisionSampler must route multimodal sampling through runtime.handle_request()"
 
     def test_vision_sampler_does_not_call_openclawd_directly(self):
         src = self._read_vision_sampler()
-        assert "get_openclawd" not in src, (
-            "VisionSampler must not depend on get_openclawd() for request ingress"
-        )
-        assert "clawd.process(" not in src, (
-            "VisionSampler must not call OpenClawd.process() directly"
-        )
+        assert "get_openclawd" not in src, "VisionSampler must not depend on get_openclawd() for request ingress"
+        assert "clawd.process(" not in src, "VisionSampler must not call OpenClawd.process() directly"

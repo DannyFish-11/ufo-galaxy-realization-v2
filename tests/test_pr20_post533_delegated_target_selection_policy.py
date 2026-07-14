@@ -100,43 +100,43 @@ from typing import Any
 
 import pytest
 
+from core.attached_runtime_session_registry import (
+    AttachedSessionRegistryEntry,
+    InvalidationReason,
+    RegistryEntryState,
+)
 from core.delegated_target_selection_policy import (
+    BASE_CANDIDATE_SCORE,
+    DEGRADATION_SCORE_THRESHOLD,
     DELEGATED_TARGET_SELECTION_POLICY_AUTHORITY,
     DELEGATED_TARGET_SELECTION_POLICY_PR20_SENTINEL,
+    DETACH_COUNT_MAX_PENALTY,
+    DETACH_COUNT_PENALTY_PER_UNIT,
+    FAILURE_COUNT_MAX_PENALTY,
+    FAILURE_COUNT_PENALTY_PER_UNIT,
+    LOAD_MAX_PENALTY,
+    LOAD_PENALTY_PER_10_EXECUTIONS,
+    REUSE_VALID_BONUS,
+    SELECTION_DECISION_IS_EXPLAINABLE_POLICY,
+    SELECTION_HIGH_DETACH_COUNT_DEMOTES_CANDIDATE_POLICY,
+    SELECTION_HIGH_FAILURE_COUNT_DEMOTES_CANDIDATE_POLICY,
+    SELECTION_HIGH_RISK_CANDIDATE_MAY_DEGRADE_POLICY,
     SELECTION_MUST_CONSULT_REGISTRY_POLICY,
+    SELECTION_NO_VALID_CANDIDATE_TRIGGERS_LOCAL_FALLBACK_POLICY,
+    SELECTION_RANKING_IS_DETERMINISTIC_POLICY,
     SELECTION_REQUIRES_ACTIVE_ATTACHMENT_STATE_POLICY,
     SELECTION_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY,
     SELECTION_REQUIRES_NO_INVALIDATION_REASON_POLICY,
     SELECTION_REUSE_VALID_IS_PREFERRED_POLICY,
-    SELECTION_HIGH_FAILURE_COUNT_DEMOTES_CANDIDATE_POLICY,
-    SELECTION_HIGH_DETACH_COUNT_DEMOTES_CANDIDATE_POLICY,
-    SELECTION_NO_VALID_CANDIDATE_TRIGGERS_LOCAL_FALLBACK_POLICY,
-    SELECTION_HIGH_RISK_CANDIDATE_MAY_DEGRADE_POLICY,
-    SELECTION_DECISION_IS_EXPLAINABLE_POLICY,
-    SELECTION_RANKING_IS_DETERMINISTIC_POLICY,
-    DEGRADATION_SCORE_THRESHOLD,
-    BASE_CANDIDATE_SCORE,
-    REUSE_VALID_BONUS,
-    FAILURE_COUNT_PENALTY_PER_UNIT,
-    FAILURE_COUNT_MAX_PENALTY,
-    DETACH_COUNT_PENALTY_PER_UNIT,
-    DETACH_COUNT_MAX_PENALTY,
-    LOAD_PENALTY_PER_10_EXECUTIONS,
-    LOAD_MAX_PENALTY,
-    SelectionOutcome,
+    CandidateEvaluation,
     CandidateRejectionReason,
     SelectionCandidateContext,
-    CandidateEvaluation,
     SelectionDecision,
+    SelectionOutcome,
+    build_selection_explanation,
     evaluate_candidate,
     rank_candidates,
     select_delegated_target,
-    build_selection_explanation,
-)
-from core.attached_runtime_session_registry import (
-    AttachedSessionRegistryEntry,
-    RegistryEntryState,
-    InvalidationReason,
 )
 
 # ---------------------------------------------------------------------------
@@ -317,7 +317,10 @@ class TestCandidateRejectionReason:
         assert CandidateRejectionReason.from_string("bad_posture") == CandidateRejectionReason.bad_posture
 
     def test_C5_from_string_explicit_invalidation(self):
-        assert CandidateRejectionReason.from_string("explicit_invalidation") == CandidateRejectionReason.explicit_invalidation
+        assert (
+            CandidateRejectionReason.from_string("explicit_invalidation")
+            == CandidateRejectionReason.explicit_invalidation
+        )
 
     def test_C6_from_string_high_risk_score(self):
         assert CandidateRejectionReason.from_string("high_risk_score") == CandidateRejectionReason.high_risk_score
@@ -377,9 +380,16 @@ class TestSelectionCandidateContextSerialisation:
         ctx = _make_ctx()
         d = ctx.to_dict()
         for key in (
-            "session_id", "device_id", "attachment_state", "posture",
-            "invalidation_reason", "is_reuse_valid", "delegated_execution_count",
-            "recent_failure_count", "recent_detach_count", "metadata",
+            "session_id",
+            "device_id",
+            "attachment_state",
+            "posture",
+            "invalidation_reason",
+            "is_reuse_valid",
+            "delegated_execution_count",
+            "recent_failure_count",
+            "recent_detach_count",
+            "metadata",
         ):
             assert key in d, f"Missing key: {key!r}"
 
@@ -452,8 +462,12 @@ class TestCandidateEvaluation:
         )
         d = ev.to_dict()
         for key in (
-            "session_id", "device_id", "score", "is_accepted",
-            "rejection_reason", "explanation_fragments",
+            "session_id",
+            "device_id",
+            "score",
+            "is_accepted",
+            "rejection_reason",
+            "explanation_fragments",
         ):
             assert key in d, f"Missing key: {key!r}"
         assert d["score"] == 80
@@ -516,8 +530,14 @@ class TestSelectionDecision:
         d = self._make_decision()
         dct = d.to_dict()
         for key in (
-            "decision_id", "outcome", "selected_candidate", "selected_evaluation",
-            "rejected_evaluations", "fallback_reason", "decided_at", "explanation",
+            "decision_id",
+            "outcome",
+            "selected_candidate",
+            "selected_evaluation",
+            "rejected_evaluations",
+            "fallback_reason",
+            "decided_at",
+            "explanation",
         ):
             assert key in dct, f"Missing key: {key!r}"
 
@@ -889,9 +909,16 @@ class TestBuildSelectionExplanation:
         decision = self._selected_decision()
         explanation = build_selection_explanation(decision)
         for key in (
-            "decision_id", "outcome", "selected", "fallback_reason",
-            "candidate_count", "accepted_count", "rejected_count",
-            "candidates", "policy_sentinels", "decided_at",
+            "decision_id",
+            "outcome",
+            "selected",
+            "fallback_reason",
+            "candidate_count",
+            "accepted_count",
+            "rejected_count",
+            "candidates",
+            "policy_sentinels",
+            "decided_at",
         ):
             assert key in explanation, f"Missing key: {key!r}"
 
@@ -1161,19 +1188,20 @@ class TestCoreRuntimeReexports:
     def test_AX2_import_directly_from_policy_module(self):
         """Verify all symbols are importable from the policy module directly."""
         from core.delegated_target_selection_policy import (  # noqa: F401
+            DEGRADATION_SCORE_THRESHOLD,
             DELEGATED_TARGET_SELECTION_POLICY_AUTHORITY,
             DELEGATED_TARGET_SELECTION_POLICY_PR20_SENTINEL,
-            DEGRADATION_SCORE_THRESHOLD,
-            SelectionOutcome,
+            CandidateEvaluation,
             CandidateRejectionReason,
             SelectionCandidateContext,
-            CandidateEvaluation,
             SelectionDecision,
+            SelectionOutcome,
+            build_selection_explanation,
             evaluate_candidate,
             rank_candidates,
             select_delegated_target,
-            build_selection_explanation,
         )
+
         # No assertion needed: import success is the test
 
 

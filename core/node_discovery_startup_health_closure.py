@@ -213,9 +213,7 @@ def build_discovery_health_surface(
         surface["fabric_total"] = summary.get("fabric_total", 0)
         surface["fabric_healthy"] = summary.get("fabric_healthy", 0)
         surface["undiscovered_active"] = summary.get("undiscovered_active", 0)
-        surface["discovery_participation"] = summary.get(
-            "discovery_participation", "none"
-        )
+        surface["discovery_participation"] = summary.get("discovery_participation", "none")
     except ImportError:
         logger.debug(
             "build_discovery_health_surface: core.node_discovery_runtime unavailable; "
@@ -254,8 +252,7 @@ def build_discovery_health_surface(
         surface["health_status"] = "unavailable"
 
     logger.debug(
-        "build_discovery_health_surface: participation=%s undiscovered=%d "
-        "health_status=%s",
+        "build_discovery_health_surface: participation=%s undiscovered=%d " "health_status=%s",
         participation,
         undiscovered,
         surface["health_status"],
@@ -301,8 +298,7 @@ def build_startup_seeding_status(
         "authority": NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_IS_AUTHORITY,
     }
     logger.info(
-        "NodeDiscoveryStartupHealthClosure: startup seeding complete — "
-        "seeded=%d fabric_healthy=%d",
+        "NodeDiscoveryStartupHealthClosure: startup seeding complete — " "seeded=%d fabric_healthy=%d",
         seeded_count,
         fabric_healthy,
     )
@@ -341,9 +337,7 @@ def build_discovery_diagnostic_context(
     try:
         from core.node_discovery_runtime import build_discovery_runtime_snapshot
 
-        snapshot = build_discovery_runtime_snapshot(
-            fabric, discovery, launcher_active_nodes
-        )
+        snapshot = build_discovery_runtime_snapshot(fabric, discovery, launcher_active_nodes)
         return {
             "healthy_count": snapshot.healthy_count,
             "undiscovered_active_count": snapshot.undiscovered_active_count,
@@ -356,17 +350,14 @@ def build_discovery_diagnostic_context(
         }
     except ImportError:
         logger.debug(
-            "build_discovery_diagnostic_context: core.node_discovery_runtime "
-            "unavailable; returning minimal context."
+            "build_discovery_diagnostic_context: core.node_discovery_runtime " "unavailable; returning minimal context."
         )
         return {
             "error": "core.node_discovery_runtime unavailable",
             "authority": NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_IS_AUTHORITY,
         }
     except Exception as exc:
-        logger.debug(
-            "build_discovery_diagnostic_context: snapshot failed: %s", exc
-        )
+        logger.debug("build_discovery_diagnostic_context: snapshot failed: %s", exc)
         return {
             "error": str(exc),
             "authority": NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_IS_AUTHORITY,

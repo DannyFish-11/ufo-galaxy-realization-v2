@@ -424,13 +424,22 @@ class AndroidRuntimeBindingSignal(str, Enum):
 _TRANSITION_TABLE: Dict[tuple, AndroidRuntimeBindingState] = {
     # bind signal
     (AndroidRuntimeBindingState.unbound, AndroidRuntimeBindingSignal.bind): AndroidRuntimeBindingState.binding,
-    (AndroidRuntimeBindingState.bound, AndroidRuntimeBindingSignal.bind): AndroidRuntimeBindingState.bound,  # idempotent
+    (
+        AndroidRuntimeBindingState.bound,
+        AndroidRuntimeBindingSignal.bind,
+    ): AndroidRuntimeBindingState.bound,  # idempotent
     # confirm signal
     (AndroidRuntimeBindingState.binding, AndroidRuntimeBindingSignal.confirm): AndroidRuntimeBindingState.bound,
-    (AndroidRuntimeBindingState.bound, AndroidRuntimeBindingSignal.confirm): AndroidRuntimeBindingState.bound,  # idempotent
+    (
+        AndroidRuntimeBindingState.bound,
+        AndroidRuntimeBindingSignal.confirm,
+    ): AndroidRuntimeBindingState.bound,  # idempotent
     # dispatch signal
     (AndroidRuntimeBindingState.bound, AndroidRuntimeBindingSignal.dispatch): AndroidRuntimeBindingState.dispatching,
-    (AndroidRuntimeBindingState.dispatching, AndroidRuntimeBindingSignal.dispatch): AndroidRuntimeBindingState.dispatching,  # idempotent
+    (
+        AndroidRuntimeBindingState.dispatching,
+        AndroidRuntimeBindingSignal.dispatch,
+    ): AndroidRuntimeBindingState.dispatching,  # idempotent
     # suspend signal
     (AndroidRuntimeBindingState.bound, AndroidRuntimeBindingSignal.suspend): AndroidRuntimeBindingState.suspended,
     (AndroidRuntimeBindingState.dispatching, AndroidRuntimeBindingSignal.suspend): AndroidRuntimeBindingState.suspended,
@@ -507,9 +516,7 @@ class AndroidRuntimeDispatchBindingIdentity:
     def from_dict(cls, data: Dict[str, Any]) -> "AndroidRuntimeDispatchBindingIdentity":
         """Construct from a dict.  Raises ValueError if *data* is not a dict."""
         if not isinstance(data, dict):
-            raise ValueError(
-                "AndroidRuntimeDispatchBindingIdentity.from_dict expects a dict"
-            )
+            raise ValueError("AndroidRuntimeDispatchBindingIdentity.from_dict expects a dict")
         return cls(
             binding_id=data.get("binding_id") or str(uuid.uuid4()),
             session_id=data.get("session_id", ""),
@@ -588,11 +595,7 @@ class AndroidRuntimeDispatchBindingRecord:
 
     def is_accepted(self) -> bool:
         """Return True if the binding was accepted (no reject reason and anchored)."""
-        return (
-            not self.reject_reason
-            and self.is_session_anchored
-            and self.is_device_bound
-        )
+        return not self.reject_reason and self.is_session_anchored and self.is_device_bound
 
     def is_rejected(self) -> bool:
         """Return True if the binding was rejected."""
@@ -613,10 +616,7 @@ class AndroidRuntimeDispatchBindingRecord:
         truly dispatch-ready when it is in ``bound`` state AND has a
         non-empty contract_id.
         """
-        return (
-            self.binding_state.is_dispatch_ready()
-            and bool(self.identity.contract_id)
-        )
+        return self.binding_state.is_dispatch_ready() and bool(self.identity.contract_id)
 
     # ------------------------------------------------------------------
     # Serialisation
@@ -647,9 +647,7 @@ class AndroidRuntimeDispatchBindingRecord:
     def from_dict(cls, data: Dict[str, Any]) -> "AndroidRuntimeDispatchBindingRecord":
         """Construct from a dict.  Raises ValueError if *data* is not a dict."""
         if not isinstance(data, dict):
-            raise ValueError(
-                "AndroidRuntimeDispatchBindingRecord.from_dict expects a dict"
-            )
+            raise ValueError("AndroidRuntimeDispatchBindingRecord.from_dict expects a dict")
         raw_identity = data.get("identity", {})
         identity = (
             AndroidRuntimeDispatchBindingIdentity.from_dict(raw_identity)
@@ -658,12 +656,8 @@ class AndroidRuntimeDispatchBindingRecord:
         )
         return cls(
             identity=identity,
-            binding_state=AndroidRuntimeBindingState.from_string(
-                data.get("binding_state", "unbound")
-            ),
-            source_runtime_posture=data.get(
-                "source_runtime_posture", _POSTURE_JOIN_RUNTIME
-            ),
+            binding_state=AndroidRuntimeBindingState.from_string(data.get("binding_state", "unbound")),
+            source_runtime_posture=data.get("source_runtime_posture", _POSTURE_JOIN_RUNTIME),
             coordination_role=data.get("coordination_role", ""),
             android_host_role=data.get("android_host_role", ""),
             capability_tier=data.get("capability_tier", ""),
@@ -736,9 +730,7 @@ class AndroidRuntimeDispatchBindingRuntime:
 
     def __init__(self, capacity: int = _RING_BUFFER_CAPACITY) -> None:
         self._capacity = capacity
-        self._buffer: Deque[AndroidRuntimeDispatchBindingRecord] = deque(
-            maxlen=capacity
-        )
+        self._buffer: Deque[AndroidRuntimeDispatchBindingRecord] = deque(maxlen=capacity)
 
     @property
     def capacity(self) -> int:
@@ -757,27 +749,21 @@ class AndroidRuntimeDispatchBindingRuntime:
         """Return all records in an active (non-released) state, newest-first."""
         return [r for r in reversed(self._buffer) if r.binding_state.is_active()]
 
-    def get_latest_for_session(
-        self, session_id: str
-    ) -> Optional[AndroidRuntimeDispatchBindingRecord]:
+    def get_latest_for_session(self, session_id: str) -> Optional[AndroidRuntimeDispatchBindingRecord]:
         """Return the most recent record for *session_id*, or None."""
         for record in reversed(self._buffer):
             if record.identity.session_id == session_id:
                 return record
         return None
 
-    def get_latest_for_contract(
-        self, contract_id: str
-    ) -> Optional[AndroidRuntimeDispatchBindingRecord]:
+    def get_latest_for_contract(self, contract_id: str) -> Optional[AndroidRuntimeDispatchBindingRecord]:
         """Return the most recent record for *contract_id*, or None."""
         for record in reversed(self._buffer):
             if record.identity.contract_id == contract_id:
                 return record
         return None
 
-    def get_latest_for_device(
-        self, device_id: str
-    ) -> Optional[AndroidRuntimeDispatchBindingRecord]:
+    def get_latest_for_device(self, device_id: str) -> Optional[AndroidRuntimeDispatchBindingRecord]:
         """Return the most recent record for *device_id*, or None."""
         for record in reversed(self._buffer):
             if record.identity.device_id == device_id:
@@ -950,9 +936,7 @@ def create_android_dispatch_binding(
             coordination_role=coordination_role,
             android_host_role=android_host_role,
             capability_tier=capability_tier,
-            reject_reason=(
-                "BINDING_REQUIRES_ATTACHED_SESSION: session_id is empty"
-            ),
+            reject_reason=("BINDING_REQUIRES_ATTACHED_SESSION: session_id is empty"),
             runtime=_runtime,
         )
 
@@ -968,9 +952,7 @@ def create_android_dispatch_binding(
             coordination_role=coordination_role,
             android_host_role=android_host_role,
             capability_tier=capability_tier,
-            reject_reason=(
-                "BINDING_REQUIRES_TARGET_DEVICE_ID: device_id is empty"
-            ),
+            reject_reason=("BINDING_REQUIRES_TARGET_DEVICE_ID: device_id is empty"),
             runtime=_runtime,
         )
 
@@ -1067,10 +1049,7 @@ def advance_binding_state(
         return record
 
     # Gate: dispatch signal requires a non-empty contract_id
-    if (
-        signal == AndroidRuntimeBindingSignal.dispatch
-        and not record.identity.contract_id
-    ):
+    if signal == AndroidRuntimeBindingSignal.dispatch and not record.identity.contract_id:
         return record
 
     updated = AndroidRuntimeDispatchBindingRecord(
@@ -1152,40 +1131,22 @@ def resolve_dispatch_binding(
     _runtime = runtime if runtime is not None else get_dispatch_binding_runtime()
 
     # --- extract session fields ---
-    session_id: str = (
-        getattr(attached_session, "session_id", None)
-        or ""
-    )
-    device_id: str = (
-        getattr(attached_session, "device_id", None)
-        or ""
-    )
-    posture: str = (
-        getattr(attached_session, "source_runtime_posture", None)
-        or _POSTURE_JOIN_RUNTIME
-    )
-    coordination_role: str = (
-        getattr(attached_session, "coordination_role", None)
-        or ""
-    )
+    session_id: str = getattr(attached_session, "session_id", None) or ""
+    device_id: str = getattr(attached_session, "device_id", None) or ""
+    posture: str = getattr(attached_session, "source_runtime_posture", None) or _POSTURE_JOIN_RUNTIME
+    coordination_role: str = getattr(attached_session, "coordination_role", None) or ""
     _ah_role = android_host_role or getattr(attached_session, "android_host_role", "") or ""
     _cap_tier = capability_tier or getattr(attached_session, "capability_tier", "") or ""
 
     # --- extract contract fields ---
     contract_identity = getattr(handoff_contract, "identity", None)
-    contract_session_id: str = (
-        getattr(contract_identity, "session_id", None) or ""
-    )
-    contract_id: str = (
-        getattr(contract_identity, "contract_id", None) or ""
-    )
+    contract_session_id: str = getattr(contract_identity, "session_id", None) or ""
+    contract_id: str = getattr(contract_identity, "contract_id", None) or ""
     trace_id: Optional[str] = getattr(contract_identity, "trace_id", None) or None
 
     # --- extract tracker fields ---
     tracker_identity = getattr(execution_tracker, "identity", None)
-    tracker_id: str = (
-        getattr(tracker_identity, "tracker_id", None) or ""
-    )
+    tracker_id: str = getattr(tracker_identity, "tracker_id", None) or ""
 
     # --- cross-record consistency check ---
     if session_id and contract_session_id and contract_session_id != session_id:

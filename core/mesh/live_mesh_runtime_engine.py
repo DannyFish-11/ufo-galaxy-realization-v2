@@ -60,8 +60,6 @@ See ``docs/LIVE_MESH_RUNTIME_ENGINE.md`` for the full specification.
 from __future__ import annotations
 
 import asyncio  # auto: missing import
-
-
 import logging
 import time
 import uuid
@@ -231,12 +229,14 @@ class LiveMeshRunResult:
 def _import_coordinator_contracts() -> Any:
     """Lazily import the coordinator contract module."""
     from contracts import mesh_session_coordinator as _mod
+
     return _mod
 
 
 # ---------------------------------------------------------------------------
 # PR-AIPV3-MESH: AIP v3 mesh event emitter
 # ---------------------------------------------------------------------------
+
 
 def _emit_aip_v3_mesh_events(
     event_type: str,
@@ -254,13 +254,13 @@ def _emit_aip_v3_mesh_events(
     affected by emission failures.
     """
     try:
+        from core.nats_bus import get_nats_bus  # noqa: PLC0415
         from core.schemas.aip_v3 import (  # noqa: PLC0415
             CoordSyncMsg,
             MeshJoinMsg,
             MeshLeaveMsg,
             MeshResultMsg,
         )
-        from core.nats_bus import get_nats_bus  # noqa: PLC0415
 
         nats = get_nats_bus()
         if not nats.is_connected():
@@ -273,6 +273,7 @@ def _emit_aip_v3_mesh_events(
         device_ids = [getattr(p, "device_id", "") for p in participants if getattr(p, "device_id", "")]
 
         import asyncio
+
         loop = asyncio.get_running_loop()
 
         if event_type == "mesh_join":
@@ -301,7 +302,9 @@ def _emit_aip_v3_mesh_events(
             if participant_results:
                 subtask_results = []
                 for did, res in participant_results.items():
-                    subtask_results.append({"device_id": did, "result": res if isinstance(res, dict) else {"value": res}})
+                    subtask_results.append(
+                        {"device_id": did, "result": res if isinstance(res, dict) else {"value": res}}
+                    )
                 msg = MeshResultMsg(
                     device_id="coordinator",
                     session_id=session_id,
@@ -313,7 +316,7 @@ def _emit_aip_v3_mesh_events(
                 loop.create_task(nats.publish_mesh_result(msg))
 
         elif event_type == "coord_sync":
-            mod = _import_coordinator_contracts()
+            _import_coordinator_contracts()
             participant_statuses = {}
             for p in participants:
                 did = getattr(p, "device_id", "")
@@ -342,6 +345,7 @@ def _emit_aip_v3_mesh_events(
 # ---------------------------------------------------------------------------
 # PR-MESH-NATS-FUSION: Remote participant dispatch
 # ---------------------------------------------------------------------------
+
 
 def _dispatch_remote_barrier_requests(
     session_id: str,
@@ -437,9 +441,10 @@ def _emit_mesh_heartbeat_leave(coordinator_state: Any, device_id: str) -> None:
     Best-effort: never raises.
     """
     try:
-        from core.schemas.aip_v3 import MeshLeaveMsg  # noqa: PLC0415
-        from core.nats_bus import get_nats_bus  # noqa: PLC0415
         import asyncio
+
+        from core.nats_bus import get_nats_bus  # noqa: PLC0415
+        from core.schemas.aip_v3 import MeshLeaveMsg  # noqa: PLC0415
 
         session_id = str(getattr(coordinator_state, "session_id", "") or "")
         mesh_id = str(getattr(coordinator_state, "mesh_id", "") or "")
@@ -469,11 +474,7 @@ def _get_participant_device_ids(coordinator_state: Any) -> List[str]:
     """Return all participant device IDs from coordinator state."""
     try:
         participants = getattr(coordinator_state, "participants", []) or []
-        return [
-            p.device_id
-            for p in participants
-            if getattr(p, "device_id", "")
-        ]
+        return [p.device_id for p in participants if getattr(p, "device_id", "")]
     except Exception:
         return []
 
@@ -529,9 +530,7 @@ def _promote_staged_to_active(
                 message="Cannot promote: no participants registered",
             )
             # Return a failed state
-            return coordinator_state.model_copy(
-                update={"status": mod.MeshCoordinatorStatus.failed}
-            )
+            return coordinator_state.model_copy(update={"status": mod.MeshCoordinatorStatus.failed})
 
         promoted = coordinator_state.model_copy(
             update={
@@ -604,9 +603,7 @@ def _track_participants_working(
                 current_val = current.value if hasattr(current, "value") else str(current)
                 if current_val in ("working", "ready", "waiting"):
                     # Participant has timed out — mark offline and emit MESH_LEAVE
-                    new_p = p.model_copy(
-                        update={"status": mod.MeshParticipantStatus.offline}
-                    )
+                    new_p = p.model_copy(update={"status": mod.MeshParticipantStatus.offline})
                     new_participants.append(new_p)
                     _log_event(
                         "participant_heartbeat_timeout",
@@ -620,16 +617,12 @@ def _track_participants_working(
                     continue
 
             if did in participant_results:
-                new_p = p.model_copy(
-                    update={"status": mod.MeshParticipantStatus.working}
-                )
+                new_p = p.model_copy(update={"status": mod.MeshParticipantStatus.working})
             else:
                 current = getattr(p, "status", mod.MeshParticipantStatus.pending)
                 current_val = current.value if hasattr(current, "value") else str(current)
                 if current_val in ("pending", "unknown"):
-                    new_p = p.model_copy(
-                        update={"status": mod.MeshParticipantStatus.ready}
-                    )
+                    new_p = p.model_copy(update={"status": mod.MeshParticipantStatus.ready})
                 else:
                     new_p = p
             new_participants.append(new_p)
@@ -637,9 +630,7 @@ def _track_participants_working(
                 "participant_registered",
                 getattr(coordinator_state, "session_id", None),
                 device_id=did,
-                new_status=getattr(
-                    getattr(new_p, "status", None), "value", str(getattr(new_p, "status", ""))
-                ),
+                new_status=getattr(getattr(new_p, "status", None), "value", str(getattr(new_p, "status", ""))),
             )
 
         return coordinator_state.model_copy(
@@ -772,9 +763,7 @@ def _evaluate_barrier(
             for p in participants:
                 did = getattr(p, "device_id", "")
                 if did in waiting:
-                    new_p = p.model_copy(
-                        update={"status": mod.MeshParticipantStatus.waiting}
-                    )
+                    new_p = p.model_copy(update={"status": mod.MeshParticipantStatus.waiting})
                     _log_event(
                         "participant_updated",
                         getattr(coordinator_state, "session_id", None),
@@ -908,7 +897,6 @@ def _finalise_coordinator_state(
     try:
         mod = _import_coordinator_contracts()
         participants = getattr(coordinator_state, "participants", []) or []
-        device_ids = [getattr(p, "device_id", "") for p in participants if getattr(p, "device_id", "")]
 
         completed_ids: List[str] = []
         failed_ids: List[str] = []
@@ -925,14 +913,10 @@ def _finalise_coordinator_state(
                     p_success = result_val is not None
 
                 if p_success is not False:
-                    new_p = p.model_copy(
-                        update={"status": mod.MeshParticipantStatus.completed}
-                    )
+                    new_p = p.model_copy(update={"status": mod.MeshParticipantStatus.completed})
                     completed_ids.append(did)
                 else:
-                    new_p = p.model_copy(
-                        update={"status": mod.MeshParticipantStatus.failed}
-                    )
+                    new_p = p.model_copy(update={"status": mod.MeshParticipantStatus.failed})
                     failed_ids.append(did)
                     errors.append(f"participant_failed:{did}")
             else:
@@ -940,9 +924,7 @@ def _finalise_coordinator_state(
                 current_status = getattr(p, "status", mod.MeshParticipantStatus.pending)
                 current_val = current_status.value if hasattr(current_status, "value") else str(current_status)
                 if current_val in ("waiting", "pending", "ready", "working"):
-                    new_p = p.model_copy(
-                        update={"status": mod.MeshParticipantStatus.offline}
-                    )
+                    new_p = p.model_copy(update={"status": mod.MeshParticipantStatus.offline})
                     failed_ids.append(did)
                     errors.append(f"participant_drop:{did}")
                     _log_event(
@@ -1095,9 +1077,7 @@ class LiveMeshRuntimeEngine:
                 )
 
             # ---- Phase 2: Participant tracking -----------------------------------
-            coordinator_state = _track_participants_working(
-                coordinator_state, p_results, errors
-            )
+            coordinator_state = _track_participants_working(coordinator_state, p_results, errors)
 
             # ---- Phase 3: Barrier evaluation ------------------------------------
             coordinator_state, barrier_released = _evaluate_barrier(
@@ -1136,9 +1116,7 @@ class LiveMeshRuntimeEngine:
             merged = _merge_participant_results(p_results, errors)
 
             # ---- Phase 5: Finalise -----------------------------------------------
-            coordinator_state, outcome = _finalise_coordinator_state(
-                coordinator_state, p_results, merged, errors
-            )
+            coordinator_state, outcome = _finalise_coordinator_state(coordinator_state, p_results, merged, errors)
 
             success = outcome in ("completed", "partial")
 
@@ -1172,9 +1150,7 @@ class LiveMeshRuntimeEngine:
             errors.append(f"engine_error:{exc}")
             _logger.warning("LiveMeshRuntimeEngine.run: unexpected error: %s", exc)
             return LiveMeshRunResult(
-                session_id=getattr(coordinator_state, "session_id", None)
-                if coordinator_state is not None
-                else None,
+                session_id=getattr(coordinator_state, "session_id", None) if coordinator_state is not None else None,
                 outcome="failed",
                 success=False,
                 coordinator_state=coordinator_state,
@@ -1230,7 +1206,7 @@ def register_participant(
             for p in participants:
                 if getattr(p, "device_id", "") == device_id:
                     merged_roles = list(getattr(p, "roles", []) or [])
-                    for r in (roles or []):
+                    for r in roles or []:
                         if r not in merged_roles:
                             merged_roles.append(r)
                     p = p.model_copy(
@@ -1303,15 +1279,15 @@ def update_participant_status(
         new_participants = []
         for p in participants:
             if getattr(p, "device_id", "") == device_id:
-                p = p.model_copy(
-                    update={"status": new_status, "last_seen": time.time()}
-                )
+                p = p.model_copy(update={"status": new_status, "last_seen": time.time()})
             new_participants.append(p)
 
         event = mod.MeshCoordinationEvent(
-            kind=mod.MeshCoordinationEventKind.participant_ready
-            if status == "ready"
-            else mod.MeshCoordinationEventKind.coordinator_status_changed,
+            kind=(
+                mod.MeshCoordinationEventKind.participant_ready
+                if status == "ready"
+                else mod.MeshCoordinationEventKind.coordinator_status_changed
+            ),
             device_id=device_id,
             message=f"Participant status updated: {status} (PR-J)",
         )

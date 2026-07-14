@@ -87,7 +87,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
@@ -96,6 +95,7 @@ import pytest
 def _make_hint(region: str, budget: float, wiring_active: bool = True) -> Any:
     """Build a minimal CognitiveExecutionHint-like object."""
     from core.cognitive.cognitive_execution_policy import CognitiveExecutionHint
+
     return CognitiveExecutionHint(
         cognitive_region=region,
         activation_budget=budget,
@@ -107,6 +107,7 @@ def _make_hint(region: str, budget: float, wiring_active: bool = True) -> Any:
 def _make_budget(region: str, budget_value: float) -> Any:
     """Derive an ActivationBudget from a CognitiveExecutionHint."""
     from core.cognitive.cognitive_activation_budget import derive_activation_budget
+
     hint = _make_hint(region, budget_value)
     return derive_activation_budget(hint)
 
@@ -120,6 +121,7 @@ class TestSentinels:
     def test_a01_authority_sentinel(self):
         """A01. COGNITIVE_ACTIVATION_BUDGET_IS_AUTHORITY exists."""
         from core.cognitive import cognitive_activation_budget as mod
+
         assert hasattr(mod, "COGNITIVE_ACTIVATION_BUDGET_IS_AUTHORITY")
         assert isinstance(mod.COGNITIVE_ACTIVATION_BUDGET_IS_AUTHORITY, str)
         assert len(mod.COGNITIVE_ACTIVATION_BUDGET_IS_AUTHORITY) > 0
@@ -127,36 +129,42 @@ class TestSentinels:
     def test_a02_pr18_sentinel(self):
         """A02. COGNITIVE_ACTIVATION_BUDGET_PR18_SENTINEL exists."""
         from core.cognitive import cognitive_activation_budget as mod
+
         assert hasattr(mod, "COGNITIVE_ACTIVATION_BUDGET_PR18_SENTINEL")
         assert "PR18" in mod.COGNITIVE_ACTIVATION_BUDGET_PR18_SENTINEL
 
     def test_a03_hard_gates_policy(self):
         """A03. HARD_GATES_REMAIN_AUTHORITATIVE_POLICY exists."""
         from core.cognitive import cognitive_activation_budget as mod
+
         assert hasattr(mod, "HARD_GATES_REMAIN_AUTHORITATIVE_POLICY")
         assert "authoritative" in mod.HARD_GATES_REMAIN_AUTHORITATIVE_POLICY.lower()
 
     def test_a04_soft_influence_policy(self):
         """A04. BUDGET_IS_SOFT_INFLUENCE_NOT_HARD_GATE_POLICY exists."""
         from core.cognitive import cognitive_activation_budget as mod
+
         assert hasattr(mod, "BUDGET_IS_SOFT_INFLUENCE_NOT_HARD_GATE_POLICY")
         assert "soft" in mod.BUDGET_IS_SOFT_INFLUENCE_NOT_HARD_GATE_POLICY.lower()
 
     def test_a05_kernel_sentinel(self):
         """A05. ACTIVATION_BUDGET_WIRED_INTO_KERNEL_PR18 exists in kernel.py."""
         from core.agent import kernel as kernel_mod
+
         assert hasattr(kernel_mod, "ACTIVATION_BUDGET_WIRED_INTO_KERNEL_PR18")
         assert "PR18" in kernel_mod.ACTIVATION_BUDGET_WIRED_INTO_KERNEL_PR18
 
     def test_a06_planner_sentinel(self):
         """A06. ACTIVATION_BUDGET_PLANNER_BREADTH_WIRED_PR18 exists in execution_planner.py."""
         from core.agent import execution_planner as ep_mod
+
         assert hasattr(ep_mod, "ACTIVATION_BUDGET_PLANNER_BREADTH_WIRED_PR18")
         assert "PR18" in ep_mod.ACTIVATION_BUDGET_PLANNER_BREADTH_WIRED_PR18
 
     def test_a07_governance_sentinel(self):
         """A07. ACTIVATION_BUDGET_NARROWING_COMPATIBLE_WITH_GOVERNANCE_PR18 exists."""
         import core.node_invocation_governance as gov_mod
+
         assert hasattr(gov_mod, "ACTIVATION_BUDGET_NARROWING_COMPATIBLE_WITH_GOVERNANCE_PR18")
         assert "PR18" in gov_mod.ACTIVATION_BUDGET_NARROWING_COMPATIBLE_WITH_GOVERNANCE_PR18
 
@@ -164,6 +172,7 @@ class TestSentinels:
         """A08. COGNITIVE_ACTIVATION_BUDGET_ALIGNED_PR18 exists in projection.py."""
         pytest.importorskip("fastapi", reason="fastapi not installed")
         import core.routes.projection as proj_mod
+
         assert hasattr(proj_mod, "COGNITIVE_ACTIVATION_BUDGET_ALIGNED_PR18")
         val = proj_mod.COGNITIVE_ACTIVATION_BUDGET_ALIGNED_PR18
         assert isinstance(val, str)
@@ -180,15 +189,17 @@ class TestActivationBudgetDerivation:
     def test_b01_none_hint_returns_fallback(self):
         """B01. derive_activation_budget(None) returns FALLBACK_ACTIVATION_BUDGET."""
         from core.cognitive.cognitive_activation_budget import (
-            derive_activation_budget,
             FALLBACK_ACTIVATION_BUDGET,
+            derive_activation_budget,
         )
+
         result = derive_activation_budget(None)
         assert result is FALLBACK_ACTIVATION_BUDGET
 
     def test_b02_fallback_hint_returns_fallback_budget(self):
         """B02. derive_activation_budget(fallback_hint) returns fallback budget."""
         from core.cognitive.cognitive_activation_budget import derive_activation_budget
+
         hint = _make_hint("silent", 0.2, wiring_active=False)
         result = derive_activation_budget(hint)
         assert result.influenced_by_budget is False
@@ -197,6 +208,7 @@ class TestActivationBudgetDerivation:
     def test_b03_passive_produces_narrow_budget(self):
         """B03. Passive hint → narrow / low / single budget."""
         from core.cognitive.cognitive_activation_budget import BREADTH_MODE_NARROW, INTENSITY_LOW
+
         budget = _make_budget("passive", 0.2)
         assert budget.breadth_mode == BREADTH_MODE_NARROW
         assert budget.intensity == INTENSITY_LOW
@@ -206,12 +218,14 @@ class TestActivationBudgetDerivation:
     def test_b04_silent_produces_narrow_budget(self):
         """B04. Silent hint → narrow / low / single budget."""
         from core.cognitive.cognitive_activation_budget import BREADTH_MODE_NARROW
+
         budget = _make_budget("silent", 0.2)
         assert budget.breadth_mode == BREADTH_MODE_NARROW
 
     def test_b05_liminal_produces_moderate_budget(self):
         """B05. Liminal hint → moderate breadth."""
         from core.cognitive.cognitive_activation_budget import BREADTH_MODE_MODERATE, INTENSITY_MODERATE
+
         budget = _make_budget("liminal", 0.6)
         assert budget.breadth_mode == BREADTH_MODE_MODERATE
         assert budget.intensity == INTENSITY_MODERATE
@@ -221,6 +235,7 @@ class TestActivationBudgetDerivation:
     def test_b06_manifest_produces_broad_budget(self):
         """B06. Manifest hint → broad / high budget."""
         from core.cognitive.cognitive_activation_budget import BREADTH_MODE_BROAD, INTENSITY_HIGH
+
         budget = _make_budget("manifest", 1.0)
         assert budget.breadth_mode == BREADTH_MODE_BROAD
         assert budget.intensity == INTENSITY_HIGH
@@ -243,6 +258,7 @@ class TestActivationBudgetDerivation:
         assert live_budget.influenced_by_budget is True
 
         from core.cognitive.cognitive_activation_budget import FALLBACK_ACTIVATION_BUDGET
+
         assert FALLBACK_ACTIVATION_BUDGET.influenced_by_budget is False
 
     def test_b10_source_field(self):
@@ -253,9 +269,13 @@ class TestActivationBudgetDerivation:
     def test_b11_is_narrow_is_moderate_is_broad_helpers(self):
         """B11. ActivationBudget.is_narrow() / is_moderate() / is_broad() work."""
         from core.cognitive.cognitive_activation_budget import (
-            derive_activation_budget, ActivationBudget,
-            BREADTH_MODE_NARROW, BREADTH_MODE_MODERATE, BREADTH_MODE_BROAD,
+            BREADTH_MODE_BROAD,
+            BREADTH_MODE_MODERATE,
+            BREADTH_MODE_NARROW,
+            ActivationBudget,
+            derive_activation_budget,
         )
+
         narrow_b = _make_budget("passive", 0.2)
         moderate_b = _make_budget("liminal", 0.6)
         broad_b = _make_budget("manifest", 1.0)
@@ -277,9 +297,16 @@ class TestActivationBudgetDerivation:
         budget = _make_budget("liminal", 0.6)
         d = budget.to_dict()
         expected_keys = {
-            "budget_value", "intensity", "breadth_mode", "max_candidate_nodes",
-            "max_concurrent_agents", "strategy_preference", "cognitive_region",
-            "influenced_by_budget", "source", "timestamp",
+            "budget_value",
+            "intensity",
+            "breadth_mode",
+            "max_candidate_nodes",
+            "max_concurrent_agents",
+            "strategy_preference",
+            "cognitive_region",
+            "influenced_by_budget",
+            "source",
+            "timestamp",
         }
         assert expected_keys.issubset(set(d.keys()))
 
@@ -293,6 +320,7 @@ class TestPlannerBreadthGuidance:
     def test_c01_none_budget_returns_fallback_guidance(self):
         """C01. get_planner_breadth_guidance(None) returns non-influenced fallback."""
         from core.cognitive.cognitive_activation_budget import get_planner_breadth_guidance
+
         guidance = get_planner_breadth_guidance(None)
         assert guidance.influenced_by_budget is False
         assert guidance.breadth_mode == "narrow"
@@ -300,14 +328,17 @@ class TestPlannerBreadthGuidance:
     def test_c02_fallback_budget_returns_fallback_guidance(self):
         """C02. get_planner_breadth_guidance(fallback_budget) returns fallback guidance."""
         from core.cognitive.cognitive_activation_budget import (
-            get_planner_breadth_guidance, FALLBACK_ACTIVATION_BUDGET,
+            FALLBACK_ACTIVATION_BUDGET,
+            get_planner_breadth_guidance,
         )
+
         guidance = get_planner_breadth_guidance(FALLBACK_ACTIVATION_BUDGET)
         assert guidance.influenced_by_budget is False
 
     def test_c03_narrow_budget_guidance(self):
         """C03. narrow budget → narrow breadth, max_agents=1, complexity_adj=+0.15."""
         from core.cognitive.cognitive_activation_budget import get_planner_breadth_guidance
+
         budget = _make_budget("passive", 0.2)
         guidance = get_planner_breadth_guidance(budget)
         assert guidance.breadth_mode == "narrow"
@@ -319,6 +350,7 @@ class TestPlannerBreadthGuidance:
     def test_c04_moderate_budget_guidance(self):
         """C04. moderate budget → moderate breadth, max_agents=3, complexity_adj=0.0."""
         from core.cognitive.cognitive_activation_budget import get_planner_breadth_guidance
+
         budget = _make_budget("liminal", 0.6)
         guidance = get_planner_breadth_guidance(budget)
         assert guidance.breadth_mode == "moderate"
@@ -330,6 +362,7 @@ class TestPlannerBreadthGuidance:
     def test_c05_broad_budget_guidance(self):
         """C05. broad budget → broad breadth, max_agents=20, complexity_adj=-0.10."""
         from core.cognitive.cognitive_activation_budget import get_planner_breadth_guidance
+
         budget = _make_budget("manifest", 1.0)
         guidance = get_planner_breadth_guidance(budget)
         assert guidance.breadth_mode == "broad"
@@ -341,6 +374,7 @@ class TestPlannerBreadthGuidance:
     def test_c06_influenced_by_budget_flag(self):
         """C06. influenced_by_budget is True for live guidance, False for fallback."""
         from core.cognitive.cognitive_activation_budget import get_planner_breadth_guidance
+
         live_guidance = get_planner_breadth_guidance(_make_budget("manifest", 1.0))
         assert live_guidance.influenced_by_budget is True
 
@@ -350,6 +384,7 @@ class TestPlannerBreadthGuidance:
     def test_c07_diagnostic_note_is_non_empty(self):
         """C07. diagnostic_note is a non-empty string."""
         from core.cognitive.cognitive_activation_budget import get_planner_breadth_guidance
+
         guidance = get_planner_breadth_guidance(_make_budget("liminal", 0.6))
         assert isinstance(guidance.diagnostic_note, str)
         assert len(guidance.diagnostic_note) > 0
@@ -357,11 +392,17 @@ class TestPlannerBreadthGuidance:
     def test_c08_to_dict_has_expected_keys(self):
         """C08. PlannerBreadthGuidance.to_dict() returns expected keys."""
         from core.cognitive.cognitive_activation_budget import get_planner_breadth_guidance
+
         guidance = get_planner_breadth_guidance(_make_budget("manifest", 1.0))
         d = guidance.to_dict()
         expected_keys = {
-            "breadth_mode", "max_concurrent_agents", "complexity_threshold_adjustment",
-            "strategy_preference", "budget_value", "influenced_by_budget", "diagnostic_note",
+            "breadth_mode",
+            "max_concurrent_agents",
+            "complexity_threshold_adjustment",
+            "strategy_preference",
+            "budget_value",
+            "influenced_by_budget",
+            "diagnostic_note",
         }
         assert expected_keys.issubset(set(d.keys()))
 
@@ -378,6 +419,7 @@ class TestCandidateNarrowing:
     def test_d01_none_budget_returns_all(self):
         """D01. apply_candidate_narrowing with None budget returns all candidates."""
         from core.cognitive.cognitive_activation_budget import apply_candidate_narrowing
+
         candidates = self._candidates(10)
         result, diag = apply_candidate_narrowing(candidates, None)
         assert result == candidates
@@ -387,8 +429,10 @@ class TestCandidateNarrowing:
     def test_d02_fallback_budget_returns_all(self):
         """D02. apply_candidate_narrowing with fallback budget returns all."""
         from core.cognitive.cognitive_activation_budget import (
-            apply_candidate_narrowing, FALLBACK_ACTIVATION_BUDGET,
+            FALLBACK_ACTIVATION_BUDGET,
+            apply_candidate_narrowing,
         )
+
         candidates = self._candidates(8)
         result, diag = apply_candidate_narrowing(candidates, FALLBACK_ACTIVATION_BUDGET)
         assert result == candidates
@@ -397,6 +441,7 @@ class TestCandidateNarrowing:
     def test_d03_passive_budget_narrows_to_5(self):
         """D03. Passive budget narrows candidates to max_candidate_nodes=5."""
         from core.cognitive.cognitive_activation_budget import apply_candidate_narrowing
+
         budget = _make_budget("passive", 0.2)
         candidates = self._candidates(12)
         result, diag = apply_candidate_narrowing(candidates, budget)
@@ -407,6 +452,7 @@ class TestCandidateNarrowing:
     def test_d04_liminal_budget_narrows_to_10(self):
         """D04. Liminal budget narrows candidates to max_candidate_nodes=10."""
         from core.cognitive.cognitive_activation_budget import apply_candidate_narrowing
+
         budget = _make_budget("liminal", 0.6)
         candidates = self._candidates(15)
         result, diag = apply_candidate_narrowing(candidates, budget)
@@ -416,6 +462,7 @@ class TestCandidateNarrowing:
     def test_d05_manifest_budget_does_not_narrow(self):
         """D05. Manifest budget does not narrow candidates (max=9999)."""
         from core.cognitive.cognitive_activation_budget import apply_candidate_narrowing
+
         budget = _make_budget("manifest", 1.0)
         candidates = self._candidates(50)
         result, diag = apply_candidate_narrowing(candidates, budget)
@@ -425,6 +472,7 @@ class TestCandidateNarrowing:
     def test_d06_governance_filter_applied_first(self):
         """D06. governance_allowed filter is applied before budget narrowing."""
         from core.cognitive.cognitive_activation_budget import apply_candidate_narrowing
+
         budget = _make_budget("liminal", 0.6)  # max=10
         candidates = [f"node_{i}" for i in range(20)]
         gov_allowed = {f"node_{i}" for i in range(7)}  # only 7 allowed
@@ -437,6 +485,7 @@ class TestCandidateNarrowing:
     def test_d07_budget_never_readmits_governance_excluded(self):
         """D07. Budget narrowing never re-admits nodes excluded by governance filter."""
         from core.cognitive.cognitive_activation_budget import apply_candidate_narrowing
+
         budget = _make_budget("manifest", 1.0)  # broad — no narrowing
         candidates = ["node_a", "node_b", "node_c", "node_d"]
         gov_allowed = {"node_a", "node_b"}
@@ -449,6 +498,7 @@ class TestCandidateNarrowing:
     def test_d08_already_within_budget_not_narrowed(self):
         """D08. Candidates already within budget limit are not narrowed further."""
         from core.cognitive.cognitive_activation_budget import apply_candidate_narrowing
+
         budget = _make_budget("passive", 0.2)  # max=5
         candidates = self._candidates(3)  # only 3 — already within limit
         result, diag = apply_candidate_narrowing(candidates, budget)
@@ -459,12 +509,16 @@ class TestCandidateNarrowing:
     def test_d09_diagnostics_keys(self):
         """D09. Diagnostics dict contains expected keys and correct output_count."""
         from core.cognitive.cognitive_activation_budget import apply_candidate_narrowing
+
         budget = _make_budget("passive", 0.2)
         candidates = self._candidates(8)
         result, diag = apply_candidate_narrowing(candidates, budget)
         expected_keys = {
-            "input_count", "governance_filter_applied", "budget_narrowing_applied",
-            "narrowed_by", "output_count",
+            "input_count",
+            "governance_filter_applied",
+            "budget_narrowing_applied",
+            "narrowed_by",
+            "output_count",
         }
         assert expected_keys.issubset(set(diag.keys()))
         assert diag["input_count"] == 8
@@ -473,6 +527,7 @@ class TestCandidateNarrowing:
     def test_d10_empty_input(self):
         """D10. apply_candidate_narrowing with empty input returns empty list."""
         from core.cognitive.cognitive_activation_budget import apply_candidate_narrowing
+
         budget = _make_budget("manifest", 1.0)
         result, diag = apply_candidate_narrowing([], budget)
         assert result == []
@@ -487,10 +542,12 @@ class TestPlannerStrategyWithBudget:
 
     def _make_planner(self):
         from core.agent.execution_planner import ExecutionPlanner
+
         return ExecutionPlanner()
 
     def _guidance(self, region: str, budget_value: float):
         from core.cognitive.cognitive_activation_budget import get_planner_breadth_guidance
+
         budget = _make_budget(region, budget_value)
         return get_planner_breadth_guidance(budget)
 
@@ -569,6 +626,7 @@ class TestKernelWiring:
     def test_f01_kernel_response_has_activation_budget_hint_field(self):
         """F01. KernelResponse has activation_budget_hint field (Optional[Dict])."""
         from core.agent.kernel import KernelResponse
+
         kr = KernelResponse()
         assert hasattr(kr, "activation_budget_hint")
         assert kr.activation_budget_hint is None
@@ -576,6 +634,7 @@ class TestKernelWiring:
     def test_f02_to_api_dict_includes_activation_budget_hint(self):
         """F02. to_api_dict() includes 'activation_budget_hint' key."""
         from core.agent.kernel import KernelResponse
+
         kr = KernelResponse(activation_budget_hint={"budget_value": 0.6})
         d = kr.to_api_dict()
         assert "activation_budget_hint" in d
@@ -584,15 +643,18 @@ class TestKernelWiring:
     def test_f03_to_api_dict_activation_budget_hint_none_when_not_set(self):
         """F03. activation_budget_hint is None in to_api_dict() when not set."""
         from core.agent.kernel import KernelResponse
+
         kr = KernelResponse()
         d = kr.to_api_dict()
         assert d["activation_budget_hint"] is None
 
     def test_f04_execute_accepts_activation_budget_kwarg(self):
         """F04. ExecutionPlanner.execute() accepts activation_budget kwarg."""
-        from core.agent.execution_planner import ExecutionPlanner, ExecutionPlan
-        from core.agent.intent_router import IntentResult
         import inspect
+
+        from core.agent.execution_planner import ExecutionPlan, ExecutionPlanner
+        from core.agent.intent_router import IntentResult
+
         sig = inspect.signature(ExecutionPlanner.execute)
         assert "activation_budget" in sig.parameters
 
@@ -615,13 +677,16 @@ class TestGovernanceIntegration:
     def test_g01_accepts_activation_budget_kwarg(self):
         """G01. evaluate_invocation_governance accepts activation_budget kwarg."""
         import inspect
+
         from core.node_invocation_governance import evaluate_invocation_governance
+
         sig = inspect.signature(evaluate_invocation_governance)
         assert "activation_budget" in sig.parameters
 
     def test_g02_budget_context_in_diagnostics_when_provided(self):
         """G02. When budget provided, diagnostic_context includes 'activation_budget_context'."""
         from core.node_invocation_governance import evaluate_invocation_governance
+
         mock_budget = self._make_mock_budget("manifest", 1.0)
 
         # Call with an unregistered node (unregistered_unmanaged path).
@@ -639,6 +704,7 @@ class TestGovernanceIntegration:
     def test_g03_budget_is_advisory_invocation_allowed_unchanged(self):
         """G03. Budget context is advisory only: invocation_allowed is not forced to False."""
         from core.node_invocation_governance import evaluate_invocation_governance
+
         mock_budget = self._make_mock_budget("passive", 0.2)  # low budget
 
         # Even with a very low budget, an unregistered node still proceeds
@@ -653,11 +719,10 @@ class TestGovernanceIntegration:
     def test_g04_denied_node_budget_context_in_diagnostics(self):
         """G04. Denied node gets budget context embedded in its denied diagnostics."""
         from core.node_invocation_governance import evaluate_invocation_governance
+
         mock_budget = self._make_mock_budget("manifest", 1.0)
 
-        with patch(
-            "core.node_governance_runtime.evaluate_node_governance_eligibility"
-        ) as mock_eval:
+        with patch("core.node_governance_runtime.evaluate_node_governance_eligibility") as mock_eval:
             mock_decision = MagicMock()
             mock_decision.eligible = False
             mock_decision.governor_consulted = True
@@ -700,9 +765,10 @@ class TestBackwardCompatibility:
 
     def test_h01_execute_without_activation_budget_works(self):
         """H01. execute(plan) without activation_budget still works."""
-        from core.agent.execution_planner import ExecutionPlanner, ExecutionPlan
-        from core.agent.intent_router import IntentResult
         import asyncio
+
+        from core.agent.execution_planner import ExecutionPlan, ExecutionPlanner
+        from core.agent.intent_router import IntentResult
 
         planner = ExecutionPlanner()
         plan = ExecutionPlan(
@@ -712,6 +778,7 @@ class TestBackwardCompatibility:
         # execute() without activation_budget should not raise signature errors.
         # We don't run it fully (side effects) — just check the call is accepted.
         import inspect
+
         sig = inspect.signature(planner.execute)
         # Calling with only plan (no activation_budget) should be valid
         bound = sig.bind(plan)
@@ -720,8 +787,10 @@ class TestBackwardCompatibility:
 
     def test_h02_evaluate_governance_without_budget_works(self):
         """H02. evaluate_invocation_governance without activation_budget still works."""
-        from core.node_invocation_governance import evaluate_invocation_governance
         import inspect
+
+        from core.node_invocation_governance import evaluate_invocation_governance
+
         sig = inspect.signature(evaluate_invocation_governance)
         # activation_budget should have a default of None
         param = sig.parameters["activation_budget"]
@@ -730,8 +799,10 @@ class TestBackwardCompatibility:
     def test_h03_derive_activation_budget_never_raises(self):
         """H03. derive_activation_budget never raises — returns fallback on invalid input."""
         from core.cognitive.cognitive_activation_budget import (
-            derive_activation_budget, FALLBACK_ACTIVATION_BUDGET,
+            FALLBACK_ACTIVATION_BUDGET,
+            derive_activation_budget,
         )
+
         # Pass various invalid inputs — should return FALLBACK_ACTIVATION_BUDGET
         for bad_input in [42, "string", object(), {"key": "value"}, []]:
             result = derive_activation_budget(bad_input)
@@ -741,6 +812,7 @@ class TestBackwardCompatibility:
     def test_h04_get_planner_breadth_guidance_never_raises(self):
         """H04. get_planner_breadth_guidance never raises — returns fallback on invalid input."""
         from core.cognitive.cognitive_activation_budget import get_planner_breadth_guidance
+
         for bad_input in [42, "string", object(), {"key": "value"}]:
             guidance = get_planner_breadth_guidance(bad_input)
             assert isinstance(guidance.breadth_mode, str)
@@ -748,6 +820,7 @@ class TestBackwardCompatibility:
     def test_h05_apply_candidate_narrowing_never_raises(self):
         """H05. apply_candidate_narrowing never raises — returns all candidates on error."""
         from core.cognitive.cognitive_activation_budget import apply_candidate_narrowing
+
         candidates = ["a", "b", "c"]
         # Bad budget (not None but missing attributes)
         result, diag = apply_candidate_narrowing(candidates, "bad_budget")

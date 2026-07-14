@@ -21,7 +21,10 @@ from unified_launcher import ai_brain_readiness
 
 def test_model_installed_and_service_healthy_is_ok():
     status, installed, label = ai_brain_readiness(
-        "gemma4:e2b", ["gemma4:e2b", "llama3"], True, env={},
+        "gemma4:e2b",
+        ["gemma4:e2b", "llama3"],
+        True,
+        env={},
     )
     assert status == "ok"
     assert installed is True
@@ -31,7 +34,10 @@ def test_model_installed_and_service_healthy_is_ok():
 def test_model_not_installed_no_cloud_key_is_fail():
     """真机复现场景:服务健康但选中模型没装好、且无云端 key 兜底 —— 必须是 fail,不能是 ok。"""
     status, installed, label = ai_brain_readiness(
-        "gemma4:e2b", [], True, env={},
+        "gemma4:e2b",
+        [],
+        True,
+        env={},
     )
     assert status == "fail", "模型未装且无云端兜底时必须标记为 fail,不能显示为已就绪"
     assert installed is False
@@ -40,7 +46,10 @@ def test_model_not_installed_no_cloud_key_is_fail():
 
 def test_model_not_installed_but_cloud_key_set_is_warn():
     status, installed, label = ai_brain_readiness(
-        "gemma4:e2b", [], True, env={"DEEPSEEK_API_KEY": "sk-real-key"},
+        "gemma4:e2b",
+        [],
+        True,
+        env={"DEEPSEEK_API_KEY": "sk-real-key"},
     )
     assert status == "warn"
     assert installed is False
@@ -50,7 +59,10 @@ def test_model_not_installed_but_cloud_key_set_is_warn():
 def test_placeholder_cloud_key_not_counted():
     """占位符 key(如 'your-key-here')不应被当成"已配置"。"""
     status, installed, label = ai_brain_readiness(
-        "gemma4:e2b", [], True, env={"OPENAI_API_KEY": "your-key-here"},
+        "gemma4:e2b",
+        [],
+        True,
+        env={"OPENAI_API_KEY": "your-key-here"},
     )
     assert status == "fail"
 
@@ -58,7 +70,10 @@ def test_placeholder_cloud_key_not_counted():
 def test_tag_variant_matches_by_root():
     """gemma4:e2b-q4 这类变体 tag 应能按根名匹配到 gemma4:e2b。"""
     status, installed, _ = ai_brain_readiness(
-        "gemma4:e2b", ["gemma4:e2b-q4_0"], True, env={},
+        "gemma4:e2b",
+        ["gemma4:e2b-q4_0"],
+        True,
+        env={},
     )
     assert installed is True
     assert status == "ok"
@@ -67,6 +82,9 @@ def test_tag_variant_matches_by_root():
 def test_ollama_service_down_even_with_model_installed_is_not_ok():
     """服务本身不可达时,即便模型列表里有它,也不该是 ok(服务都连不上)。"""
     status, installed, _ = ai_brain_readiness(
-        "gemma4:e2b", ["gemma4:e2b"], False, env={},
+        "gemma4:e2b",
+        ["gemma4:e2b"],
+        False,
+        env={},
     )
     assert status != "ok"

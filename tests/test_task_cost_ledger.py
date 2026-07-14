@@ -9,20 +9,22 @@
   5. 哲学对齐:intent.update 此前有订阅无发射——LIMINAL 期由 continuum tick
      发射,阈限呼吸映射(0.15-0.85)终于有了数据源。
 """
+
 import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # 1. 账本契约
 # ---------------------------------------------------------------------------
 
+
 class TestLedgerContract:
     def test_open_record_close_roundtrip(self, monkeypatch, tmp_path):
         from core import task_cost_ledger as tcl
+
         monkeypatch.setenv("GALAXY_TASK_LEDGER_PATH", str(tmp_path / "ledger.jsonl"))
 
         token = tcl.open_task_bill("trace_t1", source="chat")
@@ -54,6 +56,7 @@ class TestLedgerContract:
 
     def test_no_bill_in_context_is_silent_noop(self):
         from core import task_cost_ledger as tcl
+
         # 无在途账单:深链记账入口必须静默无操作(绝不反噬)
         tcl.add_llm_usage("x", 1, 1)
         tcl.add_tool_call()
@@ -65,10 +68,11 @@ class TestLedgerContract:
 # 2. router 漏斗自动记账
 # ---------------------------------------------------------------------------
 
+
 class TestRouterFunnelTap:
     def test_record_call_feeds_current_bill(self, monkeypatch, tmp_path):
         from core import task_cost_ledger as tcl
-        from core.multi_llm_router import MultiLLMRouter, TaskType, LLMResponse
+        from core.multi_llm_router import LLMResponse, MultiLLMRouter, TaskType
 
         monkeypatch.setenv("GALAXY_TASK_LEDGER_PATH", "off")
         r = MultiLLMRouter.__new__(MultiLLMRouter)
@@ -76,8 +80,7 @@ class TestRouterFunnelTap:
         r.call_history = []
 
         token = tcl.open_task_bill("trace_r1", source="test")
-        resp = LLMResponse(content="x", provider="ollama", model="m",
-                           input_tokens=42, output_tokens=17, latency_ms=1.0)
+        resp = LLMResponse(content="x", provider="ollama", model="m", input_tokens=42, output_tokens=17, latency_ms=1.0)
         r._record_call("ollama", "m", TaskType.GENERAL, resp, True)
         bill = tcl.close_task_bill(token, success=True)
 
@@ -91,19 +94,19 @@ class TestRouterFunnelTap:
 # 3. runtime 全生命周期开/结账
 # ---------------------------------------------------------------------------
 
+
 class TestRuntimeBillLifecycle:
     @pytest.mark.asyncio
     async def test_handle_request_attaches_task_cost(self, monkeypatch, tmp_path):
         monkeypatch.setenv("GALAXY_TASK_LEDGER_PATH", str(tmp_path / "l.jsonl"))
-        from core.desktop_presence_runtime import DesktopPresenceRuntime
         from core import task_cost_ledger as tcl
+        from core.desktop_presence_runtime import DesktopPresenceRuntime
 
         rt = DesktopPresenceRuntime()
 
         async def _mock_process(**kwargs):
-            tcl.add_llm_usage("ollama", 10, 5)   # 深链某处记了一笔
-            return {"success": True, "response": "OK", "intent": "chat",
-                    "metadata": {"session_id": "s1"}}
+            tcl.add_llm_usage("ollama", 10, 5)  # 深链某处记了一笔
+            return {"success": True, "response": "OK", "intent": "chat", "metadata": {"session_id": "s1"}}
 
         with patch("core.openclawd.get_openclawd") as mock_get:
             mock_clawd = MagicMock()
@@ -131,41 +134,48 @@ class TestRuntimeBillLifecycle:
             result = await rt.handle_request(message="hi", source="chat")
 
         assert result.get("task_cost", {}).get("success") is False
-        assert current_task_bill() is None   # 上下文已复位,不泄漏到下个请求
+        assert current_task_bill() is None  # 上下文已复位,不泄漏到下个请求
 
 
 # ---------------------------------------------------------------------------
 # 4. bandit 啰嗦惩罚
 # ---------------------------------------------------------------------------
 
+
 class TestBanditVerbosityPenalty:
     def _router_with_history(self, records):
         from core.multi_llm_router import MultiLLMRouter
+
         r = MultiLLMRouter.__new__(MultiLLMRouter)
         r.call_history = records
         return r
 
     def test_verbose_provider_scores_lower(self):
         """同成功率/延迟/成本,平均输出 token 高 4 倍的 provider 分更低。"""
-        base = {"task_type": "general", "latency_ms": 100.0,
-                "cost": 0.0, "success": True, "timestamp": 0.0}
+        base = {"task_type": "general", "latency_ms": 100.0, "cost": 0.0, "success": True, "timestamp": 0.0}
         records = []
         for _ in range(20):
-            records.append({**base, "provider": "terse", "model": "m",
-                            "tokens": 600, "tokens_out": 400})
-            records.append({**base, "provider": "verbose", "model": "m",
-                            "tokens": 1800, "tokens_out": 1600})
+            records.append({**base, "provider": "terse", "model": "m", "tokens": 600, "tokens_out": 400})
+            records.append({**base, "provider": "verbose", "model": "m", "tokens": 1800, "tokens_out": 1600})
         r = self._router_with_history(records)
         stats = r._provider_stats(None)
         total = int(sum(s["calls"] for s in stats.values()))
-        assert r._bandit_score("terse", stats, total) > \
-            r._bandit_score("verbose", stats, total)
+        assert r._bandit_score("terse", stats, total) > r._bandit_score("verbose", stats, total)
 
     def test_legacy_records_without_tokens_out_tolerated(self):
         """老 call_history 条目没有 tokens_out 字段:聚合按 0 处理,不炸。"""
-        records = [{"provider": "old", "model": "m", "task_type": "general",
-                    "latency_ms": 50.0, "tokens": 100, "cost": 0.0,
-                    "success": True, "timestamp": 0.0}] * 6
+        records = [
+            {
+                "provider": "old",
+                "model": "m",
+                "task_type": "general",
+                "latency_ms": 50.0,
+                "tokens": 100,
+                "cost": 0.0,
+                "success": True,
+                "timestamp": 0.0,
+            }
+        ] * 6
         r = self._router_with_history(records)
         stats = r._provider_stats(None)
         assert stats["old"]["tokens_out_sum"] == 0.0
@@ -175,6 +185,7 @@ class TestBanditVerbosityPenalty:
 # ---------------------------------------------------------------------------
 # 5. 哲学对齐:intent.update 终于有发射者
 # ---------------------------------------------------------------------------
+
 
 class TestIntentUpdateEmission:
     @pytest.mark.asyncio
@@ -186,18 +197,17 @@ class TestIntentUpdateEmission:
 
         bus = get_state_event_bus()
         got = []
-        tok = bus.subscribe("intent.update", lambda e: got.append(
-            getattr(e, "payload", e)))
+        tok = bus.subscribe("intent.update", lambda e: got.append(getattr(e, "payload", e)))
 
         s = RuntimeSession(source="chat")
         try:
-            s.advance(TriState.LIMINAL)   # 启动 continuum tick
-            await asyncio.sleep(0.45)     # 让 tick(200ms 周期)至少跑一拍
+            s.advance(TriState.LIMINAL)  # 启动 continuum tick
+            await asyncio.sleep(0.45)  # 让 tick(200ms 周期)至少跑一拍
             assert got, "LIMINAL 期必须周期性发射 intent.update"
             payload = got[-1] if isinstance(got[-1], dict) else {}
             assert "intent_strength" in payload
         finally:
-            s.advance(TriState.SILENT)    # 停 tick
+            s.advance(TriState.SILENT)  # 停 tick
             try:
                 bus.unsubscribe(tok)
             except Exception:  # noqa: BLE001
@@ -207,6 +217,7 @@ class TestIntentUpdateEmission:
 # ---------------------------------------------------------------------------
 # 6. 输出预算 env
 # ---------------------------------------------------------------------------
+
 
 class TestAnswerBudget:
     @pytest.mark.asyncio
@@ -218,11 +229,11 @@ class TestAnswerBudget:
         seen = {}
 
         class _FakeRouter:
-            async def chat_with_tools(self, messages, tools=None, task_type=None,
-                                      max_tokens=4096, **kwargs):
+            async def chat_with_tools(self, messages, tools=None, task_type=None, max_tokens=4096, **kwargs):
                 seen["max_tokens"] = max_tokens
-                return LLMResponse(content="答", provider="p", model="m",
-                                   input_tokens=1, output_tokens=1, latency_ms=1.0)
+                return LLMResponse(
+                    content="答", provider="p", model="m", input_tokens=1, output_tokens=1, latency_ms=1.0
+                )
 
         clawd = OpenClawd.__new__(OpenClawd)
         clawd._get_router = lambda: _FakeRouter()

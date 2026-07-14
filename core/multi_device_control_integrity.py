@@ -624,9 +624,7 @@ class EntryUnificationRecord:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "EntryUnificationRecord":
         try:
-            entry_kind = EntryUnificationKind(
-                data.get("entry_kind", EntryUnificationKind.UNKNOWN.value)
-            )
+            entry_kind = EntryUnificationKind(data.get("entry_kind", EntryUnificationKind.UNKNOWN.value))
         except (ValueError, KeyError):
             entry_kind = EntryUnificationKind.UNKNOWN
         return cls(
@@ -704,9 +702,7 @@ class DispatchAuthorityRecord:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "DispatchAuthorityRecord":
         try:
-            dispatch_path = DispatchPathKind(
-                data.get("dispatch_path", DispatchPathKind.UNKNOWN.value)
-            )
+            dispatch_path = DispatchPathKind(data.get("dispatch_path", DispatchPathKind.UNKNOWN.value))
         except (ValueError, KeyError):
             dispatch_path = DispatchPathKind.UNKNOWN
         return cls(
@@ -793,9 +789,7 @@ class FormationTruthRecord:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "FormationTruthRecord":
         try:
-            consistency = FormationTruthConsistency(
-                data.get("consistency", FormationTruthConsistency.UNKNOWN.value)
-            )
+            consistency = FormationTruthConsistency(data.get("consistency", FormationTruthConsistency.UNKNOWN.value))
         except (ValueError, KeyError):
             consistency = FormationTruthConsistency.UNKNOWN
         return cls(
@@ -884,9 +878,7 @@ class ControlSemanticRecord:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ControlSemanticRecord":
         try:
-            control_kind = ControlSemanticKind(
-                data.get("control_kind", ControlSemanticKind.UNKNOWN.value)
-            )
+            control_kind = ControlSemanticKind(data.get("control_kind", ControlSemanticKind.UNKNOWN.value))
         except (ValueError, KeyError):
             control_kind = ControlSemanticKind.UNKNOWN
         return cls(
@@ -982,9 +974,7 @@ class ResultSurfaceRecord:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ResultSurfaceRecord":
         try:
-            surface_kind = ResultSurfaceKind(
-                data.get("surface_kind", ResultSurfaceKind.UNKNOWN.value)
-            )
+            surface_kind = ResultSurfaceKind(data.get("surface_kind", ResultSurfaceKind.UNKNOWN.value))
         except (ValueError, KeyError):
             surface_kind = ResultSurfaceKind.UNKNOWN
         return cls(
@@ -1087,24 +1077,12 @@ class MultiDeviceIntegritySnapshot:
     """
 
     snapshot_id: str = dataclasses.field(default_factory=lambda: str(uuid.uuid4()))
-    recent_entry_records: List[EntryUnificationRecord] = dataclasses.field(
-        default_factory=list
-    )
-    recent_dispatch_records: List[DispatchAuthorityRecord] = dataclasses.field(
-        default_factory=list
-    )
-    recent_formation_records: List[FormationTruthRecord] = dataclasses.field(
-        default_factory=list
-    )
-    recent_control_semantic_records: List[ControlSemanticRecord] = dataclasses.field(
-        default_factory=list
-    )
-    recent_result_surface_records: List[ResultSurfaceRecord] = dataclasses.field(
-        default_factory=list
-    )
-    residual_gaps: List[ResidualIntegrityGap] = dataclasses.field(
-        default_factory=list
-    )
+    recent_entry_records: List[EntryUnificationRecord] = dataclasses.field(default_factory=list)
+    recent_dispatch_records: List[DispatchAuthorityRecord] = dataclasses.field(default_factory=list)
+    recent_formation_records: List[FormationTruthRecord] = dataclasses.field(default_factory=list)
+    recent_control_semantic_records: List[ControlSemanticRecord] = dataclasses.field(default_factory=list)
+    recent_result_surface_records: List[ResultSurfaceRecord] = dataclasses.field(default_factory=list)
+    residual_gaps: List[ResidualIntegrityGap] = dataclasses.field(default_factory=list)
     canonical_entry_count: int = 0
     legacy_entry_count: int = 0
     canonical_dispatch_count: int = 0
@@ -1117,12 +1095,8 @@ class MultiDeviceIntegritySnapshot:
             "recent_entry_records": [r.to_dict() for r in self.recent_entry_records],
             "recent_dispatch_records": [r.to_dict() for r in self.recent_dispatch_records],
             "recent_formation_records": [r.to_dict() for r in self.recent_formation_records],
-            "recent_control_semantic_records": [
-                r.to_dict() for r in self.recent_control_semantic_records
-            ],
-            "recent_result_surface_records": [
-                r.to_dict() for r in self.recent_result_surface_records
-            ],
+            "recent_control_semantic_records": [r.to_dict() for r in self.recent_control_semantic_records],
+            "recent_result_surface_records": [r.to_dict() for r in self.recent_result_surface_records],
             "residual_gaps": [g.to_dict() for g in self.residual_gaps],
             "canonical_entry_count": self.canonical_entry_count,
             "legacy_entry_count": self.legacy_entry_count,
@@ -1763,10 +1737,7 @@ def build_result_surface_record(
     """
     # Determine surface kind from flags
     all_surfaces = (
-        result_envelope_produced
-        and operator_surface_updated
-        and task_graph_updated
-        and replay_foundation_updated
+        result_envelope_produced and operator_surface_updated and task_graph_updated and replay_foundation_updated
     )
     any_surface = any(
         [
@@ -1846,8 +1817,7 @@ def record_integrity_event(
         rt.append_formation(formation_record)
         if not formation_record.is_consistent:
             logger.warning(
-                "FORMATION_TRUTH_DRIFT | task_id=%s formation=%s "
-                "consistency=%s ineligible=%s drift=%s",
+                "FORMATION_TRUTH_DRIFT | task_id=%s formation=%s " "consistency=%s ineligible=%s drift=%s",
                 formation_record.task_id,
                 formation_record.formation_id,
                 formation_record.consistency.value,
@@ -1858,8 +1828,7 @@ def record_integrity_event(
         rt.append_control(control_record)
         if not control_record.is_semantically_clear:
             logger.info(
-                "CONTROL_SEMANTIC_AMBIGUITY | task_id=%s source=%s target=%s "
-                "kind=%s ambiguity=%s",
+                "CONTROL_SEMANTIC_AMBIGUITY | task_id=%s source=%s target=%s " "kind=%s ambiguity=%s",
                 control_record.task_id,
                 control_record.source_device_id,
                 control_record.target_device_id,

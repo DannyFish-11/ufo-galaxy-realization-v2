@@ -65,30 +65,25 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from core.canonical_capability_scheduling_basis import (
-    # Sentinels
-    CANONICAL_CAPABILITY_SCHEDULING_BASIS_AUTHORITY,
-    FULL_RUNTIME_TIER_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY,
-    COMMAND_ONLY_TIER_BLOCKS_EXECUTION_PLACEMENT_POLICY,
-    CAPABILITY_TIER_DRIVES_SURFACE_ELIGIBILITY_POLICY,
-    OBSERVER_ONLY_ROLE_EXCLUDED_FROM_SCHEDULING_POLICY,
+from core.canonical_capability_scheduling_basis import (  # Sentinels; Enums; Dataclasses; Functions
     ANDROID_HOST_CAPABILITY_LIFTED_FROM_PR5_POLICY,
-    SCHEDULING_BASIS_NORMALISATION_IS_ADDITIVE_POLICY,
+    CANONICAL_CAPABILITY_SCHEDULING_BASIS_AUTHORITY,
     CANONICAL_CAPABILITY_SCHEDULING_BASIS_PR6_SENTINEL,
-    # Enums
+    CAPABILITY_TIER_DRIVES_SURFACE_ELIGIBILITY_POLICY,
+    COMMAND_ONLY_TIER_BLOCKS_EXECUTION_PLACEMENT_POLICY,
+    FULL_RUNTIME_TIER_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY,
+    OBSERVER_ONLY_ROLE_EXCLUDED_FROM_SCHEDULING_POLICY,
+    SCHEDULING_BASIS_NORMALISATION_IS_ADDITIVE_POLICY,
     CapabilityTier,
     ExecutionSurface,
-    # Dataclasses
+    ExecutionSurfaceEligibility,
     RuntimeCapabilityProfile,
     SchedulingBasisInputs,
-    ExecutionSurfaceEligibility,
-    # Functions
     build_runtime_capability_profile,
     build_scheduling_basis_inputs,
     evaluate_execution_surface_eligibility,
     normalize_scheduling_inputs,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -179,8 +174,10 @@ class TestSentinelsA:
 
     def test_capability_tier_drives_surface_policy(self):
         assert CAPABILITY_TIER_DRIVES_SURFACE_ELIGIBILITY_POLICY
-        assert "ExecutionSurface" in CAPABILITY_TIER_DRIVES_SURFACE_ELIGIBILITY_POLICY or \
-               "surface" in CAPABILITY_TIER_DRIVES_SURFACE_ELIGIBILITY_POLICY.lower()
+        assert (
+            "ExecutionSurface" in CAPABILITY_TIER_DRIVES_SURFACE_ELIGIBILITY_POLICY
+            or "surface" in CAPABILITY_TIER_DRIVES_SURFACE_ELIGIBILITY_POLICY.lower()
+        )
 
     def test_observer_only_excluded_policy(self):
         assert OBSERVER_ONLY_ROLE_EXCLUDED_FROM_SCHEDULING_POLICY
@@ -188,8 +185,10 @@ class TestSentinelsA:
 
     def test_android_host_capability_lifted_policy(self):
         assert ANDROID_HOST_CAPABILITY_LIFTED_FROM_PR5_POLICY
-        assert "PR-5" in ANDROID_HOST_CAPABILITY_LIFTED_FROM_PR5_POLICY or \
-               "android" in ANDROID_HOST_CAPABILITY_LIFTED_FROM_PR5_POLICY.lower()
+        assert (
+            "PR-5" in ANDROID_HOST_CAPABILITY_LIFTED_FROM_PR5_POLICY
+            or "android" in ANDROID_HOST_CAPABILITY_LIFTED_FROM_PR5_POLICY.lower()
+        )
 
     def test_normalisation_additive_policy(self):
         assert SCHEDULING_BASIS_NORMALISATION_IS_ADDITIVE_POLICY
@@ -455,9 +454,7 @@ class TestExecutionSurfaceEligibilityF:
         assert parsed["surface"] == "unavailable"
 
     def test_default_eligibility_id(self):
-        e = ExecutionSurfaceEligibility(
-            eligible=False, surface=ExecutionSurface.unavailable, reason="x"
-        )
+        e = ExecutionSurfaceEligibility(eligible=False, surface=ExecutionSurface.unavailable, reason="x")
         assert e.eligibility_id.startswith("ese_")
 
     def test_inputs_snapshot_stored(self):
@@ -478,24 +475,28 @@ class TestExecutionSurfaceEligibilityF:
 
 class TestCapabilityTierDerivationG:
     def test_join_runtime_with_both_flags_full_runtime(self):
-        profile = build_runtime_capability_profile({
-            "device_id": "ph_001",
-            "source_runtime_posture": "join_runtime",
-            "is_runtime_host": True,
-            "autonomy": {
-                "runtime_enabled": True,
-                "supports_remote_handoff": True,
-            },
-        })
+        profile = build_runtime_capability_profile(
+            {
+                "device_id": "ph_001",
+                "source_runtime_posture": "join_runtime",
+                "is_runtime_host": True,
+                "autonomy": {
+                    "runtime_enabled": True,
+                    "supports_remote_handoff": True,
+                },
+            }
+        )
         assert profile.capability_tier == CapabilityTier.full_runtime
 
     def test_join_runtime_flat_flags_full_runtime(self):
-        profile = build_runtime_capability_profile({
-            "device_id": "ph_002",
-            "source_runtime_posture": "join_runtime",
-            "runtime_enabled": True,
-            "supports_remote_handoff": True,
-        })
+        profile = build_runtime_capability_profile(
+            {
+                "device_id": "ph_002",
+                "source_runtime_posture": "join_runtime",
+                "runtime_enabled": True,
+                "supports_remote_handoff": True,
+            }
+        )
         assert profile.capability_tier == CapabilityTier.full_runtime
 
 
@@ -506,18 +507,22 @@ class TestCapabilityTierDerivationG:
 
 class TestCapabilityTierDerivationH:
     def test_join_runtime_no_flags_partial_runtime(self):
-        profile = build_runtime_capability_profile({
-            "device_id": "ph_003",
-            "source_runtime_posture": "join_runtime",
-        })
+        profile = build_runtime_capability_profile(
+            {
+                "device_id": "ph_003",
+                "source_runtime_posture": "join_runtime",
+            }
+        )
         assert profile.capability_tier == CapabilityTier.partial_runtime
 
     def test_join_runtime_one_flag_partial_runtime(self):
-        profile = build_runtime_capability_profile({
-            "source_runtime_posture": "join_runtime",
-            "runtime_enabled": True,
-            # supports_remote_handoff missing
-        })
+        profile = build_runtime_capability_profile(
+            {
+                "source_runtime_posture": "join_runtime",
+                "runtime_enabled": True,
+                # supports_remote_handoff missing
+            }
+        )
         assert profile.capability_tier == CapabilityTier.partial_runtime
 
 
@@ -528,11 +533,13 @@ class TestCapabilityTierDerivationH:
 
 class TestCapabilityTierDerivationI:
     def test_control_only_with_is_runtime_host_partial(self):
-        profile = build_runtime_capability_profile({
-            "device_id": "ph_004",
-            "source_runtime_posture": "control_only",
-            "is_runtime_host": True,
-        })
+        profile = build_runtime_capability_profile(
+            {
+                "device_id": "ph_004",
+                "source_runtime_posture": "control_only",
+                "is_runtime_host": True,
+            }
+        )
         assert profile.capability_tier == CapabilityTier.partial_runtime
 
 
@@ -543,10 +550,12 @@ class TestCapabilityTierDerivationI:
 
 class TestCapabilityTierDerivationJ:
     def test_control_only_runtime_enabled_partial(self):
-        profile = build_runtime_capability_profile({
-            "source_runtime_posture": "control_only",
-            "runtime_enabled": True,
-        })
+        profile = build_runtime_capability_profile(
+            {
+                "source_runtime_posture": "control_only",
+                "runtime_enabled": True,
+            }
+        )
         assert profile.capability_tier == CapabilityTier.partial_runtime
 
 
@@ -557,24 +566,28 @@ class TestCapabilityTierDerivationJ:
 
 class TestCapabilityTierDerivationK:
     def test_observer_only_role_blocks_to_command_only(self):
-        profile = build_runtime_capability_profile({
-            "source_runtime_posture": "join_runtime",
-            "coordination_role": "observer_only",
-            "runtime_enabled": True,
-            "supports_remote_handoff": True,
-            "is_runtime_host": True,
-        })
+        profile = build_runtime_capability_profile(
+            {
+                "source_runtime_posture": "join_runtime",
+                "coordination_role": "observer_only",
+                "runtime_enabled": True,
+                "supports_remote_handoff": True,
+                "is_runtime_host": True,
+            }
+        )
         assert profile.capability_tier == CapabilityTier.command_only
 
     def test_observer_only_overrides_all_signals(self):
-        profile = build_runtime_capability_profile({
-            "source_runtime_posture": "join_runtime",
-            "coordination_role": "observer_only",
-            "android_host_role": "full_runtime_host",
-            "is_runtime_host": True,
-            "runtime_enabled": True,
-            "supports_remote_handoff": True,
-        })
+        profile = build_runtime_capability_profile(
+            {
+                "source_runtime_posture": "join_runtime",
+                "coordination_role": "observer_only",
+                "android_host_role": "full_runtime_host",
+                "is_runtime_host": True,
+                "runtime_enabled": True,
+                "supports_remote_handoff": True,
+            }
+        )
         assert profile.capability_tier == CapabilityTier.command_only
 
 
@@ -586,27 +599,33 @@ class TestCapabilityTierDerivationK:
 class TestCapabilityTierDerivationL:
     def test_android_full_host_role_lifts_to_partial_without_posture(self):
         # control_only posture but is_runtime_host + android_host_role set
-        profile = build_runtime_capability_profile({
-            "source_runtime_posture": "control_only",
-            "is_runtime_host": True,
-            "android_host_role": "full_runtime_host",
-        })
+        profile = build_runtime_capability_profile(
+            {
+                "source_runtime_posture": "control_only",
+                "is_runtime_host": True,
+                "android_host_role": "full_runtime_host",
+            }
+        )
         assert profile.capability_tier == CapabilityTier.partial_runtime
 
     def test_android_partial_host_role_lifts_to_partial(self):
-        profile = build_runtime_capability_profile({
-            "source_runtime_posture": "control_only",
-            "is_runtime_host": True,
-            "android_host_role": "partial_runtime_host",
-        })
+        profile = build_runtime_capability_profile(
+            {
+                "source_runtime_posture": "control_only",
+                "is_runtime_host": True,
+                "android_host_role": "partial_runtime_host",
+            }
+        )
         assert profile.capability_tier == CapabilityTier.partial_runtime
 
     def test_android_connected_only_no_lift(self):
-        profile = build_runtime_capability_profile({
-            "source_runtime_posture": "control_only",
-            "is_runtime_host": False,
-            "android_host_role": "connected_device_only",
-        })
+        profile = build_runtime_capability_profile(
+            {
+                "source_runtime_posture": "control_only",
+                "is_runtime_host": False,
+                "android_host_role": "connected_device_only",
+            }
+        )
         assert profile.capability_tier == CapabilityTier.command_only
 
 
@@ -621,12 +640,14 @@ class TestCapabilityTierDerivationM:
         assert profile.capability_tier == CapabilityTier.command_only
 
     def test_control_only_no_flags_command_only(self):
-        profile = build_runtime_capability_profile({
-            "source_runtime_posture": "control_only",
-            "is_runtime_host": False,
-            "runtime_enabled": False,
-            "supports_remote_handoff": False,
-        })
+        profile = build_runtime_capability_profile(
+            {
+                "source_runtime_posture": "control_only",
+                "is_runtime_host": False,
+                "runtime_enabled": False,
+                "supports_remote_handoff": False,
+            }
+        )
         assert profile.capability_tier == CapabilityTier.command_only
 
 
@@ -681,8 +702,9 @@ class TestBuildProfileObjectO:
         assert profile.capability_tier == CapabilityTier.full_runtime
 
     def test_object_control_only_posture(self):
-        device = _mock_device(posture="control_only", is_runtime_host=False,
-                              runtime_enabled=False, supports_remote_handoff=False)
+        device = _mock_device(
+            posture="control_only", is_runtime_host=False, runtime_enabled=False, supports_remote_handoff=False
+        )
         profile = build_runtime_capability_profile(device)
         assert profile.capability_tier == CapabilityTier.command_only
 
@@ -887,8 +909,7 @@ class TestNormalizeSchedulingInputsAndroidDetectionW:
         assert inputs.is_android_device is True
 
     def test_android_detected_by_role(self):
-        raw = {"android_host_role": "full_runtime_host",
-               "source_runtime_posture": "join_runtime"}
+        raw = {"android_host_role": "full_runtime_host", "source_runtime_posture": "join_runtime"}
         inputs = normalize_scheduling_inputs(raw)
         assert inputs.is_android_device is True
 
@@ -1235,15 +1256,16 @@ class TestEvalSurfaceIneligibleUnavailableAI:
 class TestCoreRuntimeReexportsAJ:
     def test_sentinels_accessible_from_core_runtime(self):
         from core.runtime import (
+            ANDROID_HOST_CAPABILITY_LIFTED_FROM_PR5_POLICY,
             CANONICAL_CAPABILITY_SCHEDULING_BASIS_AUTHORITY,
             CANONICAL_CAPABILITY_SCHEDULING_BASIS_PR6_SENTINEL,
-            FULL_RUNTIME_TIER_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY,
-            COMMAND_ONLY_TIER_BLOCKS_EXECUTION_PLACEMENT_POLICY,
             CAPABILITY_TIER_DRIVES_SURFACE_ELIGIBILITY_POLICY,
+            COMMAND_ONLY_TIER_BLOCKS_EXECUTION_PLACEMENT_POLICY,
+            FULL_RUNTIME_TIER_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY,
             OBSERVER_ONLY_ROLE_EXCLUDED_FROM_SCHEDULING_POLICY,
-            ANDROID_HOST_CAPABILITY_LIFTED_FROM_PR5_POLICY,
             SCHEDULING_BASIS_NORMALISATION_IS_ADDITIVE_POLICY,
         )
+
         assert CANONICAL_CAPABILITY_SCHEDULING_BASIS_AUTHORITY
         assert CANONICAL_CAPABILITY_SCHEDULING_BASIS_PR6_SENTINEL
 
@@ -1251,10 +1273,11 @@ class TestCoreRuntimeReexportsAJ:
         from core.runtime import (
             CapabilityTier,
             ExecutionSurface,
+            ExecutionSurfaceEligibility,
             RuntimeCapabilityProfile,
             SchedulingBasisInputs,
-            ExecutionSurfaceEligibility,
         )
+
         assert CapabilityTier.full_runtime
         assert ExecutionSurface.android_host
 
@@ -1265,6 +1288,7 @@ class TestCoreRuntimeReexportsAJ:
             evaluate_execution_surface_eligibility,
             normalize_scheduling_inputs,
         )
+
         # Quick call to confirm they're callable
         profile = build_runtime_capability_profile({})
         assert isinstance(profile, RuntimeCapabilityProfile)
@@ -1290,6 +1314,7 @@ class TestProjectionSentinelAK:
             from core.routes.projection import (
                 CANONICAL_CAPABILITY_SCHEDULING_BASIS_ALIGNED_PR6,
             )
+
             assert CANONICAL_CAPABILITY_SCHEDULING_BASIS_ALIGNED_PR6
             assert "UNAVAILABLE" not in CANONICAL_CAPABILITY_SCHEDULING_BASIS_ALIGNED_PR6
             assert "PR6" in CANONICAL_CAPABILITY_SCHEDULING_BASIS_ALIGNED_PR6
@@ -1520,9 +1545,7 @@ class TestCapabilityTierOrderingAS:
 
 class TestMultipleDevicesAT:
     def test_multiple_device_profiles_independent(self):
-        devices = [
-            _android_full_dict(device_id=f"ph_{i:03d}") for i in range(5)
-        ]
+        devices = [_android_full_dict(device_id=f"ph_{i:03d}") for i in range(5)]
         profiles = [build_runtime_capability_profile(d) for d in devices]
         ids = [p.device_id for p in profiles]
         assert len(set(ids)) == 5  # all unique device IDs

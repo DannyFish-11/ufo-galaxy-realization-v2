@@ -126,9 +126,7 @@ logger = logging.getLogger("Galaxy.AndroidDelegatedRuntimeAudit")
 # Authority sentinels
 # ---------------------------------------------------------------------------
 
-ANDROID_DELEGATED_RUNTIME_AUDIT_AUTHORITY: str = (
-    "ANDROID_DELEGATED_RUNTIME_AUDIT_V1"
-)
+ANDROID_DELEGATED_RUNTIME_AUDIT_AUTHORITY: str = "ANDROID_DELEGATED_RUNTIME_AUDIT_V1"
 """Sentinel: import to assert that the unified Android delegated runtime audit
 layer is available.  Must be a non-empty string."""
 
@@ -161,9 +159,7 @@ class AndroidDelegatedAuditEventKind:
     RECONCILIATION_SIGNAL: str = "android_reconciliation_signal"
     """Android RuntimeController pushed a reconciliation_signal to V2."""
 
-    PARTICIPANT_TRUTH_TERMINAL_UPDATE: str = (
-        "android_participant_truth_terminal_update"
-    )
+    PARTICIPANT_TRUTH_TERMINAL_UPDATE: str = "android_participant_truth_terminal_update"
     """Android participant truth ingress applied a terminal state update to V2
     canonical orchestration records."""
 
@@ -198,9 +194,7 @@ class AndroidDelegatedAuditRecord:
     """
 
     # -- Identity / unique ID -----------------------------------------------
-    audit_id: str = field(
-        default_factory=lambda: f"adra_{uuid.uuid4().hex[:16]}"
-    )
+    audit_id: str = field(default_factory=lambda: f"adra_{uuid.uuid4().hex[:16]}")
     recorded_at: float = field(default_factory=time.time)
 
     # -- Event kind (one of AndroidDelegatedAuditEventKind.*) ---------------
@@ -276,9 +270,7 @@ class AndroidDelegatedAuditRecord:
 class AndroidDelegatedAuditSnapshot:
     """Point-in-time snapshot of the Android delegated runtime audit ring."""
 
-    snapshot_id: str = field(
-        default_factory=lambda: f"adrasnap_{uuid.uuid4().hex[:12]}"
-    )
+    snapshot_id: str = field(default_factory=lambda: f"adrasnap_{uuid.uuid4().hex[:12]}")
     generated_at: float = field(default_factory=time.time)
     event_count: int = 0
     recent_events: List[Dict[str, Any]] = field(default_factory=list)
@@ -336,9 +328,7 @@ class AndroidDelegatedRuntimeAuditRecorder:
     _MAX_RING: int = 512
 
     def __init__(self) -> None:
-        self._ring: Deque[AndroidDelegatedAuditRecord] = deque(
-            maxlen=self._MAX_RING
-        )
+        self._ring: Deque[AndroidDelegatedAuditRecord] = deque(maxlen=self._MAX_RING)
         self._by_task: Dict[str, List[AndroidDelegatedAuditRecord]] = {}
         self._by_session: Dict[str, List[AndroidDelegatedAuditRecord]] = {}
 
@@ -346,9 +336,7 @@ class AndroidDelegatedRuntimeAuditRecorder:
     # Core recording
     # ------------------------------------------------------------------
 
-    def record(
-        self, record: AndroidDelegatedAuditRecord
-    ) -> AndroidDelegatedAuditRecord:
+    def record(self, record: AndroidDelegatedAuditRecord) -> AndroidDelegatedAuditRecord:
         """Append *record* to the ring buffer and secondary indexes.
 
         Forwards a corresponding lightweight entry to the shared
@@ -362,9 +350,7 @@ class AndroidDelegatedRuntimeAuditRecorder:
             if record.task_id:
                 self._by_task.setdefault(record.task_id, []).append(record)
             if record.session_id:
-                self._by_session.setdefault(record.session_id, []).append(
-                    record
-                )
+                self._by_session.setdefault(record.session_id, []).append(record)
 
             # Forward to shared AuditEventSemantics ring
             semantics, AuditEventRecord = _get_shared_semantics()
@@ -392,14 +378,12 @@ class AndroidDelegatedRuntimeAuditRecorder:
                     semantics.record(shared_rec)
                 except Exception as _exc:  # noqa: BLE001
                     logger.debug(
-                        "AndroidDelegatedRuntimeAuditRecorder: "
-                        "shared semantics forward skipped: %s",
+                        "AndroidDelegatedRuntimeAuditRecorder: " "shared semantics forward skipped: %s",
                         _exc,
                     )
         except Exception as exc:  # noqa: BLE001
             logger.debug(
-                "AndroidDelegatedRuntimeAuditRecorder.record failed "
-                "(non-fatal): %s",
+                "AndroidDelegatedRuntimeAuditRecorder.record failed " "(non-fatal): %s",
                 exc,
             )
         return record
@@ -408,21 +392,15 @@ class AndroidDelegatedRuntimeAuditRecorder:
     # Queries
     # ------------------------------------------------------------------
 
-    def get_by_task(
-        self, task_id: str
-    ) -> List[AndroidDelegatedAuditRecord]:
+    def get_by_task(self, task_id: str) -> List[AndroidDelegatedAuditRecord]:
         """Return all audit records for *task_id* in insertion order."""
         return list(self._by_task.get(task_id, []))
 
-    def get_by_session(
-        self, session_id: str
-    ) -> List[AndroidDelegatedAuditRecord]:
+    def get_by_session(self, session_id: str) -> List[AndroidDelegatedAuditRecord]:
         """Return all audit records for *session_id* in insertion order."""
         return list(self._by_session.get(session_id, []))
 
-    def get_by_kind(
-        self, kind: str
-    ) -> List[AndroidDelegatedAuditRecord]:
+    def get_by_kind(self, kind: str) -> List[AndroidDelegatedAuditRecord]:
         """Return all ring entries matching *kind*."""
         return [r for r in self._ring if r.kind == kind]
 
@@ -523,10 +501,7 @@ def record_delegated_execution_signal(
         was_successful=was_updated if reject_reason == "" else None,
         reject_reason=reject_reason,
         source=source,
-        message=(
-            f"delegated_execution_signal kind={signal_kind!r} "
-            f"updated={was_updated}"
-        ),
+        message=(f"delegated_execution_signal kind={signal_kind!r} " f"updated={was_updated}"),
         payload={
             "signal_kind": signal_kind,
             "signal_id": signal_id,
@@ -592,10 +567,7 @@ def record_handoff_v2_result(
         was_successful=was_correlated,
         reject_reason=reject_reason,
         source=source,
-        message=(
-            f"handoff_v2_result kind={response_kind!r} "
-            f"correlated={was_correlated}"
-        ),
+        message=(f"handoff_v2_result kind={response_kind!r} " f"correlated={was_correlated}"),
         payload={
             "response_kind": response_kind,
             "callback_invoked": callback_invoked,
@@ -692,10 +664,7 @@ def record_takeover_response(
         state_transition=f"takeover_response decision={decision}",
         was_successful=accepted,
         source=source,
-        message=(
-            f"takeover_response from device={device_id!r} "
-            f"takeover_id={takeover_id!r} decision={decision}"
-        ),
+        message=(f"takeover_response from device={device_id!r} " f"takeover_id={takeover_id!r} decision={decision}"),
         payload={
             "accepted": accepted,
             "reason": reason,
@@ -760,10 +729,7 @@ def record_reconciliation_signal(
         was_successful=was_reconciled if reject_reason == "" else None,
         reject_reason=reject_reason,
         source=source,
-        message=(
-            f"reconciliation_signal truth_kind={truth_kind!r} "
-            f"reconciled={was_reconciled}"
-        ),
+        message=(f"reconciliation_signal truth_kind={truth_kind!r} " f"reconciled={was_reconciled}"),
         payload={
             "truth_kind": truth_kind,
             "phase": phase,
@@ -818,15 +784,10 @@ def record_participant_truth_terminal_update(
         device_id=device_id,
         contract_id=contract_id,
         participant_role="android",
-        state_transition=(
-            f"truth={truth_kind} → terminal_phase={terminal_phase}"
-        ),
+        state_transition=(f"truth={truth_kind} → terminal_phase={terminal_phase}"),
         was_successful=True,
         source=source,
-        message=(
-            f"participant_truth terminal update: truth_kind={truth_kind!r} "
-            f"terminal_phase={terminal_phase!r}"
-        ),
+        message=(f"participant_truth terminal update: truth_kind={truth_kind!r} " f"terminal_phase={terminal_phase!r}"),
         payload={
             "truth_kind": truth_kind,
             "terminal_phase": terminal_phase,

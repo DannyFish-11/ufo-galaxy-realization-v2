@@ -5,8 +5,9 @@ This module has been moved to ``tools.architecture.scenario_harness``.
 This shim re-exports everything (including private names) for full backward
 compatibility. Old import paths continue to work without changes.
 """
-import sys as _sys
+
 import importlib as _importlib
+import sys as _sys
 
 # Load the canonical implementation from its new location.
 _real = _importlib.import_module("tools.architecture.scenario_harness")

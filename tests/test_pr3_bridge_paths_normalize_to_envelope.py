@@ -30,11 +30,11 @@ Validates:
 
 from __future__ import annotations
 
-import sys
-import os
 import asyncio
-import warnings
+import os
+import sys
 import unittest
+import warnings
 from unittest.mock import AsyncMock, MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -92,6 +92,7 @@ class TestFacadeAuthoritySentinels(unittest.TestCase):
 
     def test_06_device_orchestrator_facade_non_empty(self):
         from core.device_orchestrator import DEVICE_ORCHESTRATOR_FACADE_AUTHORITY
+
         self.assertIsInstance(DEVICE_ORCHESTRATOR_FACADE_AUTHORITY, str)
         self.assertTrue(len(DEVICE_ORCHESTRATOR_FACADE_AUTHORITY) > 0)
 
@@ -119,10 +120,12 @@ class TestDeviceOrchestratorFacade(unittest.TestCase):
 
     def setUp(self):
         from core.execution_spine import reset_ingress_log
+
         reset_ingress_log()
 
     def _make_orchestrator(self):
         from core.device_orchestrator import DeviceOrchestrator
+
         # Reset singleton so we get a clean instance
         DeviceOrchestrator._instance = None
         orch = DeviceOrchestrator()
@@ -130,6 +133,7 @@ class TestDeviceOrchestratorFacade(unittest.TestCase):
 
     def test_09_send_command_records_ingress(self):
         from core.execution_spine import get_ingress_log
+
         orch = self._make_orchestrator()
         with patch("core.device_orchestrator._get_node_registry", return_value=None):
             _run(orch.send_command("dev_001", "screenshot", {}))
@@ -137,7 +141,8 @@ class TestDeviceOrchestratorFacade(unittest.TestCase):
         self.assertTrue(len(log) >= 1)
 
     def test_10_send_command_ingress_source_device_orchestrator(self):
-        from core.execution_spine import get_ingress_log, ExecutionIngressSource
+        from core.execution_spine import ExecutionIngressSource, get_ingress_log
+
         orch = self._make_orchestrator()
         with patch("core.device_orchestrator._get_node_registry", return_value=None):
             _run(orch.send_command("dev_001", "screenshot", {}))
@@ -151,6 +156,7 @@ class TestNormalizeBridgePayloads(unittest.TestCase):
 
     def test_11_bridge_payload_produces_envelope(self):
         from core.execution_spine import ExecutionIngressSource, normalize_ingress_to_envelope
+
         payload = {
             "action": "open_app",
             "device_id": "android_001",
@@ -161,6 +167,7 @@ class TestNormalizeBridgePayloads(unittest.TestCase):
 
     def test_12_bridge_payload_sets_targets_from_device_id(self):
         from core.execution_spine import ExecutionIngressSource, normalize_ingress_to_envelope
+
         payload = {"action": "tap", "device_id": "android_001"}
         result = normalize_ingress_to_envelope(payload, source=ExecutionIngressSource.BRIDGE)
         targets = getattr(result, "targets", []) or []
@@ -168,13 +175,20 @@ class TestNormalizeBridgePayloads(unittest.TestCase):
 
     def test_13_bridge_payload_sets_tool_name_from_action(self):
         from core.execution_spine import ExecutionIngressSource, normalize_ingress_to_envelope
+
         payload = {"action": "swipe", "device_id": "android_001"}
         result = normalize_ingress_to_envelope(payload, source=ExecutionIngressSource.BRIDGE)
         tool_name = getattr(result, "tool_name", None)
         self.assertIsNotNone(tool_name)
 
     def test_14_record_legacy_ingress_bridge_source(self):
-        from core.execution_spine import ExecutionIngressSource, record_legacy_ingress, reset_ingress_log, get_ingress_log
+        from core.execution_spine import (
+            ExecutionIngressSource,
+            get_ingress_log,
+            record_legacy_ingress,
+            reset_ingress_log,
+        )
+
         reset_ingress_log()
         rec = record_legacy_ingress(
             ExecutionIngressSource.BRIDGE,
@@ -191,40 +205,50 @@ class TestRouteViaSpine(unittest.TestCase):
 
     def setUp(self):
         from core.execution_spine import reset_ingress_log
+
         reset_ingress_log()
 
     def test_15_route_via_spine_calls_route_envelope(self):
         from core.execution_spine import ExecutionIngressSource, route_via_spine
+
         mock_router = MagicMock()
         mock_router.route_envelope = AsyncMock(return_value={"spine_ok": True})
-        result = _run(route_via_spine(
-            {"task_type": "screenshot", "device_id": "dev_001"},
-            source=ExecutionIngressSource.SCHEDULER,
-            router=mock_router,
-        ))
+        result = _run(
+            route_via_spine(
+                {"task_type": "screenshot", "device_id": "dev_001"},
+                source=ExecutionIngressSource.SCHEDULER,
+                router=mock_router,
+            )
+        )
         mock_router.route_envelope.assert_called_once()
         self.assertTrue(result.get("spine_ok"))
 
     def test_16_route_via_spine_returns_dict(self):
         from core.execution_spine import ExecutionIngressSource, route_via_spine
+
         mock_router = MagicMock()
         mock_router.route_envelope = AsyncMock(return_value={"status": "ok"})
-        result = _run(route_via_spine(
-            {"task_type": "screenshot"},
-            source=ExecutionIngressSource.BRIDGE,
-            router=mock_router,
-        ))
+        result = _run(
+            route_via_spine(
+                {"task_type": "screenshot"},
+                source=ExecutionIngressSource.BRIDGE,
+                router=mock_router,
+            )
+        )
         self.assertIsInstance(result, dict)
 
     def test_17_route_via_spine_with_failing_router_returns_error_dict(self):
         from core.execution_spine import ExecutionIngressSource, route_via_spine
+
         mock_router = MagicMock()
         mock_router.route_envelope = AsyncMock(side_effect=RuntimeError("router failed"))
-        result = _run(route_via_spine(
-            {"task_type": "screenshot"},
-            source=ExecutionIngressSource.SCHEDULER,
-            router=mock_router,
-        ))
+        result = _run(
+            route_via_spine(
+                {"task_type": "screenshot"},
+                source=ExecutionIngressSource.SCHEDULER,
+                router=mock_router,
+            )
+        )
         self.assertIsInstance(result, dict)
         self.assertFalse(result.get("success", True))
 
@@ -234,18 +258,21 @@ class TestNormalizePreservesCorrelationFields(unittest.TestCase):
 
     def test_18_preserves_explicit_task_id(self):
         from core.execution_spine import ExecutionIngressSource, normalize_ingress_to_envelope
+
         payload = {"task_id": "explicit_task_123", "task_type": "screenshot"}
         result = normalize_ingress_to_envelope(payload, source=ExecutionIngressSource.SCHEDULER)
         self.assertEqual(str(result.task_id), "explicit_task_123")
 
     def test_19_preserves_explicit_trace_id(self):
         from core.execution_spine import ExecutionIngressSource, normalize_ingress_to_envelope
+
         payload = {"trace_id": "explicit_trace_456", "task_type": "screenshot"}
         result = normalize_ingress_to_envelope(payload, source=ExecutionIngressSource.SCHEDULER)
         self.assertEqual(str(result.trace_id), "explicit_trace_456")
 
     def test_20_ingress_record_to_dict_source_matches_enum_value(self):
         from core.execution_spine import ExecutionIngressSource, IngressRecord
+
         rec = IngressRecord(source=ExecutionIngressSource.BRIDGE)
         d = rec.to_dict()
         self.assertEqual(d["source"], ExecutionIngressSource.BRIDGE.value)

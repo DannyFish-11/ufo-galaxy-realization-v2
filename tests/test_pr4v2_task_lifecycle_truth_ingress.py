@@ -142,9 +142,9 @@ class TestGroupB_HandleTaskCancel:
         with patch.object(_tl, "_ingest_via_canonical_ingress", _fake_ingest):
             _run(_tl.handle_task_cancel(bridge, None, msg))
 
-        assert any(c.get("truth_kind") == "cancel" for c in calls), (
-            "handle_task_cancel must call ingress with truth_kind='cancel'"
-        )
+        assert any(
+            c.get("truth_kind") == "cancel" for c in calls
+        ), "handle_task_cancel must call ingress with truth_kind='cancel'"
 
     def test_b2_ack_returned_regardless_of_ingress_outcome(self) -> None:
         """AC4: task_cancel_ack is returned even if ingress is unavailable."""
@@ -256,8 +256,11 @@ class TestGroupD_HandleTaskResult:
 
             def _fake_ingest(m: Dict[str, Any], **_kw: Any) -> Any:
                 return MagicMock(
-                    was_reconciled=True, reject_reason="", envelope=None,
-                    canonical_update="done", tracking_record_phase="completed",
+                    was_reconciled=True,
+                    reject_reason="",
+                    envelope=None,
+                    canonical_update="done",
+                    tracking_record_phase="completed",
                 )
 
             with patch.object(_tl, "_ingest_via_canonical_ingress", _fake_ingest):
@@ -458,19 +461,24 @@ class TestGroupI_LocalModeUnifiedClosure:
         )
         _ingest_async = AsyncMock(return_value=_fake_outcome)
 
-        with patch(
-            "core.durable_result_idempotency.check_result_idempotency",
-            return_value=False,
-        ), patch(
-            "core.durable_result_idempotency.record_result_idempotency",
-            return_value=None,
-        ), patch(
-            "core.unified_result_ingress.ingest_result_async",
-            _ingest_async,
-        ), patch.object(
-            _tl,
-            "_run_task_result_truth_chain",
-            side_effect=AssertionError("legacy truth chain should not run for local mode"),
+        with (
+            patch(
+                "core.durable_result_idempotency.check_result_idempotency",
+                return_value=False,
+            ),
+            patch(
+                "core.durable_result_idempotency.record_result_idempotency",
+                return_value=None,
+            ),
+            patch(
+                "core.unified_result_ingress.ingest_result_async",
+                _ingest_async,
+            ),
+            patch.object(
+                _tl,
+                "_run_task_result_truth_chain",
+                side_effect=AssertionError("legacy truth chain should not run for local mode"),
+            ),
         ):
             _run(_tl.handle_task_result(bridge, None, msg))
 

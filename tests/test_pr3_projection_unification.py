@@ -163,41 +163,49 @@ def _model_supply_dict(
 
 def _import_model_routing_projection():
     from contracts.desktop_status_projection import ModelRoutingProjection
+
     return ModelRoutingProjection
 
 
 def _import_build_model_routing():
     from contracts.desktop_status_projection import _build_model_routing_projection
+
     return _build_model_routing_projection
 
 
 def _import_build_desktop_status_projection():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     return build_desktop_status_projection
 
 
 def _import_desktop_status_projection():
     from contracts.desktop_status_projection import DesktopStatusProjection
+
     return DesktopStatusProjection
 
 
 def _import_runtime_projection():
     from core.projection.runtime_projection import RuntimeProjection
+
     return RuntimeProjection
 
 
 def _import_build_runtime_projection():
     from core.projection.projection_compiler import build_runtime_projection
+
     return build_runtime_projection
 
 
 def _import_continuum_state():
-    from core.continuum.types import ContinuumState, ContinuumPhase
+    from core.continuum.types import ContinuumPhase, ContinuumState
+
     return ContinuumState, ContinuumPhase
 
 
 def _import_projection_helpers():
     import core.projection.projection_helpers as _mod
+
     return _mod
 
 
@@ -328,6 +336,7 @@ def test_14_runtime_projection_has_oneapi_summary():
     """RuntimeProjection has oneapi_summary field with default None."""
     RP = _import_runtime_projection()
     from core.continuum.types import TriStatePhase
+
     rp = RP(tri_state_phase=TriStatePhase.SILENT)
     assert hasattr(rp, "oneapi_summary")
     assert rp.oneapi_summary is None
@@ -337,6 +346,7 @@ def test_15_runtime_projection_has_provider_status_summary():
     """RuntimeProjection has provider_status_summary field with default None."""
     RP = _import_runtime_projection()
     from core.continuum.types import TriStatePhase
+
     rp = RP(tri_state_phase=TriStatePhase.SILENT)
     assert hasattr(rp, "provider_status_summary")
     assert rp.provider_status_summary is None
@@ -346,6 +356,7 @@ def test_16_runtime_projection_to_dict_oneapi_summary():
     """RuntimeProjection.to_dict() includes oneapi_summary key."""
     RP = _import_runtime_projection()
     from core.continuum.types import TriStatePhase
+
     rp = RP(tri_state_phase=TriStatePhase.SILENT, oneapi_summary={"k": "v"})
     d = rp.to_dict()
     assert "oneapi_summary" in d
@@ -356,6 +367,7 @@ def test_17_runtime_projection_to_dict_provider_status_summary():
     """RuntimeProjection.to_dict() includes provider_status_summary key."""
     RP = _import_runtime_projection()
     from core.continuum.types import TriStatePhase
+
     rp = RP(tri_state_phase=TriStatePhase.SILENT, provider_status_summary={"total": 2})
     d = rp.to_dict()
     assert "provider_status_summary" in d
@@ -656,20 +668,21 @@ def test_47_build_runtime_projection_route_plan_no_oneapi():
     ContinuumState, ContinuumPhase = _import_continuum_state()
 
     try:
-        from core.model_topology import TopologyRouter, ProviderInventory
-        from core.model_topology.config_bridge import ConfigBridge
-        from core.model_topology import LegacyLLMProviderSnapshot
         from core.continuum.types import RuntimeDomain
+        from core.model_topology import LegacyLLMProviderSnapshot, ProviderInventory, TopologyRouter
+        from core.model_topology.config_bridge import ConfigBridge
 
         bridge = ConfigBridge()
         snapshots = [
-            LegacyLLMProviderSnapshot.from_dict({
-                "key": "openai",
-                "models": ["gpt-4o"],
-                "is_multimodal": True,
-                "base_url": None,
-                "api_key": "test_key",
-            })
+            LegacyLLMProviderSnapshot.from_dict(
+                {
+                    "key": "openai",
+                    "models": ["gpt-4o"],
+                    "is_multimodal": True,
+                    "base_url": None,
+                    "api_key": "test_key",
+                }
+            )
         ]
         inventory = ProviderInventory.from_snapshots(snapshots, bridge)
         router = TopologyRouter(inventory)

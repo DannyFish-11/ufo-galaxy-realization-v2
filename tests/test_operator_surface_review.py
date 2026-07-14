@@ -52,8 +52,8 @@ Coverage:
 from __future__ import annotations
 
 import json
-import sys
 import os
+import sys
 import time
 from typing import Any, Dict
 
@@ -65,20 +65,20 @@ if _PROJECT_ROOT not in sys.path:
 
 import core.operator_surface as _mod
 from core.operator_surface import (
-    RecoveryInspection,
-    PartialResultInspection,
+    OPERATOR_SURFACE_AUTHORITY,
     AuditEvidenceInspection,
     EndToEndReviewSummary,
     OperatorSurface,
+    PartialResultInspection,
+    RecoveryInspection,
     get_operator_surface,
     reset_operator_surface,
-    OPERATOR_SURFACE_AUTHORITY,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def reset_all():
@@ -92,26 +92,31 @@ def _do_reset():
     reset_operator_surface()
     try:
         from core.canonical_task import reset_canonical_task_runtime
+
         reset_canonical_task_runtime()
     except Exception:
         pass  # module may not be loaded in all test environments
     try:
         from core.hybrid_orchestration_continuity import reset_continuity_registry
+
         reset_continuity_registry()
     except Exception:
         pass  # module may not be loaded in all test environments
     try:
         from core.task_envelope_lifecycle_registry import reset_lifecycle_registry
+
         reset_lifecycle_registry()
     except Exception:
         pass  # module may not be loaded in all test environments
     try:
         from core.task_lifecycle_persistence import reset_task_lifecycle_store
+
         reset_task_lifecycle_store()
     except Exception:
         pass  # module may not be loaded in all test environments
     try:
         from core.replay_audit_persistence import reset_replay_audit_store
+
         reset_replay_audit_store()
     except Exception:
         pass  # module may not be loaded in all test environments
@@ -119,11 +124,12 @@ def _do_reset():
 
 def _build_canonical_task(goal: str = "test goal", lifecycle: str = "completed"):
     from core.canonical_task import (
-        build_canonical_task,
-        get_canonical_task_runtime,
         TaskLifecycle,
         TaskOrigin,
+        build_canonical_task,
+        get_canonical_task_runtime,
     )
+
     task = build_canonical_task(
         goal=goal,
         origin=TaskOrigin.API_REQUEST,
@@ -131,7 +137,7 @@ def _build_canonical_task(goal: str = "test goal", lifecycle: str = "completed")
         selected_targets=["device_001"],
     )
     task.lifecycle = TaskLifecycle(lifecycle)
-    task.result.success = (lifecycle == "completed")
+    task.result.success = lifecycle == "completed"
     rt = get_canonical_task_runtime()
     rt.register(task)
     return task
@@ -140,13 +146,16 @@ def _build_canonical_task(goal: str = "test goal", lifecycle: str = "completed")
 def _register_lifecycle_envelope(task_id: str, owner_str: str = "device_dispatch"):
     """Register a minimal envelope in the lifecycle registry under the given owner."""
     from core.task_envelope_lifecycle_registry import (
-        get_lifecycle_registry,
         LifecycleOwner,
+        get_lifecycle_registry,
     )
+
     registry = get_lifecycle_registry()
+
     # Build a minimal stub envelope object
     class _Env:
         pass
+
     env = _Env()
     env.task_id = task_id
     env.trace_id = f"trace_{task_id}"
@@ -160,10 +169,11 @@ def _register_lifecycle_envelope(task_id: str, owner_str: str = "device_dispatch
 def _register_hybrid_record(task_id: str, **kwargs):
     """Register a HybridOrchestrationRecord with the given task_id."""
     from core.hybrid_orchestration_continuity import (
-        get_continuity_registry,
-        HybridOrchestrationRecord,
         HybridOrchestrationLifecycleState,
+        HybridOrchestrationRecord,
+        get_continuity_registry,
     )
+
     rec = HybridOrchestrationRecord(task_id=task_id, **kwargs)
     get_continuity_registry().register(rec)
     return rec
@@ -172,6 +182,7 @@ def _register_hybrid_record(task_id: str, **kwargs):
 # ---------------------------------------------------------------------------
 # 1-10: Dataclass structure and __all__
 # ---------------------------------------------------------------------------
+
 
 class TestDataclassStructure:
     def test_01_recovery_inspection_fields(self):
@@ -194,16 +205,20 @@ class TestDataclassStructure:
         d = ri.to_dict()
         json.dumps(d)  # must not raise
         for key in (
-            "task_id", "is_recovered", "recovery_disposition",
-            "current_owner", "snapshot_id", "interrupted_at",
-            "recovery_action_taken", "recovery_note", "_source",
+            "task_id",
+            "is_recovered",
+            "recovery_disposition",
+            "current_owner",
+            "snapshot_id",
+            "interrupted_at",
+            "recovery_action_taken",
+            "recovery_note",
+            "_source",
         ):
             assert key in d, f"Missing key: {key!r}"
 
     def test_03_partial_result_inspection_fields(self):
-        pi = PartialResultInspection(
-            task_id="t2", partial_result_disposition="preserved", resume_count=3
-        )
+        pi = PartialResultInspection(task_id="t2", partial_result_disposition="preserved", resume_count=3)
         assert pi.task_id == "t2"
         assert pi.partial_result_disposition == "preserved"
         assert pi.resume_count == 3
@@ -222,16 +237,20 @@ class TestDataclassStructure:
         d = pi.to_dict()
         json.dumps(d)
         for key in (
-            "task_id", "execution_id", "lifecycle_state",
-            "partial_result_disposition", "partial_result_origin",
-            "resume_count", "has_partial_result", "interruption_reason", "_source",
+            "task_id",
+            "execution_id",
+            "lifecycle_state",
+            "partial_result_disposition",
+            "partial_result_origin",
+            "resume_count",
+            "has_partial_result",
+            "interruption_reason",
+            "_source",
         ):
             assert key in d, f"Missing key: {key!r}"
 
     def test_05_audit_evidence_inspection_fields(self):
-        ae = AuditEvidenceInspection(
-            task_id="t3", has_evidence=True, evidence_count=5
-        )
+        ae = AuditEvidenceInspection(task_id="t3", has_evidence=True, evidence_count=5)
         assert ae.task_id == "t3"
         assert ae.has_evidence is True
         assert ae.evidence_count == 5
@@ -249,8 +268,14 @@ class TestDataclassStructure:
         d = ae.to_dict()
         json.dumps(d)
         for key in (
-            "task_id", "has_evidence", "evidence_count", "by_kind",
-            "earliest_record_at", "latest_record_at", "audit_kinds_present", "_source",
+            "task_id",
+            "has_evidence",
+            "evidence_count",
+            "by_kind",
+            "earliest_record_at",
+            "latest_record_at",
+            "audit_kinds_present",
+            "_source",
         ):
             assert key in d, f"Missing key: {key!r}"
 
@@ -263,7 +288,8 @@ class TestDataclassStructure:
         assert s.authority == OPERATOR_SURFACE_AUTHORITY
 
     def test_08_end_to_end_review_summary_to_dict_serialisable(self):
-        from core.operator_surface import TaskInspection, RouteInspection
+        from core.operator_surface import RouteInspection, TaskInspection
+
         ti = TaskInspection(task_id="t4", lifecycle="completed")
         ri = RouteInspection(task_id="t4")
         summary = EndToEndReviewSummary(
@@ -277,9 +303,18 @@ class TestDataclassStructure:
         d = summary.to_dict()
         json.dumps(d)
         for key in (
-            "task_id", "trace_id", "generated_at", "task", "route",
-            "recovery", "partial_result", "audit_evidence", "lineage",
-            "reviewable", "review_notes", "authority",
+            "task_id",
+            "trace_id",
+            "generated_at",
+            "task",
+            "route",
+            "recovery",
+            "partial_result",
+            "audit_evidence",
+            "lineage",
+            "reviewable",
+            "review_notes",
+            "authority",
         ):
             assert key in d, f"Missing key: {key!r}"
         assert d["task"] is not None
@@ -288,8 +323,7 @@ class TestDataclassStructure:
         assert d["partial_result"] is None
 
     def test_09_new_types_in_all(self):
-        for name in ("RecoveryInspection", "PartialResultInspection",
-                     "AuditEvidenceInspection"):
+        for name in ("RecoveryInspection", "PartialResultInspection", "AuditEvidenceInspection"):
             assert name in _mod.__all__, f"{name!r} missing from __all__"
 
     def test_10_end_to_end_review_summary_in_all(self):
@@ -299,6 +333,7 @@ class TestDataclassStructure:
 # ---------------------------------------------------------------------------
 # 11-18: Graceful degradation for unknown task
 # ---------------------------------------------------------------------------
+
 
 class TestGracefulDegradation:
     def test_11_inspect_recovery_unknown_returns_none(self):
@@ -350,6 +385,7 @@ class TestGracefulDegradation:
 # 19-23: Live lifecycle registry integration
 # ---------------------------------------------------------------------------
 
+
 class TestRecoveryInspection:
     def test_19_inspect_recovery_pending_task_returns_inspection(self):
         _register_lifecycle_envelope("task-live-001", "device_dispatch")
@@ -390,9 +426,11 @@ class TestRecoveryInspection:
 # 24-29: Partial result inspection
 # ---------------------------------------------------------------------------
 
+
 class TestPartialResultInspection:
     def test_24_inspect_partial_result_returns_inspection(self):
         from core.hybrid_orchestration_continuity import HybridOrchestrationRecord
+
         rec = _register_hybrid_record("pr-task-001")
         surface = get_operator_surface()
         result = surface.inspect_partial_result("pr-task-001")
@@ -436,37 +474,35 @@ class TestPartialResultInspection:
 # 27-33: Audit evidence inspection
 # ---------------------------------------------------------------------------
 
+
 class TestAuditEvidenceInspection:
     def _make_store(self, tmp_path):
         from core.replay_audit_persistence import (
             DurableAuditStore,
             reset_replay_audit_store,
         )
+
         reset_replay_audit_store()
         return DurableAuditStore(store_path=str(tmp_path / "audit.jsonl"))
 
     def test_27_audit_evidence_counts_by_kind(self, tmp_path):
         store = self._make_store(tmp_path)
         from core.replay_audit_persistence import (
-            append_replay_audit_record,
             AuditRecordKind,
-            reset_replay_audit_store,
+            append_replay_audit_record,
             get_replay_audit_store,
+            reset_replay_audit_store,
         )
+
         reset_replay_audit_store()
         # Patch the singleton to use our tmp store
         import core.replay_audit_persistence as _rap
+
         _rap._store_instance = store
         try:
-            append_replay_audit_record(
-                {"task_id": "ae-task-001", "info": "x"}, AuditRecordKind.TASK_EXECUTION.value
-            )
-            append_replay_audit_record(
-                {"task_id": "ae-task-001", "route": "dev"}, AuditRecordKind.ROUTE_DECISION.value
-            )
-            append_replay_audit_record(
-                {"task_id": "other-task"}, AuditRecordKind.TASK_EXECUTION.value
-            )
+            append_replay_audit_record({"task_id": "ae-task-001", "info": "x"}, AuditRecordKind.TASK_EXECUTION.value)
+            append_replay_audit_record({"task_id": "ae-task-001", "route": "dev"}, AuditRecordKind.ROUTE_DECISION.value)
+            append_replay_audit_record({"task_id": "other-task"}, AuditRecordKind.TASK_EXECUTION.value)
             surface = get_operator_surface()
             result = surface.inspect_audit_evidence("ae-task-001")
             assert result.evidence_count == 2
@@ -478,16 +514,15 @@ class TestAuditEvidenceInspection:
 
     def test_28_audit_has_evidence_true_when_records_exist(self, tmp_path):
         store = self._make_store(tmp_path)
-        from core.replay_audit_persistence import (
-            append_replay_audit_record,
-            AuditRecordKind,
-        )
         import core.replay_audit_persistence as _rap
+        from core.replay_audit_persistence import (
+            AuditRecordKind,
+            append_replay_audit_record,
+        )
+
         _rap._store_instance = store
         try:
-            append_replay_audit_record(
-                {"task_id": "ae-task-002"}, AuditRecordKind.RUNTIME_EVENT.value
-            )
+            append_replay_audit_record({"task_id": "ae-task-002"}, AuditRecordKind.RUNTIME_EVENT.value)
             surface = get_operator_surface()
             result = surface.inspect_audit_evidence("ae-task-002")
             assert result.has_evidence is True
@@ -502,22 +537,17 @@ class TestAuditEvidenceInspection:
 
     def test_32_audit_kinds_present_sorted(self, tmp_path):
         store = self._make_store(tmp_path)
-        from core.replay_audit_persistence import (
-            append_replay_audit_record,
-            AuditRecordKind,
-        )
         import core.replay_audit_persistence as _rap
+        from core.replay_audit_persistence import (
+            AuditRecordKind,
+            append_replay_audit_record,
+        )
+
         _rap._store_instance = store
         try:
-            append_replay_audit_record(
-                {"task_id": "ae-sort-001"}, AuditRecordKind.ROUTE_DECISION.value
-            )
-            append_replay_audit_record(
-                {"task_id": "ae-sort-001"}, AuditRecordKind.TASK_EXECUTION.value
-            )
-            append_replay_audit_record(
-                {"task_id": "ae-sort-001"}, AuditRecordKind.FALLBACK.value
-            )
+            append_replay_audit_record({"task_id": "ae-sort-001"}, AuditRecordKind.ROUTE_DECISION.value)
+            append_replay_audit_record({"task_id": "ae-sort-001"}, AuditRecordKind.TASK_EXECUTION.value)
+            append_replay_audit_record({"task_id": "ae-sort-001"}, AuditRecordKind.FALLBACK.value)
             surface = get_operator_surface()
             result = surface.inspect_audit_evidence("ae-sort-001")
             assert result.audit_kinds_present == sorted(result.audit_kinds_present)
@@ -526,11 +556,12 @@ class TestAuditEvidenceInspection:
 
     def test_33_audit_timestamps_set_correctly(self, tmp_path):
         store = self._make_store(tmp_path)
-        from core.replay_audit_persistence import (
-            ReplayAuditRecord,
-            AuditRecordKind,
-        )
         import core.replay_audit_persistence as _rap
+        from core.replay_audit_persistence import (
+            AuditRecordKind,
+            ReplayAuditRecord,
+        )
+
         _rap._store_instance = store
         try:
             rec1 = ReplayAuditRecord(
@@ -557,6 +588,7 @@ class TestAuditEvidenceInspection:
 # 31, 34-35: Recovery disposition edge cases
 # ---------------------------------------------------------------------------
 
+
 class TestRecoveryDispositionEdgeCases:
     def test_31_end_to_end_review_note_when_task_in_registry(self):
         _register_lifecycle_envelope("note-task-001", "device_dispatch")
@@ -567,17 +599,14 @@ class TestRecoveryDispositionEdgeCases:
 
     def test_34_recovery_action_taken_false_for_terminal(self, tmp_path):
         """terminal_on_interrupt → recovery_action_taken=False."""
+        import core.task_lifecycle_persistence as _tlp
         from core.task_lifecycle_persistence import (
             TaskLifecyclePersistenceStore,
             TaskLifecycleSnapshotRecord,
         )
-        import core.task_lifecycle_persistence as _tlp
-        store = TaskLifecyclePersistenceStore(
-            store_path=str(tmp_path / "tls.json")
-        )
-        snap = TaskLifecycleSnapshotRecord(
-            records=[{"task_id": "term-task", "owner": "result_completion"}]
-        )
+
+        store = TaskLifecyclePersistenceStore(store_path=str(tmp_path / "tls.json"))
+        snap = TaskLifecycleSnapshotRecord(records=[{"task_id": "term-task", "owner": "result_completion"}])
         store.save(snap)
         old = _tlp._store_instance
         _tlp._store_instance = store
@@ -592,17 +621,14 @@ class TestRecoveryDispositionEdgeCases:
 
     def test_35_recovery_action_taken_true_for_resumable(self, tmp_path):
         """device_dispatch → resumable → recovery_action_taken=True."""
+        import core.task_lifecycle_persistence as _tlp
         from core.task_lifecycle_persistence import (
             TaskLifecyclePersistenceStore,
             TaskLifecycleSnapshotRecord,
         )
-        import core.task_lifecycle_persistence as _tlp
-        store = TaskLifecyclePersistenceStore(
-            store_path=str(tmp_path / "tls2.json")
-        )
-        snap = TaskLifecycleSnapshotRecord(
-            records=[{"task_id": "resumable-task", "owner": "device_dispatch"}]
-        )
+
+        store = TaskLifecyclePersistenceStore(store_path=str(tmp_path / "tls2.json"))
+        snap = TaskLifecycleSnapshotRecord(records=[{"task_id": "resumable-task", "owner": "device_dispatch"}])
         store.save(snap)
         old = _tlp._store_instance
         _tlp._store_instance = store

@@ -30,10 +30,10 @@ from unittest.mock import patch
 
 import pytest
 
-
 # ===========================================================================
 # 1. AuthorityRole
 # ===========================================================================
+
 
 class TestAuthorityRole:
     def test_core_values_are_strings(self):
@@ -48,13 +48,13 @@ class TestAuthorityRole:
         assert AuthorityRole.UNKNOWN.value == "unknown"
 
     def test_all_roles_in_catalog(self):
-        from core.orchestration_authority import AuthorityRole, ROLE_CATALOG
+        from core.orchestration_authority import ROLE_CATALOG, AuthorityRole
 
         for role in AuthorityRole:
             assert role in ROLE_CATALOG, f"{role} missing from ROLE_CATALOG"
 
     def test_role_catalog_required_keys(self):
-        from core.orchestration_authority import AuthorityRole, ROLE_CATALOG
+        from core.orchestration_authority import ROLE_CATALOG, AuthorityRole
 
         required_keys = {"role", "label", "description", "active"}
         for role in AuthorityRole:
@@ -95,14 +95,14 @@ class TestAuthorityRole:
         assert not is_legacy_or_deprecated(AuthorityRole.AUTHORITATIVE_ENTRYPOINT)
 
     def test_role_descriptions_non_empty(self):
-        from core.orchestration_authority import AuthorityRole, ROLE_DESCRIPTIONS
+        from core.orchestration_authority import ROLE_DESCRIPTIONS, AuthorityRole
 
         for role in AuthorityRole:
             desc = ROLE_DESCRIPTIONS.get(role.value, "")
             assert isinstance(desc, str) and desc, f"ROLE_DESCRIPTIONS missing entry for {role}"
 
     def test_authoritative_entrypoint_catalog_has_canonical_module(self):
-        from core.orchestration_authority import AuthorityRole, ROLE_CATALOG
+        from core.orchestration_authority import ROLE_CATALOG, AuthorityRole
 
         info = ROLE_CATALOG[AuthorityRole.AUTHORITATIVE_ENTRYPOINT]
         assert info["canonical_module"] == "core.desktop_presence_runtime"
@@ -112,6 +112,7 @@ class TestAuthorityRole:
 # ===========================================================================
 # 2. LegacyPathRegistry
 # ===========================================================================
+
 
 class TestLegacyPathRegistry:
     def test_registry_not_empty(self):
@@ -174,6 +175,7 @@ class TestLegacyPathRegistry:
 # 3. Legacy path guardrail helpers
 # ===========================================================================
 
+
 class TestLegacyGuardrail:
     def test_is_legacy_path_known(self):
         from core.orchestration_authority import is_legacy_path
@@ -188,7 +190,7 @@ class TestLegacyGuardrail:
         assert not is_legacy_path("some.completely.random.module")
 
     def test_get_legacy_entry_returns_entry(self):
-        from core.orchestration_authority import get_legacy_entry, LegacyPathEntry
+        from core.orchestration_authority import LegacyPathEntry, get_legacy_entry
 
         entry = get_legacy_entry("nodes.Node_81_Orchestrator.main")
         assert entry is not None
@@ -201,19 +203,19 @@ class TestLegacyGuardrail:
         assert get_legacy_entry("totally.unknown.path") is None
 
     def test_classify_path_status_legacy(self):
-        from core.orchestration_authority import classify_path_status, LegacyPathStatus
+        from core.orchestration_authority import LegacyPathStatus, classify_path_status
 
         status = classify_path_status("nodes.Node_110_SmartOrchestrator.server")
         assert status == LegacyPathStatus.LEGACY_COMPATIBILITY
 
     def test_classify_path_status_deprecated(self):
-        from core.orchestration_authority import classify_path_status, LegacyPathStatus
+        from core.orchestration_authority import LegacyPathStatus, classify_path_status
 
         status = classify_path_status("nodes.Node_50_Transformer.task_orchestrator")
         assert status == LegacyPathStatus.DEPRECATED
 
     def test_classify_path_status_active_for_unknown(self):
-        from core.orchestration_authority import classify_path_status, LegacyPathStatus
+        from core.orchestration_authority import LegacyPathStatus, classify_path_status
 
         status = classify_path_status("some.unknown.module.that.does.not.exist")
         assert status == LegacyPathStatus.ACTIVE
@@ -255,72 +257,73 @@ class TestLegacyGuardrail:
 # 4. classify_module
 # ===========================================================================
 
+
 class TestClassifyModule:
     def test_desktop_presence_runtime(self):
-        from core.orchestration_authority import classify_module, AuthorityRole
+        from core.orchestration_authority import AuthorityRole, classify_module
 
         assert classify_module("core.desktop_presence_runtime") == AuthorityRole.AUTHORITATIVE_ENTRYPOINT
 
     def test_constellation_runtime(self):
-        from core.orchestration_authority import classify_module, AuthorityRole
+        from core.orchestration_authority import AuthorityRole, classify_module
 
         assert classify_module("core.constellation_runtime") == AuthorityRole.EXECUTION_RUNTIME_DELEGATE
 
     def test_task_graph(self):
-        from core.orchestration_authority import classify_module, AuthorityRole
+        from core.orchestration_authority import AuthorityRole, classify_module
 
         assert classify_module("core.task_graph") == AuthorityRole.DAG_EXECUTION_ENGINE
 
     def test_e2e_orchestrator(self):
-        from core.orchestration_authority import classify_module, AuthorityRole
+        from core.orchestration_authority import AuthorityRole, classify_module
 
         assert classify_module("core.e2e_orchestrator") == AuthorityRole.ORCHESTRATION_COORDINATOR
 
     def test_node_110_prefix(self):
-        from core.orchestration_authority import classify_module, AuthorityRole
+        from core.orchestration_authority import AuthorityRole, classify_module
 
         assert classify_module("nodes.Node_110_SmartOrchestrator.server") == AuthorityRole.LEGACY_COMPATIBILITY
         assert classify_module("nodes.Node_110_SmartOrchestrator") == AuthorityRole.LEGACY_COMPATIBILITY
 
     def test_node_81(self):
-        from core.orchestration_authority import classify_module, AuthorityRole
+        from core.orchestration_authority import AuthorityRole, classify_module
 
         assert classify_module("nodes.Node_81_Orchestrator.main") == AuthorityRole.LEGACY_COMPATIBILITY
 
     def test_node_50_deprecated(self):
-        from core.orchestration_authority import classify_module, AuthorityRole
+        from core.orchestration_authority import AuthorityRole, classify_module
 
         assert classify_module("nodes.Node_50_Transformer.task_orchestrator") == AuthorityRole.DEPRECATED
         assert classify_module("nodes.Node_50_Transformer") == AuthorityRole.DEPRECATED
 
     def test_galaxy_gateway_orchestrator(self):
-        from core.orchestration_authority import classify_module, AuthorityRole
+        from core.orchestration_authority import AuthorityRole, classify_module
 
         assert classify_module("galaxy_gateway.orchestrator.task_orchestrator") == AuthorityRole.LEGACY_COMPATIBILITY
 
     def test_fusion_unified_orchestrator(self):
-        from core.orchestration_authority import classify_module, AuthorityRole
+        from core.orchestration_authority import AuthorityRole, classify_module
 
         assert classify_module("fusion.unified_orchestrator") == AuthorityRole.LEGACY_COMPATIBILITY
 
     def test_orchestrator_engine(self):
-        from core.orchestration_authority import classify_module, AuthorityRole
+        from core.orchestration_authority import AuthorityRole, classify_module
 
         assert classify_module("core.orchestrator_engine") == AuthorityRole.LEGACY_COMPATIBILITY
 
     def test_unknown_module(self):
-        from core.orchestration_authority import classify_module, AuthorityRole
+        from core.orchestration_authority import AuthorityRole, classify_module
 
         assert classify_module("completely.unknown.module") == AuthorityRole.UNKNOWN
 
     def test_empty_string(self):
-        from core.orchestration_authority import classify_module, AuthorityRole
+        from core.orchestration_authority import AuthorityRole, classify_module
 
         assert classify_module("") == AuthorityRole.UNKNOWN
 
     def test_submodule_prefix_match(self):
         """Submodule paths should match their parent's role."""
-        from core.orchestration_authority import classify_module, AuthorityRole
+        from core.orchestration_authority import AuthorityRole, classify_module
 
         assert (
             classify_module("core.desktop_presence_runtime.DesktopPresenceRuntime")
@@ -336,9 +339,10 @@ class TestClassifyModule:
 # 5. authority_chain
 # ===========================================================================
 
+
 class TestAuthorityChain:
     def test_returns_list_of_tuples(self):
-        from core.orchestration_authority import authority_chain, AuthorityRole
+        from core.orchestration_authority import AuthorityRole, authority_chain
 
         chain = authority_chain()
         assert isinstance(chain, list)
@@ -348,13 +352,13 @@ class TestAuthorityChain:
             assert isinstance(module, str)
 
     def test_authoritative_entrypoint_is_first(self):
-        from core.orchestration_authority import authority_chain, AuthorityRole
+        from core.orchestration_authority import AuthorityRole, authority_chain
 
         chain = authority_chain()
         assert chain[0][0] == AuthorityRole.AUTHORITATIVE_ENTRYPOINT
 
     def test_dag_engine_is_last(self):
-        from core.orchestration_authority import authority_chain, AuthorityRole
+        from core.orchestration_authority import AuthorityRole, authority_chain
 
         chain = authority_chain()
         assert chain[-1][0] == AuthorityRole.DAG_EXECUTION_ENGINE
@@ -370,6 +374,7 @@ class TestAuthorityChain:
 # ===========================================================================
 # 6. authority_catalog
 # ===========================================================================
+
 
 class TestAuthorityCatalog:
     def test_schema_version(self):
@@ -400,7 +405,7 @@ class TestAuthorityCatalog:
         assert ranks == sorted(ranks)
 
     def test_role_catalog_section(self):
-        from core.orchestration_authority import authority_catalog, AuthorityRole
+        from core.orchestration_authority import AuthorityRole, authority_catalog
 
         catalog = authority_catalog()
         role_cat = catalog["role_catalog"]
@@ -408,7 +413,7 @@ class TestAuthorityCatalog:
             assert role.value in role_cat
 
     def test_legacy_paths_included_by_default(self):
-        from core.orchestration_authority import authority_catalog, LEGACY_PATH_REGISTRY
+        from core.orchestration_authority import LEGACY_PATH_REGISTRY, authority_catalog
 
         catalog = authority_catalog()
         assert "legacy_paths" in catalog
@@ -422,6 +427,7 @@ class TestAuthorityCatalog:
 
     def test_catalog_is_json_serialisable(self):
         import json
+
         from core.orchestration_authority import authority_catalog
 
         catalog = authority_catalog()
@@ -443,9 +449,10 @@ class TestAuthorityCatalog:
 # 7. AuthoritySummary
 # ===========================================================================
 
+
 class TestAuthoritySummary:
     def test_summarise_authority_known_module(self):
-        from core.orchestration_authority import summarise_authority, AuthorityRole
+        from core.orchestration_authority import AuthorityRole, summarise_authority
 
         summary = summarise_authority(
             "core.desktop_presence_runtime",
@@ -459,22 +466,22 @@ class TestAuthoritySummary:
         assert summary.canonical_module == "core.desktop_presence_runtime"
 
     def test_summarise_authority_unknown_module(self):
-        from core.orchestration_authority import summarise_authority, AuthorityRole
+        from core.orchestration_authority import AuthorityRole, summarise_authority
 
         summary = summarise_authority("completely.unknown.module")
         assert summary.role == AuthorityRole.UNKNOWN
 
     def test_summarise_authority_none_module(self):
-        from core.orchestration_authority import summarise_authority, AuthorityRole
+        from core.orchestration_authority import AuthorityRole, summarise_authority
 
         summary = summarise_authority(None)
         assert summary.role == AuthorityRole.UNKNOWN
 
     def test_to_dict_round_trip(self):
         from core.orchestration_authority import (
-            summarise_authority,
-            AuthoritySummary,
             AuthorityRole,
+            AuthoritySummary,
+            summarise_authority,
         )
 
         summary = summarise_authority(
@@ -493,14 +500,14 @@ class TestAuthoritySummary:
         assert restored.runtime_session_id == summary.runtime_session_id
 
     def test_from_dict_unknown_role_defaults_to_unknown(self):
-        from core.orchestration_authority import AuthoritySummary, AuthorityRole
+        from core.orchestration_authority import AuthorityRole, AuthoritySummary
 
         d = {"role": "nonexistent_role", "active": False}
         summary = AuthoritySummary.from_dict(d)
         assert summary.role == AuthorityRole.UNKNOWN
 
     def test_from_dict_empty_dict(self):
-        from core.orchestration_authority import AuthoritySummary, AuthorityRole
+        from core.orchestration_authority import AuthorityRole, AuthoritySummary
 
         summary = AuthoritySummary.from_dict({})
         assert summary.role == AuthorityRole.UNKNOWN
@@ -520,11 +527,12 @@ class TestAuthoritySummary:
 # 8. authority_summary_for_projection
 # ===========================================================================
 
+
 class TestAuthorityProjection:
     def test_minimal_keys(self):
         from core.orchestration_authority import (
-            summarise_authority,
             authority_summary_for_projection,
+            summarise_authority,
         )
 
         summary = summarise_authority(
@@ -539,8 +547,8 @@ class TestAuthorityProjection:
 
     def test_active_true_for_authoritative(self):
         from core.orchestration_authority import (
-            summarise_authority,
             authority_summary_for_projection,
+            summarise_authority,
         )
 
         summary = summarise_authority("core.desktop_presence_runtime")
@@ -549,8 +557,8 @@ class TestAuthorityProjection:
 
     def test_active_false_for_deprecated(self):
         from core.orchestration_authority import (
-            summarise_authority,
             authority_summary_for_projection,
+            summarise_authority,
         )
 
         summary = summarise_authority("nodes.Node_50_Transformer.task_orchestrator")
@@ -561,6 +569,7 @@ class TestAuthorityProjection:
 # ===========================================================================
 # 9. attach_authority_to_event (PR-7 integration)
 # ===========================================================================
+
 
 class TestAttachAuthorityToEvent:
     def test_adds_orchestration_authority_key(self):
@@ -615,6 +624,7 @@ class TestAttachAuthorityToEvent:
 # 10. attach_authority_to_envelope_summary (PR-8 integration)
 # ===========================================================================
 
+
 class TestAttachAuthorityToEnvelopeSummary:
     def test_adds_orchestration_authority_key(self):
         from core.orchestration_authority import attach_authority_to_envelope_summary
@@ -643,6 +653,7 @@ class TestAttachAuthorityToEnvelopeSummary:
 # ===========================================================================
 # 11. resolve_trace_authority
 # ===========================================================================
+
 
 class TestResolveTraceAuthority:
     def test_adds_authority_key(self):
@@ -678,10 +689,11 @@ class TestResolveTraceAuthority:
 # 12. Edge cases
 # ===========================================================================
 
+
 class TestEdgeCases:
     def test_classify_module_partial_match_does_not_collide(self):
         """core.desktop_presence_runtime_extension should not match desktop_presence_runtime."""
-        from core.orchestration_authority import classify_module, AuthorityRole
+        from core.orchestration_authority import AuthorityRole, classify_module
 
         # A module that starts with the same text but is a different top-level module
         role = classify_module("core.desktop_presence_runtime_extra_suffix")

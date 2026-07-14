@@ -48,6 +48,7 @@ _SERVER_STARTUP_TIMEOUT_S: float = 5.0
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _free_port() -> int:
     with socket.socket() as s:
         s.bind(("localhost", 0))
@@ -67,12 +68,13 @@ def _wait_for_server_ready(port: int, timeout: float = _SERVER_STARTUP_TIMEOUT_S
 
 def _make_gateway_app() -> FastAPI:
     """Build a minimal FastAPI app with the WebRTC proxy routes."""
+    from fastapi import HTTPException
+
     from galaxy_gateway.webrtc_proxy import (
         check_node95_reachable,
         get_webrtc_endpoint_info,
         proxy_webrtc_signaling,
     )
-    from fastapi import HTTPException
 
     app = FastAPI()
 
@@ -126,6 +128,7 @@ def _start_mock_node95(received: List[str]) -> Dict[str, Any]:
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def mock_node95(monkeypatch):
     received: List[str] = []
@@ -175,10 +178,12 @@ def test_client_no_turn(mock_node95, monkeypatch):
 # Tests: candidate ordering and deduplication helpers
 # ===========================================================================
 
+
 class TestOrderIceCandidates:
 
     def test_relay_before_srflx_before_host(self):
         from galaxy_gateway.webrtc_proxy import order_ice_candidates
+
         candidates = [
             {"candidate": "candidate:1 1 UDP 2 192.168.1.1 1234 typ host"},
             {"candidate": "candidate:2 1 UDP 2 5.5.5.5 1234 typ srflx raddr 192.168.1.1 rport 1234"},
@@ -190,12 +195,14 @@ class TestOrderIceCandidates:
 
     def test_deduplication_keeps_first(self):
         from galaxy_gateway.webrtc_proxy import order_ice_candidates
+
         dup = {"candidate": "candidate:1 1 UDP 2 192.168.1.1 1234 typ host"}
         ordered = order_ice_candidates([dup, dup, dup])
         assert len(ordered) == 1
 
     def test_preserves_extra_keys(self):
         from galaxy_gateway.webrtc_proxy import order_ice_candidates
+
         c = {"candidate": "candidate:1 1 UDP 2 1.2.3.4 3478 typ relay", "sdpMid": "0", "sdpMLineIndex": 0}
         result = order_ice_candidates([c])
         assert result[0]["sdpMid"] == "0"
@@ -203,10 +210,12 @@ class TestOrderIceCandidates:
 
     def test_empty_list_returns_empty(self):
         from galaxy_gateway.webrtc_proxy import order_ice_candidates
+
         assert order_ice_candidates([]) == []
 
     def test_prflx_after_srflx(self):
         from galaxy_gateway.webrtc_proxy import order_ice_candidates
+
         candidates = [
             {"candidate": "candidate:1 1 UDP 2 5.5.5.5 1234 typ prflx"},
             {"candidate": "candidate:2 1 UDP 2 5.5.5.5 5678 typ srflx"},
@@ -217,6 +226,7 @@ class TestOrderIceCandidates:
 
     def test_multiple_relay_before_all_hosts(self):
         from galaxy_gateway.webrtc_proxy import order_ice_candidates
+
         candidates = [
             {"candidate": "candidate:1 1 UDP 2 192.168.1.1 1234 typ host"},
             {"candidate": "candidate:2 1 UDP 2 1.2.3.4 3478 typ relay"},
@@ -233,10 +243,12 @@ class TestOrderIceCandidates:
 # Tests: enrich_signaling_message
 # ===========================================================================
 
+
 class TestEnrichSignalingMessage:
 
     def test_offer_gets_ice_servers_injected(self, turn_env):
         from galaxy_gateway.webrtc_proxy import enrich_signaling_message
+
         raw = json.dumps({"type": "offer", "sdp": "v=0\r\n"})
         result = json.loads(enrich_signaling_message(raw))
         assert "ice_servers" in result
@@ -246,35 +258,44 @@ class TestEnrichSignalingMessage:
 
     def test_answer_gets_ice_servers_injected(self, turn_env):
         from galaxy_gateway.webrtc_proxy import enrich_signaling_message
+
         raw = json.dumps({"type": "answer", "sdp": "v=0\r\n"})
         result = json.loads(enrich_signaling_message(raw))
         assert "ice_servers" in result
 
     def test_ice_candidate_annotated_with_type_relay(self, monkeypatch):
         from galaxy_gateway.webrtc_proxy import enrich_signaling_message
-        raw = json.dumps({
-            "type": "ice_candidate",
-            "candidate": "candidate:1 1 UDP 2 1.2.3.4 3478 typ relay",
-        })
+
+        raw = json.dumps(
+            {
+                "type": "ice_candidate",
+                "candidate": "candidate:1 1 UDP 2 1.2.3.4 3478 typ relay",
+            }
+        )
         result = json.loads(enrich_signaling_message(raw))
         assert result.get("candidate_type") == "relay"
 
     def test_ice_candidate_annotated_with_type_host(self, monkeypatch):
         from galaxy_gateway.webrtc_proxy import enrich_signaling_message
-        raw = json.dumps({
-            "type": "ice_candidate",
-            "candidate": "candidate:1 1 UDP 2 192.168.1.1 1234 typ host",
-        })
+
+        raw = json.dumps(
+            {
+                "type": "ice_candidate",
+                "candidate": "candidate:1 1 UDP 2 192.168.1.1 1234 typ host",
+            }
+        )
         result = json.loads(enrich_signaling_message(raw))
         assert result.get("candidate_type") == "host"
 
     def test_non_json_passthrough(self):
         from galaxy_gateway.webrtc_proxy import enrich_signaling_message
+
         raw = "not-json-at-all"
         assert enrich_signaling_message(raw) == raw
 
     def test_unknown_type_passthrough(self):
         from galaxy_gateway.webrtc_proxy import enrich_signaling_message
+
         raw = json.dumps({"type": "heartbeat", "ts": 12345})
         result = json.loads(enrich_signaling_message(raw))
         assert result == {"type": "heartbeat", "ts": 12345}
@@ -283,12 +304,14 @@ class TestEnrichSignalingMessage:
         monkeypatch.setenv("GALAXY_TURN_URLS", "")
         monkeypatch.setenv("GALAXY_STUN_URLS", "")
         from galaxy_gateway.webrtc_proxy import enrich_signaling_message
+
         raw = json.dumps({"type": "offer", "sdp": "v=0\r\n"})
         result = json.loads(enrich_signaling_message(raw))
         assert "ice_servers" not in result
 
     def test_existing_keys_preserved_in_offer(self, turn_env):
         from galaxy_gateway.webrtc_proxy import enrich_signaling_message
+
         raw = json.dumps({"type": "offer", "sdp": "v=0\r\n", "custom": "value"})
         result = json.loads(enrich_signaling_message(raw))
         assert result["custom"] == "value"
@@ -298,6 +321,7 @@ class TestEnrichSignalingMessage:
 # ===========================================================================
 # Tests: GET /api/v1/webrtc/endpoint Round 6 fields
 # ===========================================================================
+
 
 class TestWebRTCEndpointRound6Fields:
 
@@ -350,6 +374,7 @@ class TestWebRTCEndpointRound6Fields:
 # Tests: WS proxy — ice_servers push on connect
 # ===========================================================================
 
+
 class TestIceServersPushOnConnect:
 
     def test_ice_servers_message_sent_on_connect(self, test_client_with_turn, mock_node95):
@@ -379,6 +404,7 @@ class TestIceServersPushOnConnect:
 # ===========================================================================
 # Tests: WS proxy — TURN injected into offer/answer from Node_95
 # ===========================================================================
+
 
 class TestTurnInjectionInProxy:
 
@@ -432,6 +458,7 @@ class TestTurnInjectionInProxy:
 # Tests: trickle ICE — multiple ice_candidate messages forwarded
 # ===========================================================================
 
+
 class TestTrickleIceForwarding:
 
     def test_multiple_ice_candidates_relayed_in_order(self, test_client_with_turn, mock_node95):
@@ -472,7 +499,9 @@ class TestTrickleIceForwarding:
         # This test verifies that trickle works (no candidate is dropped)
         with test_client_with_turn.websocket_connect("/ws/webrtc/trickle_annotate") as ws:
             ws.receive_text()  # consume ice_servers push
-            ws.send_text(json.dumps({"type": "ice_candidate", "candidate": "candidate:1 1 UDP 2 1.2.3.4 3478 typ relay"}))
+            ws.send_text(
+                json.dumps({"type": "ice_candidate", "candidate": "candidate:1 1 UDP 2 1.2.3.4 3478 typ relay"})
+            )
             reply = json.loads(ws.receive_text())
             assert reply["type"] == "echo"
 
@@ -480,6 +509,7 @@ class TestTrickleIceForwarding:
 # ===========================================================================
 # Tests: timeout path
 # ===========================================================================
+
 
 class TestSignalingTimeout:
 
@@ -495,6 +525,7 @@ class TestSignalingTimeout:
         monkeypatch.setenv("NODE_95_URL", info["url"])
 
         from galaxy_gateway import webrtc_proxy as wp
+
         # Reload the module-level constant so the new value is picked up
         original_timeout = wp.SIGNALING_TIMEOUT_S
         wp.SIGNALING_TIMEOUT_S = 0
@@ -502,6 +533,7 @@ class TestSignalingTimeout:
         app = _make_gateway_app()
         try:
             from starlette.websockets import WebSocketDisconnect
+
             closed = False
             code_received = None
             with TestClient(app, raise_server_exceptions=False) as c:
@@ -529,6 +561,7 @@ class TestSignalingTimeout:
 # ===========================================================================
 # Tests: backward compatibility with legacy single-candidate clients
 # ===========================================================================
+
 
 class TestBackwardCompatibility:
 
@@ -561,8 +594,10 @@ class TestBackwardCompatibility:
         assert resp.status_code == 200
         data = resp.json()
         required_legacy_keys = {
-            "node95_url", "ws_signaling_path",
-            "gateway_ws_url", "gateway_ws_path",
+            "node95_url",
+            "ws_signaling_path",
+            "gateway_ws_url",
+            "gateway_ws_path",
             "cross_device_enabled",
         }
         assert required_legacy_keys <= set(data.keys())
@@ -572,11 +607,13 @@ class TestBackwardCompatibility:
 # Tests: cross-device switch OFF
 # ===========================================================================
 
+
 class TestCrossDeviceSwitchOff:
 
     def test_signaling_blocked_when_switch_off(self, monkeypatch, mock_node95):
         monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
         from starlette.websockets import WebSocketDisconnect
+
         app = _make_gateway_app()
         with TestClient(app, raise_server_exceptions=False) as c:
             closed = False
@@ -601,24 +638,33 @@ class TestCrossDeviceSwitchOff:
 # Tests: _candidate_type_from_str helper
 # ===========================================================================
 
+
 class TestCandidateTypeFromStr:
 
     def test_relay_candidate(self):
         from galaxy_gateway.webrtc_proxy import _candidate_type_from_str
+
         assert _candidate_type_from_str("candidate:1 1 UDP 2 1.2.3.4 3478 typ relay raddr 0.0.0.0 rport 0") == "relay"
 
     def test_srflx_candidate(self):
         from galaxy_gateway.webrtc_proxy import _candidate_type_from_str
-        assert _candidate_type_from_str("candidate:1 1 UDP 2 5.5.5.5 1234 typ srflx raddr 192.168.1.1 rport 1234") == "srflx"
+
+        assert (
+            _candidate_type_from_str("candidate:1 1 UDP 2 5.5.5.5 1234 typ srflx raddr 192.168.1.1 rport 1234")
+            == "srflx"
+        )
 
     def test_host_candidate(self):
         from galaxy_gateway.webrtc_proxy import _candidate_type_from_str
+
         assert _candidate_type_from_str("candidate:1 1 UDP 2 192.168.1.1 1234 typ host") == "host"
 
     def test_unknown_defaults_to_host(self):
         from galaxy_gateway.webrtc_proxy import _candidate_type_from_str
+
         assert _candidate_type_from_str("no type info here") == "host"
 
     def test_case_insensitive(self):
         from galaxy_gateway.webrtc_proxy import _candidate_type_from_str
+
         assert _candidate_type_from_str("CANDIDATE:1 1 UDP 2 1.2.3.4 3478 TYP RELAY") == "relay"

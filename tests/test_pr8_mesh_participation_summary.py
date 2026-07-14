@@ -71,7 +71,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # 1. Module import and authority sentinel
 # ---------------------------------------------------------------------------
@@ -428,8 +427,7 @@ class TestGracefulDegradation:
 
     def test_mesh_session_aggregation_handles_none(self) -> None:
         """When registry.get_mesh_session() returns None, no crash."""
-        from core.mesh_participation_summary import MeshParticipationSummary
-        from core.mesh_participation_summary import _aggregate_from_mesh_session
+        from core.mesh_participation_summary import MeshParticipationSummary, _aggregate_from_mesh_session
 
         summary = MeshParticipationSummary()
 
@@ -447,8 +445,7 @@ class TestGracefulDegradation:
 
     def test_mesh_membership_aggregation_handles_empty(self) -> None:
         """When registry.get_mesh_memberships() returns empty list, no crash."""
-        from core.mesh_participation_summary import MeshParticipationSummary
-        from core.mesh_participation_summary import _aggregate_from_mesh_membership
+        from core.mesh_participation_summary import MeshParticipationSummary, _aggregate_from_mesh_membership
 
         summary = MeshParticipationSummary()
 

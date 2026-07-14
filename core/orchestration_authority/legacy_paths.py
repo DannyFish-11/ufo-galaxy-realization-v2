@@ -162,18 +162,14 @@ _register(
     LegacyPathEntry(
         module_path="nodes.Node_110_SmartOrchestrator.main",
         status=LegacyPathStatus.LEGACY_COMPATIBILITY,
-        recommendation=(
-            "Use core.constellation_runtime.get_constellation_runtime() instead."
-        ),
+        recommendation=("Use core.constellation_runtime.get_constellation_runtime() instead."),
         pr_guardrail_added="PR-1 (constellation_runtime)",
         notes="Node_110 SmartOrchestrator main — legacy scheduler path.",
     ),
     LegacyPathEntry(
         module_path="nodes.Node_81_Orchestrator.main",
         status=LegacyPathStatus.LEGACY_COMPATIBILITY,
-        recommendation=(
-            "Use core.constellation_runtime.get_constellation_runtime() instead."
-        ),
+        recommendation=("Use core.constellation_runtime.get_constellation_runtime() instead."),
         pr_guardrail_added="PR-1 (constellation_runtime)",
         notes="Node_81 Orchestrator — older multi-node orchestration path.",
     ),
@@ -181,8 +177,7 @@ _register(
         module_path="nodes.Node_50_Transformer.task_orchestrator",
         status=LegacyPathStatus.DEPRECATED,
         recommendation=(
-            "Superseded by TaskEnvelope routing.  "
-            "Use core.schemas.task_envelope.TaskEnvelope for internal routing."
+            "Superseded by TaskEnvelope routing.  " "Use core.schemas.task_envelope.TaskEnvelope for internal routing."
         ),
         pr_guardrail_added="PR-1 (constellation_runtime)",
         notes="Node_50 Transformer task orchestrator — deprecated in favour of TaskEnvelope.",
@@ -490,17 +485,13 @@ _register(
             "GET /api/v1/projection/runtime."
         ),
         pr_guardrail_added="PR-mainline-closure",
-        notes=(
-            "dashboard/ — DELETED non-mainline UI surface. Do not recreate "
-            "status-authority endpoints here."
-        ),
+        notes=("dashboard/ — DELETED non-mainline UI surface. Do not recreate " "status-authority endpoints here."),
     ),
     LegacyPathEntry(
         module_path="dashboard",
         status=LegacyPathStatus.DELETED,
         recommendation=(
-            "dashboard/ package has been deleted. Use "
-            "windows_client.status_board_v2 and projection routes instead."
+            "dashboard/ package has been deleted. Use " "windows_client.status_board_v2 and projection routes instead."
         ),
         pr_guardrail_added="PR-mainline-closure",
         notes="dashboard/ — DELETED non-mainline UI surface.",
@@ -528,10 +519,7 @@ _register(
             "RuntimeProjection contract from GET /api/v1/projection/runtime."
         ),
         pr_guardrail_added="PR-mainline-closure",
-        notes=(
-            "windows_client/status_board.py — DELETED ad-hoc status board. "
-            "Superseded by status_board_v2/."
-        ),
+        notes=("windows_client/status_board.py — DELETED ad-hoc status board. " "Superseded by status_board_v2/."),
     ),
     LegacyPathEntry(
         module_path="windows_client",
@@ -562,10 +550,7 @@ _register(
             "(direct advanced invocation: python unified_launcher.py)"
         ),
         pr_guardrail_added="PR-8-layout",
-        notes=(
-            "Hard-disabled stub.  Emits DeprecationWarning on import.  "
-            "See enhancements/LEGACY_TRANSITION.md."
-        ),
+        notes=("Hard-disabled stub.  Emits DeprecationWarning on import.  " "See enhancements/LEGACY_TRANSITION.md."),
     ),
 )
 
@@ -677,8 +662,7 @@ _register(
         ),
         pr_guardrail_added="PR-L1",
         notes=(
-            "Routes AI twin — pre-L1 direct multi_llm_router bypass.  "
-            "Updated in L1 to canonical authority path."
+            "Routes AI twin — pre-L1 direct multi_llm_router bypass.  " "Updated in L1 to canonical authority path."
         ),
     ),
     LegacyPathEntry(
@@ -876,11 +860,13 @@ _register(
 
 #: Contributors: when registering any node whose module path starts with one of
 #: these prefixes, set architectural_class=NodeArchitecturalClass.LEGACY_ORCHESTRATOR_NODE.
-LEGACY_ORCHESTRATOR_NODE_PREFIXES: frozenset = frozenset({
-    "nodes.Node_110_SmartOrchestrator",
-    "nodes.Node_81_Orchestrator",
-    "nodes.Node_50_Transformer",
-})
+LEGACY_ORCHESTRATOR_NODE_PREFIXES: frozenset = frozenset(
+    {
+        "nodes.Node_110_SmartOrchestrator",
+        "nodes.Node_81_Orchestrator",
+        "nodes.Node_50_Transformer",
+    }
+)
 
 
 def is_legacy_path(module_path: str) -> bool:
@@ -1062,8 +1048,7 @@ _register(
         ),
         pr_guardrail_added="PR-S4",
         notes=(
-            "RepoCoordinator.register_android_device — demoted in PR-S4.  "
-            "Now delegates canonical writes to UDM."
+            "RepoCoordinator.register_android_device — demoted in PR-S4.  " "Now delegates canonical writes to UDM."
         ),
     ),
     LegacyPathEntry(
@@ -1078,8 +1063,7 @@ _register(
         ),
         pr_guardrail_added="PR-S4",
         notes=(
-            "RepoCoordinator.get_android_devices — demoted in PR-S4.  "
-            "Now prefers UDM; compat cache is fallback."
+            "RepoCoordinator.get_android_devices — demoted in PR-S4.  " "Now prefers UDM; compat cache is fallback."
         ),
     ),
 )
@@ -1424,10 +1408,12 @@ _register(
 #: Sentinel set of paths that were fully deleted (not just deprecated) in PR-8.
 #: Non-regression scripts check this set to ensure deleted paths are never
 #: reintroduced into the codebase.
-PR8_DELETED_PATHS: frozenset = frozenset([
-    "windows_client/_legacy/START_CLIENT.bat",
-    "windows_client/_legacy/start_galaxy_client.bat",
-])
+PR8_DELETED_PATHS: frozenset = frozenset(
+    [
+        "windows_client/_legacy/START_CLIENT.bat",
+        "windows_client/_legacy/start_galaxy_client.bat",
+    ]
+)
 
 _register(
     LegacyPathEntry(
@@ -1738,10 +1724,7 @@ _register(
 _register(
     # ── Android participant truth ingress ─────────────────────────────────
     LegacyPathEntry(
-        module_path=(
-            "core.android_participant_truth_ingress"
-            ".ingest_android_participant_truth_message"
-        ),
+        module_path=("core.android_participant_truth_ingress" ".ingest_android_participant_truth_message"),
         status=LegacyPathStatus.ACTIVE,
         recommendation=(
             "ingest_android_participant_truth_message() is the CANONICAL Android "
@@ -1759,10 +1742,7 @@ _register(
         ),
     ),
     LegacyPathEntry(
-        module_path=(
-            "core.android_participant_truth_ingress"
-            ".reconcile_android_participant_truth"
-        ),
+        module_path=("core.android_participant_truth_ingress" ".reconcile_android_participant_truth"),
         status=LegacyPathStatus.ACTIVE,
         recommendation=(
             "reconcile_android_participant_truth() is the CANONICAL reconciliation "
@@ -1778,10 +1758,7 @@ _register(
     ),
     # ── Android delegated signal ingress ─────────────────────────────────
     LegacyPathEntry(
-        module_path=(
-            "core.android_delegated_signal_ingress"
-            ".ingest_delegated_execution_signal"
-        ),
+        module_path=("core.android_delegated_signal_ingress" ".ingest_delegated_execution_signal"),
         status=LegacyPathStatus.ACTIVE,
         recommendation=(
             "ingest_delegated_execution_signal() is the CANONICAL ingress for "
@@ -1797,10 +1774,7 @@ _register(
         ),
     ),
     LegacyPathEntry(
-        module_path=(
-            "core.android_execution_signal_reconciler"
-            ".compat_extract_signal_kind"
-        ),
+        module_path=("core.android_execution_signal_reconciler" ".compat_extract_signal_kind"),
         status=LegacyPathStatus.LEGACY_COMPATIBILITY,
         recommendation=(
             "compat_extract_signal_kind() is a LEGACY COMPAT INFERENCE PATH "
@@ -1842,10 +1816,7 @@ _register(
             "readiness verdicts."
         ),
         pr_guardrail_added="PR-convergence",
-        notes=(
-            "Canonical readiness gate.  Android artifact integration via "
-            "participant truth ingress (TRUTH-005)."
-        ),
+        notes=("Canonical readiness gate.  Android artifact integration via " "participant truth ingress (TRUTH-005)."),
     ),
     # ── Observation-only audit and operator surfaces ──────────────────────
     LegacyPathEntry(
@@ -1861,8 +1832,7 @@ _register(
         ),
         pr_guardrail_added="PR-convergence",
         notes=(
-            "Observation-only audit record.  Non-authoritative.  "
-            "Must not be used as a canonical state write path."
+            "Observation-only audit record.  Non-authoritative.  " "Must not be used as a canonical state write path."
         ),
     ),
     LegacyPathEntry(
@@ -1892,9 +1862,7 @@ _register(
             "routing, truth, or delegated-flow decisions."
         ),
         pr_guardrail_added="PR-convergence",
-        notes=(
-            "Observation-only operator surface.  Reads canonical state; does not write."
-        ),
+        notes=("Observation-only operator surface.  Reads canonical state; does not write."),
     ),
 )
 

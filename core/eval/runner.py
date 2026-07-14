@@ -31,10 +31,7 @@ class EvalReport:
             "pass_rate": round(self.pass_rate, 4),
             "avg_score": round(self.avg_score, 4),
             "duration_ms": round(self.duration_ms, 1),
-            "cases": [
-                {"id": s.case_id, "score": s.score, "passed": s.passed, "detail": s.detail}
-                for s in self.scores
-            ],
+            "cases": [{"id": s.case_id, "score": s.score, "passed": s.passed, "detail": s.detail} for s in self.scores],
         }
 
     def regressions_vs(self, baseline: "EvalReport") -> List[str]:
@@ -67,9 +64,12 @@ class EvalRunner:
         passed = sum(1 for s in scores if s.passed)
         avg = sum(s.score for s in scores) / n
         return EvalReport(
-            total=len(scores), passed=passed,
-            avg_score=avg, pass_rate=passed / n,
-            scores=scores, duration_ms=dur,
+            total=len(scores),
+            passed=passed,
+            avg_score=avg,
+            pass_rate=passed / n,
+            scores=scores,
+            duration_ms=dur,
         )
 
 

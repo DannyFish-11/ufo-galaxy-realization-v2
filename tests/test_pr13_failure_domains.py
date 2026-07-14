@@ -140,7 +140,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # ===========================================================================
 # A) FailureDomain enum
 # ===========================================================================
@@ -149,6 +148,7 @@ import pytest
 class TestFailureDomain:
     def test_all_expected_domains_present(self):
         from core.failure_domains import FailureDomain
+
         expected = {
             "LOCAL_RUNTIME_FAILURE",
             "REMOTE_CAPABILITY_MISMATCH",
@@ -165,6 +165,7 @@ class TestFailureDomain:
 
     def test_string_values_stable(self):
         from core.failure_domains import FailureDomain
+
         assert FailureDomain.LOCAL_RUNTIME_FAILURE.value == "local_runtime_failure"
         assert FailureDomain.REMOTE_CAPABILITY_MISMATCH.value == "remote_capability_mismatch"
         assert FailureDomain.REMOTE_DEVICE_UNAVAILABLE.value == "remote_device_unavailable"
@@ -177,11 +178,13 @@ class TestFailureDomain:
 
     def test_enum_is_str_subclass(self):
         from core.failure_domains import FailureDomain
+
         assert issubclass(FailureDomain, str)
         assert isinstance(FailureDomain.TIMEOUT_FAILURE, str)
 
     def test_values_are_distinct(self):
         from core.failure_domains import FailureDomain
+
         values = [d.value for d in FailureDomain]
         assert len(values) == len(set(values))
 
@@ -193,12 +196,14 @@ class TestFailureDomain:
 
 class TestDomainDescriptions:
     def test_all_domains_have_description(self):
-        from core.failure_domains import FailureDomain, DOMAIN_DESCRIPTIONS
+        from core.failure_domains import DOMAIN_DESCRIPTIONS, FailureDomain
+
         for domain in FailureDomain:
             assert domain in DOMAIN_DESCRIPTIONS, f"Missing description for {domain}"
 
     def test_descriptions_are_non_empty_strings(self):
         from core.failure_domains import DOMAIN_DESCRIPTIONS
+
         for domain, desc in DOMAIN_DESCRIPTIONS.items():
             assert isinstance(desc, str) and desc, f"Empty description for {domain}"
 
@@ -211,45 +216,53 @@ class TestDomainDescriptions:
 class TestIsRetryableByDomain:
     def test_timeout_retryable(self):
         from core.failure_domains import FailureDomain, is_retryable_by_domain
+
         assert is_retryable_by_domain(FailureDomain.TIMEOUT_FAILURE) is True
 
     def test_gateway_transport_retryable(self):
         from core.failure_domains import FailureDomain, is_retryable_by_domain
+
         assert is_retryable_by_domain(FailureDomain.GATEWAY_TRANSPORT_FAILURE) is True
 
     def test_device_unavailable_retryable(self):
         from core.failure_domains import FailureDomain, is_retryable_by_domain
+
         assert is_retryable_by_domain(FailureDomain.REMOTE_DEVICE_UNAVAILABLE) is True
 
     def test_local_runtime_not_retryable(self):
         from core.failure_domains import FailureDomain, is_retryable_by_domain
+
         assert is_retryable_by_domain(FailureDomain.LOCAL_RUNTIME_FAILURE) is False
 
     def test_capability_mismatch_not_same_target_retryable(self):
         from core.failure_domains import FailureDomain, is_retryable_by_domain
+
         # Same-target retry won't fix capability mismatch
         assert is_retryable_by_domain(FailureDomain.REMOTE_CAPABILITY_MISMATCH) is False
 
     def test_capability_mismatch_retryable_on_alternate(self):
         from core.failure_domains import FailureDomain, is_retryable_by_domain
-        assert is_retryable_by_domain(
-            FailureDomain.REMOTE_CAPABILITY_MISMATCH, allow_alternate_target=True
-        ) is True
+
+        assert is_retryable_by_domain(FailureDomain.REMOTE_CAPABILITY_MISMATCH, allow_alternate_target=True) is True
 
     def test_contract_validation_not_retryable(self):
         from core.failure_domains import FailureDomain, is_retryable_by_domain
+
         assert is_retryable_by_domain(FailureDomain.CONTRACT_VALIDATION_FAILURE) is False
 
     def test_substrate_dispatch_not_retryable(self):
         from core.failure_domains import FailureDomain, is_retryable_by_domain
+
         assert is_retryable_by_domain(FailureDomain.SUBSTRATE_DISPATCH_FAILURE) is False
 
     def test_orchestration_partial_not_retryable(self):
         from core.failure_domains import FailureDomain, is_retryable_by_domain
+
         assert is_retryable_by_domain(FailureDomain.ORCHESTRATION_PARTIAL_FAILURE) is False
 
     def test_unknown_not_retryable(self):
         from core.failure_domains import FailureDomain, is_retryable_by_domain
+
         assert is_retryable_by_domain(FailureDomain.UNKNOWN_FAILURE) is False
 
 
@@ -261,26 +274,32 @@ class TestIsRetryableByDomain:
 class TestDowngradeHintForDomain:
     def test_capability_mismatch_hint(self):
         from core.failure_domains import FailureDomain, downgrade_hint_for_domain
+
         assert downgrade_hint_for_domain(FailureDomain.REMOTE_CAPABILITY_MISMATCH) == "agent_runtime_to_command_only"
 
     def test_device_unavailable_hint(self):
         from core.failure_domains import FailureDomain, downgrade_hint_for_domain
+
         assert downgrade_hint_for_domain(FailureDomain.REMOTE_DEVICE_UNAVAILABLE) == "remote_to_local"
 
     def test_gateway_transport_hint(self):
         from core.failure_domains import FailureDomain, downgrade_hint_for_domain
+
         assert downgrade_hint_for_domain(FailureDomain.GATEWAY_TRANSPORT_FAILURE) == "remote_to_local"
 
     def test_timeout_no_hint(self):
         from core.failure_domains import FailureDomain, downgrade_hint_for_domain
+
         assert downgrade_hint_for_domain(FailureDomain.TIMEOUT_FAILURE) is None
 
     def test_local_runtime_no_hint(self):
         from core.failure_domains import FailureDomain, downgrade_hint_for_domain
+
         assert downgrade_hint_for_domain(FailureDomain.LOCAL_RUNTIME_FAILURE) is None
 
     def test_contract_validation_no_hint(self):
         from core.failure_domains import FailureDomain, downgrade_hint_for_domain
+
         assert downgrade_hint_for_domain(FailureDomain.CONTRACT_VALIDATION_FAILURE) is None
 
 
@@ -292,6 +311,7 @@ class TestDowngradeHintForDomain:
 class TestFailureClassification:
     def _make(self, **kwargs):
         from core.failure_domains import FailureClassification, FailureDomain
+
         defaults = dict(
             domain=FailureDomain.TIMEOUT_FAILURE,
             is_retryable=True,
@@ -306,6 +326,7 @@ class TestFailureClassification:
     def test_construction(self):
         fc = self._make()
         from core.failure_domains import FailureDomain
+
         assert fc.domain == FailureDomain.TIMEOUT_FAILURE
         assert fc.is_retryable is True
 
@@ -321,6 +342,7 @@ class TestFailureClassification:
 
     def test_to_dict_json_safe(self):
         import json
+
         fc = self._make()
         json.dumps(fc.to_dict())
 
@@ -338,77 +360,91 @@ class TestFailureClassification:
 class TestClassifyFromErrorCode:
     def _classify(self, code):
         from core.failure_domains import classify_from_error_code
+
         return classify_from_error_code(code)
 
     def test_command_timeout(self):
         from core.failure_domains import FailureDomain
+
         fc = self._classify("COMMAND_TIMEOUT")
         assert fc.domain == FailureDomain.TIMEOUT_FAILURE
         assert fc.is_retryable is True
 
     def test_disconnect(self):
         from core.failure_domains import FailureDomain
+
         fc = self._classify("DISCONNECT")
         assert fc.domain == FailureDomain.GATEWAY_TRANSPORT_FAILURE
         assert fc.is_retryable is True
 
     def test_executor_error(self):
         from core.failure_domains import FailureDomain
+
         fc = self._classify("EXECUTOR_ERROR")
         assert fc.domain == FailureDomain.GATEWAY_TRANSPORT_FAILURE
 
     def test_device_not_found(self):
         from core.failure_domains import FailureDomain
+
         fc = self._classify("DEVICE_NOT_FOUND")
         assert fc.domain == FailureDomain.REMOTE_DEVICE_UNAVAILABLE
         assert fc.is_retryable is True
 
     def test_device_offline(self):
         from core.failure_domains import FailureDomain
+
         fc = self._classify("DEVICE_OFFLINE")
         assert fc.domain == FailureDomain.REMOTE_DEVICE_UNAVAILABLE
 
     def test_invalid_envelope(self):
         from core.failure_domains import FailureDomain
+
         fc = self._classify("INVALID_ENVELOPE")
         assert fc.domain == FailureDomain.SUBSTRATE_DISPATCH_FAILURE
         assert fc.is_retryable is False
 
     def test_internal_error(self):
         from core.failure_domains import FailureDomain
+
         fc = self._classify("INTERNAL_ERROR")
         assert fc.domain == FailureDomain.SUBSTRATE_DISPATCH_FAILURE
 
     def test_hitl_timeout(self):
         from core.failure_domains import FailureDomain
+
         fc = self._classify("HITL_TIMEOUT")
         assert fc.domain == FailureDomain.TIMEOUT_FAILURE
 
     def test_hitl_denied(self):
         from core.failure_domains import FailureDomain
+
         fc = self._classify("HITL_DENIED")
         assert fc.domain == FailureDomain.CONTRACT_VALIDATION_FAILURE
         assert fc.is_retryable is False
 
     def test_acl_denied(self):
         from core.failure_domains import FailureDomain
+
         fc = self._classify("ACL_DENIED")
         assert fc.domain == FailureDomain.CONTRACT_VALIDATION_FAILURE
         assert fc.is_retryable is False
 
     def test_none_input(self):
         from core.failure_domains import FailureDomain
+
         fc = self._classify(None)
         assert fc.domain == FailureDomain.UNKNOWN_FAILURE
         assert fc.source_error_code is None
 
     def test_unknown_string(self):
         from core.failure_domains import FailureDomain
+
         fc = self._classify("SOMETHING_WEIRD")
         assert fc.domain == FailureDomain.UNKNOWN_FAILURE
 
     def test_notes_propagated(self):
         from core.failure_domains import classify_from_error_code
+
         fc = classify_from_error_code("DISCONNECT", notes="test note")
         assert fc.notes == "test note"
 
@@ -425,28 +461,33 @@ class TestClassifyFromErrorCode:
 class TestClassifyFromException:
     def test_timeout_error(self):
         from core.failure_domains import FailureDomain, classify_from_exception
+
         fc = classify_from_exception(TimeoutError("timed out"))
         assert fc.domain == FailureDomain.TIMEOUT_FAILURE
         assert fc.is_retryable is True
 
     def test_connection_error(self):
         from core.failure_domains import FailureDomain, classify_from_exception
+
         fc = classify_from_exception(ConnectionError("network failure"))
         assert fc.domain == FailureDomain.GATEWAY_TRANSPORT_FAILURE
         assert fc.is_retryable is True
 
     def test_generic_runtime_error(self):
         from core.failure_domains import FailureDomain, classify_from_exception
+
         fc = classify_from_exception(RuntimeError("something broke"))
         assert fc.domain == FailureDomain.LOCAL_RUNTIME_FAILURE
 
     def test_capability_message(self):
         from core.failure_domains import FailureDomain, classify_from_exception
+
         fc = classify_from_exception(RuntimeError("capability not supported on this device"))
         assert fc.domain == FailureDomain.REMOTE_CAPABILITY_MISMATCH
 
     def test_source_error_code_is_classname(self):
         from core.failure_domains import classify_from_exception
+
         fc = classify_from_exception(TimeoutError("t"))
         assert fc.source_error_code == "TimeoutError"
 
@@ -459,6 +500,7 @@ class TestClassifyFromException:
 class TestRetryPolicy:
     def _make(self, **kwargs):
         from core.schemas.execution_failure import RetryPolicy
+
         defaults = dict(
             is_retryable=True,
             max_attempts=3,
@@ -481,12 +523,20 @@ class TestRetryPolicy:
     def test_to_dict_keys(self):
         rp = self._make()
         d = rp.to_dict()
-        for key in ("is_retryable", "max_attempts", "backoff_base_ms",
-                    "backoff_multiplier", "same_target_only", "allow_mode_downgrade", "notes"):
+        for key in (
+            "is_retryable",
+            "max_attempts",
+            "backoff_base_ms",
+            "backoff_multiplier",
+            "same_target_only",
+            "allow_mode_downgrade",
+            "notes",
+        ):
             assert key in d
 
     def test_to_dict_json_safe(self):
         import json
+
         rp = self._make()
         json.dumps(rp.to_dict())
 
@@ -497,6 +547,7 @@ class TestRetryPolicy:
 
     def test_default_non_retryable(self):
         from core.schemas.execution_failure import RetryPolicy
+
         rp = RetryPolicy()
         assert rp.is_retryable is False
         assert rp.max_attempts == 1
@@ -510,6 +561,7 @@ class TestRetryPolicy:
 class TestFallbackPolicy:
     def _make(self, **kwargs):
         from core.schemas.execution_failure import FallbackPolicy
+
         defaults = dict(
             allow_agent_to_command_downgrade=True,
             allow_remote_to_local=True,
@@ -529,13 +581,19 @@ class TestFallbackPolicy:
     def test_to_dict_keys(self):
         fp = self._make()
         d = fp.to_dict()
-        for key in ("allow_agent_to_command_downgrade", "allow_remote_to_local",
-                    "allow_alternate_target", "degraded_completion_allowed",
-                    "fallback_mode_hint", "notes"):
+        for key in (
+            "allow_agent_to_command_downgrade",
+            "allow_remote_to_local",
+            "allow_alternate_target",
+            "degraded_completion_allowed",
+            "fallback_mode_hint",
+            "notes",
+        ):
             assert key in d
 
     def test_to_dict_json_safe(self):
         import json
+
         fp = self._make()
         json.dumps(fp.to_dict())
 
@@ -546,6 +604,7 @@ class TestFallbackPolicy:
 
     def test_default_no_fallback(self):
         from core.schemas.execution_failure import FallbackPolicy
+
         fp = FallbackPolicy()
         assert fp.allow_agent_to_command_downgrade is False
         assert fp.allow_remote_to_local is False
@@ -560,17 +619,20 @@ class TestFallbackPolicy:
 class TestDefaultPolicyConstants:
     def test_no_retry_policy(self):
         from core.schemas.execution_failure import DEFAULT_NO_RETRY_POLICY
+
         assert DEFAULT_NO_RETRY_POLICY.is_retryable is False
         assert DEFAULT_NO_RETRY_POLICY.max_attempts == 1
 
     def test_transient_retry_policy(self):
         from core.schemas.execution_failure import DEFAULT_TRANSIENT_RETRY_POLICY
+
         assert DEFAULT_TRANSIENT_RETRY_POLICY.is_retryable is True
         assert DEFAULT_TRANSIENT_RETRY_POLICY.max_attempts == 3
         assert DEFAULT_TRANSIENT_RETRY_POLICY.same_target_only is False
 
     def test_no_fallback_policy(self):
         from core.schemas.execution_failure import DEFAULT_NO_FALLBACK_POLICY
+
         assert DEFAULT_NO_FALLBACK_POLICY.allow_agent_to_command_downgrade is False
         assert DEFAULT_NO_FALLBACK_POLICY.allow_remote_to_local is False
         assert DEFAULT_NO_FALLBACK_POLICY.allow_alternate_target is False
@@ -578,6 +640,7 @@ class TestDefaultPolicyConstants:
 
     def test_remote_fallback_policy(self):
         from core.schemas.execution_failure import DEFAULT_REMOTE_FALLBACK_POLICY
+
         assert DEFAULT_REMOTE_FALLBACK_POLICY.allow_agent_to_command_downgrade is True
         assert DEFAULT_REMOTE_FALLBACK_POLICY.allow_remote_to_local is True
         assert DEFAULT_REMOTE_FALLBACK_POLICY.allow_alternate_target is True
@@ -592,6 +655,7 @@ class TestDefaultPolicyConstants:
 class TestFailureRecord:
     def _make_record(self, error_code="COMMAND_TIMEOUT"):
         from core.schemas.execution_failure import build_failure_record
+
         return build_failure_record(error_code)
 
     def test_failure_domain_property(self):
@@ -620,6 +684,7 @@ class TestFailureRecord:
 
     def test_to_dict_json_safe(self):
         import json
+
         record = self._make_record()
         json.dumps(record.to_dict())
 
@@ -632,6 +697,7 @@ class TestFailureRecord:
 class TestBuildFailureRecord:
     def test_command_timeout_retryable(self):
         from core.schemas.execution_failure import build_failure_record
+
         record = build_failure_record("COMMAND_TIMEOUT")
         assert record.failure_domain == "timeout_failure"
         assert record.is_retryable is True
@@ -639,12 +705,14 @@ class TestBuildFailureRecord:
 
     def test_disconnect_retryable(self):
         from core.schemas.execution_failure import build_failure_record
+
         record = build_failure_record("DISCONNECT")
         assert record.failure_domain == "gateway_transport_failure"
         assert record.is_retryable is True
 
     def test_device_not_found_retryable(self):
         from core.schemas.execution_failure import build_failure_record
+
         record = build_failure_record("DEVICE_NOT_FOUND")
         assert record.failure_domain == "remote_device_unavailable"
         assert record.is_retryable is True
@@ -652,12 +720,14 @@ class TestBuildFailureRecord:
 
     def test_invalid_envelope_not_retryable(self):
         from core.schemas.execution_failure import build_failure_record
+
         record = build_failure_record("INVALID_ENVELOPE")
         assert record.failure_domain == "substrate_dispatch_failure"
         assert record.is_retryable is False
 
     def test_acl_denied_not_retryable_no_fallback(self):
         from core.schemas.execution_failure import build_failure_record
+
         record = build_failure_record("ACL_DENIED")
         assert record.failure_domain == "contract_validation_failure"
         assert record.is_retryable is False
@@ -665,19 +735,22 @@ class TestBuildFailureRecord:
 
     def test_none_produces_unknown(self):
         from core.schemas.execution_failure import build_failure_record
+
         record = build_failure_record(None)
         assert record.failure_domain == "unknown_failure"
         assert record.is_retryable is False
 
     def test_retry_policy_override(self):
-        from core.schemas.execution_failure import build_failure_record, RetryPolicy
+        from core.schemas.execution_failure import RetryPolicy, build_failure_record
+
         custom_retry = RetryPolicy(is_retryable=False, max_attempts=1, notes="override")
         record = build_failure_record("COMMAND_TIMEOUT", retry_policy=custom_retry)
         assert record.retry_policy.is_retryable is False
         assert record.retry_policy.notes == "override"
 
     def test_fallback_policy_override(self):
-        from core.schemas.execution_failure import build_failure_record, FallbackPolicy
+        from core.schemas.execution_failure import FallbackPolicy, build_failure_record
+
         custom_fallback = FallbackPolicy(allow_remote_to_local=False, notes="override")
         record = build_failure_record("COMMAND_TIMEOUT", fallback_policy=custom_fallback)
         assert record.fallback_policy.allow_remote_to_local is False
@@ -691,12 +764,14 @@ class TestBuildFailureRecord:
 class TestBuildFailureRecordFromException:
     def test_timeout_error(self):
         from core.schemas.execution_failure import build_failure_record_from_exception
+
         record = build_failure_record_from_exception(TimeoutError("timed out"))
         assert record.failure_domain == "timeout_failure"
         assert record.is_retryable is True
 
     def test_runtime_error(self):
         from core.schemas.execution_failure import build_failure_record_from_exception
+
         record = build_failure_record_from_exception(RuntimeError("something broke"))
         assert record.failure_domain == "local_runtime_failure"
 
@@ -709,10 +784,12 @@ class TestBuildFailureRecordFromException:
 class TestFailureRecordSummary:
     def test_none_returns_empty_dict(self):
         from core.schemas.execution_failure import failure_record_summary
+
         assert failure_record_summary(None) == {}
 
     def test_record_returns_all_keys(self):
         from core.schemas.execution_failure import build_failure_record, failure_record_summary
+
         record = build_failure_record("COMMAND_TIMEOUT")
         summary = failure_record_summary(record)
         assert "failure_domain" in summary
@@ -725,18 +802,22 @@ class TestFailureRecordSummary:
 
     def test_json_safe(self):
         import json
+
         from core.schemas.execution_failure import build_failure_record, failure_record_summary
+
         record = build_failure_record("DISCONNECT")
         json.dumps(failure_record_summary(record))
 
     def test_failure_domain_value(self):
         from core.schemas.execution_failure import build_failure_record, failure_record_summary
+
         record = build_failure_record("COMMAND_TIMEOUT")
         summary = failure_record_summary(record)
         assert summary["failure_domain"] == "timeout_failure"
 
     def test_is_retryable_value(self):
         from core.schemas.execution_failure import build_failure_record, failure_record_summary
+
         record = build_failure_record("ACL_DENIED")
         summary = failure_record_summary(record)
         assert summary["is_retryable"] is False
@@ -751,20 +832,23 @@ class TestDomainPolicyGuardrails:
     """Acceptance-test style: specific failure kinds should surface the right domain."""
 
     def test_timeout_failure_domain(self):
-        from core.failure_domains import classify_from_error_code, FailureDomain
+        from core.failure_domains import FailureDomain, classify_from_error_code
+
         fc = classify_from_error_code("COMMAND_TIMEOUT")
         assert fc.domain == FailureDomain.TIMEOUT_FAILURE
 
     def test_device_unavailable_domain(self):
-        from core.failure_domains import classify_from_error_code, FailureDomain
+        from core.failure_domains import FailureDomain, classify_from_error_code
+
         fc = classify_from_error_code("DEVICE_OFFLINE")
         assert fc.domain == FailureDomain.REMOTE_DEVICE_UNAVAILABLE
         assert fc.is_retryable is True
 
     def test_capability_mismatch_domain_with_downgrade_hint(self):
         """Unsupported/insufficient capability surfaces remote_capability_mismatch."""
-        from core.schemas.execution_failure import build_failure_record
         from core.failure_domains import FailureDomain, classify_from_exception
+        from core.schemas.execution_failure import build_failure_record
+
         # Capability mismatch typically comes from the resolver as a fallback
         # We can test via a synthetic exception
         fc = classify_from_exception(RuntimeError("capability not supported"))
@@ -772,7 +856,8 @@ class TestDomainPolicyGuardrails:
         assert fc.downgrade_hint == "agent_runtime_to_command_only"
 
     def test_contract_validation_not_retryable(self):
-        from core.failure_domains import classify_from_error_code, FailureDomain
+        from core.failure_domains import FailureDomain, classify_from_error_code
+
         fc = classify_from_error_code("ACL_DENIED")
         assert fc.domain == FailureDomain.CONTRACT_VALIDATION_FAILURE
         assert fc.is_retryable is False
@@ -780,6 +865,7 @@ class TestDomainPolicyGuardrails:
     def test_retryable_vs_non_retryable_distinguishable(self):
         """Retryable and non-retryable failures must be distinguishable."""
         from core.failure_domains import classify_from_error_code
+
         retryable = classify_from_error_code("COMMAND_TIMEOUT")
         non_retryable = classify_from_error_code("ACL_DENIED")
         assert retryable.is_retryable is True
@@ -789,6 +875,7 @@ class TestDomainPolicyGuardrails:
     def test_fallback_path_inspectable(self):
         """A representative downgrade/fallback path is explicit and inspectable."""
         from core.schemas.execution_failure import build_failure_record
+
         record = build_failure_record("DEVICE_OFFLINE")
         # Downgrade hint is explicit
         assert record.downgrade_hint is not None
@@ -801,6 +888,7 @@ class TestDomainPolicyGuardrails:
     def test_backward_compat_callers_unaffected(self):
         """Callers that ignore failure_domain should still get a working result."""
         from core.failure_domains import classify_from_error_code
+
         fc = classify_from_error_code("COMMAND_TIMEOUT")
         # Caller only checks success/failure — doesn't touch domain
         # This should not raise
@@ -818,6 +906,7 @@ class TestDomainPolicyGuardrails:
 class TestModeResolutionResultFailureDomain:
     def test_failure_domain_field_exists(self):
         from core.remote_execution_mode_resolver import ModeResolutionResult
+
         result = ModeResolutionResult(
             mode="command_only",
             resolution_source="fallback",
@@ -827,12 +916,14 @@ class TestModeResolutionResultFailureDomain:
 
     def test_failure_domain_defaults_to_none(self):
         from core.remote_execution_mode_resolver import ModeResolutionResult
+
         result = ModeResolutionResult(mode="agent_runtime", resolution_source="forced")
         assert result.failure_domain is None
 
     def test_capability_mismatch_fallback_has_domain(self):
         """Resolver fallback due to capability mismatch should expose failure_domain."""
         from core.remote_execution_mode_resolver import ModeResolutionResult
+
         result = ModeResolutionResult(
             mode="command_only",
             resolution_source="fallback",
@@ -844,6 +935,7 @@ class TestModeResolutionResultFailureDomain:
     def test_non_fallback_resolution_no_domain(self):
         """Profile-preferred or task_required resolutions should have no failure_domain."""
         from core.remote_execution_mode_resolver import ModeResolutionResult
+
         result = ModeResolutionResult(
             mode="agent_runtime",
             resolution_source="profile_preferred",
@@ -852,8 +944,9 @@ class TestModeResolutionResultFailureDomain:
 
     def test_resolver_capability_mismatch_fallback(self):
         """Resolver returns failure_domain when required mode is unsupported."""
-        from core.remote_execution_mode_resolver import RemoteExecutionModeResolver
         from unittest.mock import MagicMock
+
+        from core.remote_execution_mode_resolver import RemoteExecutionModeResolver
 
         profile = MagicMock()
         profile.device_id = "test_device"
@@ -870,6 +963,7 @@ class TestModeResolutionResultFailureDomain:
     def test_resolver_no_profile_fallback_domain(self):
         """Resolver with no profile should expose remote_device_unavailable domain."""
         from core.remote_execution_mode_resolver import RemoteExecutionModeResolver
+
         resolver = RemoteExecutionModeResolver()
         result = resolver.resolve(profile=None)
         assert result.resolution_source == "fallback"
@@ -884,11 +978,13 @@ class TestModeResolutionResultFailureDomain:
 class TestLifecycleSummaryFailureDomain:
     def test_no_failure_domain_key_absent(self):
         from core.schemas.execution_lifecycle import ExecutionLifecycleState, lifecycle_summary
+
         summary = lifecycle_summary(ExecutionLifecycleState.SUCCEEDED)
         assert "failure_domain" not in summary
 
     def test_failure_domain_present_when_passed(self):
         from core.schemas.execution_lifecycle import ExecutionLifecycleState, lifecycle_summary
+
         summary = lifecycle_summary(
             ExecutionLifecycleState.FAILED,
             failure_domain="timeout_failure",
@@ -897,6 +993,7 @@ class TestLifecycleSummaryFailureDomain:
 
     def test_other_keys_unaffected(self):
         from core.schemas.execution_lifecycle import ExecutionLifecycleState, lifecycle_summary
+
         summary = lifecycle_summary(
             ExecutionLifecycleState.FAILED,
             failure_domain="gateway_transport_failure",
@@ -908,6 +1005,7 @@ class TestLifecycleSummaryFailureDomain:
     def test_backward_compat_no_failure_domain_arg(self):
         """Calling lifecycle_summary without failure_domain should still work."""
         from core.schemas.execution_lifecycle import ExecutionLifecycleState, lifecycle_summary
+
         # Original call signature — no failure_domain kwarg
         summary = lifecycle_summary(ExecutionLifecycleState.SUCCEEDED)
         assert "lifecycle_state" in summary
@@ -915,7 +1013,9 @@ class TestLifecycleSummaryFailureDomain:
 
     def test_failure_domain_json_safe(self):
         import json
+
         from core.schemas.execution_lifecycle import ExecutionLifecycleState, lifecycle_summary
+
         summary = lifecycle_summary(
             ExecutionLifecycleState.TIMED_OUT,
             failure_domain="timeout_failure",
@@ -939,6 +1039,7 @@ def _run_route_envelope_with_execute_result(envelope, execute_result):
     import asyncio
     from types import SimpleNamespace
     from unittest.mock import AsyncMock, patch
+
     from core.command_router import CommandRouter
 
     approved = list(envelope.targets)
@@ -960,8 +1061,10 @@ def _run_route_envelope_with_execute_result(envelope, execute_result):
             side_effect=_mock_get_slots,
         ):
             with patch.object(
-                router, "_execute_command",
-                new_callable=AsyncMock, return_value=execute_result,
+                router,
+                "_execute_command",
+                new_callable=AsyncMock,
+                return_value=execute_result,
             ):
                 return await router.route_envelope(envelope)
 
@@ -974,6 +1077,7 @@ class TestCommandRouterFailureDomainStamp:
     def test_failure_result_gets_failure_domain(self):
         """A failed route_envelope result should carry failure_domain."""
         import asyncio
+
         from core.schemas.task_envelope import TaskEnvelope
 
         envelope = TaskEnvelope(
@@ -1008,6 +1112,7 @@ class TestCommandRouterFailureDomainStamp:
         """A successful route_envelope result should NOT carry failure_domain."""
         import asyncio
         from unittest.mock import AsyncMock, patch
+
         from core.schemas.task_envelope import TaskEnvelope
 
         envelope = TaskEnvelope(
@@ -1040,6 +1145,7 @@ class TestCommandRouterFailureDomainStamp:
         """A retryable failure should carry failure_is_retryable=True."""
         import asyncio
         from unittest.mock import AsyncMock, patch
+
         from core.schemas.task_envelope import TaskEnvelope
 
         envelope = TaskEnvelope(
@@ -1049,11 +1155,17 @@ class TestCommandRouterFailureDomainStamp:
             args={},
         )
         failed_result = {
-            "request_id": "retry-test", "task_id": "retry-test",
-            "trace_id": None, "command_id": "retry-test",
-            "device_id": "dev_1", "command": "cmd", "via": "command_router",
-            "success": False, "result": None,
-            "error_code": "COMMAND_TIMEOUT", "error_message": "timeout",
+            "request_id": "retry-test",
+            "task_id": "retry-test",
+            "trace_id": None,
+            "command_id": "retry-test",
+            "device_id": "dev_1",
+            "command": "cmd",
+            "via": "command_router",
+            "success": False,
+            "result": None,
+            "error_code": "COMMAND_TIMEOUT",
+            "error_message": "timeout",
             "latency_ms": 30000.0,
         }
 
@@ -1074,6 +1186,7 @@ class TestSwarmCoordinatorFailureDomain:
         """Missing target_device_id → remote_device_unavailable."""
         import asyncio
         from unittest.mock import MagicMock
+
         from core.swarm_coordinator import SwarmCoordinator
 
         manifest = MagicMock()
@@ -1103,6 +1216,7 @@ class TestSwarmCoordinatorFailureDomain:
         """CommandRouter unavailable → substrate_dispatch_failure."""
         import asyncio
         from unittest.mock import MagicMock, patch
+
         from core.swarm_coordinator import SwarmCoordinator
 
         manifest = MagicMock()
@@ -1122,8 +1236,10 @@ class TestSwarmCoordinatorFailureDomain:
         mock_ledger.append = MagicMock(return_value="event_id")
 
         async def run():
-            with patch.object(coord, "_get_router", return_value=None), \
-                 patch.object(coord, "_get_ledger", return_value=mock_ledger):
+            with (
+                patch.object(coord, "_get_router", return_value=None),
+                patch.object(coord, "_get_ledger", return_value=mock_ledger),
+            ):
                 return await coord._dispatch_one(manifest)
 
         result = asyncio.new_event_loop().run_until_complete(run())
@@ -1134,7 +1250,8 @@ class TestSwarmCoordinatorFailureDomain:
     def test_exception_in_dispatch_domain(self):
         """Exception during dispatch → gateway_transport_failure."""
         import asyncio
-        from unittest.mock import MagicMock, patch, AsyncMock
+        from unittest.mock import AsyncMock, MagicMock, patch
+
         from core.swarm_coordinator import SwarmCoordinator
 
         manifest = MagicMock()
@@ -1155,13 +1272,13 @@ class TestSwarmCoordinatorFailureDomain:
         mock_ledger.append = MagicMock(return_value="event_id")
 
         mock_router = MagicMock()
-        mock_router.dispatch_agent_remote = AsyncMock(
-            side_effect=ConnectionError("network error")
-        )
+        mock_router.dispatch_agent_remote = AsyncMock(side_effect=ConnectionError("network error"))
 
         async def run():
-            with patch.object(coord, "_get_router", return_value=mock_router), \
-                 patch.object(coord, "_get_ledger", return_value=mock_ledger):
+            with (
+                patch.object(coord, "_get_router", return_value=mock_router),
+                patch.object(coord, "_get_ledger", return_value=mock_ledger),
+            ):
                 return await coord._dispatch_one(manifest)
 
         result = asyncio.new_event_loop().run_until_complete(run())

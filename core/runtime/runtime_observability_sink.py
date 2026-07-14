@@ -448,8 +448,7 @@ def emit_device_lifecycle_event(
             metadata=metadata,
         )
         logger.info(
-            "device_lifecycle event_kind=%s device_id=%s new_state=%s reason=%s "
-            "trace_id=%s event_id=%s",
+            "device_lifecycle event_kind=%s device_id=%s new_state=%s reason=%s " "trace_id=%s event_id=%s",
             evt.event_kind,
             evt.device_id,
             evt.new_state,

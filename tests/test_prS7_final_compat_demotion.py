@@ -39,8 +39,8 @@ All tests are self-contained (no live servers, no real devices).
 from __future__ import annotations
 
 import logging
-import sys
 import os
+import sys
 
 import pytest
 
@@ -53,34 +53,30 @@ if _PROJECT_ROOT not in sys.path:
 # 1. PR-S7 registry entries present
 # ===========================================================================
 
+
 class TestPRS7RegistryEntries:
     """All three PR-S7 paths appear in LEGACY_PATH_REGISTRY."""
 
     def test_task_decomposer_registered(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
-        assert (
-            "galaxy_gateway.task_decomposer.TaskDecomposer"
-            in LEGACY_PATH_REGISTRY
-        )
+
+        assert "galaxy_gateway.task_decomposer.TaskDecomposer" in LEGACY_PATH_REGISTRY
 
     def test_intelligent_task_planner_registered(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
-        assert (
-            "galaxy_gateway.task_decomposer.IntelligentTaskPlanner"
-            in LEGACY_PATH_REGISTRY
-        )
+
+        assert "galaxy_gateway.task_decomposer.IntelligentTaskPlanner" in LEGACY_PATH_REGISTRY
 
     def test_gateway_capability_registry_registered(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
-        assert (
-            "galaxy_gateway.capability_registry.GatewayCapabilityRegistry"
-            in LEGACY_PATH_REGISTRY
-        )
+
+        assert "galaxy_gateway.capability_registry.GatewayCapabilityRegistry" in LEGACY_PATH_REGISTRY
 
 
 # ===========================================================================
 # 2. All three are LEGACY_COMPATIBILITY
 # ===========================================================================
+
 
 class TestPRS7Status:
     """All PR-S7 entries carry at least LEGACY_COMPATIBILITY status.
@@ -96,10 +92,12 @@ class TestPRS7Status:
     @staticmethod
     def _retired_statuses():
         from core.orchestration_authority.legacy_paths import LegacyPathStatus
+
         return {LegacyPathStatus.LEGACY_COMPATIBILITY, LegacyPathStatus.DEPRECATED}
 
     def test_task_decomposer_is_legacy_compat(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
+
         entry = LEGACY_PATH_REGISTRY["galaxy_gateway.task_decomposer.TaskDecomposer"]
         assert entry.status in self._retired_statuses(), (
             f"TaskDecomposer status {entry.status!r} must be at least "
@@ -108,9 +106,8 @@ class TestPRS7Status:
 
     def test_intelligent_task_planner_is_legacy_compat(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
-        entry = LEGACY_PATH_REGISTRY[
-            "galaxy_gateway.task_decomposer.IntelligentTaskPlanner"
-        ]
+
+        entry = LEGACY_PATH_REGISTRY["galaxy_gateway.task_decomposer.IntelligentTaskPlanner"]
         assert entry.status in self._retired_statuses(), (
             f"IntelligentTaskPlanner status {entry.status!r} must be at least "
             "LEGACY_COMPATIBILITY (PR-516 upgraded it to DEPRECATED)"
@@ -118,9 +115,8 @@ class TestPRS7Status:
 
     def test_gateway_capability_registry_is_legacy_compat(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
-        entry = LEGACY_PATH_REGISTRY[
-            "galaxy_gateway.capability_registry.GatewayCapabilityRegistry"
-        ]
+
+        entry = LEGACY_PATH_REGISTRY["galaxy_gateway.capability_registry.GatewayCapabilityRegistry"]
         assert entry.status in self._retired_statuses(), (
             f"GatewayCapabilityRegistry status {entry.status!r} must be at least "
             "LEGACY_COMPATIBILITY (PR-516 upgraded it to DEPRECATED)"
@@ -130,6 +126,7 @@ class TestPRS7Status:
 # ===========================================================================
 # 3. All three have pr_guardrail_added == "PR-S7"
 # ===========================================================================
+
 
 class TestPRS7GuardrailTag:
     """All PR-S7 entries were guardrailed in PR-S7 or later upgraded by PR-516.
@@ -143,30 +140,26 @@ class TestPRS7GuardrailTag:
 
     def test_task_decomposer_guardrail_tag(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
+
         entry = LEGACY_PATH_REGISTRY["galaxy_gateway.task_decomposer.TaskDecomposer"]
         assert entry.pr_guardrail_added in self._VALID_TAGS, (
-            f"TaskDecomposer pr_guardrail_added {entry.pr_guardrail_added!r} "
-            "must be 'PR-S7' or 'PR-516'"
+            f"TaskDecomposer pr_guardrail_added {entry.pr_guardrail_added!r} " "must be 'PR-S7' or 'PR-516'"
         )
 
     def test_intelligent_task_planner_guardrail_tag(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
-        entry = LEGACY_PATH_REGISTRY[
-            "galaxy_gateway.task_decomposer.IntelligentTaskPlanner"
-        ]
+
+        entry = LEGACY_PATH_REGISTRY["galaxy_gateway.task_decomposer.IntelligentTaskPlanner"]
         assert entry.pr_guardrail_added in self._VALID_TAGS, (
-            f"IntelligentTaskPlanner pr_guardrail_added {entry.pr_guardrail_added!r} "
-            "must be 'PR-S7' or 'PR-516'"
+            f"IntelligentTaskPlanner pr_guardrail_added {entry.pr_guardrail_added!r} " "must be 'PR-S7' or 'PR-516'"
         )
 
     def test_gateway_capability_registry_guardrail_tag(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
-        entry = LEGACY_PATH_REGISTRY[
-            "galaxy_gateway.capability_registry.GatewayCapabilityRegistry"
-        ]
+
+        entry = LEGACY_PATH_REGISTRY["galaxy_gateway.capability_registry.GatewayCapabilityRegistry"]
         assert entry.pr_guardrail_added in self._VALID_TAGS, (
-            f"GatewayCapabilityRegistry pr_guardrail_added {entry.pr_guardrail_added!r} "
-            "must be 'PR-S7' or 'PR-516'"
+            f"GatewayCapabilityRegistry pr_guardrail_added {entry.pr_guardrail_added!r} " "must be 'PR-S7' or 'PR-516'"
         )
 
 
@@ -174,33 +167,29 @@ class TestPRS7GuardrailTag:
 # 4. LEGACY_ORCHESTRATOR_PATHS shim includes all PR-S7 keys
 # ===========================================================================
 
+
 class TestLegacyOrchestratorPathsShimPRS7:
     """LEGACY_ORCHESTRATOR_PATHS frozenset includes all PR-S7 paths."""
 
     def test_shim_includes_task_decomposer(self):
         from core.orchestration_authority.legacy_paths import LEGACY_ORCHESTRATOR_PATHS
-        assert (
-            "galaxy_gateway.task_decomposer.TaskDecomposer"
-            in LEGACY_ORCHESTRATOR_PATHS
-        )
+
+        assert "galaxy_gateway.task_decomposer.TaskDecomposer" in LEGACY_ORCHESTRATOR_PATHS
 
     def test_shim_includes_intelligent_task_planner(self):
         from core.orchestration_authority.legacy_paths import LEGACY_ORCHESTRATOR_PATHS
-        assert (
-            "galaxy_gateway.task_decomposer.IntelligentTaskPlanner"
-            in LEGACY_ORCHESTRATOR_PATHS
-        )
+
+        assert "galaxy_gateway.task_decomposer.IntelligentTaskPlanner" in LEGACY_ORCHESTRATOR_PATHS
 
     def test_shim_includes_gateway_capability_registry(self):
         from core.orchestration_authority.legacy_paths import LEGACY_ORCHESTRATOR_PATHS
-        assert (
-            "galaxy_gateway.capability_registry.GatewayCapabilityRegistry"
-            in LEGACY_ORCHESTRATOR_PATHS
-        )
+
+        assert "galaxy_gateway.capability_registry.GatewayCapabilityRegistry" in LEGACY_ORCHESTRATOR_PATHS
 
     def test_shim_is_superset_of_prs6_paths(self):
         """Regression guard: PR-S6 paths must still be present in the shim."""
         from core.orchestration_authority.legacy_paths import LEGACY_ORCHESTRATOR_PATHS
+
         prs6_paths = {
             "galaxy_gateway.task_router.TaskScheduler",
             "galaxy_gateway.task_router.TaskRouter",
@@ -213,13 +202,15 @@ class TestLegacyOrchestratorPathsShimPRS7:
 # 5. task_decomposer module docstring carries the deprecation note
 # ===========================================================================
 
+
 class TestTaskDecomposerModuleDocstring:
     """Read source file directly to avoid import chain issues."""
 
     def _read_task_decomposer_src(self) -> str:
         path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "galaxy_gateway", "task_decomposer.py",
+            "galaxy_gateway",
+            "task_decomposer.py",
         )
         with open(path, encoding="utf-8") as fh:
             return fh.read()
@@ -245,11 +236,13 @@ class TestTaskDecomposerModuleDocstring:
 # 6. TaskDecomposer class docstring marks it as legacy compat
 # ===========================================================================
 
+
 class TestTaskDecomposerClassDocstring:
     def _read_task_decomposer_src(self) -> str:
         path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "galaxy_gateway", "task_decomposer.py",
+            "galaxy_gateway",
+            "task_decomposer.py",
         )
         with open(path, encoding="utf-8") as fh:
             return fh.read()
@@ -273,13 +266,15 @@ class TestTaskDecomposerClassDocstring:
 #    (verified via source inspection to avoid import chain issues)
 # ===========================================================================
 
+
 class TestTaskDecomposerGuardrailLog:
     """Verify guardrail wiring via source inspection."""
 
     def _read_task_decomposer_src(self) -> str:
         path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "galaxy_gateway", "task_decomposer.py",
+            "galaxy_gateway",
+            "task_decomposer.py",
         )
         with open(path, encoding="utf-8") as fh:
             return fh.read()
@@ -297,11 +292,13 @@ class TestTaskDecomposerGuardrailLog:
 # 8. IntelligentTaskPlanner class docstring marks it as legacy compat
 # ===========================================================================
 
+
 class TestIntelligentTaskPlannerClassDocstring:
     def _read_task_decomposer_src(self) -> str:
         path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "galaxy_gateway", "task_decomposer.py",
+            "galaxy_gateway",
+            "task_decomposer.py",
         )
         with open(path, encoding="utf-8") as fh:
             return fh.read()
@@ -325,13 +322,15 @@ class TestIntelligentTaskPlannerClassDocstring:
 #    (verified via source inspection to avoid import chain issues)
 # ===========================================================================
 
+
 class TestIntelligentTaskPlannerGuardrailLog:
     """Verify guardrail wiring via source inspection."""
 
     def _read_task_decomposer_src(self) -> str:
         path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "galaxy_gateway", "task_decomposer.py",
+            "galaxy_gateway",
+            "task_decomposer.py",
         )
         with open(path, encoding="utf-8") as fh:
             return fh.read()
@@ -350,13 +349,15 @@ class TestIntelligentTaskPlannerGuardrailLog:
 # 10. capability_registry module docstring carries the deprecation note
 # ===========================================================================
 
+
 class TestCapabilityRegistryModuleDocstring:
     """Read source file directly to avoid import chain issues."""
 
     def _read_capability_registry_src(self) -> str:
         path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "galaxy_gateway", "capability_registry.py",
+            "galaxy_gateway",
+            "capability_registry.py",
         )
         with open(path, encoding="utf-8") as fh:
             return fh.read()
@@ -382,11 +383,13 @@ class TestCapabilityRegistryModuleDocstring:
 # 11. GatewayCapabilityRegistry class docstring marks it as legacy compat
 # ===========================================================================
 
+
 class TestGatewayCapabilityRegistryClassDocstring:
     def _read_capability_registry_src(self) -> str:
         path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "galaxy_gateway", "capability_registry.py",
+            "galaxy_gateway",
+            "capability_registry.py",
         )
         with open(path, encoding="utf-8") as fh:
             return fh.read()
@@ -410,13 +413,15 @@ class TestGatewayCapabilityRegistryClassDocstring:
 #    (verified via source inspection to avoid import chain issues)
 # ===========================================================================
 
+
 class TestGatewayCapabilityRegistryGuardrailLog:
     """Verify guardrail wiring via source inspection."""
 
     def _read_capability_registry_src(self) -> str:
         path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "galaxy_gateway", "capability_registry.py",
+            "galaxy_gateway",
+            "capability_registry.py",
         )
         with open(path, encoding="utf-8") as fh:
             return fh.read()
@@ -434,22 +439,22 @@ class TestGatewayCapabilityRegistryGuardrailLog:
 # 13. is_legacy_path returns True for all three PR-S7 paths
 # ===========================================================================
 
+
 class TestIsLegacyPathPRS7:
     def test_task_decomposer_is_legacy(self):
         from core.orchestration_authority.legacy_paths import is_legacy_path
+
         assert is_legacy_path("galaxy_gateway.task_decomposer.TaskDecomposer")
 
     def test_intelligent_task_planner_is_legacy(self):
         from core.orchestration_authority.legacy_paths import is_legacy_path
-        assert is_legacy_path(
-            "galaxy_gateway.task_decomposer.IntelligentTaskPlanner"
-        )
+
+        assert is_legacy_path("galaxy_gateway.task_decomposer.IntelligentTaskPlanner")
 
     def test_gateway_capability_registry_is_legacy(self):
         from core.orchestration_authority.legacy_paths import is_legacy_path
-        assert is_legacy_path(
-            "galaxy_gateway.capability_registry.GatewayCapabilityRegistry"
-        )
+
+        assert is_legacy_path("galaxy_gateway.capability_registry.GatewayCapabilityRegistry")
 
     def test_canonical_capability_bus_is_not_legacy_compat(self):
         """CapabilityBus (canonical) must not appear as LEGACY_COMPATIBILITY."""
@@ -457,6 +462,7 @@ class TestIsLegacyPathPRS7:
             LEGACY_PATH_REGISTRY,
             LegacyPathStatus,
         )
+
         entry = LEGACY_PATH_REGISTRY.get("core.capability_bus.CapabilityBus")
         if entry is not None:
             assert entry.status is not LegacyPathStatus.LEGACY_COMPATIBILITY, (
@@ -470,6 +476,7 @@ class TestIsLegacyPathPRS7:
             LEGACY_PATH_REGISTRY,
             LegacyPathStatus,
         )
+
         entry = LEGACY_PATH_REGISTRY.get("core.task_graph.TaskGraph")
         if entry is not None:
             assert entry.status is not LegacyPathStatus.LEGACY_COMPATIBILITY, (
@@ -482,74 +489,76 @@ class TestIsLegacyPathPRS7:
 # 14. PURGE_REGISTRY contains PR-S7 entries
 # ===========================================================================
 
+
 class TestPurgeRegistryPRS7:
     """PR-S7 decisions appear in PURGE_REGISTRY with correct statuses."""
 
     def test_purge_registry_has_task_decomposer_entry(self):
         from core.legacy_purge_registry import PURGE_REGISTRY
+
         paths = {e.asset_path for e in PURGE_REGISTRY}
-        assert any("TaskDecomposer" in p for p in paths), (
-            "PURGE_REGISTRY should have a TaskDecomposer entry from PR-S7"
-        )
+        assert any("TaskDecomposer" in p for p in paths), "PURGE_REGISTRY should have a TaskDecomposer entry from PR-S7"
 
     def test_purge_registry_has_intelligent_task_planner_entry(self):
         from core.legacy_purge_registry import PURGE_REGISTRY
+
         paths = {e.asset_path for e in PURGE_REGISTRY}
-        assert any("IntelligentTaskPlanner" in p for p in paths), (
-            "PURGE_REGISTRY should have an IntelligentTaskPlanner entry from PR-S7"
-        )
+        assert any(
+            "IntelligentTaskPlanner" in p for p in paths
+        ), "PURGE_REGISTRY should have an IntelligentTaskPlanner entry from PR-S7"
 
     def test_purge_registry_has_gateway_capability_registry_entry(self):
         from core.legacy_purge_registry import PURGE_REGISTRY
+
         paths = {e.asset_path for e in PURGE_REGISTRY}
-        assert any("GatewayCapabilityRegistry" in p for p in paths), (
-            "PURGE_REGISTRY should have a GatewayCapabilityRegistry entry from PR-S7"
-        )
+        assert any(
+            "GatewayCapabilityRegistry" in p for p in paths
+        ), "PURGE_REGISTRY should have a GatewayCapabilityRegistry entry from PR-S7"
 
     def test_purge_registry_has_aip_protocol_v2_entry(self):
         from core.legacy_purge_registry import PURGE_REGISTRY
+
         paths = {e.asset_path for e in PURGE_REGISTRY}
-        assert any("aip_protocol_v2" in p for p in paths), (
-            "PURGE_REGISTRY should have an aip_protocol_v2 entry from PR-S7"
-        )
+        assert any(
+            "aip_protocol_v2" in p for p in paths
+        ), "PURGE_REGISTRY should have an aip_protocol_v2 entry from PR-S7"
 
     def test_prs7_wrapper_hardened_entries_have_correct_status(self):
         from core.legacy_purge_registry import PURGE_REGISTRY, PurgeStatus
+
         prs7 = [e for e in PURGE_REGISTRY if e.pr == "PR-S7"]
         assert len(prs7) >= 4, f"Expected >= 4 PR-S7 entries, got {len(prs7)}"
         wrapper_entries = [
-            e for e in prs7
+            e
+            for e in prs7
             if "TaskDecomposer" in e.asset_path
             or "IntelligentTaskPlanner" in e.asset_path
             or "GatewayCapabilityRegistry" in e.asset_path
         ]
         for entry in wrapper_entries:
             assert entry.status is PurgeStatus.WRAPPER_HARDENED, (
-                f"PR-S7 entry {entry.asset_path!r} should be WRAPPER_HARDENED, "
-                f"got {entry.status!r}"
+                f"PR-S7 entry {entry.asset_path!r} should be WRAPPER_HARDENED, " f"got {entry.status!r}"
             )
 
     def test_aip_protocol_v2_entry_is_hard_disabled(self):
         from core.legacy_purge_registry import PURGE_REGISTRY, PurgeStatus
-        aip_entries = [
-            e for e in PURGE_REGISTRY
-            if "aip_protocol_v2" in e.asset_path and e.pr == "PR-S7"
-        ]
-        assert len(aip_entries) >= 1, (
-            "PURGE_REGISTRY should have a PR-S7 aip_protocol_v2 entry"
-        )
+
+        aip_entries = [e for e in PURGE_REGISTRY if "aip_protocol_v2" in e.asset_path and e.pr == "PR-S7"]
+        assert len(aip_entries) >= 1, "PURGE_REGISTRY should have a PR-S7 aip_protocol_v2 entry"
         for entry in aip_entries:
-            assert entry.status is PurgeStatus.HARD_DISABLED, (
-                f"aip_protocol_v2 entry should be HARD_DISABLED, got {entry.status!r}"
-            )
+            assert (
+                entry.status is PurgeStatus.HARD_DISABLED
+            ), f"aip_protocol_v2 entry should be HARD_DISABLED, got {entry.status!r}"
 
     def test_get_entries_by_pr_returns_prs7(self):
         from core.legacy_purge_registry import get_entries_by_pr
+
         prs7 = get_entries_by_pr("PR-S7")
         assert len(prs7) >= 4
 
     def test_purge_registry_summary_includes_prs7(self):
         from core.legacy_purge_registry import purge_registry_summary
+
         summary = purge_registry_summary()
         assert "PR-S7" in summary["by_pr"]
         assert len(summary["by_pr"]["PR-S7"]) >= 4

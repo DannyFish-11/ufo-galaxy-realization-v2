@@ -27,16 +27,16 @@ from unittest.mock import AsyncMock
 import pytest
 
 from galaxy_gateway.pending_delivery_buffer import (
+    PENDING_DELIVERY_STORE_PATH,
     DurablePendingDeliveryBuffer,
     PendingDeliveryBuffer,
-    PENDING_DELIVERY_STORE_PATH,
     pending_delivery_buffer,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _msg(msg_type: str = "task_assign", task_id: str = "t1") -> Dict[str, Any]:
     return {"type": msg_type, "task_id": task_id, "payload": {}}
@@ -49,6 +49,7 @@ def _tmp_store(tmp_dir: str, name: str = "pending.json") -> str:
 # ---------------------------------------------------------------------------
 # Process-restart simulation: new instance, same file
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_messages_survive_process_restart():
@@ -65,9 +66,7 @@ async def test_messages_survive_process_restart():
 
         # Second "process": new instance loading from the same file.
         buf2 = DurablePendingDeliveryBuffer(store_path=store, ttl_seconds=60.0)
-        assert buf2.queue_size("dev1") == 2, (
-            "Messages must be restored from snapshot on new instance creation"
-        )
+        assert buf2.queue_size("dev1") == 2, "Messages must be restored from snapshot on new instance creation"
 
 
 @pytest.mark.asyncio
@@ -114,6 +113,7 @@ async def test_queue_empty_after_flush_and_restart():
 # TTL / expiry across restart
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_expired_messages_discarded_on_load():
     """Messages that have expired by the time of restart are silently discarded."""
@@ -129,9 +129,7 @@ async def test_expired_messages_discarded_on_load():
 
         # Restart: expired message must not be restored.
         buf2 = DurablePendingDeliveryBuffer(store_path=store, ttl_seconds=0.05)
-        assert buf2.queue_size("dev1") == 0, (
-            "Expired messages must be discarded on load, not replayed"
-        )
+        assert buf2.queue_size("dev1") == 0, "Expired messages must be discarded on load, not replayed"
         assert buf2.expired_total >= 1
 
 
@@ -160,6 +158,7 @@ async def test_non_expired_messages_loaded_correctly():
 # Capacity eviction across restart
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_capacity_eviction_preserved_across_restart():
     """Capacity limit is enforced when loading from a snapshot."""
@@ -167,17 +166,13 @@ async def test_capacity_eviction_preserved_across_restart():
         store = _tmp_store(tmp_dir)
 
         # Fill buffer beyond capacity, then restart with smaller cap.
-        buf1 = DurablePendingDeliveryBuffer(
-            store_path=store, max_queue_per_device=10, ttl_seconds=60.0
-        )
+        buf1 = DurablePendingDeliveryBuffer(store_path=store, max_queue_per_device=10, ttl_seconds=60.0)
         for i in range(10):
             await buf1.enqueue("dev1", _msg(task_id=f"t{i}"))
         assert buf1.queue_size("dev1") == 10
 
         # Restart with a smaller cap — load must not exceed it.
-        buf2 = DurablePendingDeliveryBuffer(
-            store_path=store, max_queue_per_device=3, ttl_seconds=60.0
-        )
+        buf2 = DurablePendingDeliveryBuffer(store_path=store, max_queue_per_device=3, ttl_seconds=60.0)
         assert buf2.queue_size("dev1") <= 3
 
 
@@ -187,16 +182,12 @@ async def test_bounded_retention_still_enforced_on_enqueue():
     with tempfile.TemporaryDirectory() as tmp_dir:
         store = _tmp_store(tmp_dir)
 
-        buf1 = DurablePendingDeliveryBuffer(
-            store_path=store, max_queue_per_device=3, ttl_seconds=60.0
-        )
+        buf1 = DurablePendingDeliveryBuffer(store_path=store, max_queue_per_device=3, ttl_seconds=60.0)
         for i in range(3):
             await buf1.enqueue("dev1", _msg(task_id=f"pre{i}"))
 
         # Restart
-        buf2 = DurablePendingDeliveryBuffer(
-            store_path=store, max_queue_per_device=3, ttl_seconds=60.0
-        )
+        buf2 = DurablePendingDeliveryBuffer(store_path=store, max_queue_per_device=3, ttl_seconds=60.0)
         assert buf2.queue_size("dev1") == 3
 
         # Enqueue one more — oldest must be evicted.
@@ -208,6 +199,7 @@ async def test_bounded_retention_still_enforced_on_enqueue():
 # ---------------------------------------------------------------------------
 # Multi-device isolation
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_multi_device_isolation_preserved_across_restart():
@@ -231,6 +223,7 @@ async def test_multi_device_isolation_preserved_across_restart():
 # ---------------------------------------------------------------------------
 # Graceful degradation
 # ---------------------------------------------------------------------------
+
 
 def test_missing_snapshot_starts_empty():
     """A missing snapshot file starts with an empty buffer (no error)."""
@@ -267,6 +260,7 @@ def test_malformed_queues_value_starts_empty():
 # Atomic write — snapshot is valid JSON after enqueue
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_snapshot_is_valid_json_after_enqueue():
     """After enqueue the snapshot file contains valid parseable JSON."""
@@ -297,14 +291,13 @@ async def test_snapshot_updated_after_flush():
         with open(store, "r", encoding="utf-8") as fh:
             data = json.load(fh)
 
-        assert "dev1" not in data.get("queues", {}), (
-            "After flush the snapshot must not retain the device queue"
-        )
+        assert "dev1" not in data.get("queues", {}), "After flush the snapshot must not retain the device queue"
 
 
 # ---------------------------------------------------------------------------
 # Module-level singleton is DurablePendingDeliveryBuffer
 # ---------------------------------------------------------------------------
+
 
 def test_module_singleton_is_durable_buffer():
     """The module-level singleton must be a DurablePendingDeliveryBuffer instance."""
@@ -323,6 +316,7 @@ def test_module_singleton_still_is_pending_delivery_buffer():
 # PENDING_DELIVERY_STORE_PATH constant exists
 # ---------------------------------------------------------------------------
 
+
 def test_store_path_constant_is_string():
     """PENDING_DELIVERY_STORE_PATH is a non-empty string."""
     assert isinstance(PENDING_DELIVERY_STORE_PATH, str)
@@ -333,12 +327,14 @@ def test_store_path_constant_is_string():
 # Reality surface: process_restart sentinel is now False
 # ---------------------------------------------------------------------------
 
+
 def test_process_restart_residual_risk_is_false():
     """INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART must be False — durable buffer present."""
     from core.cross_device_integration_reality import (
-        INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART,
         DURABLE_PENDING_DELIVERY_BUFFER_PRESENT,
+        INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART,
     )
+
     assert DURABLE_PENDING_DELIVERY_BUFFER_PRESENT is True
     assert INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART is False, (
         "INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART must be False now that "
@@ -352,6 +348,7 @@ def test_dispatch_durability_verdict_is_runnable_but_conditional():
         DISPATCH_DURABILITY_ACROSS_RESTART,
         CapabilityVerdict,
     )
-    assert DISPATCH_DURABILITY_ACROSS_RESTART == CapabilityVerdict.RUNNABLE_BUT_CONDITIONAL, (
-        "Pending-delivery buffer is now durable — restart durability must not be MISSING."
-    )
+
+    assert (
+        DISPATCH_DURABILITY_ACROSS_RESTART == CapabilityVerdict.RUNNABLE_BUT_CONDITIONAL
+    ), "Pending-delivery buffer is now durable — restart durability must not be MISSING."

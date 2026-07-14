@@ -64,6 +64,7 @@ if _PROJECT_ROOT not in sys.path:
 # 1. Module importable and public symbols exported
 # ===========================================================================
 
+
 class TestModuleImportable:
     """core.canonical_authoritative_path_convergence is importable."""
 
@@ -74,48 +75,57 @@ class TestModuleImportable:
         from core.canonical_authoritative_path_convergence import (
             CANONICAL_AUTHORITATIVE_PATH_CONVERGENCE_AUTHORITY,
         )
+
         assert CANONICAL_AUTHORITATIVE_PATH_CONVERGENCE_AUTHORITY
 
     def test_pr_sentinel_exported(self):
         from core.canonical_authoritative_path_convergence import (
             CANONICAL_AUTHORITATIVE_PATH_CONVERGENCE_PR_SENTINEL,
         )
+
         assert CANONICAL_AUTHORITATIVE_PATH_CONVERGENCE_PR_SENTINEL
 
     def test_path_inventory_exported(self):
         from core.canonical_authoritative_path_convergence import (
             CANONICAL_PATH_INVENTORY,
         )
+
         assert CANONICAL_PATH_INVENTORY is not None
 
     def test_enum_exported(self):
         from core.canonical_authoritative_path_convergence import CanonicalPathRole
+
         assert CanonicalPathRole is not None
 
     def test_enforce_canonical_selection_exported(self):
         from core.canonical_authoritative_path_convergence import (
             enforce_canonical_selection,
         )
+
         assert callable(enforce_canonical_selection)
 
     def test_build_convergence_audit_snapshot_exported(self):
         from core.canonical_authoritative_path_convergence import (
             build_convergence_audit_snapshot,
         )
+
         assert callable(build_convergence_audit_snapshot)
 
     def test_is_legacy_default_off_exported(self):
         from core.canonical_authoritative_path_convergence import is_legacy_default_off
+
         assert callable(is_legacy_default_off)
 
     def test_get_path_role_exported(self):
         from core.canonical_authoritative_path_convergence import get_path_role
+
         assert callable(get_path_role)
 
 
 # ===========================================================================
 # 2. CANONICAL_PATH_INVENTORY is non-empty and has canonical entries
 # ===========================================================================
+
 
 class TestCanonicalPathInventory:
     """CANONICAL_PATH_INVENTORY is populated with the expected entries."""
@@ -124,6 +134,7 @@ class TestCanonicalPathInventory:
         from core.canonical_authoritative_path_convergence import (
             CANONICAL_PATH_INVENTORY,
         )
+
         assert len(CANONICAL_PATH_INVENTORY) >= 10
 
     def test_command_router_in_inventory(self):
@@ -131,9 +142,8 @@ class TestCanonicalPathInventory:
             CANONICAL_PATH_INVENTORY,
             CanonicalPathRole,
         )
-        entry = CANONICAL_PATH_INVENTORY.get(
-            "core.command_router.CommandRouter.route_envelope"
-        )
+
+        entry = CANONICAL_PATH_INVENTORY.get("core.command_router.CommandRouter.route_envelope")
         assert entry is not None
         assert entry.role == CanonicalPathRole.canonical
 
@@ -142,9 +152,8 @@ class TestCanonicalPathInventory:
             CANONICAL_PATH_INVENTORY,
             CanonicalPathRole,
         )
-        entry = CANONICAL_PATH_INVENTORY.get(
-            "core.e2e_orchestrator.process_user_input"
-        )
+
+        entry = CANONICAL_PATH_INVENTORY.get("core.e2e_orchestrator.process_user_input")
         assert entry is not None
         assert entry.role == CanonicalPathRole.canonical
 
@@ -153,9 +162,8 @@ class TestCanonicalPathInventory:
             CANONICAL_PATH_INVENTORY,
             CanonicalPathRole,
         )
-        entry = CANONICAL_PATH_INVENTORY.get(
-            "galaxy_gateway.device_router.DeviceRouter.route_task"
-        )
+
+        entry = CANONICAL_PATH_INVENTORY.get("galaxy_gateway.device_router.DeviceRouter.route_task")
         assert entry is not None
         assert entry.role == CanonicalPathRole.canonical
 
@@ -164,9 +172,9 @@ class TestCanonicalPathInventory:
             CANONICAL_PATH_INVENTORY,
             CanonicalPathRole,
         )
+
         entry = CANONICAL_PATH_INVENTORY.get(
-            "core.android_participant_truth_ingress"
-            ".ingest_android_participant_truth_message"
+            "core.android_participant_truth_ingress" ".ingest_android_participant_truth_message"
         )
         assert entry is not None
         assert entry.role == CanonicalPathRole.canonical
@@ -176,9 +184,8 @@ class TestCanonicalPathInventory:
             CANONICAL_PATH_INVENTORY,
             CanonicalPathRole,
         )
-        entry = CANONICAL_PATH_INVENTORY.get(
-            "galaxy_gateway.task_router.TaskRouter"
-        )
+
+        entry = CANONICAL_PATH_INVENTORY.get("galaxy_gateway.task_router.TaskRouter")
         assert entry is not None
         assert entry.role == CanonicalPathRole.deprecated_live
 
@@ -186,24 +193,23 @@ class TestCanonicalPathInventory:
         from core.canonical_authoritative_path_convergence import (
             CANONICAL_PATH_INVENTORY,
         )
+
         for path_id, entry in CANONICAL_PATH_INVENTORY.items():
-            assert path_id == entry.path_id, (
-                f"path_id key mismatch: key={path_id!r} entry.path_id={entry.path_id!r}"
-            )
+            assert path_id == entry.path_id, f"path_id key mismatch: key={path_id!r} entry.path_id={entry.path_id!r}"
 
     def test_all_entries_have_description(self):
         from core.canonical_authoritative_path_convergence import (
             CANONICAL_PATH_INVENTORY,
         )
+
         for entry in CANONICAL_PATH_INVENTORY.values():
-            assert entry.description, (
-                f"Missing description on entry {entry.path_id!r}"
-            )
+            assert entry.description, f"Missing description on entry {entry.path_id!r}"
 
 
 # ===========================================================================
 # 3. CanonicalPathRole has five required values
 # ===========================================================================
+
 
 class TestCanonicalPathRoleValues:
     """CanonicalPathRole has exactly the five required values."""
@@ -218,141 +224,134 @@ class TestCanonicalPathRoleValues:
 
     def test_all_required_values_present(self):
         from core.canonical_authoritative_path_convergence import CanonicalPathRole
+
         actual = {member.value for member in CanonicalPathRole}
-        assert self._REQUIRED <= actual, (
-            f"Missing CanonicalPathRole values: {self._REQUIRED - actual}"
-        )
+        assert self._REQUIRED <= actual, f"Missing CanonicalPathRole values: {self._REQUIRED - actual}"
 
 
 # ===========================================================================
 # 4. is_legacy_default_off()
 # ===========================================================================
 
+
 class TestIsLegacyDefaultOff:
     """is_legacy_default_off returns correct values for known paths."""
 
     def test_deprecated_live_is_default_off(self):
         from core.canonical_authoritative_path_convergence import is_legacy_default_off
+
         assert is_legacy_default_off("galaxy_gateway.task_router.TaskRouter") is True
 
     def test_fully_blocked_is_default_off(self):
         from core.canonical_authoritative_path_convergence import is_legacy_default_off
-        assert is_legacy_default_off(
-            "galaxy_gateway.task_router.TaskRouter.direct_http_dispatch"
-        ) is True
+
+        assert is_legacy_default_off("galaxy_gateway.task_router.TaskRouter.direct_http_dispatch") is True
 
     def test_canonical_is_not_default_off(self):
         from core.canonical_authoritative_path_convergence import is_legacy_default_off
-        assert is_legacy_default_off(
-            "core.command_router.CommandRouter.route_envelope"
-        ) is False
+
+        assert is_legacy_default_off("core.command_router.CommandRouter.route_envelope") is False
 
     def test_compat_allowed_is_not_default_off(self):
         from core.canonical_authoritative_path_convergence import is_legacy_default_off
-        assert is_legacy_default_off(
-            "core.android_execution_signal_reconciler.compat_extract_signal_kind"
-        ) is False
+
+        assert is_legacy_default_off("core.android_execution_signal_reconciler.compat_extract_signal_kind") is False
 
     def test_observation_only_is_not_default_off(self):
         from core.canonical_authoritative_path_convergence import is_legacy_default_off
-        assert is_legacy_default_off(
-            "core.android_delegated_runtime_audit.AndroidDelegatedRuntimeAuditRecord"
-        ) is False
+
+        assert is_legacy_default_off("core.android_delegated_runtime_audit.AndroidDelegatedRuntimeAuditRecord") is False
 
     def test_unregistered_path_is_default_off(self):
         """Unclassified paths are treated as default-off (safe default)."""
         from core.canonical_authoritative_path_convergence import is_legacy_default_off
-        assert is_legacy_default_off(
-            "some.completely.unknown.path.that.is.not.in.inventory"
-        ) is True
+
+        assert is_legacy_default_off("some.completely.unknown.path.that.is.not.in.inventory") is True
 
     def test_smart_transport_router_is_default_off(self):
         from core.canonical_authoritative_path_convergence import is_legacy_default_off
-        assert is_legacy_default_off(
-            "galaxy_gateway.smart_transport_router.SmartTransportRouter"
-        ) is True
+
+        assert is_legacy_default_off("galaxy_gateway.smart_transport_router.SmartTransportRouter") is True
 
     def test_enhanced_nlu_v2_is_default_off(self):
         from core.canonical_authoritative_path_convergence import is_legacy_default_off
-        assert is_legacy_default_off(
-            "galaxy_gateway.enhanced_nlu_v2.EnhancedNLUEngineV2"
-        ) is True
+
+        assert is_legacy_default_off("galaxy_gateway.enhanced_nlu_v2.EnhancedNLUEngineV2") is True
 
     def test_session_roaming_manager_is_default_off(self):
         from core.canonical_authoritative_path_convergence import is_legacy_default_off
-        assert is_legacy_default_off(
-            "galaxy_gateway.session_roaming.SessionRoamingManager"
-        ) is True
+
+        assert is_legacy_default_off("galaxy_gateway.session_roaming.SessionRoamingManager") is True
 
     def test_task_decomposer_is_default_off(self):
         from core.canonical_authoritative_path_convergence import is_legacy_default_off
-        assert is_legacy_default_off(
-            "galaxy_gateway.task_decomposer.TaskDecomposer"
-        ) is True
+
+        assert is_legacy_default_off("galaxy_gateway.task_decomposer.TaskDecomposer") is True
 
     def test_message_handler_is_default_off(self):
         from core.canonical_authoritative_path_convergence import is_legacy_default_off
-        assert is_legacy_default_off(
-            "galaxy_gateway.handlers.message_handler.MessageHandler"
-        ) is True
+
+        assert is_legacy_default_off("galaxy_gateway.handlers.message_handler.MessageHandler") is True
 
 
 # ===========================================================================
 # 5. get_path_role()
 # ===========================================================================
 
+
 class TestGetPathRole:
     """get_path_role returns the correct role for known paths."""
 
     def test_canonical_path_returns_canonical(self):
         from core.canonical_authoritative_path_convergence import (
-            get_path_role,
             CanonicalPathRole,
+            get_path_role,
         )
+
         role = get_path_role("core.command_router.CommandRouter.route_envelope")
         assert role == CanonicalPathRole.canonical
 
     def test_deprecated_live_returns_deprecated_live(self):
         from core.canonical_authoritative_path_convergence import (
-            get_path_role,
             CanonicalPathRole,
+            get_path_role,
         )
+
         role = get_path_role("galaxy_gateway.task_router.TaskRouter")
         assert role == CanonicalPathRole.deprecated_live
 
     def test_fully_blocked_returns_fully_blocked(self):
         from core.canonical_authoritative_path_convergence import (
-            get_path_role,
             CanonicalPathRole,
+            get_path_role,
         )
+
         role = get_path_role(
-            "core.android_participant_truth_ingress"
-            ".direct_canonical_state_write_from_compat_signal"
+            "core.android_participant_truth_ingress" ".direct_canonical_state_write_from_compat_signal"
         )
         assert role == CanonicalPathRole.fully_blocked
 
     def test_observation_only_returns_observation_only(self):
         from core.canonical_authoritative_path_convergence import (
-            get_path_role,
             CanonicalPathRole,
+            get_path_role,
         )
-        role = get_path_role(
-            "core.android_delegated_runtime_audit.AndroidDelegatedRuntimeAuditRecord"
-        )
+
+        role = get_path_role("core.android_delegated_runtime_audit.AndroidDelegatedRuntimeAuditRecord")
         assert role == CanonicalPathRole.observation_only
 
     def test_compat_allowed_returns_compat_allowed(self):
         from core.canonical_authoritative_path_convergence import (
-            get_path_role,
             CanonicalPathRole,
+            get_path_role,
         )
-        role = get_path_role(
-            "core.android_execution_signal_reconciler.compat_extract_signal_kind"
-        )
+
+        role = get_path_role("core.android_execution_signal_reconciler.compat_extract_signal_kind")
         assert role == CanonicalPathRole.compat_allowed
 
     def test_unregistered_path_returns_none(self):
         from core.canonical_authoritative_path_convergence import get_path_role
+
         role = get_path_role("some.totally.unknown.path")
         assert role is None
 
@@ -361,14 +360,16 @@ class TestGetPathRole:
 # 6 & 7. enforce_canonical_selection()
 # ===========================================================================
 
+
 class TestEnforceCanonicalSelection:
     """enforce_canonical_selection produces correct CanonicalSelectionRecord."""
 
     def test_produces_record(self):
         from core.canonical_authoritative_path_convergence import (
-            enforce_canonical_selection,
             CanonicalSelectionRecord,
+            enforce_canonical_selection,
         )
+
         record = enforce_canonical_selection(
             "core.command_router.CommandRouter.route_envelope",
             calling_site="test_site",
@@ -379,6 +380,7 @@ class TestEnforceCanonicalSelection:
         from core.canonical_authoritative_path_convergence import (
             enforce_canonical_selection,
         )
+
         record = enforce_canonical_selection(
             "core.command_router.CommandRouter.route_envelope",
             calling_site="test_dispatch_surface",
@@ -393,6 +395,7 @@ class TestEnforceCanonicalSelection:
         from core.canonical_authoritative_path_convergence import (
             enforce_canonical_selection,
         )
+
         record = enforce_canonical_selection(
             "core.command_router.CommandRouter.route_envelope",
             calling_site="test_dispatch_surface",
@@ -404,6 +407,7 @@ class TestEnforceCanonicalSelection:
         from core.canonical_authoritative_path_convergence import (
             enforce_canonical_selection,
         )
+
         record = enforce_canonical_selection(
             "core.e2e_orchestrator.process_user_input",
             calling_site="user_request_surface",
@@ -414,6 +418,7 @@ class TestEnforceCanonicalSelection:
         from core.canonical_authoritative_path_convergence import (
             enforce_canonical_selection,
         )
+
         record = enforce_canonical_selection(
             "core.command_router.CommandRouter.route_envelope",
             calling_site="my_dispatch_site",
@@ -424,6 +429,7 @@ class TestEnforceCanonicalSelection:
         from core.canonical_authoritative_path_convergence import (
             enforce_canonical_selection,
         )
+
         legacy = [
             "galaxy_gateway.task_router.TaskRouter",
             "galaxy_gateway.task_decomposer.TaskDecomposer",
@@ -439,6 +445,7 @@ class TestEnforceCanonicalSelection:
         from core.canonical_authoritative_path_convergence import (
             enforce_canonical_selection,
         )
+
         r1 = enforce_canonical_selection(
             "core.command_router.CommandRouter.route_envelope",
             calling_site="site1",
@@ -454,6 +461,7 @@ class TestEnforceCanonicalSelection:
 # 8 & 9. build_convergence_audit_snapshot()
 # ===========================================================================
 
+
 class TestConvergenceAuditSnapshot:
     """build_convergence_audit_snapshot produces the expected snapshot."""
 
@@ -461,6 +469,7 @@ class TestConvergenceAuditSnapshot:
         from core.canonical_authoritative_path_convergence import (
             build_convergence_audit_snapshot,
         )
+
         snapshot = build_convergence_audit_snapshot()
         assert snapshot.convergence_healthy is True
 
@@ -468,6 +477,7 @@ class TestConvergenceAuditSnapshot:
         from core.canonical_authoritative_path_convergence import (
             build_convergence_audit_snapshot,
         )
+
         snapshot = build_convergence_audit_snapshot()
         assert snapshot.canonical_count >= 1
 
@@ -475,6 +485,7 @@ class TestConvergenceAuditSnapshot:
         from core.canonical_authoritative_path_convergence import (
             build_convergence_audit_snapshot,
         )
+
         snapshot = build_convergence_audit_snapshot()
         assert snapshot.deprecated_live_count >= 1
 
@@ -482,6 +493,7 @@ class TestConvergenceAuditSnapshot:
         from core.canonical_authoritative_path_convergence import (
             build_convergence_audit_snapshot,
         )
+
         snapshot = build_convergence_audit_snapshot()
         assert snapshot.fully_blocked_count >= 1
 
@@ -489,6 +501,7 @@ class TestConvergenceAuditSnapshot:
         from core.canonical_authoritative_path_convergence import (
             build_convergence_audit_snapshot,
         )
+
         snapshot = build_convergence_audit_snapshot()
         assert len(snapshot.default_off_paths) >= 1
 
@@ -496,6 +509,7 @@ class TestConvergenceAuditSnapshot:
         from core.canonical_authoritative_path_convergence import (
             build_convergence_audit_snapshot,
         )
+
         snapshot = build_convergence_audit_snapshot()
         assert len(snapshot.observation_only_paths) >= 1
 
@@ -503,6 +517,7 @@ class TestConvergenceAuditSnapshot:
         from core.canonical_authoritative_path_convergence import (
             build_convergence_audit_snapshot,
         )
+
         snapshot = build_convergence_audit_snapshot()
         assert len(snapshot.android_compat_influence_paths) >= 1
 
@@ -510,6 +525,7 @@ class TestConvergenceAuditSnapshot:
         from core.canonical_authoritative_path_convergence import (
             build_convergence_audit_snapshot,
         )
+
         snapshot = build_convergence_audit_snapshot()
         assert len(snapshot.policy_sentinels) >= 1
         for s in snapshot.policy_sentinels:
@@ -519,6 +535,7 @@ class TestConvergenceAuditSnapshot:
         from core.canonical_authoritative_path_convergence import (
             build_convergence_audit_snapshot,
         )
+
         snapshot = build_convergence_audit_snapshot()
         total = (
             snapshot.canonical_count
@@ -534,6 +551,7 @@ class TestConvergenceAuditSnapshot:
 # 13 & 14. Policy sentinels
 # ===========================================================================
 
+
 class TestPolicySentinels:
     """Policy sentinels are present and have the required format."""
 
@@ -541,38 +559,42 @@ class TestPolicySentinels:
         from core.canonical_authoritative_path_convergence import (
             DEFAULT_OFF_LEGACY_BEHAVIOR_POLICY,
         )
+
         assert DEFAULT_OFF_LEGACY_BEHAVIOR_POLICY.startswith("POLICY::")
 
     def test_canonical_path_policy_has_prefix(self):
         from core.canonical_authoritative_path_convergence import (
             CANONICAL_PATH_IS_DEFAULT_AUTHORITY_POLICY,
         )
+
         assert CANONICAL_PATH_IS_DEFAULT_AUTHORITY_POLICY.startswith("POLICY::")
 
     def test_legacy_must_not_mutate_policy_has_prefix(self):
         from core.canonical_authoritative_path_convergence import (
             LEGACY_PATH_MUST_NOT_MUTATE_CANONICAL_STATE_POLICY,
         )
+
         assert LEGACY_PATH_MUST_NOT_MUTATE_CANONICAL_STATE_POLICY.startswith("POLICY::")
 
     def test_observation_only_policy_has_prefix(self):
         from core.canonical_authoritative_path_convergence import (
             OBSERVATION_ONLY_PATH_IS_NON_AUTHORITATIVE_POLICY,
         )
+
         assert OBSERVATION_ONLY_PATH_IS_NON_AUTHORITATIVE_POLICY.startswith("POLICY::")
 
     def test_android_compat_policy_has_prefix(self):
         from core.canonical_authoritative_path_convergence import (
             ANDROID_COMPAT_INFLUENCE_MUST_PASS_INGRESS_GATE_POLICY,
         )
-        assert ANDROID_COMPAT_INFLUENCE_MUST_PASS_INGRESS_GATE_POLICY.startswith(
-            "POLICY::"
-        )
+
+        assert ANDROID_COMPAT_INFLUENCE_MUST_PASS_INGRESS_GATE_POLICY.startswith("POLICY::")
 
 
 # ===========================================================================
 # 15. PR sentinel contains "PR-convergence"
 # ===========================================================================
+
 
 class TestPRSentinel:
     """CANONICAL_AUTHORITATIVE_PATH_CONVERGENCE_PR_SENTINEL contains PR-convergence."""
@@ -581,6 +603,7 @@ class TestPRSentinel:
         from core.canonical_authoritative_path_convergence import (
             CANONICAL_AUTHORITATIVE_PATH_CONVERGENCE_PR_SENTINEL,
         )
+
         assert "PR-convergence" in CANONICAL_AUTHORITATIVE_PATH_CONVERGENCE_PR_SENTINEL
 
 
@@ -588,43 +611,46 @@ class TestPRSentinel:
 # 16. PURGE_REGISTRY contains PR-convergence entries
 # ===========================================================================
 
+
 class TestPurgeRegistryPRConvergence:
     """PURGE_REGISTRY contains PR-convergence entries."""
 
     def test_pr_convergence_entries_present(self):
         from core.legacy_purge_registry import PURGE_REGISTRY
+
         pr_convergence_entries = [e for e in PURGE_REGISTRY if e.pr == "PR-convergence"]
-        assert len(pr_convergence_entries) >= 1, (
-            "PURGE_REGISTRY must have at least one PR-convergence entry"
-        )
+        assert len(pr_convergence_entries) >= 1, "PURGE_REGISTRY must have at least one PR-convergence entry"
 
     def test_canonical_path_inventory_entry_present(self):
         from core.legacy_purge_registry import PURGE_REGISTRY
+
         paths = [e.asset_path for e in PURGE_REGISTRY if e.pr == "PR-convergence"]
-        assert any("CANONICAL_PATH_INVENTORY" in p for p in paths), (
-            "PURGE_REGISTRY must have a PR-convergence entry for CANONICAL_PATH_INVENTORY"
-        )
+        assert any(
+            "CANONICAL_PATH_INVENTORY" in p for p in paths
+        ), "PURGE_REGISTRY must have a PR-convergence entry for CANONICAL_PATH_INVENTORY"
 
     def test_android_compat_policy_entry_present(self):
         from core.legacy_purge_registry import PURGE_REGISTRY
+
         paths = [e.asset_path for e in PURGE_REGISTRY if e.pr == "PR-convergence"]
-        assert any("ANDROID_COMPAT" in p for p in paths), (
-            "PURGE_REGISTRY must have a PR-convergence entry for Android compat policy"
-        )
+        assert any(
+            "ANDROID_COMPAT" in p for p in paths
+        ), "PURGE_REGISTRY must have a PR-convergence entry for Android compat policy"
 
     def test_all_pr_convergence_entries_have_wrapper_hardened_status(self):
         from core.legacy_purge_registry import PURGE_REGISTRY, PurgeStatus
+
         for entry in PURGE_REGISTRY:
             if entry.pr == "PR-convergence":
                 assert entry.status == PurgeStatus.WRAPPER_HARDENED, (
-                    f"PR-convergence entry {entry.asset_path!r} should have "
-                    f"WRAPPER_HARDENED status"
+                    f"PR-convergence entry {entry.asset_path!r} should have " f"WRAPPER_HARDENED status"
                 )
 
 
 # ===========================================================================
 # 17. Deprecated_live paths are also in LEGACY_PATH_REGISTRY
 # ===========================================================================
+
 
 class TestDeprecatedLiveInLegacyRegistry:
     """deprecated_live paths in CANONICAL_PATH_INVENTORY appear in LEGACY_PATH_REGISTRY."""
@@ -641,51 +667,44 @@ class TestDeprecatedLiveInLegacyRegistry:
 
     def test_task_router_in_legacy_registry(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
+
         assert "galaxy_gateway.task_router.TaskRouter" in LEGACY_PATH_REGISTRY
 
     def test_message_handler_in_legacy_registry(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
-        assert (
-            "galaxy_gateway.handlers.message_handler.MessageHandler"
-            in LEGACY_PATH_REGISTRY
-        )
+
+        assert "galaxy_gateway.handlers.message_handler.MessageHandler" in LEGACY_PATH_REGISTRY
 
     def test_task_decomposer_in_legacy_registry(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
+
         assert "galaxy_gateway.task_decomposer.TaskDecomposer" in LEGACY_PATH_REGISTRY
 
     def test_intelligent_task_planner_in_legacy_registry(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
-        assert (
-            "galaxy_gateway.task_decomposer.IntelligentTaskPlanner"
-            in LEGACY_PATH_REGISTRY
-        )
+
+        assert "galaxy_gateway.task_decomposer.IntelligentTaskPlanner" in LEGACY_PATH_REGISTRY
 
     def test_smart_transport_router_in_legacy_registry(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
-        assert (
-            "galaxy_gateway.smart_transport_router.SmartTransportRouter"
-            in LEGACY_PATH_REGISTRY
-        )
+
+        assert "galaxy_gateway.smart_transport_router.SmartTransportRouter" in LEGACY_PATH_REGISTRY
 
     def test_enhanced_nlu_v2_in_legacy_registry(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
-        assert (
-            "galaxy_gateway.enhanced_nlu_v2.EnhancedNLUEngineV2"
-            in LEGACY_PATH_REGISTRY
-        )
+
+        assert "galaxy_gateway.enhanced_nlu_v2.EnhancedNLUEngineV2" in LEGACY_PATH_REGISTRY
 
     def test_session_roaming_manager_in_legacy_registry(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
-        assert (
-            "galaxy_gateway.session_roaming.SessionRoamingManager"
-            in LEGACY_PATH_REGISTRY
-        )
+
+        assert "galaxy_gateway.session_roaming.SessionRoamingManager" in LEGACY_PATH_REGISTRY
 
 
 # ===========================================================================
 # 18. Android compat influence paths have android_compat_influence=True
 # ===========================================================================
+
 
 class TestAndroidCompatInfluence:
     """All android_compat_influence_paths have android_compat_influence=True."""
@@ -694,23 +713,19 @@ class TestAndroidCompatInfluence:
         from core.canonical_authoritative_path_convergence import (
             CANONICAL_PATH_INVENTORY,
         )
-        snapshot_paths = [
-            e.path_id for e in CANONICAL_PATH_INVENTORY.values()
-            if e.android_compat_influence
-        ]
+
+        snapshot_paths = [e.path_id for e in CANONICAL_PATH_INVENTORY.values() if e.android_compat_influence]
         for path_id in snapshot_paths:
             entry = CANONICAL_PATH_INVENTORY[path_id]
-            assert entry.android_compat_influence is True, (
-                f"Path {path_id!r} should have android_compat_influence=True"
-            )
+            assert entry.android_compat_influence is True, f"Path {path_id!r} should have android_compat_influence=True"
 
     def test_participant_truth_ingress_android_flagged(self):
         from core.canonical_authoritative_path_convergence import (
             CANONICAL_PATH_INVENTORY,
         )
+
         entry = CANONICAL_PATH_INVENTORY.get(
-            "core.android_participant_truth_ingress"
-            ".ingest_android_participant_truth_message"
+            "core.android_participant_truth_ingress" ".ingest_android_participant_truth_message"
         )
         assert entry is not None
         assert entry.android_compat_influence is True
@@ -719,9 +734,9 @@ class TestAndroidCompatInfluence:
         from core.canonical_authoritative_path_convergence import (
             CANONICAL_PATH_INVENTORY,
         )
+
         entry = CANONICAL_PATH_INVENTORY.get(
-            "core.android_participant_truth_ingress"
-            ".direct_canonical_state_write_from_compat_signal"
+            "core.android_participant_truth_ingress" ".direct_canonical_state_write_from_compat_signal"
         )
         assert entry is not None
         assert entry.android_compat_influence is True
@@ -731,6 +746,7 @@ class TestAndroidCompatInfluence:
 # 19. Observation-only paths have role=observation_only (not canonical)
 # ===========================================================================
 
+
 class TestObservationOnlyNonCanonical:
     """Observation-only paths are classified as observation_only, not canonical."""
 
@@ -739,9 +755,8 @@ class TestObservationOnlyNonCanonical:
             CANONICAL_PATH_INVENTORY,
             CanonicalPathRole,
         )
-        entry = CANONICAL_PATH_INVENTORY.get(
-            "core.android_delegated_runtime_audit.AndroidDelegatedRuntimeAuditRecord"
-        )
+
+        entry = CANONICAL_PATH_INVENTORY.get("core.android_delegated_runtime_audit.AndroidDelegatedRuntimeAuditRecord")
         assert entry is not None
         assert entry.role == CanonicalPathRole.observation_only
         assert entry.role != CanonicalPathRole.canonical
@@ -751,6 +766,7 @@ class TestObservationOnlyNonCanonical:
             CANONICAL_PATH_INVENTORY,
             CanonicalPathRole,
         )
+
         entry = CANONICAL_PATH_INVENTORY.get("core.operator_surface.OperatorSurface")
         assert entry is not None
         assert entry.role == CanonicalPathRole.observation_only
@@ -760,6 +776,7 @@ class TestObservationOnlyNonCanonical:
             CANONICAL_PATH_INVENTORY,
             CanonicalPathRole,
         )
+
         entry = CANONICAL_PATH_INVENTORY.get("core.replay_foundation.ReplayFoundation")
         assert entry is not None
         assert entry.role == CanonicalPathRole.observation_only
@@ -769,44 +786,51 @@ class TestObservationOnlyNonCanonical:
 # 20. Fully blocked paths are default-off
 # ===========================================================================
 
+
 class TestFullyBlockedDefaultOff:
     """Fully blocked paths are classified as default-off."""
 
     def test_fully_blocked_direct_http_dispatch_default_off(self):
         from core.canonical_authoritative_path_convergence import is_legacy_default_off
-        assert is_legacy_default_off(
-            "galaxy_gateway.task_router.TaskRouter.direct_http_dispatch"
-        ) is True
+
+        assert is_legacy_default_off("galaxy_gateway.task_router.TaskRouter.direct_http_dispatch") is True
 
     def test_fully_blocked_direct_canonical_write_default_off(self):
         from core.canonical_authoritative_path_convergence import is_legacy_default_off
-        assert is_legacy_default_off(
-            "core.android_participant_truth_ingress"
-            ".direct_canonical_state_write_from_compat_signal"
-        ) is True
+
+        assert (
+            is_legacy_default_off(
+                "core.android_participant_truth_ingress" ".direct_canonical_state_write_from_compat_signal"
+            )
+            is True
+        )
 
     def test_fully_blocked_task_orchestrator_direct_dispatch_default_off(self):
         from core.canonical_authoritative_path_convergence import is_legacy_default_off
-        assert is_legacy_default_off(
-            "galaxy_gateway.orchestrator.task_orchestrator"
-            ".TaskOrchestrator.direct_dispatch"
-        ) is True
+
+        assert (
+            is_legacy_default_off("galaxy_gateway.orchestrator.task_orchestrator" ".TaskOrchestrator.direct_dispatch")
+            is True
+        )
 
 
 # ===========================================================================
 # 21 & 22. Unregistered path behavior
 # ===========================================================================
 
+
 class TestUnregisteredPath:
     """Unregistered paths are treated as default-off (safe default)."""
 
     def test_unregistered_is_default_off(self):
         from core.canonical_authoritative_path_convergence import is_legacy_default_off
+
         result = is_legacy_default_off("not.a.real.path.at.all.xyz")
         assert result is True
 
     def test_unregistered_role_is_none(self):
         from core.canonical_authoritative_path_convergence import get_path_role
+
         role = get_path_role("not.a.real.path.at.all.xyz")
         assert role is None
 
@@ -814,6 +838,7 @@ class TestUnregisteredPath:
 # ===========================================================================
 # 23. LEGACY_ORCHESTRATOR_PATHS shim includes PR-convergence registry keys
 # ===========================================================================
+
 
 class TestLegacyOrchestratorPathsShim:
     """LEGACY_ORCHESTRATOR_PATHS shim includes all PR-convergence registry keys."""
@@ -829,44 +854,37 @@ class TestLegacyOrchestratorPathsShim:
 
     def test_shim_contains_participant_truth_ingress(self):
         from core.orchestration_authority.legacy_paths import LEGACY_ORCHESTRATOR_PATHS
+
         assert (
             "core.android_participant_truth_ingress"
-            ".ingest_android_participant_truth_message"
-            in LEGACY_ORCHESTRATOR_PATHS
+            ".ingest_android_participant_truth_message" in LEGACY_ORCHESTRATOR_PATHS
         )
 
     def test_shim_contains_delegated_signal_ingress(self):
         from core.orchestration_authority.legacy_paths import LEGACY_ORCHESTRATOR_PATHS
-        assert (
-            "core.android_delegated_signal_ingress.ingest_delegated_execution_signal"
-            in LEGACY_ORCHESTRATOR_PATHS
-        )
+
+        assert "core.android_delegated_signal_ingress.ingest_delegated_execution_signal" in LEGACY_ORCHESTRATOR_PATHS
 
     def test_shim_contains_compat_extract_signal_kind(self):
         from core.orchestration_authority.legacy_paths import LEGACY_ORCHESTRATOR_PATHS
-        assert (
-            "core.android_execution_signal_reconciler.compat_extract_signal_kind"
-            in LEGACY_ORCHESTRATOR_PATHS
-        )
+
+        assert "core.android_execution_signal_reconciler.compat_extract_signal_kind" in LEGACY_ORCHESTRATOR_PATHS
 
     def test_shim_contains_acceptance_gate(self):
         from core.orchestration_authority.legacy_paths import LEGACY_ORCHESTRATOR_PATHS
-        assert (
-            "core.delegated_flow_acceptance_gate.DelegatedFlowAcceptanceGate"
-            in LEGACY_ORCHESTRATOR_PATHS
-        )
+
+        assert "core.delegated_flow_acceptance_gate.DelegatedFlowAcceptanceGate" in LEGACY_ORCHESTRATOR_PATHS
 
     def test_shim_contains_readiness_gate(self):
         from core.orchestration_authority.legacy_paths import LEGACY_ORCHESTRATOR_PATHS
-        assert (
-            "core.delegated_flow_readiness_gate.DelegatedFlowReadinessGate"
-            in LEGACY_ORCHESTRATOR_PATHS
-        )
+
+        assert "core.delegated_flow_readiness_gate.DelegatedFlowReadinessGate" in LEGACY_ORCHESTRATOR_PATHS
 
 
 # ===========================================================================
 # 24 & 25. to_dict() is JSON-serialisable
 # ===========================================================================
+
 
 class TestToDict:
     """to_dict() produces JSON-serialisable output."""
@@ -875,6 +893,7 @@ class TestToDict:
         from core.canonical_authoritative_path_convergence import (
             enforce_canonical_selection,
         )
+
         record = enforce_canonical_selection(
             "core.command_router.CommandRouter.route_envelope",
             calling_site="test_site",
@@ -889,6 +908,7 @@ class TestToDict:
         from core.canonical_authoritative_path_convergence import (
             build_convergence_audit_snapshot,
         )
+
         snapshot = build_convergence_audit_snapshot()
         d = snapshot.to_dict()
         # Should not raise

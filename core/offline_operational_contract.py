@@ -551,12 +551,8 @@ class OfflineOperationalEvidence:
             evidence_fresh=bool(data.get("evidence_fresh", False)),
             reconnect_expected=bool(data.get("reconnect_expected", False)),
             inflight_tracking_active=bool(data.get("inflight_tracking_active", False)),
-            deferred_sync_acknowledged=bool(
-                data.get("deferred_sync_acknowledged", False)
-            ),
-            reconciliation_in_progress=bool(
-                data.get("reconciliation_in_progress", False)
-            ),
+            deferred_sync_acknowledged=bool(data.get("deferred_sync_acknowledged", False)),
+            reconciliation_in_progress=bool(data.get("reconciliation_in_progress", False)),
             reconciliation_complete=bool(data.get("reconciliation_complete", False)),
             explicit_unavailable=bool(data.get("explicit_unavailable", False)),
             participant_id=data.get("participant_id"),
@@ -804,14 +800,10 @@ def _classify(evidence: OfflineOperationalEvidence) -> OfflineOperationalVerdict
             "RECONNECT_EXPECTED_IS_NOT_ONLINE_OPERATIONAL_POLICY applied."
         )
     if not evidence.evidence_fresh:
-        downgrade_reasons.append(
-            "evidence_fresh=False: "
-            "STALE_EVIDENCE_MUST_DOWNGRADE_CLASS_POLICY applied."
-        )
+        downgrade_reasons.append("evidence_fresh=False: " "STALE_EVIDENCE_MUST_DOWNGRADE_CLASS_POLICY applied.")
     if evidence.deferred_sync_acknowledged:
         downgrade_reasons.append(
-            "deferred_sync_acknowledged=True: "
-            "DEFERRED_SYNC_MUST_NOT_CLAIM_ONLINE_OPERATIONAL_POLICY applied."
+            "deferred_sync_acknowledged=True: " "DEFERRED_SYNC_MUST_NOT_CLAIM_ONLINE_OPERATIONAL_POLICY applied."
         )
 
     # ------------------------------------------------------------------
@@ -868,8 +860,7 @@ def _classify(evidence: OfflineOperationalEvidence) -> OfflineOperationalVerdict
     # ------------------------------------------------------------------
     if not downgrade_reasons:
         downgrade_reasons.append(
-            "No positive operational evidence; "
-            "EVIDENCE_ABSENCE_DEFAULTS_TO_UNAVAILABLE_POLICY applied."
+            "No positive operational evidence; " "EVIDENCE_ABSENCE_DEFAULTS_TO_UNAVAILABLE_POLICY applied."
         )
     return OfflineOperationalVerdict(
         operational_class=OfflineOperationalClass.unavailable,

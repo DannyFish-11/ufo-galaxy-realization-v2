@@ -98,9 +98,7 @@ ACK_STAGE_DESCRIPTIONS: Dict[str, str] = {
         "Ensures the caller knows the operation has reached a terminal state. "
         "Higher latency than ACCEPTED_ACK."
     ),
-    AckStage.UNKNOWN.value: (
-        "Ack stage not yet classified. Treat as NO_ACK for safety."
-    ),
+    AckStage.UNKNOWN.value: ("Ack stage not yet classified. Treat as NO_ACK for safety."),
 }
 
 

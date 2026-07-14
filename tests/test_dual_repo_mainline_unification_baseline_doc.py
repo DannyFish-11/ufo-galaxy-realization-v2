@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-
 # The repository already versions many audit baselines with a `_CN_2026` suffix;
 # this test intentionally follows that established naming scheme.
 DOC_PATH = Path("audit/FORMAL_DUAL_REPO_MAINLINE_UNINTEGRATED_RISK_BASELINE_CN_2026.md")

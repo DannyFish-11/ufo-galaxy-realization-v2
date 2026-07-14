@@ -9,14 +9,15 @@ GalaxyPresenceBridge 把 StateEventBus 的自发注意力事件转成面板消�
 被 except 吞掉，桥【从未真正订阅到任何事件】。修复后订阅生效，ambient 事件才
 能流到面板。
 """
+
 from __future__ import annotations
 
 import asyncio
 
 import pytest
 
-from core.state_event_bus import get_state_event_bus
 from core.lumiv_websocket_bridge import GalaxyPresenceBridge
+from core.state_event_bus import get_state_event_bus
 
 
 def _fresh_bridge():
@@ -35,6 +36,7 @@ async def _async_false():
 class TestBridgeSubscriptionFix:
     def test_start_actually_subscribes(self):
         """start() 后，事件总线上必须真的多出订阅者（证明不再抛 get_instance）。"""
+
         async def run():
             bus = get_state_event_bus()
             before = bus.subscriber_count("ambient.decision")
@@ -53,10 +55,14 @@ class TestAmbientToMessage:
             b = _fresh_bridge()
             await b.start()
             bus = get_state_event_bus()
-            bus.publish("ambient.observed", source="ambient_attention_loop",
-                        payload={"has_frame": True, "has_audio": True})
-            bus.publish("ambient.decision", source="ambient_attention_loop",
-                        payload={"action": "speak", "rationale": "用户回来了", "utterance": "欢迎回来"})
+            bus.publish(
+                "ambient.observed", source="ambient_attention_loop", payload={"has_frame": True, "has_audio": True}
+            )
+            bus.publish(
+                "ambient.decision",
+                source="ambient_attention_loop",
+                payload={"action": "speak", "rationale": "用户回来了", "utterance": "欢迎回来"},
+            )
             await asyncio.sleep(0.05)
             return b._build_message()
 
@@ -71,8 +77,11 @@ class TestAmbientToMessage:
             b = _fresh_bridge()
             await b.start()
             bus = get_state_event_bus()
-            bus.publish("ambient.decision", source="ambient_attention_loop",
-                        payload={"action": "delegate", "task": "查错误日志"})
+            bus.publish(
+                "ambient.decision",
+                source="ambient_attention_loop",
+                payload={"action": "delegate", "task": "查错误日志"},
+            )
             await asyncio.sleep(0.05)
             return b._build_message()
 
@@ -83,6 +92,7 @@ class TestAmbientToMessage:
     def test_payload_of_handles_event_and_dict(self):
         b = _fresh_bridge()
         from core.state_event_bus import StateEvent
+
         ev = StateEvent(type="ambient.decision", source="x", payload={"action": "silent"})
         assert b._payload_of(ev) == {"action": "silent"}
         assert b._payload_of({"action": "speak"}) == {"action": "speak"}

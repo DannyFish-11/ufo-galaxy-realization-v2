@@ -22,10 +22,10 @@ from galaxy_gateway.protocol.aip_v3 import (
     DevicePlatform,
 )
 
-
 # ============================================================================
 # 简化设备类型（core 层 + 路由层统一使用）
 # ============================================================================
+
 
 class DeviceType(str, Enum):
     """设备类型大类 — 所有模块统一使用
@@ -33,6 +33,7 @@ class DeviceType(str, Enum):
     包含平台类型和专用设备类型，覆盖 Galaxy-Nexus 星枢的
     全部设备节点场景（手机/电脑/无人机/3D打印机/机器人等）。
     """
+
     # ── 平台类型 ──
     ANDROID = "android"
     IOS = "ios"
@@ -67,6 +68,7 @@ class DeviceType(str, Enum):
 
 class DeviceStatus(str, Enum):
     """设备状态"""
+
     OFFLINE = "offline"
     ONLINE = "online"
     BUSY = "busy"

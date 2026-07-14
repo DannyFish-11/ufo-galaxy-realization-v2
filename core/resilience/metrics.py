@@ -40,14 +40,14 @@ class ResilienceMetrics:
         self._queue_depth: int = 0
         self._queue_depth_max: int = 0
         self._total_accepted: int = 0
-        self._total_rejected: int = 0    # admission rejections
+        self._total_rejected: int = 0  # admission rejections
         self._rejection_timestamps: List[float] = []  # rolling 60-s window
 
         # ── Fallback ─────────────────────────────────────────────────────
         self._total_fallbacks: int = 0
 
         # ── Circuit breaker ──────────────────────────────────────────────
-        self._circuit_opens: int = 0     # cumulative opens across all targets
+        self._circuit_opens: int = 0  # cumulative opens across all targets
 
         # ── Initialisation time ──────────────────────────────────────────
         self._created_at: float = time.time()
@@ -74,9 +74,7 @@ class ResilienceMetrics:
             self._rejection_timestamps.append(now)
             # Keep only last 60 s
             cutoff = now - 60.0
-            self._rejection_timestamps = [
-                t for t in self._rejection_timestamps if t >= cutoff
-            ]
+            self._rejection_timestamps = [t for t in self._rejection_timestamps if t >= cutoff]
 
     # ------------------------------------------------------------------
     # Fallback / circuit breaker

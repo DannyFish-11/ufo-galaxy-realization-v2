@@ -76,6 +76,7 @@ def _force_legacy_truth_chain(monkeypatch):
     monkeypatch.setattr(uri, "ingest_result_async", _unavailable)
 
     import core.durable_result_idempotency as dri
+
     monkeypatch.setattr(dri, "check_result_idempotency", lambda tid: False)
     monkeypatch.setattr(dri, "record_result_idempotency", lambda tid: None)
 
@@ -86,6 +87,7 @@ def _force_legacy_truth_chain(monkeypatch):
 
 try:
     import core.task_result_canonical_truth_chain as _ttc
+
     _MODULE_AVAILABLE = True
 except ImportError:
     _MODULE_AVAILABLE = False
@@ -98,6 +100,7 @@ _SKIP = pytest.mark.skipif(not _MODULE_AVAILABLE, reason="task_result_canonical_
 
 try:
     import galaxy_gateway.android.handlers.task_lifecycle as _tl
+
     _TL_AVAILABLE = True
 except ImportError:
     _TL_AVAILABLE = False
@@ -109,21 +112,26 @@ _TL_SKIP = pytest.mark.skipif(not _TL_AVAILABLE, reason="task_lifecycle unavaila
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_ingest_ok(was_reconciled: bool = True) -> Any:
     """Return a fake ingest function that succeeds."""
+
     def _fake(msg: Dict[str, Any], **_kw: Any) -> Any:
         return MagicMock(
             was_reconciled=was_reconciled,
             reject_reason="",
             envelope=None,
         )
+
     return _fake
 
 
 def _make_reconcile_ok(was_updated: bool = True) -> Any:
     """Return a fake reconcile function that succeeds."""
+
     def _fake(msg: Dict[str, Any], **_kw: Any) -> Any:
         return MagicMock(was_updated=was_updated, reject_reason="")
+
     return _fake
 
 
@@ -201,9 +209,9 @@ class TestGroupB_FullChainComplete:
         """AC-TTC-1: all four steps available → complete."""
         msg = {"task_id": "t-b1", "status": "completed"}
         outcome = self._run_all_ok(msg)
-        assert outcome.is_truth_chain_complete is True, (
-            f"Expected complete but got incomplete_reason={outcome.incomplete_reason!r}"
-        )
+        assert (
+            outcome.is_truth_chain_complete is True
+        ), f"Expected complete but got incomplete_reason={outcome.incomplete_reason!r}"
 
     def test_b2_all_four_steps_completed_status(self) -> None:
         """AC-TTC-1: all four step statuses are 'completed' or 'completed_no_match'."""
@@ -242,9 +250,11 @@ class TestGroupB_FullChainComplete:
             pytest.skip("TaskLifecycle not available in this environment")
         calls: list = []
         mock_runtime = MagicMock()
+
         def _capture_update(task_id: str, lifecycle: Any) -> MagicMock:
             calls.append((task_id, lifecycle))
             return MagicMock()
+
         mock_runtime.update_lifecycle.side_effect = _capture_update
 
         msg = {"task_id": "t-b5", "status": "failed"}
@@ -439,8 +449,10 @@ class TestGroupE_ExceptionsAreCaptured:
 
     def test_e1_truth_ingress_exception(self) -> None:
         """AC-TTC-5: step 1 exception → TruthChainStepError raised (hardened)."""
+
         def _raising(msg: Dict[str, Any], **_kw: Any) -> Any:
             raise RuntimeError("ingress crash")
+
         msg = {"task_id": "t-e1", "status": "completed"}
         with (
             patch.object(_ttc, "_ingest_participant_truth", _raising),
@@ -457,8 +469,10 @@ class TestGroupE_ExceptionsAreCaptured:
 
     def test_e2_reconcile_exception(self) -> None:
         """AC-TTC-5: step 2 exception → TruthChainStepError raised (hardened)."""
+
         def _raising(msg: Dict[str, Any], **_kw: Any) -> Any:
             raise ValueError("reconcile crash")
+
         msg = {"task_id": "t-e2", "session_id": "s-e2", "status": "completed"}
         with (
             patch.object(_ttc, "_ingest_participant_truth", _make_ingest_ok()),
@@ -513,8 +527,10 @@ class TestGroupE_ExceptionsAreCaptured:
         Previously this test verified that exceptions were NOT re-raised.
         With the PR-3 hardening, steps 1–3 exceptions are materially visible.
         """
+
         def _raising(*_a: Any, **_kw: Any) -> Any:
             raise RuntimeError("crash")
+
         msg = {"task_id": "t-e5", "status": "completed"}
         with (
             patch.object(_ttc, "_ingest_participant_truth", _raising),
@@ -540,15 +556,13 @@ class TestGroupF_OptionalEnrichmentNotInModule:
 
     def test_f1_no_store_task_result_in_module(self) -> None:
         """Module must not import or call store_task_result."""
-        assert not hasattr(_ttc, "store_task_result"), (
-            "store_task_result must not be part of the canonical truth chain"
-        )
+        assert not hasattr(_ttc, "store_task_result"), "store_task_result must not be part of the canonical truth chain"
 
     def test_f2_no_device_router_in_module(self) -> None:
         """Module must not import device_router."""
-        assert not hasattr(_ttc, "device_router"), (
-            "device_router notification must not be part of the canonical truth chain"
-        )
+        assert not hasattr(
+            _ttc, "device_router"
+        ), "device_router notification must not be part of the canonical truth chain"
 
     def test_f3_is_truth_chain_complete_unaffected_by_enrichment_absence(self) -> None:
         """AC-TTC-6: chain completion is not affected by enrichment steps."""
@@ -591,9 +605,7 @@ class TestGroupG_ToDictSerialisation:
             "is_truth_chain_complete",
             "incomplete_reason",
         }
-        assert expected_keys <= set(d.keys()), (
-            f"Missing keys: {expected_keys - set(d.keys())}"
-        )
+        assert expected_keys <= set(d.keys()), f"Missing keys: {expected_keys - set(d.keys())}"
 
     def test_g2_to_dict_no_private_fields(self) -> None:
         outcome = _ttc.TruthChainOutcome(task_id="t-g2")
@@ -823,8 +835,10 @@ class TestGroupJ_HardenedEnforcement:
 
     def test_j5_exception_carries_full_outcome(self) -> None:
         """AC-TTC-10: TruthChainStepError.outcome has all four step statuses set."""
+
         def _raising(*_a: Any, **_kw: Any) -> Any:
             raise RuntimeError("step2 crash")
+
         msg = {"task_id": "t-j5", "session_id": "s-j5", "status": "failed"}
         with (
             patch.object(_ttc, "_ingest_participant_truth", _make_ingest_ok()),
@@ -915,9 +929,9 @@ class TestGroupJ_HardenedEnforcement:
         """AC-TTC-11: message with handoff_id passes through truth chain without error."""
         notify_calls: list = []
         mock_ingress = MagicMock()
-        mock_ingress.notify.side_effect = lambda env: notify_calls.append(
-            (env.task_id, getattr(env, "handoff_id", ""))
-        ) or True
+        mock_ingress.notify.side_effect = (
+            lambda env: notify_calls.append((env.task_id, getattr(env, "handoff_id", ""))) or True
+        )
         mock_ingress.complete_pending_dispatch.return_value = False
 
         msg = {
@@ -937,9 +951,7 @@ class TestGroupJ_HardenedEnforcement:
         assert outcome.is_truth_chain_complete is True
         assert len(notify_calls) == 1
         _, handoff_id = notify_calls[0]
-        assert handoff_id == "handoff-abc", (
-            "handoff_id must be forwarded to CanonicalCompletionIngress.notify()"
-        )
+        assert handoff_id == "handoff-abc", "handoff_id must be forwarded to CanonicalCompletionIngress.notify()"
 
     # -----------------------------------------------------------------------
     # J10: Grouped / multi-device completion — multiple sequential results
@@ -964,12 +976,12 @@ class TestGroupJ_HardenedEnforcement:
             ):
                 outcomes.append(_ttc.run_task_result_truth_chain(msg))
 
-        assert all(o.is_truth_chain_complete for o in outcomes), (
-            "All grouped device results must produce complete truth chains"
-        )
-        assert len({o.task_id for o in outcomes}) == len(device_ids), (
-            "Each device result must produce a distinct task_id outcome"
-        )
+        assert all(
+            o.is_truth_chain_complete for o in outcomes
+        ), "All grouped device results must produce complete truth chains"
+        assert len({o.task_id for o in outcomes}) == len(
+            device_ids
+        ), "Each device result must produce a distinct task_id outcome"
 
     # -----------------------------------------------------------------------
     # J11: Completion ingress safety — step 4 exception never blocks chain
@@ -1027,9 +1039,9 @@ class TestGroupJ_HardenedEnforcement:
                 patch.object(_ttc, "_get_canonical_completion_ingress", _make_ingress_ok()),
             ):
                 outcome = _ttc.run_task_result_truth_chain(msg)
-            assert outcome.is_truth_chain_complete is True, (
-                f"Replay attempt {_attempt + 1} must still produce a complete outcome"
-            )
+            assert (
+                outcome.is_truth_chain_complete is True
+            ), f"Replay attempt {_attempt + 1} must still produce a complete outcome"
 
     # -----------------------------------------------------------------------
     # J13: First-failed-step precedence when steps 1 and 2 both fail
@@ -1037,8 +1049,10 @@ class TestGroupJ_HardenedEnforcement:
 
     def test_j13_first_failed_step_reported(self) -> None:
         """AC-TTC-10: when steps 1 and 3 both fail, step 1 is reported as the first failure."""
+
         def _raising(*_a: Any, **_kw: Any) -> Any:
             raise RuntimeError("crash")
+
         msg = {"task_id": "t-j13", "status": "completed"}
         with (
             patch.object(_ttc, "_ingest_participant_truth", _raising),
@@ -1051,9 +1065,7 @@ class TestGroupJ_HardenedEnforcement:
         # Step 1 is the first fatal failure.
         assert exc_info.value.step_name == "truth_ingress"
         # Outcome also records step 3 failure.
-        assert exc_info.value.outcome.authority_update_status == (
-            _ttc.StepStatus.SKIPPED_MODULE_UNAVAILABLE
-        )
+        assert exc_info.value.outcome.authority_update_status == (_ttc.StepStatus.SKIPPED_MODULE_UNAVAILABLE)
 
 
 class TestGroupK_TaskGraphCoverage:

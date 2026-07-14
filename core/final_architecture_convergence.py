@@ -437,6 +437,7 @@ def _cinfo(check: str, message: str, detail: Optional[Dict[str, Any]] = None) ->
 # Check 1 — Boundary sentinel completeness
 # ---------------------------------------------------------------------------
 
+
 def check_boundary_sentinel_completeness() -> List[ConvergenceFinding]:
     """Verify that all five boundary clarity sentinels in this module are
     present, non-empty, and contain the expected boundary keyword.
@@ -456,48 +457,59 @@ def check_boundary_sentinel_completeness() -> List[ConvergenceFinding]:
     """
     findings: List[ConvergenceFinding] = []
     import sys
+
     this_module = sys.modules[__name__]
 
     for sentinel_name, description in _OWN_BOUNDARY_SENTINELS:
         val = getattr(this_module, sentinel_name, None)
         if not val or not isinstance(val, str) or not val.strip():
-            findings.append(_cerror(
-                _CHECK_BOUNDARIES,
-                f"Boundary sentinel {sentinel_name!r} ({description}) is absent "
-                f"or empty in core.final_architecture_convergence — "
-                "boundary clarity convergence regression.",
-                {"sentinel": sentinel_name},
-            ))
+            findings.append(
+                _cerror(
+                    _CHECK_BOUNDARIES,
+                    f"Boundary sentinel {sentinel_name!r} ({description}) is absent "
+                    f"or empty in core.final_architecture_convergence — "
+                    "boundary clarity convergence regression.",
+                    {"sentinel": sentinel_name},
+                )
+            )
         elif "NOT" not in val:
-            findings.append(_cwarn(
-                _CHECK_BOUNDARIES,
-                f"Boundary sentinel {sentinel_name!r} ({description}) does not "
-                f"contain 'NOT' — it may have lost its boundary-invariant "
-                "expression.",
-                {"sentinel": sentinel_name},
-            ))
+            findings.append(
+                _cwarn(
+                    _CHECK_BOUNDARIES,
+                    f"Boundary sentinel {sentinel_name!r} ({description}) does not "
+                    f"contain 'NOT' — it may have lost its boundary-invariant "
+                    "expression.",
+                    {"sentinel": sentinel_name},
+                )
+            )
         else:
-            findings.append(_cinfo(
-                _CHECK_BOUNDARIES,
-                f"Boundary sentinel {sentinel_name!r} ({description}) present "
-                "and contains boundary-invariant 'NOT' expression.",
-            ))
+            findings.append(
+                _cinfo(
+                    _CHECK_BOUNDARIES,
+                    f"Boundary sentinel {sentinel_name!r} ({description}) present "
+                    "and contains boundary-invariant 'NOT' expression.",
+                )
+            )
 
     for sentinel_name, description in _OWN_POLICY_SENTINELS:
         val = getattr(this_module, sentinel_name, None)
         if not val or not isinstance(val, str) or not val.strip():
-            findings.append(_cerror(
-                _CHECK_BOUNDARIES,
-                f"Policy sentinel {sentinel_name!r} ({description}) is absent "
-                f"or empty in core.final_architecture_convergence — "
-                "convergence policy regression.",
-                {"sentinel": sentinel_name},
-            ))
+            findings.append(
+                _cerror(
+                    _CHECK_BOUNDARIES,
+                    f"Policy sentinel {sentinel_name!r} ({description}) is absent "
+                    f"or empty in core.final_architecture_convergence — "
+                    "convergence policy regression.",
+                    {"sentinel": sentinel_name},
+                )
+            )
         else:
-            findings.append(_cinfo(
-                _CHECK_BOUNDARIES,
-                f"Policy sentinel {sentinel_name!r} ({description}) present.",
-            ))
+            findings.append(
+                _cinfo(
+                    _CHECK_BOUNDARIES,
+                    f"Policy sentinel {sentinel_name!r} ({description}) present.",
+                )
+            )
 
     return findings
 
@@ -505,6 +517,7 @@ def check_boundary_sentinel_completeness() -> List[ConvergenceFinding]:
 # ---------------------------------------------------------------------------
 # Check 2 — Terminal guard integrity
 # ---------------------------------------------------------------------------
+
 
 def check_terminal_guard_integrity() -> List[ConvergenceFinding]:
     """Verify that ``core.terminal_architecture_audit_guards`` (PR-10) is
@@ -526,17 +539,21 @@ def check_terminal_guard_integrity() -> List[ConvergenceFinding]:
 
     importable, mod, err = _try_import("core.terminal_architecture_audit_guards")
     if not importable:
-        findings.append(_cerror(
-            _CHECK_TERMINAL_GUARDS,
-            f"core.terminal_architecture_audit_guards is not importable: {err} — "
-            "PR-10 terminal regression guards have been lost.",
-        ))
+        findings.append(
+            _cerror(
+                _CHECK_TERMINAL_GUARDS,
+                f"core.terminal_architecture_audit_guards is not importable: {err} — "
+                "PR-10 terminal regression guards have been lost.",
+            )
+        )
         return findings
 
-    findings.append(_cinfo(
-        _CHECK_TERMINAL_GUARDS,
-        "core.terminal_architecture_audit_guards is importable.",
-    ))
+    findings.append(
+        _cinfo(
+            _CHECK_TERMINAL_GUARDS,
+            "core.terminal_architecture_audit_guards is importable.",
+        )
+    )
 
     # Check the five policy sentinels exist
     guard_sentinels = [
@@ -548,54 +565,64 @@ def check_terminal_guard_integrity() -> List[ConvergenceFinding]:
     ]
     for sname in guard_sentinels:
         if not _has_nonempty_str(mod, sname):
-            findings.append(_cerror(
-                _CHECK_TERMINAL_GUARDS,
-                f"Guard policy sentinel {sname!r} is absent or empty in "
-                "core.terminal_architecture_audit_guards — PR-10 guard "
-                "policies have been weakened.",
-                {"sentinel": sname},
-            ))
+            findings.append(
+                _cerror(
+                    _CHECK_TERMINAL_GUARDS,
+                    f"Guard policy sentinel {sname!r} is absent or empty in "
+                    "core.terminal_architecture_audit_guards — PR-10 guard "
+                    "policies have been weakened.",
+                    {"sentinel": sname},
+                )
+            )
         else:
-            findings.append(_cinfo(
-                _CHECK_TERMINAL_GUARDS,
-                f"Guard policy sentinel {sname!r} present and non-empty.",
-            ))
+            findings.append(
+                _cinfo(
+                    _CHECK_TERMINAL_GUARDS,
+                    f"Guard policy sentinel {sname!r} present and non-empty.",
+                )
+            )
 
     # Run the aggregate guard
     runner = getattr(mod, "run_terminal_audit_guards", None)
     if not callable(runner):
-        findings.append(_cerror(
-            _CHECK_TERMINAL_GUARDS,
-            "run_terminal_audit_guards is not callable in "
-            "core.terminal_architecture_audit_guards — PR-10 aggregate "
-            "guard function has been removed.",
-        ))
+        findings.append(
+            _cerror(
+                _CHECK_TERMINAL_GUARDS,
+                "run_terminal_audit_guards is not callable in "
+                "core.terminal_architecture_audit_guards — PR-10 aggregate "
+                "guard function has been removed.",
+            )
+        )
         return findings
 
     try:
         report = runner()
         if not getattr(report, "overall_passed", True):
             error_count = getattr(report, "error_count", "unknown")
-            findings.append(_cerror(
-                _CHECK_TERMINAL_GUARDS,
-                f"run_terminal_audit_guards() reports overall_passed=False "
-                f"({error_count} error(s)) — an architectural regression has "
-                "been introduced.",
-                {"error_count": error_count},
-            ))
+            findings.append(
+                _cerror(
+                    _CHECK_TERMINAL_GUARDS,
+                    f"run_terminal_audit_guards() reports overall_passed=False "
+                    f"({error_count} error(s)) — an architectural regression has "
+                    "been introduced.",
+                    {"error_count": error_count},
+                )
+            )
         else:
-            findings.append(_cinfo(
-                _CHECK_TERMINAL_GUARDS,
-                "run_terminal_audit_guards() passed — no terminal guard "
-                "regressions detected on clean system.",
-            ))
+            findings.append(
+                _cinfo(
+                    _CHECK_TERMINAL_GUARDS,
+                    "run_terminal_audit_guards() passed — no terminal guard " "regressions detected on clean system.",
+                )
+            )
     except Exception as exc:  # noqa: BLE001
-        findings.append(_cwarn(
-            _CHECK_TERMINAL_GUARDS,
-            f"run_terminal_audit_guards() raised an exception: {exc} — "
-            "guard execution may be impaired.",
-            {"exception": str(exc)},
-        ))
+        findings.append(
+            _cwarn(
+                _CHECK_TERMINAL_GUARDS,
+                f"run_terminal_audit_guards() raised an exception: {exc} — " "guard execution may be impaired.",
+                {"exception": str(exc)},
+            )
+        )
 
     return findings
 
@@ -603,6 +630,7 @@ def check_terminal_guard_integrity() -> List[ConvergenceFinding]:
 # ---------------------------------------------------------------------------
 # Check 3 — Participant layer consistency
 # ---------------------------------------------------------------------------
+
 
 def check_participant_layer_consistency() -> List[ConvergenceFinding]:
     """Verify that the participant-generic interface layer (PR-8) is intact
@@ -624,17 +652,21 @@ def check_participant_layer_consistency() -> List[ConvergenceFinding]:
 
     importable, mod, err = _try_import("core.participant_authority_interfaces")
     if not importable:
-        findings.append(_cerror(
-            _CHECK_PARTICIPANT,
-            f"core.participant_authority_interfaces is not importable: {err} — "
-            "PR-8 participant-generic interface layer has been lost.",
-        ))
+        findings.append(
+            _cerror(
+                _CHECK_PARTICIPANT,
+                f"core.participant_authority_interfaces is not importable: {err} — "
+                "PR-8 participant-generic interface layer has been lost.",
+            )
+        )
         return findings
 
-    findings.append(_cinfo(
-        _CHECK_PARTICIPANT,
-        "core.participant_authority_interfaces is importable.",
-    ))
+    findings.append(
+        _cinfo(
+            _CHECK_PARTICIPANT,
+            "core.participant_authority_interfaces is importable.",
+        )
+    )
 
     # Check authority sentinels
     auth_sentinels = [
@@ -644,34 +676,42 @@ def check_participant_layer_consistency() -> List[ConvergenceFinding]:
     ]
     for sname in auth_sentinels:
         if not _has_nonempty_str(mod, sname):
-            findings.append(_cerror(
-                _CHECK_PARTICIPANT,
-                f"Participant authority sentinel {sname!r} is absent or empty — "
-                "PR-8 participant-generic layer authority has been weakened.",
-                {"sentinel": sname},
-            ))
+            findings.append(
+                _cerror(
+                    _CHECK_PARTICIPANT,
+                    f"Participant authority sentinel {sname!r} is absent or empty — "
+                    "PR-8 participant-generic layer authority has been weakened.",
+                    {"sentinel": sname},
+                )
+            )
         else:
-            findings.append(_cinfo(
-                _CHECK_PARTICIPANT,
-                f"Participant authority sentinel {sname!r} present.",
-            ))
+            findings.append(
+                _cinfo(
+                    _CHECK_PARTICIPANT,
+                    f"Participant authority sentinel {sname!r} present.",
+                )
+            )
 
     # Check the generic-above-Android policy
     policy_name = "PARTICIPANT_GENERIC_LAYER_IS_ABOVE_ANDROID_CONCRETE_POLICY"
     if not _has_nonempty_str(mod, policy_name):
-        findings.append(_cerror(
-            _CHECK_PARTICIPANT,
-            f"Policy sentinel {policy_name!r} is absent or empty in "
-            "core.participant_authority_interfaces — the participant-generic "
-            "above Android-concrete boundary is no longer machine-checked.",
-            {"sentinel": policy_name},
-        ))
+        findings.append(
+            _cerror(
+                _CHECK_PARTICIPANT,
+                f"Policy sentinel {policy_name!r} is absent or empty in "
+                "core.participant_authority_interfaces — the participant-generic "
+                "above Android-concrete boundary is no longer machine-checked.",
+                {"sentinel": policy_name},
+            )
+        )
     else:
-        findings.append(_cinfo(
-            _CHECK_PARTICIPANT,
-            f"Policy sentinel {policy_name!r} present — participant-generic "
-            "above Android boundary is expressed.",
-        ))
+        findings.append(
+            _cinfo(
+                _CHECK_PARTICIPANT,
+                f"Policy sentinel {policy_name!r} present — participant-generic "
+                "above Android boundary is expressed.",
+            )
+        )
 
     # Verify Android concrete modules still exist (Android must not be removed)
     android_modules = [
@@ -681,20 +721,23 @@ def check_participant_layer_consistency() -> List[ConvergenceFinding]:
     for android_mod in android_modules:
         importable_android, _, _ = _try_import(android_mod)
         if not importable_android:
-            findings.append(_cwarn(
-                _CHECK_PARTICIPANT,
-                f"Android concrete module {android_mod!r} is not importable — "
-                "Android participant implementation may have been removed.  "
-                "The participant-generic layer must have at least one concrete "
-                "implementation.",
-                {"module": android_mod},
-            ))
+            findings.append(
+                _cwarn(
+                    _CHECK_PARTICIPANT,
+                    f"Android concrete module {android_mod!r} is not importable — "
+                    "Android participant implementation may have been removed.  "
+                    "The participant-generic layer must have at least one concrete "
+                    "implementation.",
+                    {"module": android_mod},
+                )
+            )
         else:
-            findings.append(_cinfo(
-                _CHECK_PARTICIPANT,
-                f"Android concrete module {android_mod!r} is importable — "
-                "concrete implementation preserved.",
-            ))
+            findings.append(
+                _cinfo(
+                    _CHECK_PARTICIPANT,
+                    f"Android concrete module {android_mod!r} is importable — " "concrete implementation preserved.",
+                )
+            )
 
     return findings
 
@@ -702,6 +745,7 @@ def check_participant_layer_consistency() -> List[ConvergenceFinding]:
 # ---------------------------------------------------------------------------
 # Check 4 — Canonical layer model reachable
 # ---------------------------------------------------------------------------
+
 
 def check_canonical_layer_model_reachable() -> List[ConvergenceFinding]:
     """Verify that ``core.canonical_layer_model`` (PR-9) is intact, all five
@@ -722,17 +766,20 @@ def check_canonical_layer_model_reachable() -> List[ConvergenceFinding]:
 
     importable, mod, err = _try_import("core.canonical_layer_model")
     if not importable:
-        findings.append(_cerror(
-            _CHECK_LAYER_MODEL,
-            f"core.canonical_layer_model is not importable: {err} — "
-            "PR-9 canonical layer model has been lost.",
-        ))
+        findings.append(
+            _cerror(
+                _CHECK_LAYER_MODEL,
+                f"core.canonical_layer_model is not importable: {err} — " "PR-9 canonical layer model has been lost.",
+            )
+        )
         return findings
 
-    findings.append(_cinfo(
-        _CHECK_LAYER_MODEL,
-        "core.canonical_layer_model is importable.",
-    ))
+    findings.append(
+        _cinfo(
+            _CHECK_LAYER_MODEL,
+            "core.canonical_layer_model is importable.",
+        )
+    )
 
     # Check all five layer keys
     expected_keys = {
@@ -745,17 +792,21 @@ def check_canonical_layer_model_reachable() -> List[ConvergenceFinding]:
     actual_keys = getattr(mod, "CANONICAL_LAYER_KEYS", frozenset())
     missing = expected_keys - frozenset(actual_keys)
     if missing:
-        findings.append(_cerror(
-            _CHECK_LAYER_MODEL,
-            f"CANONICAL_LAYER_KEYS is missing expected layer keys: {sorted(missing)} — "
-            "the five-layer canonical model has been partially removed.",
-            {"missing_keys": sorted(missing)},
-        ))
+        findings.append(
+            _cerror(
+                _CHECK_LAYER_MODEL,
+                f"CANONICAL_LAYER_KEYS is missing expected layer keys: {sorted(missing)} — "
+                "the five-layer canonical model has been partially removed.",
+                {"missing_keys": sorted(missing)},
+            )
+        )
     else:
-        findings.append(_cinfo(
-            _CHECK_LAYER_MODEL,
-            "All five canonical layer keys present in CANONICAL_LAYER_KEYS.",
-        ))
+        findings.append(
+            _cinfo(
+                _CHECK_LAYER_MODEL,
+                "All five canonical layer keys present in CANONICAL_LAYER_KEYS.",
+            )
+        )
 
     # Check the four NOT-policy sentinels
     not_sentinels = [
@@ -766,50 +817,61 @@ def check_canonical_layer_model_reachable() -> List[ConvergenceFinding]:
     ]
     for sname in not_sentinels:
         if not _has_nonempty_str(mod, sname):
-            findings.append(_cerror(
-                _CHECK_LAYER_MODEL,
-                f"NOT-policy sentinel {sname!r} is absent or empty in "
-                "core.canonical_layer_model — a canonical layer boundary "
-                "invariant has been removed.",
-                {"sentinel": sname},
-            ))
+            findings.append(
+                _cerror(
+                    _CHECK_LAYER_MODEL,
+                    f"NOT-policy sentinel {sname!r} is absent or empty in "
+                    "core.canonical_layer_model — a canonical layer boundary "
+                    "invariant has been removed.",
+                    {"sentinel": sname},
+                )
+            )
         else:
-            findings.append(_cinfo(
-                _CHECK_LAYER_MODEL,
-                f"NOT-policy sentinel {sname!r} present.",
-            ))
+            findings.append(
+                _cinfo(
+                    _CHECK_LAYER_MODEL,
+                    f"NOT-policy sentinel {sname!r} present.",
+                )
+            )
 
     # Run the layer model invariants
     runner = getattr(mod, "run_layer_model_invariants", None)
     if not callable(runner):
-        findings.append(_cerror(
-            _CHECK_LAYER_MODEL,
-            "run_layer_model_invariants is not callable in "
-            "core.canonical_layer_model — PR-9 invariant runner removed.",
-        ))
+        findings.append(
+            _cerror(
+                _CHECK_LAYER_MODEL,
+                "run_layer_model_invariants is not callable in "
+                "core.canonical_layer_model — PR-9 invariant runner removed.",
+            )
+        )
         return findings
 
     try:
         report = runner()
         if not getattr(report, "overall_consistent", True):
-            findings.append(_cerror(
-                _CHECK_LAYER_MODEL,
-                "run_layer_model_invariants() reports overall_consistent=False — "
-                "the canonical layer model has an internal inconsistency.",
-                {"report": getattr(report, "to_dict", lambda: {})()},
-            ))
+            findings.append(
+                _cerror(
+                    _CHECK_LAYER_MODEL,
+                    "run_layer_model_invariants() reports overall_consistent=False — "
+                    "the canonical layer model has an internal inconsistency.",
+                    {"report": getattr(report, "to_dict", lambda: {})()},
+                )
+            )
         else:
-            findings.append(_cinfo(
-                _CHECK_LAYER_MODEL,
-                "run_layer_model_invariants() passed — canonical layer model "
-                "is internally consistent.",
-            ))
+            findings.append(
+                _cinfo(
+                    _CHECK_LAYER_MODEL,
+                    "run_layer_model_invariants() passed — canonical layer model " "is internally consistent.",
+                )
+            )
     except Exception as exc:  # noqa: BLE001
-        findings.append(_cwarn(
-            _CHECK_LAYER_MODEL,
-            f"run_layer_model_invariants() raised an exception: {exc}",
-            {"exception": str(exc)},
-        ))
+        findings.append(
+            _cwarn(
+                _CHECK_LAYER_MODEL,
+                f"run_layer_model_invariants() raised an exception: {exc}",
+                {"exception": str(exc)},
+            )
+        )
 
     return findings
 
@@ -817,6 +879,7 @@ def check_canonical_layer_model_reachable() -> List[ConvergenceFinding]:
 # ---------------------------------------------------------------------------
 # Aggregate runner
 # ---------------------------------------------------------------------------
+
 
 def run_final_convergence_checks() -> ConvergenceReport:
     """Run all four final convergence checks and aggregate the results.
@@ -841,11 +904,13 @@ def run_final_convergence_checks() -> ConvergenceReport:
             findings = check_fn()
         except Exception as exc:  # noqa: BLE001
             logger.debug("Fallback triggered: %s", exc)
-            findings = [_cerror(
-                check_name,
-                f"Check {check_name!r} raised an unexpected exception: {exc}",
-                {"exception": str(exc)},
-            )]
+            findings = [
+                _cerror(
+                    check_name,
+                    f"Check {check_name!r} raised an unexpected exception: {exc}",
+                    {"exception": str(exc)},
+                )
+            ]
         report.checks_run.append(check_name)
         report.extend(findings)
         logger.debug(

@@ -49,13 +49,10 @@ Usage::
 from __future__ import annotations
 
 import logging  # auto: missing import
-
-
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
-
 
 # ---------------------------------------------------------------------------
 # Enumerations
@@ -223,43 +220,49 @@ class DeviceExecutionProfile(BaseModel):
 # ---------------------------------------------------------------------------
 
 #: Capability names that strongly indicate a rich (agent_runtime-capable) device.
-_RICH_CAPABILITY_HINTS: frozenset = frozenset({
-    "screen",
-    "touch",
-    "keyboard",
-    "camera",
-    "microphone",
-    "display",
-    "agent_runtime",
-    "execute_agent",
-})
+_RICH_CAPABILITY_HINTS: frozenset = frozenset(
+    {
+        "screen",
+        "touch",
+        "keyboard",
+        "camera",
+        "microphone",
+        "display",
+        "agent_runtime",
+        "execute_agent",
+    }
+)
 
 #: Device-type strings that indicate a thin (command_only) device.
-_THIN_DEVICE_TYPES: frozenset = frozenset({
-    "drone",
-    "iot",
-    "sensor",
-    "embedded",
-    "kiosk",
-    "mcu",
-    "rpi",
-    "raspberrypi",
-    "arduino",
-})
+_THIN_DEVICE_TYPES: frozenset = frozenset(
+    {
+        "drone",
+        "iot",
+        "sensor",
+        "embedded",
+        "kiosk",
+        "mcu",
+        "rpi",
+        "raspberrypi",
+        "arduino",
+    }
+)
 
 #: Device-type strings that indicate a rich device.
-_RICH_DEVICE_TYPES: frozenset = frozenset({
-    "android",
-    "ios",
-    "windows",
-    "macos",
-    "linux",
-    "phone",
-    "tablet",
-    "desktop",
-    "laptop",
-    "pc",
-})
+_RICH_DEVICE_TYPES: frozenset = frozenset(
+    {
+        "android",
+        "ios",
+        "windows",
+        "macos",
+        "linux",
+        "phone",
+        "tablet",
+        "desktop",
+        "laptop",
+        "pc",
+    }
+)
 
 
 def _classify_from_info(
@@ -334,8 +337,7 @@ def build_profile_from_device_info(
     raw_caps = device_info.get("capabilities", [])
     if isinstance(raw_caps, list):
         caps: List[str] = [
-            c if isinstance(c, str) else (c.get("name", "") if isinstance(c, dict) else str(c))
-            for c in raw_caps
+            c if isinstance(c, str) else (c.get("name", "") if isinstance(c, dict) else str(c)) for c in raw_caps
         ]
     else:
         caps = []

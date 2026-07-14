@@ -94,10 +94,10 @@ from core.execution.fallback_trace import (
     summarize_fallback_trace,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_intent_profile(
     intent_id: str = "test-intent-001",
@@ -324,6 +324,7 @@ class TestFallbackDecisionTrace:
 
     def test_timestamp_auto_populated(self):
         import time
+
         before = time.time()
         t = FallbackDecisionTrace()
         after = time.time()
@@ -557,8 +558,16 @@ class TestSummarizeFallbackTrace:
             outcome=FallbackOutcome.BLOCKED.value,
         )
         s = summarize_fallback_trace(trace)
-        for key in ("trace_id", "intent_id", "action_level", "primary_path",
-                    "primary_block_reason", "fallback_path", "decision_source", "outcome"):
+        for key in (
+            "trace_id",
+            "intent_id",
+            "action_level",
+            "primary_path",
+            "primary_block_reason",
+            "fallback_path",
+            "decision_source",
+            "outcome",
+        ):
             assert key in s, f"key {key!r} missing from summary"
 
     def test_minimal_trace_summary_safe(self):
@@ -645,7 +654,7 @@ class TestReadinessResultIntegration:
 
     def test_real_readiness_result_object(self):
         """Test with an actual ReadinessResult from the readiness gate module."""
-        from core.execution.readiness_gate import ReadinessResult, ReadinessStatus, BlockedBy
+        from core.execution.readiness_gate import BlockedBy, ReadinessResult, ReadinessStatus
 
         rr = ReadinessResult(
             ready=False,
@@ -671,6 +680,7 @@ class TestOpenClawdBuildFallbackTrace:
         """Return a minimal OpenClawd instance (config optional)."""
         try:
             from core.openclawd import OpenClawd  # noqa: PLC0415
+
             with patch("core.openclawd.OpenClawd._load_config", return_value={}):
                 oc = OpenClawd.__new__(OpenClawd)
                 oc._config = {}

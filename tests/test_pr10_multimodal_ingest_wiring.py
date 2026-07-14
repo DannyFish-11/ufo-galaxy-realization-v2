@@ -11,16 +11,16 @@ Validates:
 8. _run_continuum uses the running singleton bus when available.
 9. Response metadata contains fused context (no base64 payloads).
 """
+
 from __future__ import annotations
 
 import asyncio
-import pathlib
 import json
+import pathlib
 from typing import Any, Dict, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 
 # ===========================================================================
 # Helpers
@@ -42,13 +42,13 @@ def _assert_no_base64_payload(data_str: str, context: str = "") -> None:
     consistent with JSON-embedded image/audio data fields.
     """
     import re
+
     # Match long base64 blobs: 80+ chars of base64 alphabet, optionally ending in = padding
     # Wrapped in quotes (as in JSON) to avoid matching long identifiers or UUIDs.
     pattern = r'"[A-Za-z0-9+/]{80,}={0,2}"'
     match = re.search(pattern, data_str)
     assert match is None, (
-        f"Base64 payload found in result{' (' + context + ')' if context else ''}: "
-        f"{match.group()[:40]}..."
+        f"Base64 payload found in result{' (' + context + ')' if context else ''}: " f"{match.group()[:40]}..."
     )
 
 
@@ -85,10 +85,12 @@ class TestPR3ConfigFlags:
 class TestMultimodalIngestEventType:
     def test_event_type_exists(self):
         from core.state_event_bus import StateEventType
+
         assert hasattr(StateEventType, "MULTIMODAL_INGEST_ACTIVE")
 
     def test_event_type_value(self):
         from core.state_event_bus import StateEventType
+
         assert StateEventType.MULTIMODAL_INGEST_ACTIVE == "multimodal.ingest.active"
 
 
@@ -103,15 +105,17 @@ class TestIngestRuntimeModule:
     def setup_method(self):
         # Reset singleton before each test.
         import core.multimodal.ingest_runtime as _ir
+
         _ir._ingest_bus = None
         _ir._ingest_task = None
 
     def test_get_ingest_bus_returns_none_when_not_started(self):
         from core.multimodal.ingest_runtime import get_ingest_bus
+
         assert get_ingest_bus() is None
 
     def test_start_ingest_bus_skips_when_flag_false(self):
-        from core.multimodal.ingest_runtime import start_ingest_bus, get_ingest_bus
+        from core.multimodal.ingest_runtime import get_ingest_bus, start_ingest_bus
 
         with patch("core.unified_config.config", {"enable_multimodal_ingest": False}):
             result = start_ingest_bus()
@@ -119,12 +123,10 @@ class TestIngestRuntimeModule:
         assert get_ingest_bus() is None
 
     def test_start_ingest_bus_starts_when_flag_true(self):
-        from core.multimodal.ingest_runtime import start_ingest_bus, get_ingest_bus
+        from core.multimodal.ingest_runtime import get_ingest_bus, start_ingest_bus
 
         with patch("core.unified_config.config", {"enable_multimodal_ingest": True}):
-            with patch(
-                "core.multimodal.ingest_runtime._schedule_pipeline"
-            ):  # don't actually schedule
+            with patch("core.multimodal.ingest_runtime._schedule_pipeline"):  # don't actually schedule
                 result = start_ingest_bus()
 
         assert result is True
@@ -132,7 +134,7 @@ class TestIngestRuntimeModule:
         assert bus is not None
 
     def test_start_ingest_bus_is_idempotent(self):
-        from core.multimodal.ingest_runtime import start_ingest_bus, get_ingest_bus
+        from core.multimodal.ingest_runtime import get_ingest_bus, start_ingest_bus
 
         with patch("core.unified_config.config", {"enable_multimodal_ingest": True}):
             with patch("core.multimodal.ingest_runtime._schedule_pipeline"):
@@ -147,9 +149,9 @@ class TestIngestRuntimeModule:
 
     def test_stop_ingest_bus_clears_singleton(self):
         from core.multimodal.ingest_runtime import (
+            get_ingest_bus,
             start_ingest_bus,
             stop_ingest_bus,
-            get_ingest_bus,
         )
 
         with patch("core.unified_config.config", {"enable_multimodal_ingest": True}):
@@ -189,9 +191,7 @@ class TestDesktopPresenceRuntimeAutostart:
     def test_try_start_called_on_init(self):
         from core.desktop_presence_runtime import DesktopPresenceRuntime
 
-        with patch.object(
-            DesktopPresenceRuntime, "_try_start_ingest_bus"
-        ) as mock_start:
+        with patch.object(DesktopPresenceRuntime, "_try_start_ingest_bus") as mock_start:
             runtime = DesktopPresenceRuntime()
             mock_start.assert_called_once()
 
@@ -225,9 +225,10 @@ class TestTextOnlyFlowUnchanged:
         )
         assert isinstance(result, dict)
         # Text-only with no device metadata: fusion_summary should be empty
-        assert not result.get("fusion_summary"), (
-            "Text-only request with no device metadata should produce empty fusion_summary, got: "
-            + repr(result.get("fusion_summary"))
+        assert not result.get(
+            "fusion_summary"
+        ), "Text-only request with no device metadata should produce empty fusion_summary, got: " + repr(
+            result.get("fusion_summary")
         )
 
     @pytest.mark.asyncio
@@ -254,6 +255,7 @@ class TestMultimodalFusionSummaryInjection:
     def _make_multimodal_context(self):
         try:
             from core.schemas.multimodal import MultiModalContext, MultiModalImage
+
             return MultiModalContext(
                 images=[
                     MultiModalImage(
@@ -342,9 +344,7 @@ class TestOpenClawdResponseMetadata:
                             )
 
         metadata = result.get("metadata", {})
-        assert "multimodal_context" in metadata, (
-            "response.metadata should always contain 'multimodal_context' key"
-        )
+        assert "multimodal_context" in metadata, "response.metadata should always contain 'multimodal_context' key"
 
 
 # ===========================================================================
@@ -354,8 +354,8 @@ class TestOpenClawdResponseMetadata:
 
 class TestRunContinuumUsesSingletonBus:
     def test_run_continuum_uses_running_bus_when_available(self):
-        from core.openclawd import OpenClawd
         from core.multimodal.ingress_bus import MultimodalIngressBus
+        from core.openclawd import OpenClawd
 
         clawd = OpenClawd()
         mock_bus = MagicMock(spec=MultimodalIngressBus)
@@ -425,19 +425,19 @@ class TestGatewayChatRequestSchema:
 
     def test_multimodal_context_field_exists_in_source(self):
         src = self._chat_source()
-        assert "multimodal_context" in src, (
-            "galaxy_gateway/routes/chat.py ChatRequest must declare multimodal_context field"
-        )
+        assert (
+            "multimodal_context" in src
+        ), "galaxy_gateway/routes/chat.py ChatRequest must declare multimodal_context field"
 
     def test_multimodal_context_passed_to_process_in_source(self):
         src = self._chat_source()
-        assert "multimodal_context=request.multimodal_context" in src, (
-            "gateway chat_endpoint must pass multimodal_context to runtime.handle_request()"
-        )
+        assert (
+            "multimodal_context=request.multimodal_context" in src
+        ), "gateway chat_endpoint must pass multimodal_context to runtime.handle_request()"
 
     def test_multimodal_context_optional_annotation_in_source(self):
         src = self._chat_source()
         # The field must have a None default (making it optional for callers)
-        assert "multimodal_context" in src and "= None" in src, (
-            "multimodal_context field should be declared with a None default"
-        )
+        assert (
+            "multimodal_context" in src and "= None" in src
+        ), "multimodal_context field should be declared with a None default"

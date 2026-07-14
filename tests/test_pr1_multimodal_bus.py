@@ -22,6 +22,7 @@ import pytest
 # ContextFuser tests
 # ---------------------------------------------------------------------------
 
+
 class TestContextFuserTextOnly:
     """Text-only requests must return empty media and empty fusion_summary."""
 
@@ -153,6 +154,7 @@ class TestContextFuserSizeLimits:
 # MultimodalBus tests
 # ---------------------------------------------------------------------------
 
+
 class TestMultimodalBusTextOnly:
     """Text-only path through the bus."""
 
@@ -183,14 +185,8 @@ class TestMultimodalBusWithContext:
         """Build a minimal MultiModalContext-like object."""
         from core.schemas.multimodal import MultiModalAudio, MultiModalContext, MultiModalImage
 
-        images = [
-            MultiModalImage(mime="image/jpeg", data="FAKE_B64", source="webcam")
-            for _ in range(n_images)
-        ]
-        audio = [
-            MultiModalAudio(mime="audio/wav", data="FAKE_B64", source="microphone")
-            for _ in range(n_audio)
-        ]
+        images = [MultiModalImage(mime="image/jpeg", data="FAKE_B64", source="webcam") for _ in range(n_images)]
+        audio = [MultiModalAudio(mime="audio/wav", data="FAKE_B64", source="microphone") for _ in range(n_audio)]
         return MultiModalContext(images=images, audio=audio)
 
     def test_ingest_image_audio_produces_summary(self):
@@ -238,6 +234,7 @@ class TestMultimodalBusWithContext:
 # EventBus event emission tests
 # ---------------------------------------------------------------------------
 
+
 class TestMultimodalBusEvents:
     """PERCEPTION_INGESTED and PERCEPTION_FUSED must be emitted."""
 
@@ -257,14 +254,12 @@ class TestMultimodalBusEvents:
         assert "PERCEPTION_FUSED" in emitted
 
     def test_events_emitted_with_context(self):
-        from core.schemas.multimodal import MultiModalContext, MultiModalImage
         from core.perception.multimodal_bus import MultimodalBus
+        from core.schemas.multimodal import MultiModalContext, MultiModalImage
 
         emitted: list = []
 
-        ctx = MultiModalContext(
-            images=[MultiModalImage(mime="image/png", data="X", source="cam")]
-        )
+        ctx = MultiModalContext(images=[MultiModalImage(mime="image/png", data="X", source="cam")])
 
         with patch(
             "core.perception.multimodal_bus._galaxy_event_bus.publish",
@@ -295,6 +290,7 @@ class TestMultimodalBusEvents:
 # EventType enum membership tests
 # ---------------------------------------------------------------------------
 
+
 class TestPerceptionEventTypes:
     """PERCEPTION_INGESTED and PERCEPTION_FUSED must be in EventType."""
 
@@ -315,6 +311,7 @@ class TestPerceptionEventTypes:
 # ---------------------------------------------------------------------------
 # OpenClawd integration — text-only path unchanged
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_openclawd_process_text_only_unaffected():
@@ -342,13 +339,11 @@ async def test_openclawd_process_text_only_unaffected():
 @pytest.mark.asyncio
 async def test_openclawd_process_multimodal_injects_summary():
     """When multimodal_context is provided the handler receives the augmented message."""
-    from core.schemas.multimodal import MultiModalContext, MultiModalImage
     from core.openclawd import OpenClawd
+    from core.schemas.multimodal import MultiModalContext, MultiModalImage
 
     oc = OpenClawd()
-    ctx = MultiModalContext(
-        images=[MultiModalImage(mime="image/jpeg", data="X", source="webcam")]
-    )
+    ctx = MultiModalContext(images=[MultiModalImage(mime="image/jpeg", data="X", source="webcam")])
 
     received_messages: list = []
 

@@ -223,74 +223,59 @@ CAPABILITY_TIER_REGISTRY: Dict[str, str] = {
     # These are verified in the canonical main path:
     # main.py → OpenClawd → CommandRouter → DeviceRouter → dispatch_to_websocket
     # -----------------------------------------------------------------------
-
     # Core dispatch and routing
     "command_routing": CapabilityTier.MAIN_CHAIN.value,
     "device_dispatch": CapabilityTier.MAIN_CHAIN.value,
     "websocket_dispatch": CapabilityTier.MAIN_CHAIN.value,
     "task_completion_ingress": CapabilityTier.MAIN_CHAIN.value,
     "android_handoff": CapabilityTier.MAIN_CHAIN.value,
-
     # Session and truth
     "session_management": CapabilityTier.MAIN_CHAIN.value,
     "device_registry": CapabilityTier.MAIN_CHAIN.value,
     "canonical_session_truth": CapabilityTier.MAIN_CHAIN.value,
-
     # Android core capabilities (verified via device registration)
     "screen": CapabilityTier.MAIN_CHAIN.value,
     "touch": CapabilityTier.MAIN_CHAIN.value,
     "keyboard": CapabilityTier.MAIN_CHAIN.value,
-
     # Orchestration
     "task_orchestration": CapabilityTier.MAIN_CHAIN.value,
     "llm_routing": CapabilityTier.MAIN_CHAIN.value,
     "skill_dispatch": CapabilityTier.MAIN_CHAIN.value,
-
     # Governance (verified readiness structure)
     "release_gate_evaluation": CapabilityTier.MAIN_CHAIN.value,
     "readiness_evaluation": CapabilityTier.MAIN_CHAIN.value,
-
     # -----------------------------------------------------------------------
     # QUASI_MAIN_CHAIN capabilities
     # Substantially integrated but with at least one known gap.
     # -----------------------------------------------------------------------
-
     # Mesh / multi-node (staged, not default-on)
     "staged_mesh": CapabilityTier.QUASI_MAIN_CHAIN.value,
     "multi_node_dispatch": CapabilityTier.QUASI_MAIN_CHAIN.value,
-
     # Session migration/continuity (substantially integrated, gaps in E2E)
     "session_migration": CapabilityTier.QUASI_MAIN_CHAIN.value,
     "session_continuity": CapabilityTier.QUASI_MAIN_CHAIN.value,
     "session_recovery": CapabilityTier.QUASI_MAIN_CHAIN.value,
-
     # Local LLM (integration present, not fully verified in all paths)
     "local_llm": CapabilityTier.QUASI_MAIN_CHAIN.value,
-
     # Camera / microphone (capability declared, not fully verified in main path)
     "camera": CapabilityTier.QUASI_MAIN_CHAIN.value,
     "microphone": CapabilityTier.QUASI_MAIN_CHAIN.value,
-
     # -----------------------------------------------------------------------
     # EXPERIMENTAL capabilities
     # Present in codebase but NOT fully integrated into main dispatch chain.
     # MUST NOT be described as production main-chain.
     # -----------------------------------------------------------------------
-
     # Visual-language models (architecture exists, not wired to main dispatch)
     "vlm": CapabilityTier.EXPERIMENTAL.value,
     "multimodal_vlm": CapabilityTier.EXPERIMENTAL.value,
     "visual_language_model": CapabilityTier.EXPERIMENTAL.value,
-
     # WebRTC (gateway exists, not connected to canonical main path)
     "webrtc": CapabilityTier.EXPERIMENTAL.value,
     "webrtc_gateway": CapabilityTier.EXPERIMENTAL.value,
     "peer_video": CapabilityTier.EXPERIMENTAL.value,
-
     # Live mesh runtime engine (staged mesh is QUASI, live engine is EXPERIMENTAL)
     "live_mesh_runtime": CapabilityTier.EXPERIMENTAL.value,
     "mesh_runtime_engine": CapabilityTier.EXPERIMENTAL.value,
-
     # Hardware-specific features not yet verified in main path
     "bluetooth": CapabilityTier.EXPERIMENTAL.value,
     "nfc": CapabilityTier.EXPERIMENTAL.value,
@@ -298,10 +283,8 @@ CAPABILITY_TIER_REGISTRY: Dict[str, str] = {
     "accelerometer": CapabilityTier.EXPERIMENTAL.value,
     "gyroscope": CapabilityTier.EXPERIMENTAL.value,
     "biometric": CapabilityTier.EXPERIMENTAL.value,
-
     # Dual-repo E2E (architecture defined, not yet verified)
     "dual_repo_e2e": CapabilityTier.EXPERIMENTAL.value,
-
     # Desktop projection (adapter exists but not in main dispatch path)
     "desktop_projection": CapabilityTier.EXPERIMENTAL.value,
 }
@@ -337,9 +320,7 @@ def get_capability_tier(capability_name: str) -> CapabilityTier:
                 raw = reg_val
                 break
     if raw is None:
-        logger.debug(
-            "get_capability_tier: '%s' not in registry → UNKNOWN", capability_name
-        )
+        logger.debug("get_capability_tier: '%s' not in registry → UNKNOWN", capability_name)
         return CapabilityTier.UNKNOWN
     try:
         return CapabilityTier(raw)

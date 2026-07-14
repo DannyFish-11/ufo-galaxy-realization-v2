@@ -39,6 +39,7 @@ Usage::
     handler = loader.get_handler("adb_shell")
     result = await handler(device_id="phone_01", params={"command": "ls /sdcard"})
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -54,8 +55,9 @@ logger = logging.getLogger("Galaxy.NodeCapabilityLoader")
 
 # PR-AIPV3: AIP v3 unified message emission
 try:
-    from core.schemas.aip_v3 import CapabilityReportMsg  # noqa: F401
     from core.nats_bus import get_nats_bus  # noqa: F401
+    from core.schemas.aip_v3 import CapabilityReportMsg  # noqa: F401
+
     _AIPV3_AVAILABLE = True
 except ImportError:
     _AIPV3_AVAILABLE = False
@@ -156,9 +158,7 @@ class NodeCapabilityLoader:
 
         try:
             # Dynamic import of fusion_entry.py
-            spec = importlib.util.spec_from_file_location(
-                f"nodes.{node_id}.fusion_entry", str(fusion_path)
-            )
+            spec = importlib.util.spec_from_file_location(f"nodes.{node_id}.fusion_entry", str(fusion_path))
             if spec is None or spec.loader is None:
                 return []
             mod = importlib.util.module_from_spec(spec)
@@ -181,9 +181,7 @@ class NodeCapabilityLoader:
             logger.debug("Node %s: capability loading failed: %s", node_id, exc)
             return []
 
-    def _register_from_manifest(
-        self, node_id: str, manifest: Dict[str, Any], mod: Any
-    ) -> List[CapabilityAction]:
+    def _register_from_manifest(self, node_id: str, manifest: Dict[str, Any], mod: Any) -> List[CapabilityAction]:
         """Register actions from a capability manifest."""
         actions: List[CapabilityAction] = []
         action_list = manifest.get("actions", [])
@@ -393,10 +391,22 @@ class NodeCapabilityLoader:
             "Node_33_ADB": {
                 "description": "Android Debug Bridge — device control via ADB",
                 "actions": [
-                    {"name": "adb_shell", "description": "Execute shell command on Android device", "params": {"command": "string", "timeout_ms": "int"}},
-                    {"name": "adb_screenshot", "description": "Capture device screen", "params": {"format": "string", "quality": "int"}},
+                    {
+                        "name": "adb_shell",
+                        "description": "Execute shell command on Android device",
+                        "params": {"command": "string", "timeout_ms": "int"},
+                    },
+                    {
+                        "name": "adb_screenshot",
+                        "description": "Capture device screen",
+                        "params": {"format": "string", "quality": "int"},
+                    },
                     {"name": "adb_tap", "description": "Tap screen at coordinates", "params": {"x": "int", "y": "int"}},
-                    {"name": "adb_swipe", "description": "Swipe screen", "params": {"x1": "int", "y1": "int", "x2": "int", "y2": "int", "duration_ms": "int"}},
+                    {
+                        "name": "adb_swipe",
+                        "description": "Swipe screen",
+                        "params": {"x1": "int", "y1": "int", "x2": "int", "y2": "int", "duration_ms": "int"},
+                    },
                     {"name": "adb_input_text", "description": "Type text", "params": {"text": "string"}},
                     {"name": "adb_keyevent", "description": "Send key event", "params": {"keycode": "int"}},
                 ],
@@ -404,41 +414,105 @@ class NodeCapabilityLoader:
             "Node_38_BLE": {
                 "description": "Bluetooth Low Energy — scan, connect, read, write",
                 "actions": [
-                    {"name": "ble_scan", "description": "Scan for BLE devices", "params": {"duration_ms": "int", "service_uuid": "string"}},
-                    {"name": "ble_connect", "description": "Connect to BLE device", "params": {"address": "string", "auto_discover": "bool"}},
-                    {"name": "ble_disconnect", "description": "Disconnect from BLE device", "params": {"address": "string"}},
-                    {"name": "ble_read", "description": "Read GATT characteristic", "params": {"address": "string", "uuid": "string"}},
-                    {"name": "ble_write", "description": "Write GATT characteristic", "params": {"address": "string", "uuid": "string", "data": "bytes"}},
-                    {"name": "ble_notify", "description": "Subscribe to notifications", "params": {"address": "string", "uuid": "string", "enable": "bool"}},
+                    {
+                        "name": "ble_scan",
+                        "description": "Scan for BLE devices",
+                        "params": {"duration_ms": "int", "service_uuid": "string"},
+                    },
+                    {
+                        "name": "ble_connect",
+                        "description": "Connect to BLE device",
+                        "params": {"address": "string", "auto_discover": "bool"},
+                    },
+                    {
+                        "name": "ble_disconnect",
+                        "description": "Disconnect from BLE device",
+                        "params": {"address": "string"},
+                    },
+                    {
+                        "name": "ble_read",
+                        "description": "Read GATT characteristic",
+                        "params": {"address": "string", "uuid": "string"},
+                    },
+                    {
+                        "name": "ble_write",
+                        "description": "Write GATT characteristic",
+                        "params": {"address": "string", "uuid": "string", "data": "bytes"},
+                    },
+                    {
+                        "name": "ble_notify",
+                        "description": "Subscribe to notifications",
+                        "params": {"address": "string", "uuid": "string", "enable": "bool"},
+                    },
                 ],
             },
             "Node_41_MQTT": {
                 "description": "MQTT — IoT device messaging",
                 "actions": [
-                    {"name": "mqtt_publish", "description": "Publish MQTT message", "params": {"topic": "string", "payload": "string", "qos": "int"}},
-                    {"name": "mqtt_subscribe", "description": "Subscribe to MQTT topic", "params": {"topic": "string", "qos": "int"}},
-                    {"name": "mqtt_unsubscribe", "description": "Unsubscribe from topic", "params": {"topic": "string"}},
-                    {"name": "mqtt_connect", "description": "Connect to MQTT broker", "params": {"host": "string", "port": "int", "client_id": "string"}},
+                    {
+                        "name": "mqtt_publish",
+                        "description": "Publish MQTT message",
+                        "params": {"topic": "string", "payload": "string", "qos": "int"},
+                    },
+                    {
+                        "name": "mqtt_subscribe",
+                        "description": "Subscribe to MQTT topic",
+                        "params": {"topic": "string", "qos": "int"},
+                    },
+                    {
+                        "name": "mqtt_unsubscribe",
+                        "description": "Unsubscribe from topic",
+                        "params": {"topic": "string"},
+                    },
+                    {
+                        "name": "mqtt_connect",
+                        "description": "Connect to MQTT broker",
+                        "params": {"host": "string", "port": "int", "client_id": "string"},
+                    },
                     {"name": "mqtt_disconnect", "description": "Disconnect from broker", "params": {}},
                 ],
             },
             "Node_45_DesktopAuto": {
                 "description": "Desktop Automation — UI control",
                 "actions": [
-                    {"name": "ui_click", "description": "Click at screen coordinates", "params": {"x": "int", "y": "int"}},
+                    {
+                        "name": "ui_click",
+                        "description": "Click at screen coordinates",
+                        "params": {"x": "int", "y": "int"},
+                    },
                     {"name": "ui_type", "description": "Type text", "params": {"text": "string", "interval": "float"}},
-                    {"name": "ui_screenshot", "description": "Capture desktop screenshot", "params": {"region": "tuple", "format": "string"}},
-                    {"name": "ui_find", "description": "Find image on screen", "params": {"image_path": "string", "confidence": "float"}},
+                    {
+                        "name": "ui_screenshot",
+                        "description": "Capture desktop screenshot",
+                        "params": {"region": "tuple", "format": "string"},
+                    },
+                    {
+                        "name": "ui_find",
+                        "description": "Find image on screen",
+                        "params": {"image_path": "string", "confidence": "float"},
+                    },
                     {"name": "ui_hotkey", "description": "Press hotkey combination", "params": {"keys": "list"}},
                 ],
             },
             "Node_48_Serial": {
                 "description": "Serial/UART — hardware communication",
                 "actions": [
-                    {"name": "serial_open", "description": "Open serial port", "params": {"port": "string", "baudrate": "int"}},
+                    {
+                        "name": "serial_open",
+                        "description": "Open serial port",
+                        "params": {"port": "string", "baudrate": "int"},
+                    },
                     {"name": "serial_close", "description": "Close serial port", "params": {"port": "string"}},
-                    {"name": "serial_read", "description": "Read from serial port", "params": {"port": "string", "size": "int", "timeout_ms": "int"}},
-                    {"name": "serial_write", "description": "Write to serial port", "params": {"port": "string", "data": "bytes"}},
+                    {
+                        "name": "serial_read",
+                        "description": "Read from serial port",
+                        "params": {"port": "string", "size": "int", "timeout_ms": "int"},
+                    },
+                    {
+                        "name": "serial_write",
+                        "description": "Write to serial port",
+                        "params": {"port": "string", "data": "bytes"},
+                    },
                     {"name": "serial_flush", "description": "Flush serial buffer", "params": {"port": "string"}},
                     {"name": "serial_list_ports", "description": "List available serial ports", "params": {}},
                 ],

@@ -71,7 +71,6 @@ from core.node_cognition_activation import (
     transition_activation_state,
 )
 
-
 # ===========================================================================
 # Helpers
 # ===========================================================================
@@ -137,9 +136,7 @@ class TestSentinels:
         assert len(ACTIVATION_LAYER_SITS_ABOVE_INVOCATION_SUBSTRATE_POLICY) > 0
 
     def test_policy_governance_clearance(self):
-        assert isinstance(
-            ACTIVATION_ELIGIBILITY_REQUIRES_GOVERNANCE_CLEARANCE_POLICY, str
-        )
+        assert isinstance(ACTIVATION_ELIGIBILITY_REQUIRES_GOVERNANCE_CLEARANCE_POLICY, str)
         assert len(ACTIVATION_ELIGIBILITY_REQUIRES_GOVERNANCE_CLEARANCE_POLICY) > 0
 
     def test_policy_validated_transitions(self):
@@ -147,20 +144,12 @@ class TestSentinels:
         assert len(ACTIVATION_STATE_TRANSITIONS_ARE_VALIDATED_POLICY) > 0
 
     def test_policy_role_at_activation(self):
-        assert isinstance(
-            COGNITION_ROLE_IS_ASSIGNED_AT_ACTIVATION_NOT_REGISTRATION_POLICY, str
-        )
-        assert len(
-            COGNITION_ROLE_IS_ASSIGNED_AT_ACTIVATION_NOT_REGISTRATION_POLICY
-        ) > 0
+        assert isinstance(COGNITION_ROLE_IS_ASSIGNED_AT_ACTIVATION_NOT_REGISTRATION_POLICY, str)
+        assert len(COGNITION_ROLE_IS_ASSIGNED_AT_ACTIVATION_NOT_REGISTRATION_POLICY) > 0
 
     def test_policy_orchestration_path(self):
-        assert isinstance(
-            ORCHESTRATION_MUST_USE_ACTIVATION_LAYER_NOT_BARE_INVOCATION_POLICY, str
-        )
-        assert len(
-            ORCHESTRATION_MUST_USE_ACTIVATION_LAYER_NOT_BARE_INVOCATION_POLICY
-        ) > 0
+        assert isinstance(ORCHESTRATION_MUST_USE_ACTIVATION_LAYER_NOT_BARE_INVOCATION_POLICY, str)
+        assert len(ORCHESTRATION_MUST_USE_ACTIVATION_LAYER_NOT_BARE_INVOCATION_POLICY) > 0
 
     def test_all_five_policies_are_distinct(self):
         policies = [
@@ -181,8 +170,14 @@ class TestSentinels:
 class TestNodeActivationState:
     def test_all_eight_states_present(self):
         expected = {
-            "candidate", "eligible", "selected", "active",
-            "suspended", "blocked", "retired", "excluded",
+            "candidate",
+            "eligible",
+            "selected",
+            "active",
+            "suspended",
+            "blocked",
+            "retired",
+            "excluded",
         }
         actual = {s.value for s in NodeActivationState}
         assert expected == actual
@@ -210,8 +205,13 @@ class TestNodeActivationState:
 class TestNodeCognitionRole:
     def test_all_seven_roles_present(self):
         expected = {
-            "planning", "acting", "sensing", "memory",
-            "coordination", "observer", "unassigned",
+            "planning",
+            "acting",
+            "sensing",
+            "memory",
+            "coordination",
+            "observer",
+            "unassigned",
         }
         actual = {r.value for r in NodeCognitionRole}
         assert expected == actual
@@ -257,31 +257,19 @@ class TestActivationEligibilityOutcome:
         assert ActivationEligibilityOutcome.ELIGIBLE.value == "eligible"
 
     def test_governance_ineligible_present(self):
-        assert (
-            ActivationEligibilityOutcome.GOVERNANCE_INELIGIBLE.value
-            == "governance_ineligible"
-        )
+        assert ActivationEligibilityOutcome.GOVERNANCE_INELIGIBLE.value == "governance_ineligible"
 
     def test_capacity_exceeded_present(self):
-        assert (
-            ActivationEligibilityOutcome.CAPACITY_EXCEEDED.value == "capacity_exceeded"
-        )
+        assert ActivationEligibilityOutcome.CAPACITY_EXCEEDED.value == "capacity_exceeded"
 
     def test_policy_excluded_present(self):
-        assert (
-            ActivationEligibilityOutcome.POLICY_EXCLUDED.value == "policy_excluded"
-        )
+        assert ActivationEligibilityOutcome.POLICY_EXCLUDED.value == "policy_excluded"
 
     def test_registry_unavailable_present(self):
-        assert (
-            ActivationEligibilityOutcome.REGISTRY_UNAVAILABLE.value
-            == "registry_unavailable"
-        )
+        assert ActivationEligibilityOutcome.REGISTRY_UNAVAILABLE.value == "registry_unavailable"
 
     def test_unregistered_node_present(self):
-        assert (
-            ActivationEligibilityOutcome.UNREGISTERED_NODE.value == "unregistered_node"
-        )
+        assert ActivationEligibilityOutcome.UNREGISTERED_NODE.value == "unregistered_node"
 
 
 # ===========================================================================
@@ -296,9 +284,9 @@ class TestValidActivationTransitions:
 
     def test_all_states_are_keys(self):
         for state in NodeActivationState:
-            assert state in VALID_ACTIVATION_TRANSITIONS, (
-                f"NodeActivationState.{state.name} missing from VALID_ACTIVATION_TRANSITIONS"
-            )
+            assert (
+                state in VALID_ACTIVATION_TRANSITIONS
+            ), f"NodeActivationState.{state.name} missing from VALID_ACTIVATION_TRANSITIONS"
 
     def test_candidate_transitions(self):
         targets = VALID_ACTIVATION_TRANSITIONS[NodeActivationState.CANDIDATE]
@@ -376,9 +364,18 @@ class TestNodeActivationContext:
         ctx = NodeActivationContext(node_id="n1", session_id="s1")
         d = ctx.to_dict()
         expected_keys = {
-            "node_id", "session_id", "activation_id", "state", "role",
-            "activation_reason", "last_transition_reason", "governance_cleared",
-            "eligible_at", "selected_at", "activated_at", "retired_at",
+            "node_id",
+            "session_id",
+            "activation_id",
+            "state",
+            "role",
+            "activation_reason",
+            "last_transition_reason",
+            "governance_cleared",
+            "eligible_at",
+            "selected_at",
+            "activated_at",
+            "retired_at",
             "diagnostic_context",
         }
         assert expected_keys.issubset(set(d.keys()))
@@ -453,8 +450,13 @@ class TestNodeActivationEligibilityDecision:
         )
         result = d.to_dict()
         expected_keys = {
-            "node_id", "outcome", "eligible", "denial_reasons",
-            "governance_decision_summary", "policy_notes", "diagnostic_context",
+            "node_id",
+            "outcome",
+            "eligible",
+            "denial_reasons",
+            "governance_decision_summary",
+            "policy_notes",
+            "diagnostic_context",
         }
         assert expected_keys.issubset(set(result.keys()))
 
@@ -494,8 +496,13 @@ class TestNodeActivationTransitionResult:
         )
         result = r.to_dict()
         expected_keys = {
-            "node_id", "from_state", "to_state", "transition_allowed",
-            "rejection_reason", "applied_reason", "updated_context",
+            "node_id",
+            "from_state",
+            "to_state",
+            "transition_allowed",
+            "rejection_reason",
+            "applied_reason",
+            "updated_context",
             "diagnostic_context",
         }
         assert expected_keys.issubset(set(result.keys()))
@@ -527,10 +534,20 @@ class TestNodeActivationContextSnapshot:
         snap = NodeActivationContextSnapshot()
         d = snap.to_dict()
         expected_keys = {
-            "snapshot_id", "session_id", "total_contexts",
-            "candidate_count", "eligible_count", "selected_count", "active_count",
-            "suspended_count", "blocked_count", "retired_count", "excluded_count",
-            "contexts", "snapshot_at", "authority",
+            "snapshot_id",
+            "session_id",
+            "total_contexts",
+            "candidate_count",
+            "eligible_count",
+            "selected_count",
+            "active_count",
+            "suspended_count",
+            "blocked_count",
+            "retired_count",
+            "excluded_count",
+            "contexts",
+            "snapshot_at",
+            "authority",
         }
         assert expected_keys.issubset(set(d.keys()))
 
@@ -554,8 +571,11 @@ class TestNodeActivationPolicy:
         p = NodeActivationPolicy()
         d = p.to_dict()
         expected_keys = {
-            "max_active_per_role", "require_governance_clearance",
-            "excluded_node_ids", "allowed_roles_for_unregistered", "policy_label",
+            "max_active_per_role",
+            "require_governance_clearance",
+            "excluded_node_ids",
+            "allowed_roles_for_unregistered",
+            "policy_label",
         }
         assert expected_keys.issubset(set(d.keys()))
 
@@ -608,17 +628,13 @@ class TestBuildDefaultActivationPolicy:
 class TestEvaluateEligibilityPolicyExclusion:
     def test_excluded_node_id_returns_policy_excluded(self):
         policy = NodeActivationPolicy(excluded_node_ids={"bad_node"})
-        result = evaluate_activation_eligibility(
-            "bad_node", NodeCognitionRole.ACTING, policy=policy
-        )
+        result = evaluate_activation_eligibility("bad_node", NodeCognitionRole.ACTING, policy=policy)
         assert result.eligible is False
         assert result.outcome == ActivationEligibilityOutcome.POLICY_EXCLUDED
 
     def test_excluded_denial_reasons_non_empty(self):
         policy = NodeActivationPolicy(excluded_node_ids={"bad_node"})
-        result = evaluate_activation_eligibility(
-            "bad_node", NodeCognitionRole.ACTING, policy=policy
-        )
+        result = evaluate_activation_eligibility("bad_node", NodeCognitionRole.ACTING, policy=policy)
         assert len(result.denial_reasons) > 0
 
     def test_non_excluded_node_not_policy_excluded(self):
@@ -642,9 +658,7 @@ class TestEvaluateEligibilityUnregistered:
     def test_unregistered_without_allowed_role_returns_ineligible(self):
         policy = NodeActivationPolicy(require_governance_clearance=False)
         registry = _stub_registry("n1", found=False)
-        result = evaluate_activation_eligibility(
-            "n1", NodeCognitionRole.ACTING, registry=registry, policy=policy
-        )
+        result = evaluate_activation_eligibility("n1", NodeCognitionRole.ACTING, registry=registry, policy=policy)
         assert result.eligible is False
         assert result.outcome in (
             ActivationEligibilityOutcome.UNREGISTERED_NODE,
@@ -657,9 +671,7 @@ class TestEvaluateEligibilityUnregistered:
             allowed_roles_for_unregistered={NodeCognitionRole.OBSERVER},
         )
         registry = _stub_registry("n1", found=False)
-        result = evaluate_activation_eligibility(
-            "n1", NodeCognitionRole.OBSERVER, registry=registry, policy=policy
-        )
+        result = evaluate_activation_eligibility("n1", NodeCognitionRole.OBSERVER, registry=registry, policy=policy)
         assert result.eligible is True
 
     def test_unregistered_other_role_still_ineligible(self):
@@ -668,9 +680,7 @@ class TestEvaluateEligibilityUnregistered:
             allowed_roles_for_unregistered={NodeCognitionRole.OBSERVER},
         )
         registry = _stub_registry("n1", found=False)
-        result = evaluate_activation_eligibility(
-            "n1", NodeCognitionRole.ACTING, registry=registry, policy=policy
-        )
+        result = evaluate_activation_eligibility("n1", NodeCognitionRole.ACTING, registry=registry, policy=policy)
         assert result.eligible is False
 
 
@@ -685,14 +695,11 @@ class TestEvaluateEligibilityGovernanceIneligible:
         gov_decision = _stub_governance_decision(eligible=False, reasons=["archived"])
 
         import core.node_cognition_activation as nca
-        monkeypatch.setattr(
-            nca, "_evaluate_governance", lambda record, governor=None: gov_decision
-        )
+
+        monkeypatch.setattr(nca, "_evaluate_governance", lambda record, governor=None: gov_decision)
 
         policy = NodeActivationPolicy(require_governance_clearance=True)
-        result = evaluate_activation_eligibility(
-            "n1", NodeCognitionRole.ACTING, registry=registry, policy=policy
-        )
+        result = evaluate_activation_eligibility("n1", NodeCognitionRole.ACTING, registry=registry, policy=policy)
         assert result.eligible is False
         assert result.outcome == ActivationEligibilityOutcome.GOVERNANCE_INELIGIBLE
 
@@ -701,31 +708,23 @@ class TestEvaluateEligibilityGovernanceIneligible:
         gov_decision = _stub_governance_decision(eligible=False, reasons=["deprecated"])
 
         import core.node_cognition_activation as nca
-        monkeypatch.setattr(
-            nca, "_evaluate_governance", lambda record, governor=None: gov_decision
-        )
+
+        monkeypatch.setattr(nca, "_evaluate_governance", lambda record, governor=None: gov_decision)
 
         policy = NodeActivationPolicy(require_governance_clearance=True)
-        result = evaluate_activation_eligibility(
-            "n1", NodeCognitionRole.ACTING, registry=registry, policy=policy
-        )
+        result = evaluate_activation_eligibility("n1", NodeCognitionRole.ACTING, registry=registry, policy=policy)
         assert any("deprecated" in r for r in result.denial_reasons)
 
-    def test_governance_decision_summary_present_when_governance_consulted(
-        self, monkeypatch
-    ):
+    def test_governance_decision_summary_present_when_governance_consulted(self, monkeypatch):
         registry = _stub_registry("n1", found=True)
         gov_decision = _stub_governance_decision(eligible=False, reasons=["unhealthy"])
 
         import core.node_cognition_activation as nca
-        monkeypatch.setattr(
-            nca, "_evaluate_governance", lambda record, governor=None: gov_decision
-        )
+
+        monkeypatch.setattr(nca, "_evaluate_governance", lambda record, governor=None: gov_decision)
 
         policy = NodeActivationPolicy(require_governance_clearance=True)
-        result = evaluate_activation_eligibility(
-            "n1", NodeCognitionRole.ACTING, registry=registry, policy=policy
-        )
+        result = evaluate_activation_eligibility("n1", NodeCognitionRole.ACTING, registry=registry, policy=policy)
         assert result.governance_decision_summary is not None
         assert "eligible" in result.governance_decision_summary
 
@@ -741,19 +740,15 @@ class TestEvaluateEligibilityCapacityExceeded:
         gov_decision = _stub_governance_decision(eligible=True)
 
         import core.node_cognition_activation as nca
-        monkeypatch.setattr(
-            nca, "_evaluate_governance", lambda record, governor=None: gov_decision
-        )
+
+        monkeypatch.setattr(nca, "_evaluate_governance", lambda record, governor=None: gov_decision)
 
         policy = NodeActivationPolicy(
             require_governance_clearance=True,
             max_active_per_role={"acting": 1},
         )
         # One already active ACTING node
-        existing = _make_context(
-            node_id="n0", state=NodeActivationState.ACTIVE,
-            role=NodeCognitionRole.ACTING
-        )
+        existing = _make_context(node_id="n0", state=NodeActivationState.ACTIVE, role=NodeCognitionRole.ACTING)
         result = evaluate_activation_eligibility(
             "n1",
             NodeCognitionRole.ACTING,
@@ -769,18 +764,14 @@ class TestEvaluateEligibilityCapacityExceeded:
         gov_decision = _stub_governance_decision(eligible=True)
 
         import core.node_cognition_activation as nca
-        monkeypatch.setattr(
-            nca, "_evaluate_governance", lambda record, governor=None: gov_decision
-        )
+
+        monkeypatch.setattr(nca, "_evaluate_governance", lambda record, governor=None: gov_decision)
 
         policy = NodeActivationPolicy(
             require_governance_clearance=False,
             max_active_per_role={"acting": 2},
         )
-        existing = _make_context(
-            node_id="n0", state=NodeActivationState.ACTIVE,
-            role=NodeCognitionRole.ACTING
-        )
+        existing = _make_context(node_id="n0", state=NodeActivationState.ACTIVE, role=NodeCognitionRole.ACTING)
         result = evaluate_activation_eligibility(
             "n1",
             NodeCognitionRole.ACTING,
@@ -802,14 +793,11 @@ class TestEvaluateEligibilityEligible:
         gov_decision = _stub_governance_decision(eligible=True)
 
         import core.node_cognition_activation as nca
-        monkeypatch.setattr(
-            nca, "_evaluate_governance", lambda record, governor=None: gov_decision
-        )
+
+        monkeypatch.setattr(nca, "_evaluate_governance", lambda record, governor=None: gov_decision)
 
         policy = NodeActivationPolicy(require_governance_clearance=True)
-        result = evaluate_activation_eligibility(
-            "n1", NodeCognitionRole.PLANNING, registry=registry, policy=policy
-        )
+        result = evaluate_activation_eligibility("n1", NodeCognitionRole.PLANNING, registry=registry, policy=policy)
         assert result.eligible is True
         assert result.outcome == ActivationEligibilityOutcome.ELIGIBLE
 
@@ -818,14 +806,11 @@ class TestEvaluateEligibilityEligible:
         gov_decision = _stub_governance_decision(eligible=True)
 
         import core.node_cognition_activation as nca
-        monkeypatch.setattr(
-            nca, "_evaluate_governance", lambda record, governor=None: gov_decision
-        )
+
+        monkeypatch.setattr(nca, "_evaluate_governance", lambda record, governor=None: gov_decision)
 
         policy = NodeActivationPolicy(require_governance_clearance=True)
-        result = evaluate_activation_eligibility(
-            "n1", NodeCognitionRole.PLANNING, registry=registry, policy=policy
-        )
+        result = evaluate_activation_eligibility("n1", NodeCognitionRole.PLANNING, registry=registry, policy=policy)
         assert result.governance_decision_summary is not None
 
     def test_eligible_denial_reasons_empty(self, monkeypatch):
@@ -833,13 +818,10 @@ class TestEvaluateEligibilityEligible:
         gov_decision = _stub_governance_decision(eligible=True)
 
         import core.node_cognition_activation as nca
-        monkeypatch.setattr(
-            nca, "_evaluate_governance", lambda record, governor=None: gov_decision
-        )
 
-        result = evaluate_activation_eligibility(
-            "n1", NodeCognitionRole.ACTING, registry=registry
-        )
+        monkeypatch.setattr(nca, "_evaluate_governance", lambda record, governor=None: gov_decision)
+
+        result = evaluate_activation_eligibility("n1", NodeCognitionRole.ACTING, registry=registry)
         if result.eligible:
             assert result.denial_reasons == []
 
@@ -853,18 +835,14 @@ class TestEvaluateEligibilityNoGovernanceClearance:
     def test_eligible_without_governance_check(self):
         registry = _stub_registry("n1", found=True)
         policy = NodeActivationPolicy(require_governance_clearance=False)
-        result = evaluate_activation_eligibility(
-            "n1", NodeCognitionRole.SENSING, registry=registry, policy=policy
-        )
+        result = evaluate_activation_eligibility("n1", NodeCognitionRole.SENSING, registry=registry, policy=policy)
         assert result.eligible is True
         assert result.outcome == ActivationEligibilityOutcome.ELIGIBLE
 
     def test_no_governance_summary_when_clearance_not_required(self):
         registry = _stub_registry("n1", found=True)
         policy = NodeActivationPolicy(require_governance_clearance=False)
-        result = evaluate_activation_eligibility(
-            "n1", NodeCognitionRole.SENSING, registry=registry, policy=policy
-        )
+        result = evaluate_activation_eligibility("n1", NodeCognitionRole.SENSING, registry=registry, policy=policy)
         # governance_decision_summary may be None when clearance not required
         assert result.eligible is True
 
@@ -1044,17 +1022,13 @@ class TestTransitionActivationStateTerminal:
     def test_retired_has_no_valid_outgoing_transitions(self):
         ctx = _make_context(state=NodeActivationState.RETIRED)
         for target in NodeActivationState:
-            result = transition_activation_state(
-                ctx, target, ActivationTransitionReason.CONTEXT_RETIRED
-            )
+            result = transition_activation_state(ctx, target, ActivationTransitionReason.CONTEXT_RETIRED)
             assert result.transition_allowed is False
 
     def test_excluded_has_no_valid_outgoing_transitions(self):
         ctx = _make_context(state=NodeActivationState.EXCLUDED)
         for target in NodeActivationState:
-            result = transition_activation_state(
-                ctx, target, ActivationTransitionReason.POLICY_EXCLUDED
-            )
+            result = transition_activation_state(ctx, target, ActivationTransitionReason.POLICY_EXCLUDED)
             assert result.transition_allowed is False
 
 
@@ -1071,10 +1045,7 @@ class TestBuildActivationContextSnapshot:
         assert snap.candidate_count == 0
 
     def test_total_contexts_matches_len(self):
-        ctxs = [
-            _make_context(node_id=f"n{i}", state=NodeActivationState.ACTIVE)
-            for i in range(5)
-        ]
+        ctxs = [_make_context(node_id=f"n{i}", state=NodeActivationState.ACTIVE) for i in range(5)]
         snap = build_activation_context_snapshot(ctxs)
         assert snap.total_contexts == 5
 
@@ -1128,9 +1099,17 @@ class TestGetActivationSummary:
     def test_all_expected_keys_present(self):
         result = get_activation_summary([])
         expected = {
-            "total_contexts", "active_count", "selected_count", "eligible_count",
-            "candidate_count", "suspended_count", "blocked_count",
-            "retired_count", "excluded_count", "participating_count", "authority",
+            "total_contexts",
+            "active_count",
+            "selected_count",
+            "eligible_count",
+            "candidate_count",
+            "suspended_count",
+            "blocked_count",
+            "retired_count",
+            "excluded_count",
+            "participating_count",
+            "authority",
         }
         assert expected.issubset(set(result.keys()))
 
@@ -1157,9 +1136,15 @@ class TestGetActivationSummary:
         ctxs = [_make_context("n0", state=NodeActivationState.ACTIVE)]
         result = get_activation_summary(ctxs)
         for key in (
-            "total_contexts", "active_count", "selected_count",
-            "eligible_count", "candidate_count", "suspended_count",
-            "blocked_count", "retired_count", "excluded_count",
+            "total_contexts",
+            "active_count",
+            "selected_count",
+            "eligible_count",
+            "candidate_count",
+            "suspended_count",
+            "blocked_count",
+            "retired_count",
+            "excluded_count",
             "participating_count",
         ):
             assert isinstance(result[key], int), f"{key} is not int"

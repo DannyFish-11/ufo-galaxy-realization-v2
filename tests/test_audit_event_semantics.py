@@ -59,8 +59,8 @@ Coverage:
 from __future__ import annotations
 
 import json
-import sys
 import os
+import sys
 
 import pytest
 
@@ -68,34 +68,34 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
+import core.audit_event_semantics as _mod
 from core.audit_event_semantics import (
+    AUDIT_EVENT_DESCRIPTIONS,
     AUDIT_EVENT_SEMANTICS_AUTHORITY,
     AUDIT_EVENT_SEMANTICS_CONTRACT_VERSION,
     AUDIT_UNIFIED_VOCABULARY_POLICY,
     AuditEventKind,
-    AUDIT_EVENT_DESCRIPTIONS,
     AuditEventRecord,
-    AuditSemanticSnapshot,
     AuditEventSemantics,
+    AuditSemanticSnapshot,
+    audit_failure_domain,
+    audit_fallback_triggered,
+    audit_policy_decision,
+    audit_retry_triggered,
+    audit_route_decision,
     audit_task_accepted,
     audit_task_admitted,
-    audit_task_dispatched,
     audit_task_completed,
+    audit_task_dispatched,
     audit_task_failed,
-    audit_route_decision,
-    audit_policy_decision,
-    audit_fallback_triggered,
-    audit_retry_triggered,
-    audit_failure_domain,
     get_audit_event_semantics,
     reset_audit_event_semantics,
 )
-import core.audit_event_semantics as _mod
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def reset():
@@ -107,6 +107,7 @@ def reset():
 # ===========================================================================
 # 1-4: Authority sentinels
 # ===========================================================================
+
 
 class TestAuthoritySentinels:
     def test_01_authority_importable(self):
@@ -152,6 +153,7 @@ class TestAuthoritySentinels:
 # 5-16: AuditEventKind and descriptions
 # ===========================================================================
 
+
 class TestAuditEventKind:
     def test_05_task_accepted(self):
         assert AuditEventKind.TASK_ACCEPTED == "task_accepted"
@@ -195,6 +197,7 @@ class TestAuditEventKind:
 # ===========================================================================
 # 17-22: AuditEventRecord
 # ===========================================================================
+
 
 class TestAuditEventRecord:
     def test_17_audit_id_auto_generated(self):
@@ -241,6 +244,7 @@ class TestAuditEventRecord:
 # ===========================================================================
 # 23-31: AuditEventSemantics operations
 # ===========================================================================
+
 
 class TestAuditEventSemanticsOperations:
     def test_23_record_appends_to_ring(self):
@@ -303,6 +307,7 @@ class TestAuditEventSemanticsOperations:
 # 32-45: Helper factory functions
 # ===========================================================================
 
+
 class TestHelperFactories:
     def test_32_audit_task_accepted(self):
         rec = audit_task_accepted("t1", trace_id="tr1", origin="api", goal="do x")
@@ -344,9 +349,7 @@ class TestHelperFactories:
         assert rec.payload["verdict"] == "admit"
 
     def test_39_audit_fallback_triggered(self):
-        rec = audit_fallback_triggered(
-            "t1", fallback_task_id="t2", reason="primary failed"
-        )
+        rec = audit_fallback_triggered("t1", fallback_task_id="t2", reason="primary failed")
         assert rec.kind == AuditEventKind.FALLBACK_TRIGGERED
         assert rec.payload["fallback_task_id"] == "t2"
 
@@ -373,9 +376,7 @@ class TestHelperFactories:
         assert len(records) == 3
 
     def test_44_failed_payload_includes_failure_domain(self):
-        rec = audit_task_failed(
-            "t_fail", error_code="EXEC_ERR", failure_domain="execution"
-        )
+        rec = audit_task_failed("t_fail", error_code="EXEC_ERR", failure_domain="execution")
         assert rec.payload.get("failure_domain") == "execution"
         assert rec.payload.get("error_code") == "EXEC_ERR"
 

@@ -24,10 +24,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_ws() -> MagicMock:
     ws = MagicMock()
@@ -64,136 +64,203 @@ def _make_heartbeat_msg(device_id: str) -> Dict[str, Any]:
 # A. Sub-module import tests
 # ---------------------------------------------------------------------------
 
+
 class TestSubModuleImports:
     """Verify that all new sub-modules are importable."""
 
     def test_capabilities_importable(self):
         from galaxy_gateway.android.capabilities import DeviceCapability
+
         assert DeviceCapability is not None
 
     def test_models_importable(self):
-        from galaxy_gateway.android.models import Rect, UIElement, AndroidDevice
+        from galaxy_gateway.android.models import AndroidDevice, Rect, UIElement
+
         assert Rect is not None
         assert UIElement is not None
         assert AndroidDevice is not None
 
     def test_message_builder_importable(self):
         from galaxy_gateway.android.message_builder import MessageBuilder
+
         assert MessageBuilder is not None
 
     def test_handlers_package_importable(self):
         import galaxy_gateway.android.handlers as handlers_pkg
+
         assert handlers_pkg is not None
 
     def test_handler_registration_importable(self):
         from galaxy_gateway.android.handlers.registration import (
-            handle_device_register, handle_unregistered,
+            handle_device_register,
+            handle_unregistered,
         )
+
         assert callable(handle_device_register)
         assert callable(handle_unregistered)
 
     def test_handler_heartbeat_importable(self):
         from galaxy_gateway.android.handlers.heartbeat import (
-            handle_heartbeat, handle_device_status, handle_agent_ping,
+            handle_agent_ping,
+            handle_device_status,
+            handle_heartbeat,
         )
+
         assert callable(handle_heartbeat)
         assert callable(handle_device_status)
         assert callable(handle_agent_ping)
 
     def test_handler_task_lifecycle_importable(self):
         from galaxy_gateway.android.handlers.task_lifecycle import (
-            handle_task_result, handle_task_end, handle_task_progress,
-            handle_command_result, handle_error,
-            handle_task_cancel, handle_task_status,
+            handle_command_result,
+            handle_error,
+            handle_task_cancel,
+            handle_task_end,
+            handle_task_progress,
+            handle_task_result,
+            handle_task_status,
         )
-        for fn in (handle_task_result, handle_task_end, handle_task_progress,
-                   handle_command_result, handle_error,
-                   handle_task_cancel, handle_task_status):
+
+        for fn in (
+            handle_task_result,
+            handle_task_end,
+            handle_task_progress,
+            handle_command_result,
+            handle_error,
+            handle_task_cancel,
+            handle_task_status,
+        ):
             assert callable(fn)
 
     def test_handler_task_submit_importable(self):
         from galaxy_gateway.android.handlers.task_submit import (
-            handle_task_execute, handle_task_submit,
+            handle_task_execute,
+            handle_task_submit,
         )
+
         assert callable(handle_task_execute)
         assert callable(handle_task_submit)
 
     def test_handler_goal_execution_importable(self):
         from galaxy_gateway.android.handlers.goal_execution import (
-            handle_goal_execution, handle_parallel_subtask,
+            handle_goal_execution,
             handle_goal_execution_result,
+            handle_parallel_subtask,
         )
+
         for fn in (handle_goal_execution, handle_parallel_subtask, handle_goal_execution_result):
             assert callable(fn)
 
     def test_handler_capability_report_importable(self):
         from galaxy_gateway.android.handlers.capability_report import handle_capability_report
+
         assert callable(handle_capability_report)
 
     def test_handler_diagnostics_importable(self):
         from galaxy_gateway.android.handlers.diagnostics import handle_diagnostics_payload
+
         assert callable(handle_diagnostics_payload)
 
     def test_handler_vision_importable(self):
         from galaxy_gateway.android.handlers.vision import handle_vision_request
+
         assert callable(handle_vision_request)
 
     def test_handler_generic_importable(self):
         from galaxy_gateway.android.handlers.generic import handle_generic_forward
+
         assert callable(handle_generic_forward)
 
     def test_android_package_init_exports(self):
-        from galaxy_gateway.android import DeviceCapability, Rect, UIElement, AndroidDevice, MessageBuilder
+        from galaxy_gateway.android import AndroidDevice, DeviceCapability, MessageBuilder, Rect, UIElement
+
         for symbol in (DeviceCapability, Rect, UIElement, AndroidDevice, MessageBuilder):
             assert symbol is not None
 
     def test_handlers_init_exports(self):
         from galaxy_gateway.android.handlers import (
-            handle_device_register, handle_unregistered,
-            handle_heartbeat, handle_device_status, handle_agent_ping,
-            handle_task_result, handle_task_end, handle_task_progress,
-            handle_command_result, handle_error,
-            handle_task_cancel, handle_task_status,
-            handle_task_execute, handle_task_submit,
-            handle_goal_execution, handle_parallel_subtask, handle_goal_execution_result,
-            handle_capability_report, handle_diagnostics_payload,
-            handle_vision_request, handle_generic_forward,
+            handle_agent_ping,
+            handle_capability_report,
+            handle_command_result,
+            handle_device_register,
+            handle_device_status,
+            handle_diagnostics_payload,
+            handle_error,
+            handle_generic_forward,
+            handle_goal_execution,
+            handle_goal_execution_result,
+            handle_heartbeat,
+            handle_parallel_subtask,
+            handle_task_cancel,
+            handle_task_end,
+            handle_task_execute,
+            handle_task_progress,
+            handle_task_result,
+            handle_task_status,
+            handle_task_submit,
+            handle_unregistered,
+            handle_vision_request,
         )
-        assert all(callable(fn) for fn in [
-            handle_device_register, handle_unregistered,
-            handle_heartbeat, handle_device_status, handle_agent_ping,
-            handle_task_result, handle_task_end, handle_task_progress,
-            handle_command_result, handle_error,
-            handle_task_cancel, handle_task_status,
-            handle_task_execute, handle_task_submit,
-            handle_goal_execution, handle_parallel_subtask, handle_goal_execution_result,
-            handle_capability_report, handle_diagnostics_payload,
-            handle_vision_request, handle_generic_forward,
-        ])
+
+        assert all(
+            callable(fn)
+            for fn in [
+                handle_device_register,
+                handle_unregistered,
+                handle_heartbeat,
+                handle_device_status,
+                handle_agent_ping,
+                handle_task_result,
+                handle_task_end,
+                handle_task_progress,
+                handle_command_result,
+                handle_error,
+                handle_task_cancel,
+                handle_task_status,
+                handle_task_execute,
+                handle_task_submit,
+                handle_goal_execution,
+                handle_parallel_subtask,
+                handle_goal_execution_result,
+                handle_capability_report,
+                handle_diagnostics_payload,
+                handle_vision_request,
+                handle_generic_forward,
+            ]
+        )
 
 
 # ---------------------------------------------------------------------------
 # B. DeviceCapability tests
 # ---------------------------------------------------------------------------
 
+
 class TestDeviceCapability:
     def test_bitmask_values_are_powers_of_two(self):
         from galaxy_gateway.android.capabilities import DeviceCapability
+
         caps = [
-            DeviceCapability.NETWORK, DeviceCapability.STORAGE, DeviceCapability.COMPUTE,
-            DeviceCapability.GUI_READ, DeviceCapability.GUI_WRITE, DeviceCapability.GUI_SCREENSHOT,
-            DeviceCapability.INPUT_TOUCH, DeviceCapability.INPUT_KEYBOARD,
+            DeviceCapability.NETWORK,
+            DeviceCapability.STORAGE,
+            DeviceCapability.COMPUTE,
+            DeviceCapability.GUI_READ,
+            DeviceCapability.GUI_WRITE,
+            DeviceCapability.GUI_SCREENSHOT,
+            DeviceCapability.INPUT_TOUCH,
+            DeviceCapability.INPUT_KEYBOARD,
         ]
         for c in caps:
             assert (c & (c - 1)) == 0  # power of two
 
     def test_get_android_default_nonzero(self):
         from galaxy_gateway.android.capabilities import DeviceCapability
+
         caps = DeviceCapability.get_android_default()
         assert caps > 0
 
     def test_has_capability(self):
         from galaxy_gateway.android.capabilities import DeviceCapability
+
         caps = DeviceCapability.NETWORK | DeviceCapability.STORAGE
         assert DeviceCapability.has_capability(caps, DeviceCapability.NETWORK)
         assert DeviceCapability.has_capability(caps, DeviceCapability.STORAGE)
@@ -201,6 +268,7 @@ class TestDeviceCapability:
 
     def test_to_list_returns_strings(self):
         from galaxy_gateway.android.capabilities import DeviceCapability
+
         caps = DeviceCapability.NETWORK | DeviceCapability.GUI_READ
         result = DeviceCapability.to_list(caps)
         assert "network" in result
@@ -210,6 +278,7 @@ class TestDeviceCapability:
 
     def test_none_capability_empty_list(self):
         from galaxy_gateway.android.capabilities import DeviceCapability
+
         assert DeviceCapability.to_list(DeviceCapability.NONE) == []
 
 
@@ -217,15 +286,18 @@ class TestDeviceCapability:
 # C. Model dataclass tests
 # ---------------------------------------------------------------------------
 
+
 class TestModels:
     def test_rect_center(self):
         from galaxy_gateway.android.models import Rect
+
         r = Rect(x=10, y=20, width=100, height=200)
         assert r.center_x == 60
         assert r.center_y == 120
 
     def test_rect_to_dict_from_dict_roundtrip(self):
         from galaxy_gateway.android.models import Rect
+
         r = Rect(x=5, y=10, width=50, height=100)
         d = r.to_dict()
         r2 = Rect.from_dict(d)
@@ -233,6 +305,7 @@ class TestModels:
 
     def test_uielement_to_dict(self):
         from galaxy_gateway.android.models import UIElement
+
         el = UIElement(element_id="btn_1", text="Click me", is_clickable=True)
         d = el.to_dict()
         assert d["element_id"] == "btn_1"
@@ -241,6 +314,7 @@ class TestModels:
 
     def test_android_device_from_registration(self):
         from galaxy_gateway.android.models import AndroidDevice
+
         data = {
             "device_id": "android_01",
             "name": "My Phone",
@@ -255,6 +329,7 @@ class TestModels:
 
     def test_android_device_to_dict(self):
         from galaxy_gateway.android.models import AndroidDevice
+
         device = AndroidDevice(device_id="dev_01", name="Phone", model="Model X")
         d = device.to_dict()
         assert d["device_id"] == "dev_01"
@@ -265,9 +340,11 @@ class TestModels:
 # D. MessageBuilder tests
 # ---------------------------------------------------------------------------
 
+
 class TestMessageBuilder:
     def test_heartbeat_ack_structure(self):
         from galaxy_gateway.android.message_builder import MessageBuilder
+
         msg = MessageBuilder.heartbeat_ack("dev_01")
         assert msg["device_id"] == "dev_01"
         assert msg["type"] == "heartbeat_ack"
@@ -276,18 +353,21 @@ class TestMessageBuilder:
 
     def test_device_register_ack_success(self):
         from galaxy_gateway.android.message_builder import MessageBuilder
+
         msg = MessageBuilder.device_register_ack("dev_01", success=True, session_id="sess_1")
         assert msg["success"] is True
         assert msg["session_id"] == "sess_1"
 
     def test_device_register_ack_failure(self):
         from galaxy_gateway.android.message_builder import MessageBuilder
+
         msg = MessageBuilder.device_register_ack("dev_01", success=False, message="Failed")
         assert msg["success"] is False
         assert msg["message"] == "Failed"
 
     def test_task_assign_structure(self):
         from galaxy_gateway.android.message_builder import MessageBuilder
+
         msg = MessageBuilder.task_assign("dev_01", "task_1", "goal_execution", {"goal": "open app"})
         assert msg["task_id"] == "task_1"
         assert msg["task_type"] == "goal_execution"
@@ -295,6 +375,7 @@ class TestMessageBuilder:
 
     def test_error_message(self):
         from galaxy_gateway.android.message_builder import MessageBuilder
+
         msg = MessageBuilder.error("dev_01", "ERR_CODE", "Something failed", correlation_id="corr_1")
         assert msg["error_code"] == "ERR_CODE"
         assert msg["error_message"] == "Something failed"
@@ -302,21 +383,22 @@ class TestMessageBuilder:
 
     def test_capability_report_ack(self):
         from galaxy_gateway.android.message_builder import MessageBuilder
+
         msg = MessageBuilder.capability_report_ack("dev_01", accepted=True, message="OK")
         assert msg["accepted"] is True
         assert msg["message"] == "OK"
 
     def test_vision_result_uses_task_assign(self):
         from galaxy_gateway.android.message_builder import MessageBuilder
+
         msg = MessageBuilder.vision_result("dev_01", "t1", {"success": True})
         assert msg["task_type"] == "vision_action"
         assert msg["payload"]["success"] is True
 
     def test_goal_execution_result(self):
         from galaxy_gateway.android.message_builder import MessageBuilder
-        msg = MessageBuilder.goal_execution_result(
-            "dev_01", {"status": "success"}, correlation_id="c1", trace_id="t1"
-        )
+
+        msg = MessageBuilder.goal_execution_result("dev_01", {"status": "success"}, correlation_id="c1", trace_id="t1")
         assert msg["payload"]["status"] == "success"
         assert msg["correlation_id"] == "c1"
         assert msg["trace_id"] == "t1"
@@ -326,11 +408,13 @@ class TestMessageBuilder:
 # E. AndroidBridge backward-compatible _handle_* wrapper tests
 # ---------------------------------------------------------------------------
 
+
 class TestAndroidBridgeBackwardCompatWrappers:
     """Verify _handle_* methods still exist on AndroidBridge and delegate correctly."""
 
     def _make_bridge(self):
         from galaxy_gateway.android_bridge import AndroidBridge
+
         return AndroidBridge()
 
     @pytest.mark.asyncio
@@ -349,8 +433,7 @@ class TestAndroidBridgeBackwardCompatWrappers:
         ws = _make_ws()
         # Register first
         reg_msg = _make_reg_msg("hb_compat_01")
-        with patch.object(bridge, "_write_registration_to_udm"), \
-             patch.object(bridge, "_patch_heartbeat_to_udm"):
+        with patch.object(bridge, "_write_registration_to_udm"), patch.object(bridge, "_patch_heartbeat_to_udm"):
             await bridge._handle_device_register(ws, reg_msg)
             hb_msg = _make_heartbeat_msg("hb_compat_01")
             resp = await bridge._handle_heartbeat(ws, hb_msg)
@@ -443,11 +526,13 @@ class TestAndroidBridgeBackwardCompatWrappers:
 # F. AndroidBridge dispatch routing tests
 # ---------------------------------------------------------------------------
 
+
 class TestAndroidBridgeDispatch:
     """Verify that handle_message routes to the correct handler."""
 
     def _make_bridge(self):
         from galaxy_gateway.android_bridge import AndroidBridge
+
         return AndroidBridge()
 
     @pytest.mark.asyncio
@@ -464,8 +549,7 @@ class TestAndroidBridgeDispatch:
     async def test_dispatch_device_heartbeat(self):
         bridge = self._make_bridge()
         ws = _make_ws()
-        with patch.object(bridge, "_write_registration_to_udm"), \
-             patch.object(bridge, "_patch_heartbeat_to_udm"):
+        with patch.object(bridge, "_write_registration_to_udm"), patch.object(bridge, "_patch_heartbeat_to_udm"):
             await bridge.handle_message(ws, _make_reg_msg("hb_dispatch"))
             hb = _make_heartbeat_msg("hb_dispatch")
             resp = await bridge.handle_message(ws, hb)
@@ -669,16 +753,19 @@ class TestAndroidBridgeDispatch:
 # G. Standalone handler function tests
 # ---------------------------------------------------------------------------
 
+
 class TestStandaloneHandlers:
     """Test handler functions called with an explicit bridge argument."""
 
     def _make_bridge(self):
         from galaxy_gateway.android_bridge import AndroidBridge
+
         return AndroidBridge()
 
     @pytest.mark.asyncio
     async def test_handle_device_register_standalone(self):
         from galaxy_gateway.android.handlers.registration import handle_device_register
+
         bridge = self._make_bridge()
         ws = _make_ws()
         msg = _make_reg_msg("sa_reg_01")
@@ -689,12 +776,12 @@ class TestStandaloneHandlers:
 
     @pytest.mark.asyncio
     async def test_handle_heartbeat_standalone(self):
-        from galaxy_gateway.android.handlers.registration import handle_device_register
         from galaxy_gateway.android.handlers.heartbeat import handle_heartbeat
+        from galaxy_gateway.android.handlers.registration import handle_device_register
+
         bridge = self._make_bridge()
         ws = _make_ws()
-        with patch.object(bridge, "_write_registration_to_udm"), \
-             patch.object(bridge, "_patch_heartbeat_to_udm"):
+        with patch.object(bridge, "_write_registration_to_udm"), patch.object(bridge, "_patch_heartbeat_to_udm"):
             await handle_device_register(bridge, ws, _make_reg_msg("sa_hb_01"))
             old_hb = bridge._devices["sa_hb_01"].last_heartbeat
             await asyncio.sleep(0.01)
@@ -732,6 +819,7 @@ class TestStandaloneHandlers:
     @pytest.mark.asyncio
     async def test_handle_generic_forward_standalone(self):
         from galaxy_gateway.android.handlers.generic import handle_generic_forward
+
         bridge = self._make_bridge()
         ws = _make_ws()
         msg = {"type": "app_start", "device_id": "dev_01"}
@@ -741,6 +829,7 @@ class TestStandaloneHandlers:
     @pytest.mark.asyncio
     async def test_handle_unregistered_standalone(self):
         from galaxy_gateway.android.handlers.registration import handle_unregistered
+
         bridge = self._make_bridge()
         ws = _make_ws()
         msg = {"type": "foobar", "device_id": "dev_01"}
@@ -750,8 +839,9 @@ class TestStandaloneHandlers:
 
     @pytest.mark.asyncio
     async def test_handle_capability_report_standalone(self):
-        from galaxy_gateway.android.handlers.registration import handle_device_register
         from galaxy_gateway.android.handlers.capability_report import handle_capability_report
+        from galaxy_gateway.android.handlers.registration import handle_device_register
+
         bridge = self._make_bridge()
         ws = _make_ws()
         with patch.object(bridge, "_write_registration_to_udm"):
@@ -762,8 +852,10 @@ class TestStandaloneHandlers:
             "supported_actions": ["tap", "swipe"],
             "message_id": "m1",
         }
-        with patch("galaxy_gateway.android.handlers.capability_report.CapabilityAuthority.get_instance",
-                   side_effect=ImportError):
+        with patch(
+            "galaxy_gateway.android.handlers.capability_report.CapabilityAuthority.get_instance",
+            side_effect=ImportError,
+        ):
             resp = await handle_capability_report(bridge, ws, msg)
         assert resp["accepted"] is True
         assert bridge._devices["cap_sa_01"].supported_actions == ["tap", "swipe"]
@@ -771,6 +863,7 @@ class TestStandaloneHandlers:
     @pytest.mark.asyncio
     async def test_handle_vision_request_no_image(self):
         from galaxy_gateway.android.handlers.vision import handle_vision_request
+
         bridge = self._make_bridge()
         ws = _make_ws()
         msg = {
@@ -785,6 +878,7 @@ class TestStandaloneHandlers:
     async def test_handle_task_execute_sets_current_task(self):
         from galaxy_gateway.android.handlers.registration import handle_device_register
         from galaxy_gateway.android.handlers.task_submit import handle_task_execute
+
         bridge = self._make_bridge()
         ws = _make_ws()
         with patch.object(bridge, "_write_registration_to_udm"):
@@ -805,6 +899,7 @@ class TestStandaloneHandlers:
         """task_cancel 应取消 _pending_responses 中的 Future 并返回 task_cancel_ack"""
         from galaxy_gateway.android.handlers.registration import handle_device_register
         from galaxy_gateway.android.handlers.task_lifecycle import handle_task_cancel
+
         bridge = self._make_bridge()
         ws = _make_ws()
         with patch.object(bridge, "_write_registration_to_udm"):
@@ -840,6 +935,7 @@ class TestStandaloneHandlers:
     async def test_handle_task_cancel_unknown_task_returns_not_found(self):
         """取消不存在任务时返回 cancelled=False 且包含 reason"""
         from galaxy_gateway.android.handlers.task_lifecycle import handle_task_cancel
+
         bridge = self._make_bridge()
         ws = _make_ws()
         msg = {
@@ -857,6 +953,7 @@ class TestStandaloneHandlers:
     async def test_handle_task_cancel_already_done_future(self):
         """已完成的 Future 被 cancel 时返回 cancelled=False + reason"""
         from galaxy_gateway.android.handlers.task_lifecycle import handle_task_cancel
+
         bridge = self._make_bridge()
         ws = _make_ws()
 
@@ -881,6 +978,7 @@ class TestStandaloneHandlers:
     async def test_handle_task_status_running(self):
         """有待处理 Future 时返回 running 状态"""
         from galaxy_gateway.android.handlers.task_lifecycle import handle_task_status
+
         bridge = self._make_bridge()
         ws = _make_ws()
 
@@ -905,6 +1003,7 @@ class TestStandaloneHandlers:
     async def test_handle_task_status_completed_after_result(self):
         """Future 已完成时返回 completed 状态"""
         from galaxy_gateway.android.handlers.task_lifecycle import handle_task_status
+
         bridge = self._make_bridge()
         ws = _make_ws()
 
@@ -928,6 +1027,7 @@ class TestStandaloneHandlers:
     async def test_handle_task_status_cancelled_future(self):
         """已取消的 Future 返回 cancelled 状态"""
         from galaxy_gateway.android.handlers.task_lifecycle import handle_task_status
+
         bridge = self._make_bridge()
         ws = _make_ws()
 
@@ -951,6 +1051,7 @@ class TestStandaloneHandlers:
     async def test_handle_task_status_unknown_task(self):
         """未知任务返回 completed（默认状态）"""
         from galaxy_gateway.android.handlers.task_lifecycle import handle_task_status
+
         bridge = self._make_bridge()
         ws = _make_ws()
         msg = {
@@ -968,9 +1069,11 @@ class TestStandaloneHandlers:
 # H. Transport cache operations
 # ---------------------------------------------------------------------------
 
+
 class TestTransportCacheOperations:
     def _make_bridge(self):
         from galaxy_gateway.android_bridge import AndroidBridge
+
         return AndroidBridge()
 
     @pytest.mark.asyncio
@@ -978,8 +1081,7 @@ class TestTransportCacheOperations:
         bridge = self._make_bridge()
         ws = _make_ws()
         msg = _make_reg_msg("dc_op_01")
-        with patch.object(bridge, "_write_registration_to_udm"), \
-             patch.object(bridge, "_patch_disconnect_to_udm"):
+        with patch.object(bridge, "_write_registration_to_udm"), patch.object(bridge, "_patch_disconnect_to_udm"):
             await bridge._handle_device_register(ws, msg)
             await bridge.disconnect_device("dc_op_01")
         assert bridge._devices["dc_op_01"].connected is False
@@ -990,9 +1092,11 @@ class TestTransportCacheOperations:
         bridge = self._make_bridge()
         ws = _make_ws()
         msg = _make_reg_msg("rc_op_01")
-        with patch.object(bridge, "_write_registration_to_udm"), \
-             patch.object(bridge, "_patch_disconnect_to_udm"), \
-             patch.object(bridge, "_patch_reconnect_to_udm"):
+        with (
+            patch.object(bridge, "_write_registration_to_udm"),
+            patch.object(bridge, "_patch_disconnect_to_udm"),
+            patch.object(bridge, "_patch_reconnect_to_udm"),
+        ):
             await bridge._handle_device_register(ws, msg)
             await bridge.disconnect_device("rc_op_01")
             assert bridge._devices["rc_op_01"].connected is False
@@ -1022,8 +1126,7 @@ class TestTransportCacheOperations:
     async def test_get_connected_devices(self):
         bridge = self._make_bridge()
         ws = _make_ws()
-        with patch.object(bridge, "_write_registration_to_udm"), \
-             patch.object(bridge, "_patch_disconnect_to_udm"):
+        with patch.object(bridge, "_write_registration_to_udm"), patch.object(bridge, "_patch_disconnect_to_udm"):
             await bridge._handle_device_register(ws, _make_reg_msg("conn_01"))
             await bridge._handle_device_register(ws, _make_reg_msg("conn_02"))
             await bridge.disconnect_device("conn_02")
@@ -1041,8 +1144,7 @@ class TestTransportCacheOperations:
     async def test_get_device_health_with_devices(self):
         bridge = self._make_bridge()
         ws = _make_ws()
-        with patch.object(bridge, "_write_registration_to_udm"), \
-             patch.object(bridge, "_patch_heartbeat_to_udm"):
+        with patch.object(bridge, "_write_registration_to_udm"), patch.object(bridge, "_patch_heartbeat_to_udm"):
             await bridge._handle_device_register(ws, _make_reg_msg("health_01"))
             await bridge._handle_heartbeat(ws, _make_heartbeat_msg("health_01"))
         health = bridge.get_device_health()
@@ -1054,24 +1156,26 @@ class TestTransportCacheOperations:
 # I. android_bridge module backward-compat re-export test
 # ---------------------------------------------------------------------------
 
+
 class TestAndroidBridgeModuleReExports:
     """Verify all public symbols remain importable from galaxy_gateway.android_bridge."""
 
     def test_all_public_symbols_importable(self):
         from galaxy_gateway.android_bridge import (
             AndroidBridge,
-            android_bridge,
-            DeviceCapability,
-            MessageBuilder,
-            Rect,
-            UIElement,
             AndroidDevice,
-            DeviceType,
+            DeviceCapability,
             DevicePlatform,
+            DeviceType,
+            MessageBuilder,
             MessageType,
-            TaskStatus,
+            Rect,
             ResultStatus,
+            TaskStatus,
+            UIElement,
+            android_bridge,
         )
+
         assert AndroidBridge is not None
         assert android_bridge is not None
         assert DeviceCapability is not None
@@ -1081,8 +1185,10 @@ class TestAndroidBridgeModuleReExports:
         # 融合清理:galaxy_gateway/android/bridge.py 纯再导出壳已删除——
         # "一个桥接一个入口"字面成立;canonical 符号仍在唯一入口可用。
         import importlib.util
+
         assert importlib.util.find_spec("galaxy_gateway.android.bridge") is None
-        from galaxy_gateway.android_bridge import AndroidBridge
         from galaxy_gateway.android.capabilities import DeviceCapability
         from galaxy_gateway.android.message_builder import MessageBuilder
+        from galaxy_gateway.android_bridge import AndroidBridge
+
         assert AndroidBridge is not None and DeviceCapability is not None and MessageBuilder is not None

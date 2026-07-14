@@ -82,10 +82,13 @@ def test_barrier_and_aggregation_mapping() -> None:
 
 def test_terminal_outcome_inference() -> None:
     assert infer_terminal_outcome(CoordinationLifecycleState.failed) == CoordinationTerminalOutcome.failed
-    assert infer_terminal_outcome(
-        CoordinationLifecycleState.failed,
-        raw_reason="merge_error",
-    ) == CoordinationTerminalOutcome.merge_failed
+    assert (
+        infer_terminal_outcome(
+            CoordinationLifecycleState.failed,
+            raw_reason="merge_error",
+        )
+        == CoordinationTerminalOutcome.merge_failed
+    )
 
 
 def test_build_coordination_truth_event_payload() -> None:

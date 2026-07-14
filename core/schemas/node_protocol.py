@@ -22,6 +22,7 @@ class NodeRequest(BaseModel):
 
     所有 Agent/Gateway → Node 的调用应使用此格式。
     """
+
     action: str = Field(..., description="执行动作名称")
     params: Dict[str, Any] = Field(default_factory=dict, description="动作参数")
     request_id: str = Field(
@@ -41,6 +42,7 @@ class NodeResponse(BaseModel):
     所有 Node → Agent/Gateway 的返回应使用此格式。
     对于旧格式节点，由 unified_node_gateway 适配层自动包装。
     """
+
     success: bool = Field(..., description="是否执行成功")
     data: Optional[Any] = Field(default=None, description="成功时的返回数据")
     error: Optional[str] = Field(default=None, description="失败时的错误信息")
@@ -54,8 +56,7 @@ class NodeResponse(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict, description="扩展元数据")
 
     @classmethod
-    def from_raw(cls, node_id: str, raw: Any, request_id: str = "",
-                 latency_ms: float = 0.0) -> "NodeResponse":
+    def from_raw(cls, node_id: str, raw: Any, request_id: str = "", latency_ms: float = 0.0) -> "NodeResponse":
         """从旧格式节点原始响应自动适配为标准 NodeResponse
 
         支持的旧格式:
@@ -86,6 +87,7 @@ class NodeResponse(BaseModel):
 
 class NodeHealthResponse(BaseModel):
     """标准健康检查响应"""
+
     status: str = Field(..., description="healthy / degraded / unhealthy")
     node_id: str = Field(default="", description="节点 ID")
     version: str = Field(default="1.0.0", description="节点版本")
@@ -120,6 +122,7 @@ class ToolDefinition(BaseModel):
       - MCP 工具 (mcp_loader)
       - OpenClawd._CORE_NODE_ACTIONS (硬编码)
     """
+
     name: str = Field(..., description="唯一工具名: call_Node_XX_action")
     description: str = Field(..., description="自然语言描述（供 LLM 理解）")
     node_id: str = Field(default="", description="所属节点 ID")
@@ -149,7 +152,8 @@ class ToolDefinition(BaseModel):
             "function": {
                 "name": self.name,
                 "description": self.description,
-                "parameters": self.parameters or {
+                "parameters": self.parameters
+                or {
                     "type": "object",
                     "properties": {
                         "action": {"type": "string", "description": "执行动作"},

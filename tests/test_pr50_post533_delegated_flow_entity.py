@@ -107,48 +107,43 @@ import pytest
 # ---------------------------------------------------------------------------
 
 try:
-    from core.delegated_flow_entity import (
-        # Sentinels
-        DELEGATED_FLOW_ENTITY_AUTHORITY,
-        DELEGATED_FLOW_ID_IS_IMMUTABLE_POLICY,
-        FLOW_LINEAGE_ID_SPANS_BOTH_SIDES_POLICY,
-        FLOW_PHASE_IS_MONOTONIC_POLICY,
-        FLOW_KIND_UNIFIES_ALL_DELEGATED_WORK_POLICY,
-        V2_HOLDS_CANONICAL_FLOW_TRUTH_POLICY,
+    from core.delegated_flow_entity import (  # Sentinels; Enums; Dataclasses; Runtime; Functions
         ANDROID_HOLDS_EXECUTION_TRUTH_POLICY,
-        FLOW_OBJECT_MAPPING_IS_ADDITIVE_POLICY,
-        FLOW_ENTITY_IS_SYSTEM_FIRST_CLASS_CITIZEN_POLICY,
-        TERMINAL_FLOW_PHASE_BLOCKS_ADVANCEMENT_POLICY,
-        FLOW_LINEAGE_IS_TRACEABLE_ACROSS_KIND_BOUNDARY_POLICY,
-        EXTENSION_POINTS_ARE_FORWARD_COMPATIBLE_POLICY,
-        FLOW_TRUTH_AUTHORITY_IS_SCOPE_SEPARATED_POLICY,
+        DELEGATED_FLOW_ENTITY_AUTHORITY,
         DELEGATED_FLOW_ENTITY_PR50_SENTINEL,
-        # Enums
-        DelegatedFlowKind,
-        DelegatedFlowPhase,
-        DelegatedFlowSignal,
-        DelegatedFlowOwnerKind,
-        # Dataclasses
-        DelegatedFlowIdentity,
-        DelegatedFlowOwnership,
-        DelegatedFlowObjectMapping,
-        DelegatedFlowExtensionPoints,
+        DELEGATED_FLOW_ID_IS_IMMUTABLE_POLICY,
+        EXTENSION_POINTS_ARE_FORWARD_COMPATIBLE_POLICY,
+        FLOW_ENTITY_IS_SYSTEM_FIRST_CLASS_CITIZEN_POLICY,
+        FLOW_KIND_UNIFIES_ALL_DELEGATED_WORK_POLICY,
+        FLOW_LINEAGE_ID_SPANS_BOTH_SIDES_POLICY,
+        FLOW_LINEAGE_IS_TRACEABLE_ACROSS_KIND_BOUNDARY_POLICY,
+        FLOW_OBJECT_MAPPING_IS_ADDITIVE_POLICY,
+        FLOW_PHASE_IS_MONOTONIC_POLICY,
+        FLOW_TRUTH_AUTHORITY_IS_SCOPE_SEPARATED_POLICY,
+        TERMINAL_FLOW_PHASE_BLOCKS_ADVANCEMENT_POLICY,
+        V2_HOLDS_CANONICAL_FLOW_TRUTH_POLICY,
         DelegatedFlowEntity,
         DelegatedFlowEntityRecord,
-        DelegatedFlowEntitySnapshot,
-        # Runtime
         DelegatedFlowEntityRuntime,
-        # Functions
-        create_delegated_flow_entity,
+        DelegatedFlowEntitySnapshot,
+        DelegatedFlowExtensionPoints,
+        DelegatedFlowIdentity,
+        DelegatedFlowKind,
+        DelegatedFlowObjectMapping,
+        DelegatedFlowOwnerKind,
+        DelegatedFlowOwnership,
+        DelegatedFlowPhase,
+        DelegatedFlowSignal,
         advance_flow_phase,
         attach_object_mapping,
-        record_delegated_flow,
-        get_delegated_flow,
-        get_delegated_flow_by_lineage,
-        get_delegated_flow_by_contract,
-        list_active_delegated_flows,
         build_delegated_flow_snapshot,
+        create_delegated_flow_entity,
+        get_delegated_flow,
+        get_delegated_flow_by_contract,
+        get_delegated_flow_by_lineage,
         get_delegated_flow_entity_runtime,
+        list_active_delegated_flows,
+        record_delegated_flow,
         reset_delegated_flow_entity_runtime,
     )
 
@@ -157,41 +152,37 @@ except ImportError:
     _MODULE_AVAILABLE = False
 
 try:
-    from core.runtime import (
-        DELEGATED_FLOW_ENTITY_AUTHORITY as _rt_authority,
-        DELEGATED_FLOW_ENTITY_PR50_SENTINEL as _rt_sentinel,
-        DelegatedFlowKind as _rt_kind,
-        DelegatedFlowPhase as _rt_phase,
-        DelegatedFlowSignal as _rt_signal,
-        DelegatedFlowOwnerKind as _rt_owner_kind,
-        DelegatedFlowIdentity as _rt_identity,
-        DelegatedFlowOwnership as _rt_ownership,
-        DelegatedFlowObjectMapping as _rt_mapping,
-        DelegatedFlowExtensionPoints as _rt_ext,
-        DelegatedFlowEntity as _rt_entity,
-        DelegatedFlowEntityRecord as _rt_record,
-        DelegatedFlowEntitySnapshot as _rt_snapshot,
-        DelegatedFlowEntityRuntime as _rt_runtime_cls,
-        create_delegated_flow_entity as _rt_create,
-        advance_flow_phase as _rt_advance,
-        attach_object_mapping as _rt_attach,
-        record_delegated_flow as _rt_record_fn,
-        get_delegated_flow as _rt_get,
-        get_delegated_flow_by_lineage as _rt_get_lineage,
-        get_delegated_flow_by_contract as _rt_get_contract,
-        list_active_delegated_flows as _rt_list_active,
-        build_delegated_flow_snapshot as _rt_snapshot_fn,
-        get_delegated_flow_entity_runtime as _rt_get_runtime,
-        reset_delegated_flow_entity_runtime as _rt_reset_runtime,
-    )
+    from core.runtime import DELEGATED_FLOW_ENTITY_AUTHORITY as _rt_authority
+    from core.runtime import DELEGATED_FLOW_ENTITY_PR50_SENTINEL as _rt_sentinel
+    from core.runtime import DelegatedFlowEntity as _rt_entity
+    from core.runtime import DelegatedFlowEntityRecord as _rt_record
+    from core.runtime import DelegatedFlowEntityRuntime as _rt_runtime_cls
+    from core.runtime import DelegatedFlowEntitySnapshot as _rt_snapshot
+    from core.runtime import DelegatedFlowExtensionPoints as _rt_ext
+    from core.runtime import DelegatedFlowIdentity as _rt_identity
+    from core.runtime import DelegatedFlowKind as _rt_kind
+    from core.runtime import DelegatedFlowObjectMapping as _rt_mapping
+    from core.runtime import DelegatedFlowOwnerKind as _rt_owner_kind
+    from core.runtime import DelegatedFlowOwnership as _rt_ownership
+    from core.runtime import DelegatedFlowPhase as _rt_phase
+    from core.runtime import DelegatedFlowSignal as _rt_signal
+    from core.runtime import advance_flow_phase as _rt_advance
+    from core.runtime import attach_object_mapping as _rt_attach
+    from core.runtime import build_delegated_flow_snapshot as _rt_snapshot_fn
+    from core.runtime import create_delegated_flow_entity as _rt_create
+    from core.runtime import get_delegated_flow as _rt_get
+    from core.runtime import get_delegated_flow_by_contract as _rt_get_contract
+    from core.runtime import get_delegated_flow_by_lineage as _rt_get_lineage
+    from core.runtime import get_delegated_flow_entity_runtime as _rt_get_runtime
+    from core.runtime import list_active_delegated_flows as _rt_list_active
+    from core.runtime import record_delegated_flow as _rt_record_fn
+    from core.runtime import reset_delegated_flow_entity_runtime as _rt_reset_runtime
 
     _RUNTIME_EXPORTS_AVAILABLE = True
 except ImportError:
     _RUNTIME_EXPORTS_AVAILABLE = False
 
-skip_if_unavailable = pytest.mark.skipif(
-    not _MODULE_AVAILABLE, reason="core.delegated_flow_entity not available"
-)
+skip_if_unavailable = pytest.mark.skipif(not _MODULE_AVAILABLE, reason="core.delegated_flow_entity not available")
 skip_runtime_if_unavailable = pytest.mark.skipif(
     not _RUNTIME_EXPORTS_AVAILABLE, reason="core.runtime PR-50 exports not available"
 )
@@ -505,11 +496,14 @@ def test_F07_transition_suspend_and_resume():
 
 
 @skip_if_unavailable
-@pytest.mark.parametrize("terminal_phase", [
-    DelegatedFlowPhase.completed,
-    DelegatedFlowPhase.failed,
-    DelegatedFlowPhase.cancelled,
-])
+@pytest.mark.parametrize(
+    "terminal_phase",
+    [
+        DelegatedFlowPhase.completed,
+        DelegatedFlowPhase.failed,
+        DelegatedFlowPhase.cancelled,
+    ],
+)
 def test_G01_terminal_phases_block_all_signals(terminal_phase):
     rt = DelegatedFlowEntityRuntime()
     flow_id = str(uuid.uuid4())
@@ -524,9 +518,7 @@ def test_G01_terminal_phases_block_all_signals(terminal_phase):
     rt.put(terminal_entity)
     for signal in DelegatedFlowSignal:
         advanced = advance_flow_phase(terminal_entity, signal, runtime=rt)
-        assert advanced.phase == terminal_phase, (
-            f"Terminal phase {terminal_phase} should not advance via {signal}"
-        )
+        assert advanced.phase == terminal_phase, f"Terminal phase {terminal_phase} should not advance via {signal}"
 
 
 # ===========================================================================
@@ -581,8 +573,11 @@ def test_I03_identity_to_dict_keys():
     identity = DelegatedFlowIdentity()
     d = identity.to_dict()
     assert set(d.keys()) == {
-        "delegated_flow_id", "flow_lineage_id", "flow_segment_id",
-        "trace_id", "flow_kind",
+        "delegated_flow_id",
+        "flow_lineage_id",
+        "flow_segment_id",
+        "trace_id",
+        "flow_kind",
     }
 
 
@@ -664,8 +659,14 @@ def test_J05_ownership_to_json_valid():
 def test_K01_object_mapping_defaults():
     m = DelegatedFlowObjectMapping()
     for field_name in (
-        "canonical_task_id", "dispatch_record_id", "contract_id",
-        "binding_id", "tracker_id", "session_id", "device_id", "android_flow_id",
+        "canonical_task_id",
+        "dispatch_record_id",
+        "contract_id",
+        "binding_id",
+        "tracker_id",
+        "session_id",
+        "device_id",
+        "android_flow_id",
     ):
         assert getattr(m, field_name) == "", f"{field_name} should default to empty string"
 
@@ -675,8 +676,14 @@ def test_K02_object_mapping_to_dict_keys():
     m = DelegatedFlowObjectMapping()
     d = m.to_dict()
     assert set(d.keys()) == {
-        "canonical_task_id", "dispatch_record_id", "contract_id",
-        "binding_id", "tracker_id", "session_id", "device_id", "android_flow_id",
+        "canonical_task_id",
+        "dispatch_record_id",
+        "contract_id",
+        "binding_id",
+        "tracker_id",
+        "session_id",
+        "device_id",
+        "android_flow_id",
     }
 
 
@@ -802,8 +809,14 @@ def test_N01_entity_to_dict_keys():
     e = DelegatedFlowEntity()
     d = e.to_dict()
     assert set(d.keys()) >= {
-        "identity", "phase", "ownership", "object_mapping",
-        "extension_points", "created_at", "last_updated_at", "metadata",
+        "identity",
+        "phase",
+        "ownership",
+        "object_mapping",
+        "extension_points",
+        "created_at",
+        "last_updated_at",
+        "metadata",
     }
 
 
@@ -923,9 +936,7 @@ def test_P03_snapshot_to_json_valid():
 def test_Q01_runtime_put_and_get():
     rt = DelegatedFlowEntityRuntime()
     fid = str(uuid.uuid4())
-    e = DelegatedFlowEntity(
-        identity=DelegatedFlowIdentity(delegated_flow_id=fid)
-    )
+    e = DelegatedFlowEntity(identity=DelegatedFlowIdentity(delegated_flow_id=fid))
     rt.put(e)
     retrieved = rt.get_by_flow_id(fid)
     assert retrieved is not None
@@ -1054,9 +1065,7 @@ def test_T02_create_default_kind_is_task_assign():
 @skip_if_unavailable
 def test_T03_create_explicit_kind():
     rt = DelegatedFlowEntityRuntime()
-    e = create_delegated_flow_entity(
-        flow_kind=DelegatedFlowKind.goal_execution, runtime=rt
-    )
+    e = create_delegated_flow_entity(flow_kind=DelegatedFlowKind.goal_execution, runtime=rt)
     assert e.flow_kind == DelegatedFlowKind.goal_execution
 
 
@@ -1253,7 +1262,9 @@ def test_AL01_signal_metadata_merged():
     rt = DelegatedFlowEntityRuntime()
     e = create_delegated_flow_entity(runtime=rt)
     e2 = advance_flow_phase(
-        e, DelegatedFlowSignal.dispatch, runtime=rt,
+        e,
+        DelegatedFlowSignal.dispatch,
+        runtime=rt,
         signal_metadata={"source": "test", "step": 1},
     )
     assert e2.metadata.get("source") == "test"
@@ -1417,9 +1428,7 @@ def test_BP01_task_assign_full_lifecycle():
     )
     assert e.phase == DelegatedFlowPhase.created
     # Attach contract
-    e = attach_object_mapping(
-        e, DelegatedFlowObjectMapping(contract_id="contract-e2e"), runtime=rt
-    )
+    e = attach_object_mapping(e, DelegatedFlowObjectMapping(contract_id="contract-e2e"), runtime=rt)
     assert e.contract_id == "contract-e2e"
     # Dispatch
     e = advance_flow_phase(e, DelegatedFlowSignal.dispatch, runtime=rt)
@@ -1542,17 +1551,13 @@ def test_BT01_snapshot_dict_top_level_keys():
 
 @skip_if_unavailable
 def test_BU01_contract_id_shortcut():
-    e = DelegatedFlowEntity(
-        object_mapping=DelegatedFlowObjectMapping(contract_id="c-shortcut")
-    )
+    e = DelegatedFlowEntity(object_mapping=DelegatedFlowObjectMapping(contract_id="c-shortcut"))
     assert e.contract_id == "c-shortcut"
 
 
 @skip_if_unavailable
 def test_BV01_canonical_task_id_shortcut():
-    e = DelegatedFlowEntity(
-        object_mapping=DelegatedFlowObjectMapping(canonical_task_id="t-shortcut")
-    )
+    e = DelegatedFlowEntity(object_mapping=DelegatedFlowObjectMapping(canonical_task_id="t-shortcut"))
     assert e.canonical_task_id == "t-shortcut"
 
 

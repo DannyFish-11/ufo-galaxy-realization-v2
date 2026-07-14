@@ -54,16 +54,12 @@ REPO_ROOT = Path(__file__).parent.parent
 
 
 def test_consistency_gates_authority_sentinel():
-    assert CROSS_REPO_CONSISTENCY_GATES_IS_AUTHORITY.startswith(
-        "CROSS_REPO_CONSISTENCY_GATES_IS_AUTHORITY::"
-    )
+    assert CROSS_REPO_CONSISTENCY_GATES_IS_AUTHORITY.startswith("CROSS_REPO_CONSISTENCY_GATES_IS_AUTHORITY::")
     assert "core.cross_repo_consistency_gates" in CROSS_REPO_CONSISTENCY_GATES_IS_AUTHORITY
 
 
 def test_pr12_sentinel_present():
-    assert CROSS_REPO_CONSISTENCY_GATES_PR12_SENTINEL.startswith(
-        "CROSS_REPO_CONSISTENCY_GATES_PR12_SENTINEL::"
-    )
+    assert CROSS_REPO_CONSISTENCY_GATES_PR12_SENTINEL.startswith("CROSS_REPO_CONSISTENCY_GATES_PR12_SENTINEL::")
     assert "PR12" in CROSS_REPO_CONSISTENCY_GATES_PR12_SENTINEL
     assert "cross-repo-consistency-gates-v1" in CROSS_REPO_CONSISTENCY_GATES_PR12_SENTINEL
     assert "core.cross_repo_consistency_gates" in CROSS_REPO_CONSISTENCY_GATES_PR12_SENTINEL
@@ -277,10 +273,7 @@ def test_run_schema_vocabulary_gate_returns_result():
 
 def test_run_schema_vocabulary_gate_passes():
     result = run_schema_vocabulary_gate()
-    assert result.passed, (
-        f"schema_vocabulary gate unexpectedly failed: {result.details}\n"
-        + "\n".join(result.issues)
-    )
+    assert result.passed, f"schema_vocabulary gate unexpectedly failed: {result.details}\n" + "\n".join(result.issues)
     assert not result.drift_detected
 
 
@@ -298,10 +291,7 @@ def test_run_session_family_gate_returns_result():
 
 def test_run_session_family_gate_passes():
     result = run_session_family_gate()
-    assert result.passed, (
-        f"session_family gate unexpectedly failed: {result.details}\n"
-        + "\n".join(result.issues)
-    )
+    assert result.passed, f"session_family gate unexpectedly failed: {result.details}\n" + "\n".join(result.issues)
     assert not result.drift_detected
 
 
@@ -314,10 +304,7 @@ def test_run_execution_enum_gate_returns_result():
 
 def test_run_execution_enum_gate_passes():
     result = run_execution_enum_gate()
-    assert result.passed, (
-        f"execution_enum gate unexpectedly failed: {result.details}\n"
-        + "\n".join(result.issues)
-    )
+    assert result.passed, f"execution_enum gate unexpectedly failed: {result.details}\n" + "\n".join(result.issues)
     assert not result.drift_detected
 
 
@@ -332,9 +319,8 @@ def test_run_terminal_state_gate_no_drift():
     result = run_terminal_state_gate()
     # terminal_state gate may warn about documented cross-module differences
     # (intentional, not drift), but must not report drift_detected=True
-    assert not result.drift_detected, (
-        f"terminal_state gate detected unexpected drift: {result.details}\n"
-        + "\n".join(result.issues)
+    assert not result.drift_detected, f"terminal_state gate detected unexpected drift: {result.details}\n" + "\n".join(
+        result.issues
     )
 
 
@@ -342,8 +328,7 @@ def test_run_terminal_state_gate_closed_set_invariant_satisfied():
     result = run_terminal_state_gate()
     # If there are only warnings (not failures), the closed-set invariant is met
     assert result.verdict in (GateVerdict.pass_, GateVerdict.warn), (
-        f"terminal_state gate failed (closed-set invariant violated): "
-        f"{result.details}"
+        f"terminal_state gate failed (closed-set invariant violated): " f"{result.details}"
     )
 
 
@@ -356,10 +341,7 @@ def test_run_descriptor_field_gate_returns_result():
 
 def test_run_descriptor_field_gate_passes():
     result = run_descriptor_field_gate()
-    assert result.passed, (
-        f"descriptor_field gate unexpectedly failed: {result.details}\n"
-        + "\n".join(result.issues)
-    )
+    assert result.passed, f"descriptor_field gate unexpectedly failed: {result.details}\n" + "\n".join(result.issues)
     assert not result.drift_detected
 
 
@@ -372,10 +354,7 @@ def test_run_transitional_marker_gate_returns_result():
 
 def test_run_transitional_marker_gate_passes():
     result = run_transitional_marker_gate()
-    assert result.passed, (
-        f"transitional_marker gate unexpectedly failed: {result.details}\n"
-        + "\n".join(result.issues)
-    )
+    assert result.passed, f"transitional_marker gate unexpectedly failed: {result.details}\n" + "\n".join(result.issues)
     assert not result.drift_detected
 
 
@@ -434,9 +413,8 @@ def test_run_all_consistency_gates_all_results_non_null():
 def test_run_all_consistency_gates_no_drift_detected():
     results = run_all_consistency_gates()
     drifting = [r for r in results if r.drift_detected]
-    assert len(drifting) == 0, (
-        f"Unexpected drift detected in gates: "
-        + ", ".join(f"{r.gate_id}({r.verdict.value})" for r in drifting)
+    assert len(drifting) == 0, f"Unexpected drift detected in gates: " + ", ".join(
+        f"{r.gate_id}({r.verdict.value})" for r in drifting
     )
 
 
@@ -468,11 +446,8 @@ def test_build_consistency_gate_snapshot_gate_results_length():
 
 def test_build_consistency_gate_snapshot_is_clean():
     snap = build_consistency_gate_snapshot()
-    assert snap.is_clean(), (
-        f"Snapshot not clean: {snap.summary}\n"
-        + "\n".join(
-            f"  {r.gate_id}: {r.verdict.value}" for r in snap.gate_results
-        )
+    assert snap.is_clean(), f"Snapshot not clean: {snap.summary}\n" + "\n".join(
+        f"  {r.gate_id}: {r.verdict.value}" for r in snap.gate_results
     )
 
 
@@ -526,8 +501,7 @@ def test_all_gate_runners_do_not_raise():
             assert isinstance(result, ConsistencyGateResult)
         except Exception as exc:
             pytest.fail(
-                f"Gate runner {runner.__name__} raised an exception: {exc!r}. "
-                "Gate runners must be non-breaking."
+                f"Gate runner {runner.__name__} raised an exception: {exc!r}. " "Gate runners must be non-breaking."
             )
 
 
@@ -538,8 +512,7 @@ def test_build_consistency_gate_snapshot_does_not_raise():
         assert isinstance(snap, ConsistencyGateSnapshot)
     except Exception as exc:
         pytest.fail(
-            f"build_consistency_gate_snapshot raised an exception: {exc!r}. "
-            "Snapshot builder must be non-breaking."
+            f"build_consistency_gate_snapshot raised an exception: {exc!r}. " "Snapshot builder must be non-breaking."
         )
 
 
@@ -554,14 +527,10 @@ def test_schema_vocabulary_gate_no_unresolved_surfaces():
         ProtocolSurfaceClass,
         get_protocol_surface_catalogue,
     )
-    unresolved = [
-        r
-        for r in get_protocol_surface_catalogue()
-        if r.surface_class == ProtocolSurfaceClass.unresolved
-    ]
-    assert len(unresolved) == 0, (
-        f"Unresolved surfaces found (would cause schema_vocabulary gate drift): "
-        + str([r.surface_id for r in unresolved])
+
+    unresolved = [r for r in get_protocol_surface_catalogue() if r.surface_class == ProtocolSurfaceClass.unresolved]
+    assert len(unresolved) == 0, f"Unresolved surfaces found (would cause schema_vocabulary gate drift): " + str(
+        [r.surface_id for r in unresolved]
     )
 
 
@@ -571,6 +540,7 @@ def test_execution_enum_gate_terminal_phases_align_with_canonical_terminal_state
         CanonicalTerminalState,
         get_delegated_execution_status_catalogue,
     )
+
     canonical_values = {s.value for s in CanonicalTerminalState}
     for record in get_delegated_execution_status_catalogue():
         if record.is_terminal:
@@ -584,6 +554,7 @@ def test_execution_enum_gate_terminal_phases_align_with_canonical_terminal_state
 def test_transitional_marker_gate_all_allowances_have_retirement_condition():
     """Verify every transitional allowance has a non-empty retirement_condition."""
     from core.cross_repo_protocol_consistency import get_transitional_allowance_catalogue
+
     for record in get_transitional_allowance_catalogue():
         assert record.retirement_condition, (
             f"Transitional allowance '{record.allowance_id}' has no "
@@ -597,11 +568,11 @@ def test_transitional_marker_gate_all_surfaces_have_retirement_pathway():
         ProtocolSurfaceClass,
         get_protocol_surface_catalogue,
     )
+
     for record in get_protocol_surface_catalogue():
         if record.surface_class == ProtocolSurfaceClass.transitional:
             assert record.retirement_pathway, (
-                f"Transitional surface '{record.surface_id}' has no "
-                "retirement_pathway."
+                f"Transitional surface '{record.surface_id}' has no " "retirement_pathway."
             )
 
 
@@ -611,11 +582,8 @@ def test_transitional_marker_gate_all_surfaces_have_retirement_pathway():
 
 
 def test_projection_alignment_sentinel_is_available():
-    pytest.importorskip(
-        "fastapi", reason="projection module requires fastapi"
-    )
+    pytest.importorskip("fastapi", reason="projection module requires fastapi")
     from core.routes.projection import CROSS_REPO_CONSISTENCY_GATES_ALIGNED_PR12
-    assert "CROSS_REPO_CONSISTENCY_GATES_ALIGNED_PR12_V1" in (
-        CROSS_REPO_CONSISTENCY_GATES_ALIGNED_PR12
-    )
+
+    assert "CROSS_REPO_CONSISTENCY_GATES_ALIGNED_PR12_V1" in (CROSS_REPO_CONSISTENCY_GATES_ALIGNED_PR12)
     assert "PR-12" in CROSS_REPO_CONSISTENCY_GATES_ALIGNED_PR12

@@ -15,10 +15,7 @@ def test_default_snapshot_matches_frozen_budgets() -> None:
 
     assert snapshot.compat_surface_count == FROZEN_COMPAT_SURFACE_BUDGET
     assert snapshot.legacy_path_count == FROZEN_LEGACY_PATH_BUDGET
-    assert (
-        snapshot.production_baseline_legacy_count
-        == FROZEN_PRODUCTION_BASELINE_LEGACY_BUDGET
-    )
+    assert snapshot.production_baseline_legacy_count == FROZEN_PRODUCTION_BASELINE_LEGACY_BUDGET
     assert snapshot.violations == []
 
 

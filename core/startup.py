@@ -47,13 +47,13 @@ _SUBSYSTEM_DEPS: Dict[str, List[str]] = {
     "concurrency_manager": [],
     "config_hot_reload": [],
     "security_middleware": [],
-    "performance": ["cache"],             # 缓存中间件需要 cache
+    "performance": ["cache"],  # 缓存中间件需要 cache
     "command_router": ["cache"],
     "ai_intent": ["cache"],
     "qdrant": [],
-    "event_bridge": ["command_router"],    # 事件桥接依赖命令路由
+    "event_bridge": ["command_router"],  # 事件桥接依赖命令路由
     "llm_router": [],
-    "agent_system": ["llm_router"],       # Agent 依赖 LLM 路由
+    "agent_system": ["llm_router"],  # Agent 依赖 LLM 路由
     "mcp_loader": [],
     "capability_orchestrator": ["mcp_loader"],  # 能力编排需要 MCP 工具
     "digital_twin": [],
@@ -117,8 +117,14 @@ def _check_pip_dependencies() -> dict:
 
     core_packages = ["fastapi", "uvicorn", "pydantic"]
     optional_packages = [
-        "aiohttp", "psutil", "python-multipart", "cryptography",
-        "Pillow", "feedparser", "bleak", "asyncssh",
+        "aiohttp",
+        "psutil",
+        "python-multipart",
+        "cryptography",
+        "Pillow",
+        "feedparser",
+        "bleak",
+        "asyncssh",
     ]
 
     missing_core = []
@@ -188,9 +194,9 @@ def wire_durable_audit_store(store_path: Optional[str] = None) -> dict:
         ``error``.
     """
     try:
+        from core.audit_event_semantics import get_audit_event_semantics
         from core.replay_audit_persistence import get_replay_audit_store
         from core.replay_foundation import get_replay_foundation
-        from core.audit_event_semantics import get_audit_event_semantics
 
         _store = get_replay_audit_store(store_path=store_path)
 
@@ -204,6 +210,7 @@ def wire_durable_audit_store(store_path: Optional[str] = None) -> dict:
         _truth_wired = False
         try:
             from core.canonical_session_truth import get_canonical_session_truth_runtime
+
             get_canonical_session_truth_runtime().set_audit_store(_store)
             _truth_wired = True
         except Exception as _truth_exc:  # noqa: BLE001
@@ -249,7 +256,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         dep_report = _check_pip_dependencies()
         if dep_report["missing_core"]:
             logger.error(f"缺少核心依赖: {dep_report['missing_core']}")
-            logger.error("安装命令: pip install " + " ".join(dep_report['missing_core']))
+            logger.error("安装命令: pip install " + " ".join(dep_report["missing_core"]))
         for pkg in dep_report.get("missing_optional", []):
             logger.warning(f"可选依赖未安装: {pkg}")
         results["dependency_check"] = dep_report
@@ -268,10 +275,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(_handle_signal(s)))
         logger.info("已注册 SIGTERM/SIGINT 信号处理器")
     except (RuntimeError, NotImplementedError):
-        logger.info(
-            "跳过 asyncio 信号处理器注册（Windows 或非主线程下不支持,属预期;"
-            "Ctrl+C 仍可正常停止）"
-        )
+        logger.info("跳过 asyncio 信号处理器注册（Windows 或非主线程下不支持,属预期;" "Ctrl+C 仍可正常停止）")
 
     # 启动前校验依赖图
     dep_errors = _validate_startup_deps()
@@ -289,8 +293,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             dep_result = results.get(dep, {})
             if dep_result.get("status") not in ("ok", "degraded"):
                 logger.warning(
-                    f"跳过 {subsystem}: 依赖 '{dep}' 未成功 "
-                    f"(status={dep_result.get('status', 'missing')})"
+                    f"跳过 {subsystem}: 依赖 '{dep}' 未成功 " f"(status={dep_result.get('status', 'missing')})"
                 )
                 results[subsystem] = {
                     "status": "skipped",
@@ -305,6 +308,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     cache = None
     try:
         from core.cache import get_cache
+
         redis_url = os.environ.get("REDIS_URL", "")
         if config and hasattr(config, "redis_url"):
             redis_url = config.redis_url or redis_url
@@ -328,9 +332,11 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         monitoring.health.register_check("api_server", lambda: {"status": "healthy"})
 
         if cache:
+
             async def _check_cache():
                 info = await cache.info()
                 return {"status": "healthy", **info}
+
             monitoring.health.register_check("cache", _check_cache)
 
         if cache and cache.backend_type == "redis":
@@ -349,7 +355,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # ====================================================================
     error_tracker = None
     try:
-        from core.error_framework import get_error_tracker, create_error_handlers
+        from core.error_framework import create_error_handlers, get_error_tracker
 
         error_tracker = get_error_tracker()
         create_error_handlers(app)
@@ -424,10 +430,10 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # ====================================================================
     try:
         from core.performance import (
-            RequestTimerMiddleware,
-            RateLimitMiddleware,
-            ResponseCompressor,
             CachingMiddleware,
+            RateLimitMiddleware,
+            RequestTimerMiddleware,
+            ResponseCompressor,
         )
 
         # 中间件按添加的逆序执行（最后添加的最先执行）
@@ -492,12 +498,14 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # ====================================================================
     try:
         from core.ai_intent import (
-            get_intent_parser, get_conversation_memory, get_smart_recommender,
+            get_conversation_memory,
+            get_intent_parser,
+            get_smart_recommender,
         )
 
-        intent_parser = get_intent_parser()
+        get_intent_parser()
         memory = get_conversation_memory(cache_backend=cache)
-        recommender = get_smart_recommender(memory=memory)
+        get_smart_recommender(memory=memory)
 
         results["ai_intent"] = {"status": "ok"}
         logger.info("AI 意图引擎已初始化")
@@ -513,6 +521,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     if qdrant_url:
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=5) as client:
                 resp = await client.get(f"{qdrant_url}/healthz")
                 if resp.status_code == 200:
@@ -555,9 +564,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             "healthy": status["healthy_providers"],
         }
         logger.info(
-            f"多 LLM 路由器已初始化: "
-            f"{status['total_providers']} 提供商, "
-            f"{status['healthy_providers']} 可用"
+            f"多 LLM 路由器已初始化: " f"{status['total_providers']} 提供商, " f"{status['healthy_providers']} 可用"
         )
     except Exception as e:
         logger.debug("Fallback triggered: %s", e)
@@ -575,9 +582,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             from core.fractal_agent import get_fractal_executor
 
             agent_factory = get_agent_factory(llm_router=llm_router)
-            fractal_executor = get_fractal_executor(
-                llm_router=llm_router, agent_factory=agent_factory
-            )
+            get_fractal_executor(llm_router=llm_router, agent_factory=agent_factory)
             # 启动 Agent TTL 清理循环
             await agent_factory.start_cleanup_loop()
             results["agent_system"] = {
@@ -599,15 +604,15 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # 9a. 统一会话管理 + 全链路编排器
     # ====================================================================
     try:
-        from core.session_manager import get_session_manager
         from core.e2e_pipeline import init_pipeline
         from core.routes._shared import connection_manager as _conn_mgr
+        from core.session_manager import get_session_manager
 
         session_mgr = get_session_manager()
-        pipeline = init_pipeline(
+        init_pipeline(
             session_manager=session_mgr,
             llm_router=llm_router,
-            agent_factory=agent_factory if 'agent_factory' in dir() else None,
+            agent_factory=agent_factory if "agent_factory" in dir() else None,
             connection_manager=_conn_mgr,
         )
         results["session_manager"] = {
@@ -615,10 +620,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             "sessions_restored": len(session_mgr._sessions),
         }
         results["e2e_pipeline"] = {"status": "ok"}
-        logger.info(
-            f"统一会话管理器已初始化 (恢复 {len(session_mgr._sessions)} 个会话), "
-            f"全链路编排器就绪"
-        )
+        logger.info(f"统一会话管理器已初始化 (恢复 {len(session_mgr._sessions)} 个会话), " f"全链路编排器就绪")
     except Exception as e:
         logger.debug("Fallback triggered: %s", e)
         results["session_manager"] = {"status": "degraded", "error": str(e)}
@@ -638,8 +640,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         results["wake_event_bus"] = {"status": "ok"}
         results["wake_router"] = {"status": "ok"}
         logger.info(
-            "SessionRoaming + WakeEventBus + WakeRouter 已初始化 "
-            f"(活跃会话: {len(session_roaming._sessions)})"
+            "SessionRoaming + WakeEventBus + WakeRouter 已初始化 " f"(活跃会话: {len(session_roaming._sessions)})"
         )
     except Exception as e:
         logger.debug("Fallback triggered: %s", e)
@@ -651,12 +652,11 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # 9b. MCP 工具加载（从 config/mcp_servers.json 读取并加载）
     # ====================================================================
     try:
-        from core.mcp_loader import mcp_loader
         import json as _json
 
-        mcp_config_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "config", "mcp_servers.json"
-        )
+        from core.mcp_loader import mcp_loader
+
+        mcp_config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config", "mcp_servers.json")
         auto_started = 0
         if os.path.exists(mcp_config_path):
             with open(mcp_config_path, "r", encoding="utf-8") as f:
@@ -687,10 +687,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             "servers_loaded": len(mcp_loader.servers),
             "auto_started": auto_started,
         }
-        logger.info(
-            f"MCP 工具加载器就绪: {len(mcp_loader.servers)} 服务器, "
-            f"{auto_started} 个自动启动"
-        )
+        logger.info(f"MCP 工具加载器就绪: {len(mcp_loader.servers)} 服务器, " f"{auto_started} 个自动启动")
     except Exception as e:
         logger.debug("Fallback triggered: %s", e)
         results["mcp_loader"] = {"status": "degraded", "error": str(e)}
@@ -701,6 +698,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # ====================================================================
     try:
         from core.capability_orchestrator import capability_orchestrator
+
         await capability_orchestrator.initialize()
         cap_count = len(capability_orchestrator.capabilities)
         results["capability_orchestrator"] = {
@@ -719,7 +717,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     try:
         from core.digital_twin_engine import get_digital_twin_engine
 
-        twin_engine = get_digital_twin_engine()
+        get_digital_twin_engine()
         results["digital_twin"] = {"status": "ok"}
         logger.info("数字孪生引擎已初始化")
     except Exception as e:
@@ -733,7 +731,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     try:
         from enhancements.reasoning.world_model import WorldModel
 
-        world_model = WorldModel()
+        WorldModel()
         results["world_model"] = {"status": "ok", "pillars": ["ontology", "epistemology", "information"]}
         logger.info("三位一体世界模型已初始化 (本体论 + 认知论 + 信息论)")
     except Exception as e:
@@ -772,6 +770,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         _monitoring = None
         try:
             from core.monitoring import get_monitoring_manager
+
             _monitoring = get_monitoring_manager()
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
@@ -810,7 +809,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # 升级为"在场主体"。默认关闭(GALAXY_AMBIENT_LOOP=1 开启),不破坏既有行为;
     # 隐私跟随现有感知授权。
     try:
-        from core.ambient_attention_loop import get_ambient_loop, ambient_loop_enabled
+        from core.ambient_attention_loop import ambient_loop_enabled, get_ambient_loop
 
         if ambient_loop_enabled():
             _ambient = get_ambient_loop()
@@ -869,6 +868,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # ====================================================================
     try:
         from mcp_bridge.bridge import MCPBridgeLoader
+
         mcp_bridge = MCPBridgeLoader.get_instance()
         # Bridge loader is ready; actual servers are loaded on-demand or via config.
         # Log availability so operators know the bridge subsystem is active.
@@ -886,6 +886,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # ====================================================================
     try:
         from galaxy_gateway.app import app as gateway_app
+
         app.mount("/gateway", gateway_app)
 
         # Starlette 不会为【被挂载的子应用】运行其 lifespan —— 而 galaxy_gateway 的
@@ -905,8 +906,12 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         # 不受此影响;本修复只补活 /gateway/* 的 REST 面。
         try:
             from galaxy_gateway.bootstrap.lifecycle import init_gateway_core_services
+
             (
-                _gw_dm, _gw_mh, _gw_wsm, _gw_to,
+                _gw_dm,
+                _gw_mh,
+                _gw_wsm,
+                _gw_to,
             ) = await init_gateway_core_services(gateway_app)
 
             # 到这里【必需核心服务已就绪、/gateway/* 已不再 503】——这才是本修复的实质。
@@ -918,10 +923,12 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             def _register_gateway_shutdown() -> None:
                 async def _shutdown_gateway_core() -> None:
                     import contextlib as _ctx
+
                     with _ctx.suppress(Exception):
                         await _gw_to.stop()
                     with _ctx.suppress(Exception):
                         await _gw_wsm.stop()
+
                 if hasattr(app, "add_event_handler"):
                     app.add_event_handler("shutdown", _shutdown_gateway_core)
                 elif hasattr(getattr(app, "router", None), "on_shutdown"):
@@ -933,9 +940,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
                 logger.debug("gateway shutdown 钩子注册跳过(非致命,不影响 /gateway/* 已就绪): %s", _she)
 
             results["galaxy_gateway"] = {"status": "ok", "core_services": "started"}
-            logger.info(
-                "Galaxy Gateway 已挂载到 /gateway(必需核心服务已就绪,/gateway/* 不再 503)"
-            )
+            logger.info("Galaxy Gateway 已挂载到 /gateway(必需核心服务已就绪,/gateway/* 不再 503)")
         except Exception as _le:
             # 核心服务启动失败不应阻断整体:挂载仍在,只是 /gateway/* 可能仍 503。
             results["galaxy_gateway"] = {"status": "degraded", "error": str(_le)}
@@ -953,15 +958,19 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # ② 起 worker 消费循环(订阅派发 → 规范执行器执行 → 回传结果)。全 best-effort,
     # 任何失败都不阻断启动。默认关时整段跳过,桌面单机行为一字未变。
     try:
-        from core.master_brain import master_brain_enabled, get_master_brain
+        from core.master_brain import get_master_brain, master_brain_enabled
+
         if master_brain_enabled():
             brain = get_master_brain()
             if brain is not None:
                 _mb = await brain.start()
-                results["master_brain"] = {"status": "started",
-                                           "nats_connected": bool((_mb or {}).get("nats_connected"))}
+                results["master_brain"] = {
+                    "status": "started",
+                    "nats_connected": bool((_mb or {}).get("nats_connected")),
+                }
                 logger.info("MasterBrain 已启用(多设备总开关开)")
             from core.worker_runtime import start_worker_runtime
+
             _wk = await start_worker_runtime()
             results["worker_runtime"] = _wk
             if _wk.get("started"):
@@ -1024,11 +1033,12 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # no longer loses all session truth context.
     # ====================================================================
     try:
+        from core.canonical_session_truth import get_canonical_session_truth_runtime
         from core.session_truth_snapshot import (
             get_session_truth_snapshot_store,
             restore_session_truth_from_snapshot,
         )
-        from core.canonical_session_truth import get_canonical_session_truth_runtime
+
         _stt_store = get_session_truth_snapshot_store()
         get_canonical_session_truth_runtime().set_snapshot_store(_stt_store)
         _stt_restored = restore_session_truth_from_snapshot(store=_stt_store)
@@ -1058,6 +1068,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # ====================================================================
     try:
         from core.runtime_restart_recovery import run_startup_recovery
+
         _recovery_report = run_startup_recovery()
         results["startup_recovery"] = {
             "status": "ok",
@@ -1095,6 +1106,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # ====================================================================
     try:
         from core.durable_result_idempotency import get_durable_result_id_store
+
         _rid_store = get_durable_result_id_store()
         results["durable_result_idempotency"] = {
             "status": "ok",
@@ -1135,6 +1147,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
 
     # 结构化启动摘要（便于 ELK/Loki 等日志系统收集）
     import json as _json
+
     startup_summary = {
         "event": "bootstrap_complete",
         "elapsed_s": round(elapsed, 3),
@@ -1142,11 +1155,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         "degraded": degraded_count,
         "skipped": skipped_count,
         "total": total,
-        "subsystems": {
-            k: v.get("status", "unknown")
-            for k, v in results.items()
-            if not k.startswith("_")
-        },
+        "subsystems": {k: v.get("status", "unknown") for k, v in results.items() if not k.startswith("_")},
     }
     logger.info(f"STARTUP_SUMMARY: {_json.dumps(startup_summary, ensure_ascii=False)}")
 
@@ -1176,6 +1185,7 @@ async def shutdown_subsystems():
     # 0. Agent 清理循环
     try:
         from core.agent_factory import get_agent_factory
+
         factory = get_agent_factory()
         await _shutdown_with_timeout("Agent 清理循环", factory.stop_cleanup_loop())
         factory._persist_state()  # 关闭前持久化状态
@@ -1187,6 +1197,7 @@ async def shutdown_subsystems():
     # captured in the registry is snapshotted while it is still valid.
     try:
         from core.task_envelope_lifecycle_registry import get_lifecycle_registry
+
         _registry = get_lifecycle_registry()
         _saved = _registry.persist_snapshot()
         if _saved:
@@ -1201,6 +1212,7 @@ async def shutdown_subsystems():
     # 不对称。仅 mesh opt-in 启用时才在跑;stop() 对未启动实例是安全空操作)。
     try:
         from core.worker_runtime import get_worker_runtime
+
         _wk_rt = get_worker_runtime()
         if getattr(_wk_rt, "running", False):
             await _shutdown_with_timeout("Worker 消费循环", _wk_rt.stop())
@@ -1210,6 +1222,7 @@ async def shutdown_subsystems():
     # 0a. 健康检查整合层
     try:
         from core.health_integration import get_unified_health_manager
+
         uhm = get_unified_health_manager()
         await _shutdown_with_timeout("健康检查整合层", uhm.stop())
     except Exception as e:
@@ -1218,6 +1231,7 @@ async def shutdown_subsystems():
     # 0a-1. 系统负载后台采样循环（bootstrap_subsystems 里启动，uhm.stop() 不管它）
     try:
         from core.system_load_monitor import get_monitor as get_load_monitor
+
         await _shutdown_with_timeout("系统负载采样循环", get_load_monitor().stop_monitoring())
     except Exception as e:
         logger.warning(f"系统负载采样循环停止失败: {e}")
@@ -1225,6 +1239,7 @@ async def shutdown_subsystems():
     # 0a-2. 常驻注意力循环（bootstrap 15a 里启动，需在关闭序列显式停掉后台任务）
     try:
         from core.ambient_attention_loop import get_ambient_loop
+
         await _shutdown_with_timeout("常驻注意力循环", get_ambient_loop().stop())
     except Exception as e:
         logger.warning(f"常驻注意力循环停止失败: {e}")
@@ -1232,6 +1247,7 @@ async def shutdown_subsystems():
     # 0a-3. HA 桥（bootstrap 15a-2 里启动，事件流后台任务需显式停）
     try:
         from core.ha_bridge import get_ha_bridge
+
         await _shutdown_with_timeout("HA 桥", get_ha_bridge().stop())
     except Exception as e:
         logger.warning(f"HA 桥停止失败: {e}")
@@ -1239,6 +1255,7 @@ async def shutdown_subsystems():
     # 0a-4. LAN mDNS 发现（bootstrap 15a-3 里启动;同步 close,不需 await）
     try:
         from core.lan_discovery import get_lan_discovery
+
         get_lan_discovery().stop()
     except Exception as e:
         logger.warning(f"LAN mDNS 发现停止失败: {e}")
@@ -1246,6 +1263,7 @@ async def shutdown_subsystems():
     # 0b. 节点发现服务
     try:
         from core.node_discovery import get_node_discovery
+
         discovery = get_node_discovery()
         await _shutdown_with_timeout("节点发现服务", discovery.stop())
     except Exception as e:
@@ -1254,6 +1272,7 @@ async def shutdown_subsystems():
     # 0c. 数字孪生引擎
     try:
         from core.digital_twin_engine import get_digital_twin_engine
+
         twin_engine = get_digital_twin_engine()
         await _shutdown_with_timeout("数字孪生引擎", twin_engine.shutdown())
     except Exception as e:
@@ -1262,6 +1281,7 @@ async def shutdown_subsystems():
     # 0d. LLM 路由器
     try:
         from core.multi_llm_router import get_llm_router
+
         router = get_llm_router()
         await _shutdown_with_timeout("LLM 路由器", router.close())
     except Exception as e:
@@ -1270,6 +1290,7 @@ async def shutdown_subsystems():
     # 1. 事件桥接
     try:
         from core.event_bridge import get_event_bridge
+
         bridge = get_event_bridge()
         await _shutdown_with_timeout("事件桥接", bridge.shutdown())
     except Exception as e:
@@ -1278,6 +1299,7 @@ async def shutdown_subsystems():
     # 2. 命令路由清理
     try:
         from core.command_router import get_command_router
+
         cmd_router = get_command_router()
         await _shutdown_with_timeout("命令路由", cmd_router.cleanup(max_age_seconds=0))
     except Exception as exc:
@@ -1286,6 +1308,7 @@ async def shutdown_subsystems():
     # 3. 监控系统
     try:
         from core.monitoring import get_monitoring_manager
+
         monitoring = get_monitoring_manager()
         await _shutdown_with_timeout("监控系统", monitoring.stop())
     except Exception as e:
@@ -1294,6 +1317,7 @@ async def shutdown_subsystems():
     # 3b. 并发管理器
     try:
         from core.concurrency_manager import get_concurrency_manager
+
         concurrency = get_concurrency_manager()
         await _shutdown_with_timeout("并发管理器", concurrency.stop())
     except Exception as e:
@@ -1302,6 +1326,7 @@ async def shutdown_subsystems():
     # 3c. 配置热更新管理器
     try:
         from core.config_hot_reload import get_config_manager
+
         config_mgr = get_config_manager()
         await _shutdown_with_timeout("配置热更新", config_mgr.stop_watching())
     except Exception as e:
@@ -1310,7 +1335,8 @@ async def shutdown_subsystems():
     # 4. 缓存
     try:
         import core.cache as _cache_mod
-        instance = getattr(_cache_mod, '_cache_instance', None)
+
+        instance = getattr(_cache_mod, "_cache_instance", None)
         if instance:
             await _shutdown_with_timeout("缓存连接", instance.close())
     except Exception as e:

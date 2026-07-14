@@ -12,22 +12,23 @@
 import asyncio
 import json
 import logging
-import time
 import socket
 import struct
-from typing import Dict, List, Optional, Callable
+import time
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Callable, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.NodeDiscovery")
 
 DISCOVERY_PORT = 19720
 DISCOVERY_MAGIC = b"UFOGLXY"  # 7 bytes 魔数
-HEARTBEAT_INTERVAL = 10       # 秒
-NODE_TIMEOUT = 35             # 3 次心跳未收到即认为下线
+HEARTBEAT_INTERVAL = 10  # 秒
+NODE_TIMEOUT = 35  # 3 次心跳未收到即认为下线
 
 
 # ───────────────────── 数据模型 ─────────────────────
+
 
 class NodeRole(Enum):
     MASTER = "master"
@@ -40,7 +41,7 @@ class DiscoveryState(Enum):
     DISCOVERED = "discovered"
     REGISTERED = "registered"
     HEALTHY = "healthy"
-    SUSPECT = "suspect"      # 心跳超时但未确认下线
+    SUSPECT = "suspect"  # 心跳超时但未确认下线
     OFFLINE = "offline"
     DEREGISTERED = "deregistered"
 
@@ -48,6 +49,7 @@ class DiscoveryState(Enum):
 @dataclass
 class DiscoveredNode:
     """已发现的节点"""
+
     node_id: str
     host: str
     port: int
@@ -77,12 +79,13 @@ class DiscoveredNode:
 
 # ───────────────────── 协议消息 ─────────────────────
 
+
 class MessageType(Enum):
-    ANNOUNCE = 0x01      # 节点宣告自己的存在
-    HEARTBEAT = 0x02     # 心跳
-    QUERY = 0x03         # 查询在线节点
-    RESPONSE = 0x04      # 查询响应
-    DEREGISTER = 0x05    # 节点主动下线
+    ANNOUNCE = 0x01  # 节点宣告自己的存在
+    HEARTBEAT = 0x02  # 心跳
+    QUERY = 0x03  # 查询在线节点
+    RESPONSE = 0x04  # 查询响应
+    DEREGISTER = 0x05  # 节点主动下线
 
 
 def encode_message(msg_type: MessageType, payload: Dict) -> bytes:
@@ -100,7 +103,7 @@ def decode_message(data: bytes) -> Optional[tuple]:
         msg_type = MessageType(msg_type_val)
     except ValueError:
         return None
-    body = data[10:10 + body_len]
+    body = data[10 : 10 + body_len]
     try:
         payload = json.loads(body.decode("utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError):
@@ -109,6 +112,7 @@ def decode_message(data: bytes) -> Optional[tuple]:
 
 
 # ───────────────────── 节点发现服务 ─────────────────────
+
 
 class NodeDiscoveryService:
     """
@@ -121,10 +125,15 @@ class NodeDiscoveryService:
     4. 状态管理：维护所有已知节点的状态
     """
 
-    def __init__(self, node_id: str, host: str = "0.0.0.0", port: int = 0,
-                 role: NodeRole = NodeRole.WORKER,
-                 capabilities: Optional[List[str]] = None,
-                 discovery_port: int = DISCOVERY_PORT):
+    def __init__(
+        self,
+        node_id: str,
+        host: str = "0.0.0.0",
+        port: int = 0,
+        role: NodeRole = NodeRole.WORKER,
+        capabilities: Optional[List[str]] = None,
+        discovery_port: int = DISCOVERY_PORT,
+    ):
         self.node_id = node_id
         self.host = host
         self.port = port
@@ -225,17 +234,17 @@ class NodeDiscoveryService:
     # ─── 查询 ───
 
     def get_healthy_nodes(self) -> List[DiscoveredNode]:
-        return [n for n in self.nodes.values()
-                if n.state in (DiscoveryState.HEALTHY, DiscoveryState.REGISTERED)
-                and n.is_alive()]
+        return [
+            n
+            for n in self.nodes.values()
+            if n.state in (DiscoveryState.HEALTHY, DiscoveryState.REGISTERED) and n.is_alive()
+        ]
 
     def get_nodes_by_capability(self, capability: str) -> List[DiscoveredNode]:
-        return [n for n in self.get_healthy_nodes()
-                if capability in n.capabilities]
+        return [n for n in self.get_healthy_nodes() if capability in n.capabilities]
 
     def get_nodes_by_role(self, role: NodeRole) -> List[DiscoveredNode]:
-        return [n for n in self.get_healthy_nodes()
-                if n.role == role]
+        return [n for n in self.get_healthy_nodes() if n.role == role]
 
     def get_node(self, node_id: str) -> Optional[DiscoveredNode]:
         """按节点 ID 获取节点（包含离线节点）"""
@@ -261,8 +270,9 @@ class NodeDiscoveryService:
         ]
 
     @classmethod
-    def seed_from_registry(cls, service: "NodeDiscoveryService",
-                           registry_path: str = "config/node_registry.json") -> int:
+    def seed_from_registry(
+        cls, service: "NodeDiscoveryService", registry_path: str = "config/node_registry.json"
+    ) -> int:
         """
         从 node_registry.json 预填充节点，无需等待 UDP 广播。
 
@@ -271,9 +281,11 @@ class NodeDiscoveryService:
         """
         import json
         from pathlib import Path
+
         try:
             from core.port_config import get_node_port
-        except Exception as exc:
+        except Exception:
+
             def get_node_port(name: str) -> int:
                 raise ValueError(f"Port configuration not available for node: {name}")
 
@@ -331,10 +343,13 @@ class NodeDiscoveryService:
         while self._running:
             try:
                 await asyncio.sleep(HEARTBEAT_INTERVAL)
-                self._broadcast(MessageType.HEARTBEAT, {
-                    "node_id": self.node_id,
-                    "timestamp": time.time(),
-                })
+                self._broadcast(
+                    MessageType.HEARTBEAT,
+                    {
+                        "node_id": self.node_id,
+                        "timestamp": time.time(),
+                    },
+                )
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -377,7 +392,8 @@ class NodeDiscoveryService:
                         logger.warning(
                             "%d 个节点 UDP 心跳超时转为离线（单机下未广播心跳的节点属正常，"
                             "以 HTTP 健康为准，不影响 API）。示例: %s …",
-                            len(newly_offline), ", ".join(newly_offline[:8]),
+                            len(newly_offline),
+                            ", ".join(newly_offline[:8]),
                         )
                         for _nid in newly_offline:
                             logger.debug("节点离线明细: %s", _nid)
@@ -496,6 +512,7 @@ class NodeDiscoveryService:
 
 # ───────────────────── UDP 协议处理 ─────────────────────
 
+
 class _DiscoveryProtocol(asyncio.DatagramProtocol):
     """asyncio UDP 协议"""
 
@@ -524,8 +541,7 @@ def _safe_call(callback, *args):
 _discovery_instance: Optional[NodeDiscoveryService] = None
 
 
-def get_node_discovery(node_id: str = "master",
-                       **kwargs) -> NodeDiscoveryService:
+def get_node_discovery(node_id: str = "master", **kwargs) -> NodeDiscoveryService:
     global _discovery_instance
     if _discovery_instance is None:
         _discovery_instance = NodeDiscoveryService(node_id=node_id, **kwargs)
@@ -533,6 +549,7 @@ def get_node_discovery(node_id: str = "master",
 
 
 # ───────────────────── 本地节点扫描 ─────────────────────
+
 
 async def safe_scan_nodes_dir(nodes_dir: str = "nodes") -> Dict:
     """
@@ -549,8 +566,8 @@ async def safe_scan_nodes_dir(nodes_dir: str = "nodes") -> Dict:
             "available_count": int,
         }
     """
-    import os
     import importlib
+    import os
     import sys
 
     report = {"available": [], "errors": {}, "total": 0, "available_count": 0}
@@ -559,10 +576,9 @@ async def safe_scan_nodes_dir(nodes_dir: str = "nodes") -> Dict:
         logger.warning(f"节点目录不存在: {nodes_dir}")
         return report
 
-    node_dirs = sorted([
-        d for d in os.listdir(nodes_dir)
-        if os.path.isdir(os.path.join(nodes_dir, d)) and d.startswith("Node_")
-    ])
+    node_dirs = sorted(
+        [d for d in os.listdir(nodes_dir) if os.path.isdir(os.path.join(nodes_dir, d)) and d.startswith("Node_")]
+    )
 
     report["total"] = len(node_dirs)
 
@@ -597,8 +613,5 @@ async def safe_scan_nodes_dir(nodes_dir: str = "nodes") -> Dict:
             report["errors"][nd] = info["error"]
             report["available"].append(info)
 
-    logger.info(
-        f"节点扫描完成: {report['available_count']}/{report['total']} 可加载, "
-        f"{len(report['errors'])} 失败"
-    )
+    logger.info(f"节点扫描完成: {report['available_count']}/{report['total']} 可加载, " f"{len(report['errors'])} 失败")
     return report

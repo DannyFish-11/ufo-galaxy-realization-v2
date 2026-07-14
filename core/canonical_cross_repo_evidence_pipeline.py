@@ -295,14 +295,10 @@ MISSING_PRIMARY_SOURCE_DOWNGRADES_TO_PARTIAL_POLICY: str = (
 _ENV_PRIMARY_MAX_AGE = "CROSS_REPO_EVIDENCE_PRIMARY_MAX_AGE_SECONDS"
 _ENV_SECONDARY_MAX_AGE = "CROSS_REPO_EVIDENCE_SECONDARY_MAX_AGE_SECONDS"
 
-CANONICAL_PIPELINE_PRIMARY_FRESHNESS_MAX_AGE_SECONDS: float = float(
-    os.environ.get(_ENV_PRIMARY_MAX_AGE, "3600")
-)
+CANONICAL_PIPELINE_PRIMARY_FRESHNESS_MAX_AGE_SECONDS: float = float(os.environ.get(_ENV_PRIMARY_MAX_AGE, "3600"))
 """Maximum age for primary source evidence to be considered fresh (default 3600 s)."""
 
-CANONICAL_PIPELINE_SECONDARY_FRESHNESS_MAX_AGE_SECONDS: float = float(
-    os.environ.get(_ENV_SECONDARY_MAX_AGE, "7200")
-)
+CANONICAL_PIPELINE_SECONDARY_FRESHNESS_MAX_AGE_SECONDS: float = float(os.environ.get(_ENV_SECONDARY_MAX_AGE, "7200"))
 """Maximum age for secondary source evidence to be considered fresh (default 7200 s)."""
 
 # ---------------------------------------------------------------------------
@@ -666,17 +662,12 @@ class CanonicalCrossRepoEvidenceReport:
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "CanonicalCrossRepoEvidenceReport":
-        sources = [
-            IngestionSourceEntry.from_dict(s)
-            for s in (d.get("sources") or [])
-        ]
+        sources = [IngestionSourceEntry.from_dict(s) for s in (d.get("sources") or [])]
         return cls(
             report_id=d.get("report_id", ""),
             generated_at=float(d.get("generated_at", 0.0)),
             authority=d.get("authority", ""),
-            pipeline_verdict=PipelineVerdict(
-                d.get("pipeline_verdict", "insufficient")
-            ),
+            pipeline_verdict=PipelineVerdict(d.get("pipeline_verdict", "insufficient")),
             is_complete=bool(d.get("is_complete", False)),
             sources=sources,
             primary_sources_complete=bool(d.get("primary_sources_complete", False)),
@@ -688,9 +679,7 @@ class CanonicalCrossRepoEvidenceReport:
             partial_sources=list(d.get("partial_sources") or []),
             unavailable_sources=list(d.get("unavailable_sources") or []),
             authority_unclear_sources=list(d.get("authority_unclear_sources") or []),
-            canonical_precedence_applied=list(
-                d.get("canonical_precedence_applied") or []
-            ),
+            canonical_precedence_applied=list(d.get("canonical_precedence_applied") or []),
             merge_policy_notes=list(d.get("merge_policy_notes") or []),
             summary=d.get("summary", ""),
         )
@@ -702,11 +691,14 @@ class CanonicalCrossRepoEvidenceReport:
 
 # Source 1: real_device_verification — AndroidParticipantEvidenceIngress
 try:
-    from core.android_participant_evidence_ingress import (  # type: ignore[import]
-        ingest_android_participant_evidence as _ingest_real_device_evidence,
+    from core.android_participant_evidence_ingress import (
         ANDROID_PARTICIPANT_EVIDENCE_INGRESS_AUTHORITY as _REAL_DEVICE_AUTHORITY_SENTINEL,
-        AndroidParticipantStatus as _AndroidParticipantStatus,
     )
+    from core.android_participant_evidence_ingress import AndroidParticipantStatus as _AndroidParticipantStatus
+    from core.android_participant_evidence_ingress import (
+        ingest_android_participant_evidence as _ingest_real_device_evidence,  # type: ignore[import]
+    )
+
     _REAL_DEVICE_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -717,11 +709,14 @@ except Exception as exc:
 
 # Source 2: readiness_evidence — AndroidEvaluatorArtifactRegistry
 try:
-    from core.android_evaluator_artifact_ingress import (  # type: ignore[import]
-        get_evaluator_artifact_registry as _get_evaluator_registry,
+    from core.android_evaluator_artifact_ingress import (
         ANDROID_EVALUATOR_ARTIFACT_INGRESS_AUTHORITY as _EVALUATOR_AUTHORITY_SENTINEL,
-        AndroidEvaluatorArtifactKind as _ArtifactKind,
     )
+    from core.android_evaluator_artifact_ingress import AndroidEvaluatorArtifactKind as _ArtifactKind
+    from core.android_evaluator_artifact_ingress import (
+        get_evaluator_artifact_registry as _get_evaluator_registry,  # type: ignore[import]
+    )
+
     _EVALUATOR_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -732,9 +727,10 @@ except Exception as exc:
 
 # Source 3: participant_lifecycle_truth — AndroidParticipantSessionRegistry
 try:
-    from core.android_participant_session_state import (  # type: ignore[import]
-        get_participant_session_registry as _get_session_registry,
+    from core.android_participant_session_state import (
+        get_participant_session_registry as _get_session_registry,  # type: ignore[import]
     )
+
     _SESSION_REGISTRY_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -743,9 +739,10 @@ except Exception as exc:
 
 # Source 4: task_result_runtime — AndroidExecutionSignalReconciler
 try:
-    from core.android_execution_signal_reconciler import (  # type: ignore[import]
-        ANDROID_EXECUTION_SIGNAL_RECONCILER_AUTHORITY as _RECONCILER_AUTHORITY_SENTINEL,
+    from core.android_execution_signal_reconciler import (
+        ANDROID_EXECUTION_SIGNAL_RECONCILER_AUTHORITY as _RECONCILER_AUTHORITY_SENTINEL,  # type: ignore[import]
     )
+
     _RECONCILER_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -754,10 +751,13 @@ except Exception as exc:
 
 # Source 5: delegated_runtime_audit — AndroidDelegatedRuntimeAuditRecorder
 try:
-    from core.android_delegated_runtime_audit import (  # type: ignore[import]
-        android_audit_snapshot as _android_audit_snapshot,
+    from core.android_delegated_runtime_audit import (
         ANDROID_DELEGATED_RUNTIME_AUDIT_AUTHORITY as _AUDIT_AUTHORITY_SENTINEL,
     )
+    from core.android_delegated_runtime_audit import (
+        android_audit_snapshot as _android_audit_snapshot,  # type: ignore[import]
+    )
+
     _AUDIT_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -799,8 +799,7 @@ def _probe_real_device_verification() -> IngestionSourceEntry:
             authority=auth,
             status=IngestionStatus.authority_unclear,
             evidence_summary=(
-                "ANDROID_PARTICIPANT_EVIDENCE_INGRESS_AUTHORITY sentinel is "
-                "empty; cannot confirm source authority."
+                "ANDROID_PARTICIPANT_EVIDENCE_INGRESS_AUTHORITY sentinel is " "empty; cannot confirm source authority."
             ),
         )
 
@@ -828,8 +827,7 @@ def _probe_real_device_verification() -> IngestionSourceEntry:
                 raw_evidence=evidence_dict,
                 notes=(
                     f"Evidence exceeds PRIMARY freshness window "
-                    f"({max_age:.0f} s).  "
-                    + (getattr(result, "gap_description", "") or "")
+                    f"({max_age:.0f} s).  " + (getattr(result, "gap_description", "") or "")
                 ),
             )
 
@@ -855,8 +853,7 @@ def _probe_real_device_verification() -> IngestionSourceEntry:
                 is_stale=is_stale,
                 raw_evidence=evidence_dict,
                 notes=(
-                    "Evidence file present but structurally invalid: "
-                    + (getattr(result, "gap_description", "") or "")
+                    "Evidence file present but structurally invalid: " + (getattr(result, "gap_description", "") or "")
                 ),
             )
 
@@ -873,10 +870,7 @@ def _probe_real_device_verification() -> IngestionSourceEntry:
                 notes=(
                     f"Participant reports: {status_val}. "
                     + (getattr(result, "gap_description", "") or "")
-                    + (
-                        f"  [STALE: age={freshness_secs:.0f}s > {max_age:.0f}s]"
-                        if is_stale else ""
-                    )
+                    + (f"  [STALE: age={freshness_secs:.0f}s > {max_age:.0f}s]" if is_stale else "")
                 ),
             )
 
@@ -924,9 +918,7 @@ def _probe_readiness_evidence() -> IngestionSourceEntry:
             source_id=src,
             authority=auth,
             status=IngestionStatus.authority_unclear,
-            evidence_summary=(
-                "ANDROID_EVALUATOR_ARTIFACT_INGRESS_AUTHORITY sentinel is empty."
-            ),
+            evidence_summary=("ANDROID_EVALUATOR_ARTIFACT_INGRESS_AUTHORITY sentinel is empty."),
         )
 
     try:
@@ -935,14 +927,6 @@ def _probe_readiness_evidence() -> IngestionSourceEntry:
         total = snapshot.get("total_artifacts", 0)
         counts = snapshot.get("artifact_counts_by_kind", {})
         latest_by_kind = snapshot.get("latest_by_kind", {})
-
-        canonical_kinds = []
-        if _ArtifactKind is not None:
-            canonical_kinds = [
-                k.value for k in _ArtifactKind
-                if k != _ArtifactKind.unknown and hasattr(k, "is_canonical_gate_input")
-                and k.is_canonical_gate_input()
-            ]
 
         # Check freshness per artifact (use received_at from latest_by_kind)
         max_age = CANONICAL_PIPELINE_PRIMARY_FRESHNESS_MAX_AGE_SECONDS
@@ -977,15 +961,9 @@ def _probe_readiness_evidence() -> IngestionSourceEntry:
 
         # Determine overall freshness
         is_stale = bool(stale_kinds)
-        min_freshness = (
-            min(freshness_secs_per_kind.values())
-            if freshness_secs_per_kind else None
-        )
+        min_freshness = min(freshness_secs_per_kind.values()) if freshness_secs_per_kind else None
 
-        summary = (
-            f"AndroidEvaluatorArtifactRegistry: {total} artifact(s); "
-            f"kinds present: {list(counts.keys())}"
-        )
+        summary = f"AndroidEvaluatorArtifactRegistry: {total} artifact(s); " f"kinds present: {list(counts.keys())}"
 
         return IngestionSourceEntry(
             source_id=src,
@@ -995,11 +973,7 @@ def _probe_readiness_evidence() -> IngestionSourceEntry:
             freshness_secs=min_freshness,
             is_stale=is_stale,
             raw_evidence=snapshot,
-            notes=(
-                f"Stale artifact kinds: {stale_kinds}; "
-                f"max_age={max_age:.0f}s."
-                if is_stale else ""
-            ),
+            notes=(f"Stale artifact kinds: {stale_kinds}; " f"max_age={max_age:.0f}s." if is_stale else ""),
         )
 
     except Exception as exc:  # noqa: BLE001
@@ -1022,9 +996,7 @@ def _probe_participant_lifecycle_truth() -> IngestionSourceEntry:
             source_id=src,
             authority=auth,
             status=IngestionStatus.unavailable,
-            evidence_summary=(
-                "AndroidParticipantSessionRegistry module unavailable."
-            ),
+            evidence_summary=("AndroidParticipantSessionRegistry module unavailable."),
             notes="core.android_participant_session_state not importable.",
         )
 
@@ -1066,9 +1038,7 @@ def _probe_task_result_runtime() -> IngestionSourceEntry:
             source_id=src,
             authority=auth,
             status=IngestionStatus.unavailable,
-            evidence_summary=(
-                "AndroidExecutionSignalReconciler module unavailable."
-            ),
+            evidence_summary=("AndroidExecutionSignalReconciler module unavailable."),
             notes="core.android_execution_signal_reconciler not importable.",
         )
 
@@ -1077,9 +1047,7 @@ def _probe_task_result_runtime() -> IngestionSourceEntry:
             source_id=src,
             authority=auth,
             status=IngestionStatus.unavailable,
-            evidence_summary=(
-                "ANDROID_EXECUTION_SIGNAL_RECONCILER_AUTHORITY sentinel is empty."
-            ),
+            evidence_summary=("ANDROID_EXECUTION_SIGNAL_RECONCILER_AUTHORITY sentinel is empty."),
         )
 
     # The execution signal reconciler is a functional module; its presence and
@@ -1118,18 +1086,14 @@ def _probe_delegated_runtime_audit() -> IngestionSourceEntry:
             source_id=src,
             authority=auth,
             status=IngestionStatus.unavailable,
-            evidence_summary=(
-                "AndroidDelegatedRuntimeAuditRecorder module unavailable."
-            ),
+            evidence_summary=("AndroidDelegatedRuntimeAuditRecorder module unavailable."),
             notes="core.android_delegated_runtime_audit not importable.",
         )
 
     try:
         snap = _android_audit_snapshot()
         total = len(snap)
-        summary = (
-            f"AndroidDelegatedRuntimeAuditRecorder: {total} record(s) in ring buffer"
-        )
+        summary = f"AndroidDelegatedRuntimeAuditRecorder: {total} record(s) in ring buffer"
         return IngestionSourceEntry(
             source_id=src,
             authority=auth,
@@ -1183,12 +1147,8 @@ class CanonicalCrossRepoEvidencePipeline:
             _probe_delegated_runtime_audit(),
         ]
 
-        primary_sources = [
-            s for s in sources if s.authority == EvidenceSourceAuthority.primary
-        ]
-        secondary_sources = [
-            s for s in sources if s.authority == EvidenceSourceAuthority.secondary
-        ]
+        primary_sources = [s for s in sources if s.authority == EvidenceSourceAuthority.primary]
+        secondary_sources = [s for s in sources if s.authority == EvidenceSourceAuthority.secondary]
 
         # ------------------------------------------------------------------
         # Classify per-source issues
@@ -1219,12 +1179,8 @@ class CanonicalCrossRepoEvidencePipeline:
         # ------------------------------------------------------------------
         # Compute primary source aggregate state
         # ------------------------------------------------------------------
-        primary_all_present = all(
-            s.status == IngestionStatus.present for s in primary_sources
-        )
-        primary_all_fresh = all(
-            not s.is_stale for s in primary_sources
-        )
+        primary_all_present = all(s.status == IngestionStatus.present for s in primary_sources)
+        primary_all_fresh = all(not s.is_stale for s in primary_sources)
 
         # ------------------------------------------------------------------
         # Conflict detection between PRIMARY sources
@@ -1234,13 +1190,11 @@ class CanonicalCrossRepoEvidencePipeline:
         # potentially conflicting (advisory note only, not blocking by
         # itself unless both are authoritative and contradictory).
         rdv_entry = next(
-            (s for s in primary_sources
-             if s.source_id == EvidenceSourceId.real_device_verification),
+            (s for s in primary_sources if s.source_id == EvidenceSourceId.real_device_verification),
             None,
         )
         re_entry = next(
-            (s for s in primary_sources
-             if s.source_id == EvidenceSourceId.readiness_evidence),
+            (s for s in primary_sources if s.source_id == EvidenceSourceId.readiness_evidence),
             None,
         )
         if (
@@ -1286,33 +1240,12 @@ class CanonicalCrossRepoEvidencePipeline:
         # Determine pipeline verdict (downgrade rules)
         # ------------------------------------------------------------------
         primary_authority_unclear = [
-            s.source_id.value for s in primary_sources
-            if s.status == IngestionStatus.authority_unclear
+            s.source_id.value for s in primary_sources if s.status == IngestionStatus.authority_unclear
         ]
-        primary_stale = [
-            s.source_id.value for s in primary_sources
-            if s.status == IngestionStatus.stale
-        ]
-        primary_missing = [
-            s.source_id.value for s in primary_sources
-            if s.status == IngestionStatus.missing
-        ]
-        primary_partial = [
-            s.source_id.value for s in primary_sources
-            if s.status == IngestionStatus.partial
-        ]
-        primary_unavailable = [
-            s.source_id.value for s in primary_sources
-            if s.status == IngestionStatus.unavailable
-        ]
-
-        all_primary_blocking = (
-            primary_authority_unclear
-            + primary_stale
-            + primary_missing
-            + primary_partial
-            + primary_unavailable
-        )
+        primary_stale = [s.source_id.value for s in primary_sources if s.status == IngestionStatus.stale]
+        primary_missing = [s.source_id.value for s in primary_sources if s.status == IngestionStatus.missing]
+        primary_partial = [s.source_id.value for s in primary_sources if s.status == IngestionStatus.partial]
+        primary_unavailable = [s.source_id.value for s in primary_sources if s.status == IngestionStatus.unavailable]
 
         if primary_authority_unclear or primary_unavailable:
             verdict = PipelineVerdict.authority_unclear
@@ -1327,9 +1260,7 @@ class CanonicalCrossRepoEvidencePipeline:
                     "treated as authority_unclear per fail-conservative policy."
                 )
 
-        elif conflict_notes and any(
-            "conflict" in n.lower() for n in conflict_notes
-        ):
+        elif conflict_notes and any("conflict" in n.lower() for n in conflict_notes):
             verdict = PipelineVerdict.conflicting
             downgrade_reasons.append(
                 "PRIMARY sources have conflicting operational verdicts — "
@@ -1340,8 +1271,7 @@ class CanonicalCrossRepoEvidencePipeline:
             verdict = PipelineVerdict.stale
             for sid in primary_stale:
                 downgrade_reasons.append(
-                    f"PRIMARY source {sid!r}: stale evidence — "
-                    "STALE_EVIDENCE_NEVER_UPGRADES_VERDICT_POLICY applied."
+                    f"PRIMARY source {sid!r}: stale evidence — " "STALE_EVIDENCE_NEVER_UPGRADES_VERDICT_POLICY applied."
                 )
 
         elif primary_missing or primary_partial:
@@ -1359,24 +1289,18 @@ class CanonicalCrossRepoEvidencePipeline:
 
         elif not primary_sources:
             verdict = PipelineVerdict.insufficient
-            downgrade_reasons.append(
-                "No PRIMARY sources available — insufficient evidence to conclude."
-            )
+            downgrade_reasons.append("No PRIMARY sources available — insufficient evidence to conclude.")
 
         elif primary_all_present and primary_all_fresh:
             verdict = PipelineVerdict.complete
             canonical_precedence_applied.append(
-                "All PRIMARY sources present and fresh.  "
-                "Cross-repo evidence chain is canonically closed."
+                "All PRIMARY sources present and fresh.  " "Cross-repo evidence chain is canonically closed."
             )
 
         else:
             # Should not normally reach here; belt-and-suspenders
             verdict = PipelineVerdict.insufficient
-            downgrade_reasons.append(
-                "Unexpected primary source state combination; "
-                "treating as insufficient."
-            )
+            downgrade_reasons.append("Unexpected primary source state combination; " "treating as insufficient.")
 
         is_complete = verdict == PipelineVerdict.complete
 
@@ -1431,9 +1355,7 @@ def _build_summary(
         "Evidence sources:",
     ]
     for s in sources:
-        freshness_note = (
-            f"  age={s.freshness_secs:.0f}s" if s.freshness_secs is not None else ""
-        )
+        freshness_note = f"  age={s.freshness_secs:.0f}s" if s.freshness_secs is not None else ""
         stale_flag = "  [STALE]" if s.is_stale else ""
         lines.append(
             f"  [{s.authority.value.upper():<9}] {s.source_id.value:<32} "
@@ -1450,10 +1372,7 @@ def _build_summary(
         for n in conflict_notes:
             lines.append(f"  - {n}")
         lines.append("")
-    lines.append(
-        f"Primary sources complete: {primary_all_present}  "
-        f"fresh: {primary_all_fresh}"
-    )
+    lines.append(f"Primary sources complete: {primary_all_present}  " f"fresh: {primary_all_fresh}")
     lines.append(
         "CONCLUSION: "
         + (

@@ -19,7 +19,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ============================================================================
 # 1. protocol/compat helpers
 # ============================================================================
@@ -30,6 +29,7 @@ class TestEnforceAIPV3:
 
     def _enforce(self, data):
         from galaxy_gateway.protocol.compat import enforce_aip_v3
+
         enforce_aip_v3(data)
 
     def test_accepts_version_3_0(self):
@@ -43,21 +43,25 @@ class TestEnforceAIPV3:
 
     def test_rejects_missing_version(self):
         from galaxy_gateway.protocol.compat import AIPVersionError
+
         with pytest.raises(AIPVersionError, match="Missing"):
             self._enforce({"type": "heartbeat", "device_id": "d1"})
 
     def test_rejects_version_1_0(self):
         from galaxy_gateway.protocol.compat import AIPVersionError
+
         with pytest.raises(AIPVersionError):
             self._enforce({"version": "1.0"})
 
     def test_rejects_version_2_0(self):
         from galaxy_gateway.protocol.compat import AIPVersionError
+
         with pytest.raises(AIPVersionError):
             self._enforce({"version": "2.0"})
 
     def test_rejects_version_0_9(self):
         from galaxy_gateway.protocol.compat import AIPVersionError
+
         with pytest.raises(AIPVersionError):
             self._enforce({"version": "0.9"})
 
@@ -67,6 +71,7 @@ class TestInjectTraceMetadata:
 
     def _inject(self, data):
         from galaxy_gateway.protocol.compat import inject_trace_metadata
+
         return inject_trace_metadata(data)
 
     def test_injects_trace_id_when_absent(self):
@@ -128,26 +133,31 @@ class TestParseMessageStrict:
 
     def test_accepts_v3_message(self):
         from galaxy_gateway.protocol.compat import parse_message_strict
+
         msg = parse_message_strict(self._make_v3())
         assert msg.device_id == "test-device"
 
     def test_rejects_missing_version(self):
-        from galaxy_gateway.protocol.compat import parse_message_strict, AIPVersionError
+        from galaxy_gateway.protocol.compat import AIPVersionError, parse_message_strict
+
         with pytest.raises(AIPVersionError):
             parse_message_strict({"type": "heartbeat", "device_id": "d1"})
 
     def test_rejects_v1_message(self):
-        from galaxy_gateway.protocol.compat import parse_message_strict, AIPVersionError
+        from galaxy_gateway.protocol.compat import AIPVersionError, parse_message_strict
+
         with pytest.raises(AIPVersionError):
             parse_message_strict({"version": "1.0", "type": "heartbeat", "device_id": "d1"})
 
     def test_rejects_v2_message(self):
-        from galaxy_gateway.protocol.compat import parse_message_strict, AIPVersionError
+        from galaxy_gateway.protocol.compat import AIPVersionError, parse_message_strict
+
         with pytest.raises(AIPVersionError):
             parse_message_strict({"version": "2.0", "type": "heartbeat", "device_id": "d1"})
 
     def test_trace_id_injected_in_payload(self):
         from galaxy_gateway.protocol.compat import parse_message_strict
+
         msg = parse_message_strict(self._make_v3())
         # trace_id is injected into the raw dict; it surfaces in payload
         # because parse_message_strict passes the dict (which includes trace_id)
@@ -158,12 +168,14 @@ class TestParseMessageStrict:
 
     def test_accepts_json_string_input(self):
         from galaxy_gateway.protocol.compat import parse_message_strict
+
         raw = json.dumps(self._make_v3())
         msg = parse_message_strict(raw)
         assert msg.device_id == "test-device"
 
     def test_trace_id_preserved_when_provided(self):
-        from galaxy_gateway.protocol.compat import parse_message_strict, inject_trace_metadata
+        from galaxy_gateway.protocol.compat import inject_trace_metadata, parse_message_strict
+
         tid = str(uuid.uuid4())
         # inject_trace_metadata should preserve an existing trace_id, not replace it
         out = inject_trace_metadata({"version": "3.0", "trace_id": tid})
@@ -178,21 +190,27 @@ class TestParseMessageCompatTraceInjection:
 
     def test_v1_message_gets_trace_id_and_route_mode(self):
         from galaxy_gateway.protocol.compat import parse_message_compat
+
         # AIP/1.0 message — no version, no trace_id, no route_mode
-        msg = parse_message_compat({
-            "type": "heartbeat",
-            "device_id": "legacy-device",
-        })
+        msg = parse_message_compat(
+            {
+                "type": "heartbeat",
+                "device_id": "legacy-device",
+            }
+        )
         # Parsing should succeed
         assert msg.device_id == "legacy-device"
 
     def test_v3_message_gets_trace_id_injected(self):
         from galaxy_gateway.protocol.compat import parse_message_compat
-        msg = parse_message_compat({
-            "version": "3.0",
-            "type": "heartbeat",
-            "device_id": "d1",
-        })
+
+        msg = parse_message_compat(
+            {
+                "version": "3.0",
+                "type": "heartbeat",
+                "device_id": "d1",
+            }
+        )
         assert msg.device_id == "d1"
 
 
@@ -206,6 +224,7 @@ class TestMessageHandlerTracePropagation:
 
     def _make_aip_message(self, trace_id=None, route_mode=None):
         from galaxy_gateway.protocol.aip_v3 import AIPMessage, MessageType
+
         payload = {}
         if trace_id:
             payload["trace_id"] = trace_id
@@ -221,6 +240,7 @@ class TestMessageHandlerTracePropagation:
     def handler(self):
         from galaxy_gateway.handlers.device_manager import DeviceManager
         from galaxy_gateway.handlers.message_handler import MessageHandler
+
         dm = MagicMock(spec=DeviceManager)
         dm.update_device_status = MagicMock()
         return MessageHandler(dm)
@@ -276,6 +296,7 @@ class TestWebSocketHandlerEnforcement:
     @pytest.mark.asyncio
     async def test_rejects_missing_version(self):
         from galaxy_gateway.websocket_handler import handle_message
+
         ws = self._make_ws()
         message = {"type": "heartbeat", "device_id": "d1"}
         await handle_message("conn-1", message, ws)
@@ -288,6 +309,7 @@ class TestWebSocketHandlerEnforcement:
     @pytest.mark.asyncio
     async def test_rejects_version_1_0(self):
         from galaxy_gateway.websocket_handler import handle_message
+
         ws = self._make_ws()
         message = {"version": "1.0", "type": "heartbeat", "device_id": "d1"}
         await handle_message("conn-1", message, ws)
@@ -300,6 +322,7 @@ class TestWebSocketHandlerEnforcement:
     @pytest.mark.asyncio
     async def test_rejects_version_2_0(self):
         from galaxy_gateway.websocket_handler import handle_message
+
         ws = self._make_ws()
         message = {"version": "2.0", "type": "heartbeat", "device_id": "d1"}
         await handle_message("conn-1", message, ws)
@@ -311,7 +334,8 @@ class TestWebSocketHandlerEnforcement:
     @pytest.mark.asyncio
     async def test_accepts_version_3_0(self):
         """A valid v3.0 heartbeat should not close the connection."""
-        from galaxy_gateway.websocket_handler import handle_message, connection_manager
+        from galaxy_gateway.websocket_handler import connection_manager, handle_message
+
         ws = self._make_ws()
         conn_id = "conn-accept"
         # Simulate a registered connection so handle_heartbeat can send its ack
@@ -336,7 +360,8 @@ class TestWebSocketHandlerEnforcement:
     @pytest.mark.asyncio
     async def test_v3_heartbeat_injects_trace_in_log(self):
         """parse_message_strict is called; trace_id flows into aip_msg.payload."""
-        from galaxy_gateway.websocket_handler import handle_message, connection_manager
+        from galaxy_gateway.websocket_handler import connection_manager, handle_message
+
         ws = self._make_ws()
         conn_id = "conn-trace"
         connection_manager.active_connections[conn_id] = ws
@@ -356,6 +381,7 @@ class TestWebSocketHandlerEnforcement:
     async def test_ignores_message_without_type(self):
         """Messages without 'type' are silently dropped; no close/error sent."""
         from galaxy_gateway.websocket_handler import handle_message
+
         ws = self._make_ws()
         await handle_message("conn-no-type", {}, ws)
         ws.send_json.assert_not_called()

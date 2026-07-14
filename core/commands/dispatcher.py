@@ -28,6 +28,7 @@ simplified dispatch surface.  For full orchestration, callers should use
 for scenarios where the caller has already performed routing decisions and
 simply needs to send a command to a concrete list of targets.
 """
+
 from __future__ import annotations
 
 import logging
@@ -38,8 +39,8 @@ from core.command_router import (
     CommandMode,
     CommandRequest,
     CommandResult,
-    CommandStatus,
     CommandRouter,
+    CommandStatus,
     TargetResult,
     get_command_router,
 )

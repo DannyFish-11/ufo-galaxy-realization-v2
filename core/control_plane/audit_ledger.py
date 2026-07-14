@@ -46,10 +46,10 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
-
 # ---------------------------------------------------------------------------
 # Enumerations
 # ---------------------------------------------------------------------------
+
 
 class EventType(str, Enum):
     """Coarse-grained categories for audit events."""
@@ -128,6 +128,7 @@ class Severity(str, Enum):
 # ---------------------------------------------------------------------------
 # Core models
 # ---------------------------------------------------------------------------
+
 
 class TraceEvent(BaseModel):
     """A single immutable event in the audit ledger.
@@ -213,6 +214,7 @@ class LedgerSnapshot(BaseModel):
 # DAG helpers
 # ---------------------------------------------------------------------------
 
+
 def events_to_dag(events: List[TraceEvent]) -> Dict[str, List[str]]:
     """Convert a list of :class:`TraceEvent` objects to an adjacency list.
 
@@ -260,6 +262,7 @@ def events_to_json(events: List[TraceEvent], *, indent: int = 2) -> str:
 # ---------------------------------------------------------------------------
 # In-memory ledger
 # ---------------------------------------------------------------------------
+
 
 class AuditLedger:
     """Append-only, in-memory store for :class:`TraceEvent` objects.

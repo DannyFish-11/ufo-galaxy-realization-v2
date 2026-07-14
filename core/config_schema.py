@@ -53,8 +53,8 @@ VALID_PROVIDERS: FrozenSet[str] = frozenset(
 
 VALID_NATIVE_MM_POLICIES: FrozenSet[str] = frozenset(
     {
-        "strict",       # Only use providers that natively support multimodal
-        "prefer",       # Prefer native multimodal; allow fallback
+        "strict",  # Only use providers that natively support multimodal
+        "prefer",  # Prefer native multimodal; allow fallback
         "allow_fallback",  # Always allow text-only fallback
     }
 )
@@ -108,7 +108,7 @@ CONFIG_KEYS: FrozenSet[str] = frozenset(
         "network.ats_url",
         "network.webrtc_stun_url",
         # Android integration settings
-        "android.inference_mode",        # "center" | "local" | "hybrid"
+        "android.inference_mode",  # "center" | "local" | "hybrid"
     }
 )
 
@@ -118,9 +118,9 @@ CONFIG_KEYS: FrozenSet[str] = frozenset(
 
 VALID_ANDROID_INFERENCE_MODES: FrozenSet[str] = frozenset(
     {
-        "center",   # All inference performed on V2 center via gateway
-        "local",    # Inference performed on Android device (requires llama.cpp/NCNN)
-        "hybrid",   # Local first, fall back to center on failure
+        "center",  # All inference performed on V2 center via gateway
+        "local",  # Inference performed on Android device (requires llama.cpp/NCNN)
+        "hybrid",  # Local first, fall back to center on failure
     }
 )
 
@@ -133,13 +133,13 @@ class ConfigDefaults:
     """Immutable namespace of default values for non-secret config keys."""
 
     PROVIDERS: Dict[str, Any] = {
-        "openai":     {"enabled": True},
-        "anthropic":  {"enabled": False},
-        "gemini":     {"enabled": False},
-        "deepseek":   {"enabled": False},
-        "groq":       {"enabled": False},
+        "openai": {"enabled": True},
+        "anthropic": {"enabled": False},
+        "gemini": {"enabled": False},
+        "deepseek": {"enabled": False},
+        "groq": {"enabled": False},
         "openrouter": {"enabled": False},
-        "oneapi":     {"enabled": False, "base_url": ""},
+        "oneapi": {"enabled": False, "base_url": ""},
     }
 
     ROUTING: Dict[str, Any] = {

@@ -45,7 +45,6 @@ from typing import Any, Dict, List, Optional
 
 import pytest
 
-
 # ===========================================================================
 # A — Policy sentinel accessibility
 # ===========================================================================
@@ -58,6 +57,7 @@ class TestPolicySentinelAccessibility:
         from core.v2_android_recovery_continuity_hardening import (
             V2_ANDROID_RECOVERY_CONTINUITY_HARDENING_SENTINEL,
         )
+
         assert isinstance(V2_ANDROID_RECOVERY_CONTINUITY_HARDENING_SENTINEL, str)
         assert len(V2_ANDROID_RECOVERY_CONTINUITY_HARDENING_SENTINEL) > 0
         assert "PR7A_SEQ11_V2" in V2_ANDROID_RECOVERY_CONTINUITY_HARDENING_SENTINEL
@@ -66,6 +66,7 @@ class TestPolicySentinelAccessibility:
         from core.v2_android_recovery_continuity_hardening import (
             V2_ANDROID_RECOVERY_CONTINUITY_CONTRACT_VERSION,
         )
+
         assert isinstance(V2_ANDROID_RECOVERY_CONTINUITY_CONTRACT_VERSION, str)
         assert "7a" in V2_ANDROID_RECOVERY_CONTINUITY_CONTRACT_VERSION.lower()
 
@@ -73,6 +74,7 @@ class TestPolicySentinelAccessibility:
         from core.v2_android_recovery_continuity_hardening import (
             SESSION_REUSE_MUST_REJECT_ABSENT_ATTACHMENT_ID_POLICY,
         )
+
         assert isinstance(SESSION_REUSE_MUST_REJECT_ABSENT_ATTACHMENT_ID_POLICY, str)
         assert SESSION_REUSE_MUST_REJECT_ABSENT_ATTACHMENT_ID_POLICY.startswith("POLICY::")
 
@@ -80,6 +82,7 @@ class TestPolicySentinelAccessibility:
         from core.v2_android_recovery_continuity_hardening import (
             SESSION_REUSE_MUST_REJECT_EPOCH_MISMATCH_POLICY,
         )
+
         assert isinstance(SESSION_REUSE_MUST_REJECT_EPOCH_MISMATCH_POLICY, str)
         assert SESSION_REUSE_MUST_REJECT_EPOCH_MISMATCH_POLICY.startswith("POLICY::")
 
@@ -87,26 +90,23 @@ class TestPolicySentinelAccessibility:
         from core.v2_android_recovery_continuity_hardening import (
             ATTACHED_RUNTIME_TRUTH_MUST_BE_GRADED_BEFORE_DELEGATION_POLICY,
         )
-        assert isinstance(
-            ATTACHED_RUNTIME_TRUTH_MUST_BE_GRADED_BEFORE_DELEGATION_POLICY, str
-        )
-        assert ATTACHED_RUNTIME_TRUTH_MUST_BE_GRADED_BEFORE_DELEGATION_POLICY.startswith(
-            "POLICY::"
-        )
+
+        assert isinstance(ATTACHED_RUNTIME_TRUTH_MUST_BE_GRADED_BEFORE_DELEGATION_POLICY, str)
+        assert ATTACHED_RUNTIME_TRUTH_MUST_BE_GRADED_BEFORE_DELEGATION_POLICY.startswith("POLICY::")
 
     def test_A06_evidence_ingress_provenance_policy(self) -> None:
         from core.v2_android_recovery_continuity_hardening import (
             EVIDENCE_INGRESS_MUST_CARRY_EXPLICIT_PROVENANCE_POLICY,
         )
+
         assert isinstance(EVIDENCE_INGRESS_MUST_CARRY_EXPLICIT_PROVENANCE_POLICY, str)
-        assert EVIDENCE_INGRESS_MUST_CARRY_EXPLICIT_PROVENANCE_POLICY.startswith(
-            "POLICY::"
-        )
+        assert EVIDENCE_INGRESS_MUST_CARRY_EXPLICIT_PROVENANCE_POLICY.startswith("POLICY::")
 
     def test_A07_recovery_closure_quality_policy(self) -> None:
         from core.v2_android_recovery_continuity_hardening import (
             RECOVERY_CLOSURE_QUALITY_MUST_BE_GRADED_POLICY,
         )
+
         assert isinstance(RECOVERY_CLOSURE_QUALITY_MUST_BE_GRADED_POLICY, str)
         assert RECOVERY_CLOSURE_QUALITY_MUST_BE_GRADED_POLICY.startswith("POLICY::")
 
@@ -114,27 +114,17 @@ class TestPolicySentinelAccessibility:
         from core.v2_android_recovery_continuity_hardening import (
             DUPLICATE_RESULT_MUST_BE_SUPPRESSED_BEFORE_STATE_MUTATION_POLICY,
         )
-        assert isinstance(
-            DUPLICATE_RESULT_MUST_BE_SUPPRESSED_BEFORE_STATE_MUTATION_POLICY, str
-        )
-        assert (
-            DUPLICATE_RESULT_MUST_BE_SUPPRESSED_BEFORE_STATE_MUTATION_POLICY.startswith(
-                "POLICY::"
-            )
-        )
+
+        assert isinstance(DUPLICATE_RESULT_MUST_BE_SUPPRESSED_BEFORE_STATE_MUTATION_POLICY, str)
+        assert DUPLICATE_RESULT_MUST_BE_SUPPRESSED_BEFORE_STATE_MUTATION_POLICY.startswith("POLICY::")
 
     def test_A09_offline_replay_policy(self) -> None:
         from core.v2_android_recovery_continuity_hardening import (
             OFFLINE_REPLAY_MUST_RESPECT_SESSION_EPOCH_AND_SEQUENCE_POLICY,
         )
-        assert isinstance(
-            OFFLINE_REPLAY_MUST_RESPECT_SESSION_EPOCH_AND_SEQUENCE_POLICY, str
-        )
-        assert (
-            OFFLINE_REPLAY_MUST_RESPECT_SESSION_EPOCH_AND_SEQUENCE_POLICY.startswith(
-                "POLICY::"
-            )
-        )
+
+        assert isinstance(OFFLINE_REPLAY_MUST_RESPECT_SESSION_EPOCH_AND_SEQUENCE_POLICY, str)
+        assert OFFLINE_REPLAY_MUST_RESPECT_SESSION_EPOCH_AND_SEQUENCE_POLICY.startswith("POLICY::")
 
 
 # ===========================================================================
@@ -147,6 +137,7 @@ class TestSessionReuseHardening:
 
     def _classify(self, **kwargs):
         from core.v2_android_recovery_continuity_hardening import classify_session_reuse
+
         return classify_session_reuse(**kwargs)
 
     def test_B01_absent_attachment_id_none(self) -> None:
@@ -156,6 +147,7 @@ class TestSessionReuseHardening:
             stored_attachment_id="stored-id",
         )
         from core.v2_android_recovery_continuity_hardening import SessionReuseOutcome
+
         assert result.outcome == SessionReuseOutcome.new_attachment_absent_id
         assert "absent" in result.diagnosis.lower()
 
@@ -166,6 +158,7 @@ class TestSessionReuseHardening:
             stored_attachment_id="stored-id",
         )
         from core.v2_android_recovery_continuity_hardening import SessionReuseOutcome
+
         assert result.outcome == SessionReuseOutcome.new_attachment_absent_id
 
     def test_B03_no_prior_entry(self) -> None:
@@ -175,6 +168,7 @@ class TestSessionReuseHardening:
             stored_attachment_id=None,
         )
         from core.v2_android_recovery_continuity_hardening import SessionReuseOutcome
+
         assert result.outcome == SessionReuseOutcome.new_attachment_no_prior_entry
 
     def test_B04_epoch_mismatch(self) -> None:
@@ -186,6 +180,7 @@ class TestSessionReuseHardening:
             stored_epoch=1,
         )
         from core.v2_android_recovery_continuity_hardening import SessionReuseOutcome
+
         assert result.outcome == SessionReuseOutcome.new_attachment_epoch_mismatch
         assert "epoch" in result.diagnosis.lower()
 
@@ -198,6 +193,7 @@ class TestSessionReuseHardening:
             stored_durable_session_id="durable-B",
         )
         from core.v2_android_recovery_continuity_hardening import SessionReuseOutcome
+
         assert result.outcome == SessionReuseOutcome.new_attachment_durable_conflict
         assert "conflict" in result.diagnosis.lower()
 
@@ -208,6 +204,7 @@ class TestSessionReuseHardening:
             stored_attachment_id="old-id",
         )
         from core.v2_android_recovery_continuity_hardening import SessionReuseOutcome
+
         assert result.outcome == SessionReuseOutcome.new_attachment_id_mismatch
 
     def test_B07_successful_continuity_resume(self) -> None:
@@ -217,6 +214,7 @@ class TestSessionReuseHardening:
             stored_attachment_id="stable-id",
         )
         from core.v2_android_recovery_continuity_hardening import SessionReuseOutcome
+
         assert result.outcome == SessionReuseOutcome.continuity_resume
 
     def test_B08_continuity_resume_with_matching_epoch(self) -> None:
@@ -228,6 +226,7 @@ class TestSessionReuseHardening:
             stored_epoch=3,
         )
         from core.v2_android_recovery_continuity_hardening import SessionReuseOutcome
+
         assert result.outcome == SessionReuseOutcome.continuity_resume
 
     def test_B09_assessment_is_json_serialisable(self) -> None:
@@ -237,6 +236,7 @@ class TestSessionReuseHardening:
             stored_attachment_id="stable-id",
         )
         import json
+
         data = json.loads(result.to_json())
         assert data["outcome"] == "continuity_resume"
         assert "_sentinel" in data
@@ -251,6 +251,7 @@ class TestSessionReuseHardening:
             stored_epoch=None,
         )
         from core.v2_android_recovery_continuity_hardening import SessionReuseOutcome
+
         assert result.outcome == SessionReuseOutcome.continuity_resume
 
     def test_B11_durable_none_both_does_not_trigger_conflict(self) -> None:
@@ -263,6 +264,7 @@ class TestSessionReuseHardening:
             stored_durable_session_id=None,
         )
         from core.v2_android_recovery_continuity_hardening import SessionReuseOutcome
+
         assert result.outcome == SessionReuseOutcome.continuity_resume
 
 
@@ -278,6 +280,7 @@ class TestAttachedRuntimeTruthAssessment:
         from core.v2_android_recovery_continuity_hardening import (
             assess_attached_runtime_truth,
         )
+
         return assess_attached_runtime_truth(**kwargs)
 
     def test_C01_android_confirmed_fresh_signal(self) -> None:
@@ -288,6 +291,7 @@ class TestAttachedRuntimeTruthAssessment:
             last_signal_age_seconds=30.0,
         )
         from core.v2_android_recovery_continuity_hardening import AttachedRuntimeTruth
+
         assert result.truth == AttachedRuntimeTruth.android_confirmed
 
     def test_C02_locally_inferred_stale_signal(self) -> None:
@@ -298,6 +302,7 @@ class TestAttachedRuntimeTruthAssessment:
             last_signal_age_seconds=300.0,  # > 120s threshold
         )
         from core.v2_android_recovery_continuity_hardening import AttachedRuntimeTruth
+
         assert result.truth == AttachedRuntimeTruth.locally_inferred
         assert "stale" in result.diagnosis.lower()
 
@@ -309,6 +314,7 @@ class TestAttachedRuntimeTruthAssessment:
             last_signal_age_seconds=None,
         )
         from core.v2_android_recovery_continuity_hardening import AttachedRuntimeTruth
+
         assert result.truth == AttachedRuntimeTruth.locally_inferred
 
     def test_C04_unverifiable_no_registry_entry(self) -> None:
@@ -319,6 +325,7 @@ class TestAttachedRuntimeTruthAssessment:
             last_signal_age_seconds=None,
         )
         from core.v2_android_recovery_continuity_hardening import AttachedRuntimeTruth
+
         assert result.truth == AttachedRuntimeTruth.unverifiable
 
     def test_C05_unverifiable_missing_attachment_id(self) -> None:
@@ -329,6 +336,7 @@ class TestAttachedRuntimeTruthAssessment:
             last_signal_age_seconds=10.0,
         )
         from core.v2_android_recovery_continuity_hardening import AttachedRuntimeTruth
+
         assert result.truth == AttachedRuntimeTruth.unverifiable
 
     def test_C06_assessment_to_dict_includes_truth(self) -> None:
@@ -352,6 +360,7 @@ class TestAttachedRuntimeTruthAssessment:
             last_signal_age_seconds=120.0,
         )
         from core.v2_android_recovery_continuity_hardening import AttachedRuntimeTruth
+
         assert result.truth == AttachedRuntimeTruth.android_confirmed
 
     def test_C08_threshold_boundary_just_above_is_inferred(self) -> None:
@@ -363,6 +372,7 @@ class TestAttachedRuntimeTruthAssessment:
             last_signal_age_seconds=120.1,
         )
         from core.v2_android_recovery_continuity_hardening import AttachedRuntimeTruth
+
         assert result.truth == AttachedRuntimeTruth.locally_inferred
 
 
@@ -378,6 +388,7 @@ class TestEvidenceIngressClassification:
         from core.v2_android_recovery_continuity_hardening import (
             classify_evidence_ingress,
         )
+
         return classify_evidence_ingress(**kwargs)
 
     def test_D01_real_android_originated_via_hint(self) -> None:
@@ -389,6 +400,7 @@ class TestEvidenceIngressClassification:
         from core.v2_android_recovery_continuity_hardening import (
             EvidenceIngressProvenance,
         )
+
         assert result.provenance == EvidenceIngressProvenance.real_android_originated
         assert result.is_degraded is False
 
@@ -401,6 +413,7 @@ class TestEvidenceIngressClassification:
         from core.v2_android_recovery_continuity_hardening import (
             EvidenceIngressProvenance,
         )
+
         assert result.provenance == EvidenceIngressProvenance.replay_queue_drained
         assert result.is_degraded is False
 
@@ -413,6 +426,7 @@ class TestEvidenceIngressClassification:
         from core.v2_android_recovery_continuity_hardening import (
             EvidenceIngressProvenance,
         )
+
         assert result.provenance == EvidenceIngressProvenance.locally_synthesised
         assert result.is_degraded is True
 
@@ -425,6 +439,7 @@ class TestEvidenceIngressClassification:
         from core.v2_android_recovery_continuity_hardening import (
             EvidenceIngressProvenance,
         )
+
         assert result.provenance == EvidenceIngressProvenance.unknown_provenance
         assert result.is_degraded is True
 
@@ -437,6 +452,7 @@ class TestEvidenceIngressClassification:
         from core.v2_android_recovery_continuity_hardening import (
             EvidenceIngressProvenance,
         )
+
         assert result.provenance == EvidenceIngressProvenance.unknown_provenance
 
     def test_D06_from_replay_queue_flag_overrides(self) -> None:
@@ -449,6 +465,7 @@ class TestEvidenceIngressClassification:
         from core.v2_android_recovery_continuity_hardening import (
             EvidenceIngressProvenance,
         )
+
         assert result.provenance == EvidenceIngressProvenance.replay_queue_drained
 
     def test_D07_from_local_synthesis_flag_overrides(self) -> None:
@@ -461,6 +478,7 @@ class TestEvidenceIngressClassification:
         from core.v2_android_recovery_continuity_hardening import (
             EvidenceIngressProvenance,
         )
+
         assert result.provenance == EvidenceIngressProvenance.locally_synthesised
         assert result.is_degraded is True
 
@@ -471,6 +489,7 @@ class TestEvidenceIngressClassification:
             provenance_hint="real_android",
         )
         import json
+
         data = json.loads(result.to_json())
         assert data["provenance"] == "real_android_originated"
         assert "_sentinel" in data
@@ -488,6 +507,7 @@ class TestRecoveryClosureQualityAssessment:
         from core.v2_android_recovery_continuity_hardening import (
             assess_recovery_closure_quality,
         )
+
         return assess_recovery_closure_quality(**kwargs)
 
     def test_E01_full_convergence_all_resolved(self) -> None:
@@ -499,6 +519,7 @@ class TestRecoveryClosureQualityAssessment:
             degraded_task_count=0,
         )
         from core.v2_android_recovery_continuity_hardening import RecoveryClosureQuality
+
         assert result.quality == RecoveryClosureQuality.full_convergence
 
     def test_E02_full_convergence_trivial_no_tasks(self) -> None:
@@ -510,6 +531,7 @@ class TestRecoveryClosureQualityAssessment:
             degraded_task_count=0,
         )
         from core.v2_android_recovery_continuity_hardening import RecoveryClosureQuality
+
         assert result.quality == RecoveryClosureQuality.full_convergence
 
     def test_E03_partial_convergence_some_unresolved(self) -> None:
@@ -521,6 +543,7 @@ class TestRecoveryClosureQualityAssessment:
             degraded_task_count=0,
         )
         from core.v2_android_recovery_continuity_hardening import RecoveryClosureQuality
+
         assert result.quality == RecoveryClosureQuality.partial_convergence
 
     def test_E04_degraded_recovery_some_degraded(self) -> None:
@@ -532,6 +555,7 @@ class TestRecoveryClosureQualityAssessment:
             degraded_task_count=2,
         )
         from core.v2_android_recovery_continuity_hardening import RecoveryClosureQuality
+
         assert result.quality == RecoveryClosureQuality.degraded_recovery
 
     def test_E05_no_recovery_nothing_resolved(self) -> None:
@@ -543,6 +567,7 @@ class TestRecoveryClosureQualityAssessment:
             degraded_task_count=0,
         )
         from core.v2_android_recovery_continuity_hardening import RecoveryClosureQuality
+
         assert result.quality == RecoveryClosureQuality.no_recovery
 
     def test_E06_gap_descriptions_preserved(self) -> None:
@@ -578,6 +603,7 @@ class TestRecoveryClosureQualityAssessment:
             degraded_task_count=1,
         )
         from core.v2_android_recovery_continuity_hardening import RecoveryClosureQuality
+
         assert result.quality == RecoveryClosureQuality.partial_convergence
 
 
@@ -593,6 +619,7 @@ class TestDuplicateResultHandling:
         from core.v2_android_recovery_continuity_hardening import (
             classify_result_delivery,
         )
+
         return classify_result_delivery(**kwargs)
 
     def test_F01_first_delivery_accepted(self) -> None:
@@ -607,6 +634,7 @@ class TestDuplicateResultHandling:
         from core.v2_android_recovery_continuity_hardening import (
             ResultDeliveryClassification,
         )
+
         assert result.classification == ResultDeliveryClassification.first_delivery
         assert result.should_suppress is False
         assert "t1:seq1" in seen  # key registered
@@ -623,6 +651,7 @@ class TestDuplicateResultHandling:
         from core.v2_android_recovery_continuity_hardening import (
             ResultDeliveryClassification,
         )
+
         assert result.classification == ResultDeliveryClassification.confirmed_duplicate
         assert result.should_suppress is True
 
@@ -638,6 +667,7 @@ class TestDuplicateResultHandling:
         from core.v2_android_recovery_continuity_hardening import (
             ResultDeliveryClassification,
         )
+
         assert result.classification == ResultDeliveryClassification.out_of_order_replay
         assert result.should_suppress is True
 
@@ -672,6 +702,7 @@ class TestDuplicateResultHandling:
         from core.v2_android_recovery_continuity_hardening import (
             ResultDeliveryClassification,
         )
+
         assert r1.classification == ResultDeliveryClassification.first_delivery
         assert r2.classification == ResultDeliveryClassification.first_delivery
         assert r1.should_suppress is False
@@ -712,6 +743,7 @@ class TestDuplicateResultHandling:
             durable_seen_keys=seen,
         )
         import json
+
         data = json.loads(result.to_json())
         assert data["classification"] == "first_delivery"
         assert data["should_suppress"] is False
@@ -729,6 +761,7 @@ class TestOfflineReplaySequenceInterpretation:
         from core.v2_android_recovery_continuity_hardening import (
             interpret_replay_sequence,
         )
+
         return interpret_replay_sequence(items, **kwargs)
 
     def test_G01_all_convergence_eligible_within_epoch(self) -> None:
@@ -741,10 +774,8 @@ class TestOfflineReplaySequenceInterpretation:
         from core.v2_android_recovery_continuity_hardening import (
             ReplayItemClassification,
         )
-        assert all(
-            r.classification == ReplayItemClassification.convergence_eligible
-            for r in results
-        )
+
+        assert all(r.classification == ReplayItemClassification.convergence_eligible for r in results)
 
     def test_G02_stale_epoch_items_dropped(self) -> None:
         items = [
@@ -755,6 +786,7 @@ class TestOfflineReplaySequenceInterpretation:
         from core.v2_android_recovery_continuity_hardening import (
             ReplayItemClassification,
         )
+
         assert results[0].classification == ReplayItemClassification.stale_dropped
         assert results[1].classification == ReplayItemClassification.convergence_eligible
 
@@ -767,6 +799,7 @@ class TestOfflineReplaySequenceInterpretation:
         from core.v2_android_recovery_continuity_hardening import (
             ReplayItemClassification,
         )
+
         assert results[0].classification == ReplayItemClassification.duplicate_suppressed
 
     def test_G04_gap_exposed_on_sequence_jump(self) -> None:
@@ -778,6 +811,7 @@ class TestOfflineReplaySequenceInterpretation:
         from core.v2_android_recovery_continuity_hardening import (
             ReplayItemClassification,
         )
+
         assert results[0].classification == ReplayItemClassification.convergence_eligible
         assert results[1].classification == ReplayItemClassification.gap_exposed
         assert "gap" in results[1].diagnosis.lower()
@@ -796,10 +830,8 @@ class TestOfflineReplaySequenceInterpretation:
         from core.v2_android_recovery_continuity_hardening import (
             ReplayItemClassification,
         )
-        assert all(
-            r.classification == ReplayItemClassification.convergence_eligible
-            for r in results
-        )
+
+        assert all(r.classification == ReplayItemClassification.convergence_eligible for r in results)
 
     def test_G07_mixed_scenario_real_android_behavior(self) -> None:
         """A realistic offline replay: some items stale, some duplicate, one gap, some ok."""
@@ -815,6 +847,7 @@ class TestOfflineReplaySequenceInterpretation:
         from core.v2_android_recovery_continuity_hardening import (
             ReplayItemClassification,
         )
+
         assert results[0].classification == ReplayItemClassification.convergence_eligible
         assert results[1].classification == ReplayItemClassification.stale_dropped
         assert results[2].classification == ReplayItemClassification.convergence_eligible
@@ -841,18 +874,13 @@ class TestOfflineReplaySequenceInterpretation:
 
     def test_G10_consecutive_positions_no_gap(self) -> None:
         """Consecutive sequence positions 1, 2, 3, 4 produce no gaps."""
-        items = [
-            {"item_id": f"i{n}", "session_epoch": 3, "sequence_position": n}
-            for n in range(1, 5)
-        ]
+        items = [{"item_id": f"i{n}", "session_epoch": 3, "sequence_position": n} for n in range(1, 5)]
         results = self._interpret(items, expected_epoch=3)
         from core.v2_android_recovery_continuity_hardening import (
             ReplayItemClassification,
         )
-        assert all(
-            r.classification == ReplayItemClassification.convergence_eligible
-            for r in results
-        )
+
+        assert all(r.classification == ReplayItemClassification.convergence_eligible for r in results)
 
 
 # ===========================================================================
@@ -868,6 +896,7 @@ class TestBuildRecoveryParticipationReport:
             SessionReuseAssessment,
             SessionReuseOutcome,
         )
+
         return SessionReuseAssessment(
             device_id="dev-1",
             presented_attachment_id="att-id",
@@ -885,6 +914,7 @@ class TestBuildRecoveryParticipationReport:
             AttachedRuntimeTruth,
             AttachedRuntimeTruthAssessment,
         )
+
         return AttachedRuntimeTruthAssessment(
             device_id="dev-1",
             runtime_attachment_session_id="att-id",
@@ -897,6 +927,7 @@ class TestBuildRecoveryParticipationReport:
             EvidenceIngressAssessment,
             EvidenceIngressProvenance,
         )
+
         return EvidenceIngressAssessment(
             evidence_id="ev-1",
             device_id="dev-1",
@@ -910,6 +941,7 @@ class TestBuildRecoveryParticipationReport:
             RecoveryClosureAssessment,
             RecoveryClosureQuality,
         )
+
         return RecoveryClosureAssessment(
             device_id="dev-1",
             session_id="sess-1",
@@ -924,6 +956,7 @@ class TestBuildRecoveryParticipationReport:
         from core.v2_android_recovery_continuity_hardening import (
             build_recovery_participation_report,
         )
+
         return build_recovery_participation_report(
             device_id="dev-1",
             session_id="sess-1",
@@ -943,6 +976,7 @@ class TestBuildRecoveryParticipationReport:
         )
         assert report.dual_repo_participation_eligible is True
         from core.v2_android_recovery_continuity_hardening import RecoveryClosureQuality
+
         assert report.overall_recovery_quality == RecoveryClosureQuality.full_convergence
 
     def test_H02_not_eligible_when_new_attachment(self) -> None:
@@ -971,6 +1005,7 @@ class TestBuildRecoveryParticipationReport:
             self._make_closure("full_convergence"),
         )
         from core.v2_android_recovery_continuity_hardening import RecoveryClosureQuality
+
         assert report.overall_recovery_quality == RecoveryClosureQuality.degraded_recovery
 
     def test_H05_degraded_when_runtime_is_locally_inferred(self) -> None:
@@ -981,6 +1016,7 @@ class TestBuildRecoveryParticipationReport:
             self._make_closure("full_convergence"),
         )
         from core.v2_android_recovery_continuity_hardening import RecoveryClosureQuality
+
         assert report.overall_recovery_quality == RecoveryClosureQuality.degraded_recovery
 
     def test_H06_no_recovery_when_closure_is_no_recovery(self) -> None:
@@ -991,6 +1027,7 @@ class TestBuildRecoveryParticipationReport:
             self._make_closure("no_recovery"),
         )
         from core.v2_android_recovery_continuity_hardening import RecoveryClosureQuality
+
         assert report.overall_recovery_quality == RecoveryClosureQuality.no_recovery
         assert report.dual_repo_participation_eligible is False
 
@@ -1012,6 +1049,7 @@ class TestBuildRecoveryParticipationReport:
             self._make_closure("full_convergence"),
         )
         import json
+
         data = json.loads(report.to_json())
         assert "_sentinel" in data
         assert data["dual_repo_participation_eligible"] is True
@@ -1022,6 +1060,7 @@ class TestBuildRecoveryParticipationReport:
             ReplayItemClassification,
             ReplaySequenceItemAssessment,
         )
+
         gap_item = ReplaySequenceItemAssessment(
             sequence_index=1,
             item_id="i2",
@@ -1040,6 +1079,7 @@ class TestBuildRecoveryParticipationReport:
             replay_items=[gap_item],
         )
         from core.v2_android_recovery_continuity_hardening import RecoveryClosureQuality
+
         assert report.overall_recovery_quality == RecoveryClosureQuality.degraded_recovery
 
 
@@ -1055,17 +1095,20 @@ class TestContractVersionAndSentinelCoverage:
         from core.v2_android_recovery_continuity_hardening import (
             V2_ANDROID_RECOVERY_CONTINUITY_HARDENING_SENTINEL,
         )
+
         assert "PR7A_SEQ11_V2" in V2_ANDROID_RECOVERY_CONTINUITY_HARDENING_SENTINEL
 
     def test_I02_contract_version_is_string(self) -> None:
         from core.v2_android_recovery_continuity_hardening import (
             V2_ANDROID_RECOVERY_CONTINUITY_CONTRACT_VERSION,
         )
+
         assert isinstance(V2_ANDROID_RECOVERY_CONTINUITY_CONTRACT_VERSION, str)
         assert V2_ANDROID_RECOVERY_CONTINUITY_CONTRACT_VERSION != ""
 
     def test_I03_all_policy_constants_have_policy_prefix(self) -> None:
         import core.v2_android_recovery_continuity_hardening as mod
+
         policy_names = [
             "SESSION_REUSE_MUST_REJECT_ABSENT_ATTACHMENT_ID_POLICY",
             "SESSION_REUSE_MUST_REJECT_EPOCH_MISMATCH_POLICY",
@@ -1084,6 +1127,7 @@ class TestContractVersionAndSentinelCoverage:
 
     def test_I04_session_reuse_outcome_enum_values(self) -> None:
         from core.v2_android_recovery_continuity_hardening import SessionReuseOutcome
+
         expected = {
             "continuity_resume",
             "new_attachment_absent_id",
@@ -1097,6 +1141,7 @@ class TestContractVersionAndSentinelCoverage:
 
     def test_I05_recovery_closure_quality_enum_values(self) -> None:
         from core.v2_android_recovery_continuity_hardening import RecoveryClosureQuality
+
         expected = {
             "full_convergence",
             "partial_convergence",
@@ -1110,6 +1155,7 @@ class TestContractVersionAndSentinelCoverage:
         from core.v2_android_recovery_continuity_hardening import (
             ResultDeliveryClassification,
         )
+
         expected = {
             "first_delivery",
             "confirmed_duplicate",

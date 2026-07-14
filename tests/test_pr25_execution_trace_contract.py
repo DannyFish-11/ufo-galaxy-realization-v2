@@ -112,10 +112,10 @@ from contracts.execution_trace import (
     from_readiness_result,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers / Fixtures
 # ---------------------------------------------------------------------------
+
 
 def _make_intent_profile(
     *,
@@ -712,7 +712,8 @@ class TestBuildTraceEnvelope:
         assert ExecutionTraceStage.FALLBACK_SELECTED.value in stages
         # execution_finished or execution_blocked
         assert any(
-            s in (
+            s
+            in (
                 ExecutionTraceStage.EXECUTION_FINISHED.value,
                 ExecutionTraceStage.EXECUTION_BLOCKED.value,
             )
@@ -749,9 +750,7 @@ class TestBuildTraceEnvelope:
 
     def test_blocked_lifecycle_final_status_blocked(self):
         profile = _make_intent_profile()
-        readiness = _make_readiness_result(
-            ready=False, status="blocked", blocked_by="policy"
-        )
+        readiness = _make_readiness_result(ready=False, status="blocked", blocked_by="policy")
         result = _make_exec_result(action_taken="none", success=False, skipped_reason="readiness_gate:blocked:policy")
 
         envelope = build_trace_envelope(
@@ -898,6 +897,7 @@ class TestOpenClawdIntegration:
         """Return an OpenClawd-like object with the real _build_execution_trace method."""
         try:
             from core.openclawd import OpenClawd  # noqa: PLC0415
+
             return OpenClawd.__new__(OpenClawd)
         except Exception:
             pytest.skip("OpenClawd not importable in test context")

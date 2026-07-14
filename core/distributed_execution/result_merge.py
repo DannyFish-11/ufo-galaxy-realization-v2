@@ -199,33 +199,26 @@ def merge_result_envelopes(
             successful += 1
         else:
             # Check for timed_out indicator in result payload or error message
-            is_timeout = (
-                "timeout" in error.lower()
-                or "timed_out" in error.lower()
-                or bool(result.get("timed_out"))
-            )
+            is_timeout = "timeout" in error.lower() or "timed_out" in error.lower() or bool(result.get("timed_out"))
             if is_timeout:
                 timed_out += 1
-                warnings.append(
-                    f"Branch timed out: task_id={ids['task_id']} "
-                    f"device={ids['device_id']}"
-                )
+                warnings.append(f"Branch timed out: task_id={ids['task_id']} " f"device={ids['device_id']}")
             else:
                 failed += 1
                 if error:
-                    errors.append(
-                        f"Branch failed [{ids['device_id']}]: {error}"
-                    )
+                    errors.append(f"Branch failed [{ids['device_id']}]: {error}")
 
-        merged_payloads.append({
-            "task_id": ids["task_id"],
-            "trace_id": ids["trace_id"],
-            "device_id": ids["device_id"],
-            "success": success,
-            "result": result,
-            "error": error,
-            "elapsed_ms": elapsed_ms,
-        })
+        merged_payloads.append(
+            {
+                "task_id": ids["task_id"],
+                "trace_id": ids["trace_id"],
+                "device_id": ids["device_id"],
+                "success": success,
+                "result": result,
+                "error": error,
+                "elapsed_ms": elapsed_ms,
+            }
+        )
 
     status = _classify_status(successful, failed, timed_out, len(valid))
 
@@ -307,12 +300,14 @@ def merge_graph_result(
     for node_id, node_result in node_results.items():
         node_status = node_statuses.get(node_id, "unknown")
         node_error = node_errors.get(node_id, "") or ""
-        merged_payloads.append({
-            "node_id": node_id,
-            "status": node_status,
-            "result": node_result or {},
-            "error": node_error,
-        })
+        merged_payloads.append(
+            {
+                "node_id": node_id,
+                "status": node_status,
+                "result": node_result or {},
+                "error": node_error,
+            }
+        )
         if node_error:
             errors.append(f"Node [{node_id}] error: {node_error}")
         if node_status in ("skipped", "cancelled", "interrupted"):
@@ -411,9 +406,7 @@ def merge_dict_results(
 
         success = bool(r.get("success", False))
         error = str(r.get("error") or "")
-        is_timeout = bool(r.get("timed_out", False)) or (
-            "timeout" in error.lower() or "timed_out" in error.lower()
-        )
+        is_timeout = bool(r.get("timed_out", False)) or ("timeout" in error.lower() or "timed_out" in error.lower())
         result_payload = r.get("result") or {}
         elapsed_ms = float(r.get("elapsed_ms") or 0.0)
 
@@ -421,26 +414,23 @@ def merge_dict_results(
             successful += 1
         elif is_timeout:
             timed_out += 1
-            warnings.append(
-                f"Branch timed out: task_id={ids['task_id']} "
-                f"device={ids['device_id']}"
-            )
+            warnings.append(f"Branch timed out: task_id={ids['task_id']} " f"device={ids['device_id']}")
         else:
             failed += 1
             if error:
-                errors.append(
-                    f"Branch failed [{ids['device_id'] or ids['task_id']}]: {error}"
-                )
+                errors.append(f"Branch failed [{ids['device_id'] or ids['task_id']}]: {error}")
 
-        merged_payloads.append({
-            "task_id": ids["task_id"],
-            "trace_id": ids["trace_id"],
-            "device_id": ids["device_id"],
-            "success": success,
-            "result": result_payload,
-            "error": error,
-            "elapsed_ms": elapsed_ms,
-        })
+        merged_payloads.append(
+            {
+                "task_id": ids["task_id"],
+                "trace_id": ids["trace_id"],
+                "device_id": ids["device_id"],
+                "success": success,
+                "result": result_payload,
+                "error": error,
+                "elapsed_ms": elapsed_ms,
+            }
+        )
 
     status = _classify_status(successful, failed, timed_out, len(valid))
 
@@ -612,15 +602,9 @@ def merge_any(
     for s in sub_summaries[1:]:
         overall_status = worst_of(overall_status, s.merge_status)
 
-    _task_id = task_id or next(
-        (s.task_id for s in sub_summaries if s.task_id), ""
-    )
-    _trace_id = trace_id or next(
-        (s.trace_id for s in sub_summaries if s.trace_id), ""
-    )
-    _session_id = runtime_session_id or next(
-        (s.runtime_session_id for s in sub_summaries if s.runtime_session_id), ""
-    )
+    _task_id = task_id or next((s.task_id for s in sub_summaries if s.task_id), "")
+    _trace_id = trace_id or next((s.trace_id for s in sub_summaries if s.trace_id), "")
+    _session_id = runtime_session_id or next((s.runtime_session_id for s in sub_summaries if s.runtime_session_id), "")
 
     return MergeSummary(
         merge_status=overall_status,

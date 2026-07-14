@@ -229,6 +229,7 @@ class MeshSessionLifecycleCoordinator:
         if self._store is not None:
             return self._store
         from core.mesh.mesh_session_persistence import get_persistence_store
+
         return get_persistence_store()
 
     # ------------------------------------------------------------------
@@ -277,6 +278,7 @@ class MeshSessionLifecycleCoordinator:
         # PR-G: emit mesh session transition event for observability
         try:
             from core.runtime.runtime_observability_sink import emit_mesh_session_transition_event
+
             emit_mesh_session_transition_event(
                 session_id,
                 transition_kind="create",
@@ -396,7 +398,8 @@ class MeshSessionLifecycleCoordinator:
         if snap.is_terminal():
             logger.warning(
                 "restore_session: session %s has terminal status '%s' — not restorable",
-                session_id, snap.overall_status,
+                session_id,
+                snap.overall_status,
             )
             return None
 
@@ -418,9 +421,7 @@ class MeshSessionLifecycleCoordinator:
             op_name="restore_session[restoring]",
         )
         if restoring_record is None:
-            logger.warning(
-                "restore_session: could not transition %s to RESTORING", session_id
-            )
+            logger.warning("restore_session: could not transition %s to RESTORING", session_id)
             # Force-set to restoring to allow the ACTIVE transition
             with self._lock:
                 rec = self._sessions.get(session_id)
@@ -451,6 +452,7 @@ class MeshSessionLifecycleCoordinator:
                     emit_mesh_session_transition_event,
                     emit_recovery_decision_event,
                 )
+
                 sd = active_record.session_dict
                 emit_mesh_session_transition_event(
                     session_id,
@@ -515,8 +517,12 @@ class MeshSessionLifecycleCoordinator:
             session_id=session_id,
             target_status=outcome,
             valid_sources={
-                "active", "merging", "suspended", "restoring",
-                "pending", "unknown",
+                "active",
+                "merging",
+                "suspended",
+                "restoring",
+                "pending",
+                "unknown",
             },
             session=session,
             op_name="terminate_session",
@@ -529,9 +535,7 @@ class MeshSessionLifecycleCoordinator:
         try:
             store.mark_terminal(session_id, status=outcome)
         except Exception as exc:
-            logger.warning(
-                "terminate_session: failed to mark_terminal for %s: %s", session_id, exc
-            )
+            logger.warning("terminate_session: failed to mark_terminal for %s: %s", session_id, exc)
 
         return record
 
@@ -547,16 +551,14 @@ class MeshSessionLifecycleCoordinator:
     def list_active_session_ids(self) -> List[str]:
         """Return a list of session IDs currently in ACTIVE status."""
         with self._lock:
-            return [
-                sid for sid, rec in self._sessions.items()
-                if rec.status == "active"
-            ]
+            return [sid for sid, rec in self._sessions.items() if rec.status == "active"]
 
     def list_restorable_session_ids(self) -> List[str]:
         """Return a list of session IDs that are restorable (SUSPENDED)."""
         store = self._get_store()
         try:
             from core.mesh.mesh_session_persistence import list_recoverable_sessions
+
             return list_recoverable_sessions(store=store)
         except Exception as exc:
             logger.warning("list_restorable_session_ids: store scan failed: %s", exc)
@@ -590,10 +592,7 @@ class MeshSessionLifecycleCoordinator:
                 if only_non_terminal and record.status in _TERMINAL:
                     continue
                 sd = record.session_dict
-                if (
-                    sd.get("source_device_id") == device_id
-                    or sd.get("primary_device_id") == device_id
-                ):
+                if sd.get("source_device_id") == device_id or sd.get("primary_device_id") == device_id:
                     results.append(sid)
         return results
 
@@ -653,15 +652,14 @@ class MeshSessionLifecycleCoordinator:
         with self._lock:
             record = self._sessions.get(session_id)
             if record is None:
-                logger.warning(
-                    "associate_resumed_execution: unknown session_id '%s'", session_id
-                )
+                logger.warning("associate_resumed_execution: unknown session_id '%s'", session_id)
                 return None
             if record.status in _TERMINAL:
                 logger.warning(
                     "associate_resumed_execution: session '%s' is terminal (status=%s) — "
                     "cannot associate resumed execution",
-                    session_id, record.status,
+                    session_id,
+                    record.status,
                 )
                 return None
 
@@ -735,15 +733,16 @@ class MeshSessionLifecycleCoordinator:
         with self._lock:
             record = self._sessions.get(session_id)
             if record is None:
-                logger.warning(
-                    "%s: unknown session_id '%s'", op_name, session_id
-                )
+                logger.warning("%s: unknown session_id '%s'", op_name, session_id)
                 return None
 
             if record.status not in valid_sources:
                 logger.warning(
                     "%s: invalid transition for %s — current='%s', expected one of %s",
-                    op_name, session_id, record.status, valid_sources,
+                    op_name,
+                    session_id,
+                    record.status,
+                    valid_sources,
                 )
                 return None
 
@@ -753,12 +752,15 @@ class MeshSessionLifecycleCoordinator:
                     MeshSessionStatus,
                     is_valid_lifecycle_transition,
                 )
+
                 from_s = MeshSessionStatus(record.status)
                 to_s = MeshSessionStatus(target_status)
                 if not is_valid_lifecycle_transition(from_s, to_s):
                     logger.warning(
                         "%s: contract transition %s→%s not in MESH_SESSION_VALID_TRANSITIONS — proceeding anyway",
-                        op_name, record.status, target_status,
+                        op_name,
+                        record.status,
+                        target_status,
                     )
             except ValueError:
                 # target_status or record.status is not a known MeshSessionStatus value
@@ -782,6 +784,7 @@ class MeshSessionLifecycleCoordinator:
         if _emit_transition_kind is not None:
             try:
                 from core.runtime.runtime_observability_sink import emit_mesh_session_transition_event
+
                 sd = record.session_dict
                 emit_mesh_session_transition_event(
                     session_id,
@@ -810,9 +813,7 @@ class MeshSessionLifecycleCoordinator:
         try:
             store.save(payload)
         except Exception as exc:
-            logger.warning(
-                "_persist: failed to save snapshot for %s: %s", record.session_id, exc
-            )
+            logger.warning("_persist: failed to save snapshot for %s: %s", record.session_id, exc)
 
     @staticmethod
     def _extract_session_fields(
@@ -836,11 +837,7 @@ class MeshSessionLifecycleCoordinator:
                 session_dict = vars(session) if hasattr(session, "__dict__") else {}
         session_id = str(getattr(session, "session_id", "") or "")
         status_raw = getattr(session, "status", None)
-        status_str = (
-            status_raw.value
-            if hasattr(status_raw, "value")
-            else str(status_raw or "")
-        )
+        status_str = status_raw.value if hasattr(status_raw, "value") else str(status_raw or "")
         return session_dict, session_id, status_str
 
 

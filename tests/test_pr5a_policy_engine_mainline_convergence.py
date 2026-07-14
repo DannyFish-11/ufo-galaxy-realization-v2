@@ -35,7 +35,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # A. CommandRouter sentinel present
 # ---------------------------------------------------------------------------
@@ -279,22 +278,22 @@ class TestDelegatedSignalHandlerConsumerWiring:
 
     def _run_handler_with_kind(self, kind: str):
         import asyncio
+
         import core.android_delegated_runtime_lifecycle_coordinator as _co
         import galaxy_gateway.android.handlers.delegated_signal as _ds
 
         mock_consumer = MagicMock()
-        mock_consumer.consume_android_behavioral_result = MagicMock(
-            return_value={"consumed": True}
-        )
+        mock_consumer.consume_android_behavioral_result = MagicMock(return_value={"consumed": True})
         mock_outcome = self._make_ingress_outcome(kind)
 
         loop = asyncio.new_event_loop()
         try:
-            with patch.object(_co, "_EXECUTION_SIGNAL_AVAILABLE", True), \
-                 patch.object(_co, "_ingest_execution_signal",
-                              MagicMock(return_value=mock_outcome)), \
-                 patch.object(_co, "_RESULT_CONSUMER_AVAILABLE", True), \
-                 patch.object(_co, "_android_result_consumer", mock_consumer):
+            with (
+                patch.object(_co, "_EXECUTION_SIGNAL_AVAILABLE", True),
+                patch.object(_co, "_ingest_execution_signal", MagicMock(return_value=mock_outcome)),
+                patch.object(_co, "_RESULT_CONSUMER_AVAILABLE", True),
+                patch.object(_co, "_android_result_consumer", mock_consumer),
+            ):
                 result = loop.run_until_complete(
                     _ds.handle_delegated_execution_signal(
                         bridge=MagicMock(),
@@ -317,4 +316,3 @@ class TestDelegatedSignalHandlerConsumerWiring:
         result, mock_consumer = self._run_handler_with_kind("progress")
         assert result["type"] == "delegated_execution_signal_ack"
         mock_consumer.consume_android_behavioral_result.assert_not_called()
-

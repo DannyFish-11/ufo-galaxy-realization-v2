@@ -659,11 +659,7 @@ def normalize_cross_subsystem_metadata(raw: Dict[str, Any]) -> MainlineMetadataF
         )
 
     # trace_id — fallback chain
-    trace_id = (
-        raw.get("trace_id")
-        or raw.get("runtime_session_id")
-        or raw.get("request_id")
-    )
+    trace_id = raw.get("trace_id") or raw.get("runtime_session_id") or raw.get("request_id")
 
     # task_id
     task_id = raw.get("task_id")
@@ -850,8 +846,7 @@ class MainlineConvergenceRegistry:
         """
         if not isinstance(trace, MainlineExecutionTrace):
             logger.warning(
-                "MainlineConvergenceRegistry.record: expected MainlineExecutionTrace, "
-                "got %s — skipping",
+                "MainlineConvergenceRegistry.record: expected MainlineExecutionTrace, " "got %s — skipping",
                 type(trace).__name__,
             )
             return
@@ -873,8 +868,7 @@ class MainlineConvergenceRegistry:
         # Emit warning for non-mainline paths (outside lock for simplicity)
         if trace.path_class and trace.path_class != MainlinePathClass.MAINLINE.value:
             logger.warning(
-                "MainlineConvergenceRegistry: non-mainline trace recorded "
-                "trace_id=%s path_class=%s stages=%s",
+                "MainlineConvergenceRegistry: non-mainline trace recorded " "trace_id=%s path_class=%s stages=%s",
                 trace.trace_id,
                 trace.path_class,
                 trace.stages_visited,
@@ -988,9 +982,8 @@ class MainlineConvergenceRegistry:
             stage_counts = dict(self._stage_counters)
             openclawd_stage = MainlineChainStage.OPENCLAWD_AUTHORITY.value
             openclawd_hits = stage_counts.get(openclawd_stage, 0)
-            knowledge_hits = (
-                stage_counts.get(MainlineChainStage.KNOWLEDGE_RECALL.value, 0)
-                + stage_counts.get(MainlineChainStage.KNOWLEDGE_WRITEBACK.value, 0)
+            knowledge_hits = stage_counts.get(MainlineChainStage.KNOWLEDGE_RECALL.value, 0) + stage_counts.get(
+                MainlineChainStage.KNOWLEDGE_WRITEBACK.value, 0
             )
 
         openclawd_coverage = min(1.0, (openclawd_hits / total)) if total > 0 else 0.0
@@ -1037,8 +1030,7 @@ class MainlineConvergenceRegistry:
         ok = ratio >= min_ratio
         if not ok:
             logger.warning(
-                "MainlineConvergenceRegistry.assert_mainline_dominant FAILED: "
-                "mainline_ratio=%.2f < min_ratio=%.2f",
+                "MainlineConvergenceRegistry.assert_mainline_dominant FAILED: " "mainline_ratio=%.2f < min_ratio=%.2f",
                 ratio,
                 min_ratio,
             )

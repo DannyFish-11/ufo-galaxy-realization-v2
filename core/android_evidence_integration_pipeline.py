@@ -125,6 +125,7 @@ try:
         get_execution_lifecycle_truth_binding,
     )
 except Exception:  # pragma: no cover
+
     def classify_canonical_proof_input_diagnosis(snapshot):  # type: ignore[misc]
         return {
             "proof_input_class": "missing",
@@ -135,17 +136,20 @@ except Exception:  # pragma: no cover
     def get_execution_lifecycle_truth_binding(device_id):  # type: ignore[misc]
         return None  # type: ignore[return-value]
 
+
 try:
     from core.execution_governance_audit_authority import (  # noqa: E402
         build_governance_authority_evidence,
         verify_governance_authority_integrity,
     )
 except Exception:  # pragma: no cover
+
     def build_governance_authority_evidence(execution_id, device_id):  # type: ignore[misc]
         return None  # type: ignore[return-value]
 
     def verify_governance_authority_integrity(execution_id, device_id):  # type: ignore[misc]
         return []
+
 
 try:
     from core.closed_loop_governance_consolidation import (  # noqa: E402
@@ -153,11 +157,13 @@ try:
         query_closed_loop_governance_state,
     )
 except Exception:  # pragma: no cover
+
     def query_closed_loop_governance_state(execution_id, device_id):  # type: ignore[misc]
         return None  # type: ignore[return-value]
 
     def assert_closed_loop_invariants(execution_id, device_id):  # type: ignore[misc]
         return []
+
 
 # ---------------------------------------------------------------------------
 # Authority sentinels & contract version
@@ -447,9 +453,7 @@ _NON_PASSING_CAPABILITY_TRUTH_CLASSES: frozenset = frozenset(
 
 # Lifecycle truth quality values that degrade the gate when V2 has active
 # executions.
-_DEGRADING_LIFECYCLE_TRUTH_QUALITIES: frozenset = frozenset(
-    {"missing_remote", "stale_remote", "conflicting_remote"}
-)
+_DEGRADING_LIFECYCLE_TRUTH_QUALITIES: frozenset = frozenset({"missing_remote", "stale_remote", "conflicting_remote"})
 
 
 def _evaluate_capability_truth_dimension(
@@ -475,13 +479,9 @@ def _evaluate_capability_truth_dimension(
             if proof_class not in _NON_PASSING_CAPABILITY_TRUTH_CLASSES:
                 # Defensive forward-compatibility: unknown/new proof classes
                 # must fail the gate and remain explicitly diagnosable.
-                degradation_causes.append(
-                    f"unrecognized_proof_input_class:{proof_class or 'missing'}"
-                )
+                degradation_causes.append(f"unrecognized_proof_input_class:{proof_class or 'missing'}")
             else:
-                degradation_causes.append(
-                    f"non_passing_capability_truth_class:{proof_class or 'missing'}"
-                )
+                degradation_causes.append(f"non_passing_capability_truth_class:{proof_class or 'missing'}")
             return AndroidEvidenceDimensionResult(
                 dimension=AndroidEvidenceDimension.capability_truth,
                 grade=AndroidEvidenceGrade.degraded if proof_class != "missing" else AndroidEvidenceGrade.absent,
@@ -539,15 +539,11 @@ def _evaluate_lifecycle_truth_dimension(
     """
     try:
         binding = get_execution_lifecycle_truth_binding(device_id)
-        quality_value = str(
-            getattr(binding.android_lifecycle_truth_quality, "value", "v2_local_only")
-        )
+        quality_value = str(getattr(binding.android_lifecycle_truth_quality, "value", "v2_local_only"))
         degraded = bool(getattr(binding, "android_lifecycle_truth_degraded", False))
         reason_str = str(getattr(binding, "android_lifecycle_truth_reason", "unknown"))
         active_count = int(getattr(binding, "active_execution_count", 0))
-        governance_impact = str(
-            getattr(binding, "android_lifecycle_truth_governance_impact", "none")
-        )
+        governance_impact = str(getattr(binding, "android_lifecycle_truth_governance_impact", "none"))
 
         # Fail closed: either a degrading quality token or an explicit degraded
         # lifecycle binding flag is sufficient to deny lifecycle truth passing.
@@ -636,13 +632,9 @@ def _evaluate_audit_authority_dimension(
         violations = verify_governance_authority_integrity(execution_id, device_id)
 
         stages_reached = [
-            e.stage.value
-            for e in (getattr(evidence, "audit_entries", []) or [])
-            if getattr(e, "reached", False)
+            e.stage.value for e in (getattr(evidence, "audit_entries", []) or []) if getattr(e, "reached", False)
         ]
-        violation_dicts = [
-            v.to_dict() for v in (violations or [])
-        ]
+        violation_dicts = [v.to_dict() for v in (violations or [])]
 
         if violations:
             return AndroidEvidenceDimensionResult(
@@ -651,9 +643,7 @@ def _evaluate_audit_authority_dimension(
                 passed=False,
                 reason=(
                     f"audit_authority_violations={len(violations)}: "
-                    + "; ".join(
-                        f"{v.invariant_id}:{v.description[:60]}" for v in violations
-                    )
+                    + "; ".join(f"{v.invariant_id}:{v.description[:60]}" for v in violations)
                 ),
                 detail={
                     "violations": violation_dicts,
@@ -677,19 +667,12 @@ def _evaluate_audit_authority_dimension(
                 },
             )
 
-        grade = (
-            AndroidEvidenceGrade.strong
-            if "terminal" in stages_reached
-            else AndroidEvidenceGrade.adequate
-        )
+        grade = AndroidEvidenceGrade.strong if "terminal" in stages_reached else AndroidEvidenceGrade.adequate
         return AndroidEvidenceDimensionResult(
             dimension=AndroidEvidenceDimension.audit_authority,
             grade=grade,
             passed=True,
-            reason=(
-                f"audit_authority_chain_intact: "
-                f"stages_reached={stages_reached!r}; zero violations"
-            ),
+            reason=(f"audit_authority_chain_intact: " f"stages_reached={stages_reached!r}; zero violations"),
             detail={
                 "stages_reached": stages_reached,
                 "violations": [],
@@ -750,9 +733,7 @@ def _evaluate_closed_loop_dimension(
                 passed=False,
                 reason=(
                     f"closed_loop_invariant_violations={len(violations)}: "
-                    + "; ".join(
-                        f"{v.invariant_id}:{v.description[:60]}" for v in violations
-                    )
+                    + "; ".join(f"{v.invariant_id}:{v.description[:60]}" for v in violations)
                 ),
                 detail={
                     "stage": stage_value,
@@ -777,18 +758,12 @@ def _evaluate_closed_loop_dimension(
                 },
             )
 
-        grade = (
-            AndroidEvidenceGrade.strong
-            if stage_value == "completion"
-            else AndroidEvidenceGrade.adequate
-        )
+        grade = AndroidEvidenceGrade.strong if stage_value == "completion" else AndroidEvidenceGrade.adequate
         return AndroidEvidenceDimensionResult(
             dimension=AndroidEvidenceDimension.closed_loop,
             grade=grade,
             passed=True,
-            reason=(
-                f"closed_loop_stage={stage_value!r}; zero invariant violations"
-            ),
+            reason=(f"closed_loop_stage={stage_value!r}; zero invariant violations"),
             detail={
                 "stage": stage_value,
                 "violations": [],
@@ -864,9 +839,7 @@ _RECOVERY_GAP_ALIAS_MAP: Dict[str, str] = {
 _RECOVERY_DEGRADING_GAPS: frozenset = frozenset(
     {"stale", "partial", "missing", "duplicated", "conflicting", "replay_fragmented"}
 )
-_RECOVERY_SEVERE_GAPS: frozenset = frozenset(
-    {"missing", "conflicting", "replay_fragmented"}
-)
+_RECOVERY_SEVERE_GAPS: frozenset = frozenset({"missing", "conflicting", "replay_fragmented"})
 
 
 def _extract_recovery_gap_types(runtime_state: Optional[Dict[str, Any]]) -> List[str]:
@@ -903,14 +876,10 @@ def _extract_recovery_gap_types(runtime_state: Optional[Dict[str, Any]]) -> List
                 raw_values.append("conflicting")
 
     duplicate_count = _safe_int(
-        runtime_state.get("recovery_duplicate_result_count")
-        or runtime_state.get("duplicate_result_count")
-        or 0
+        runtime_state.get("recovery_duplicate_result_count") or runtime_state.get("duplicate_result_count") or 0
     )
     replay_fragment_count = _safe_int(
-        runtime_state.get("recovery_replay_fragment_count")
-        or runtime_state.get("replay_fragment_count")
-        or 0
+        runtime_state.get("recovery_replay_fragment_count") or runtime_state.get("replay_fragment_count") or 0
     )
     if duplicate_count > 0:
         raw_values.append("duplicated")
@@ -930,11 +899,11 @@ def _assess_recovery_truth_adjustment(
 ) -> Dict[str, Any]:
     closure_quality = ""
     if isinstance(runtime_state, dict):
-        closure_quality = str(
-            runtime_state.get("recovery_closure_quality")
-            or runtime_state.get("overall_recovery_quality")
-            or ""
-        ).strip().lower()
+        closure_quality = (
+            str(runtime_state.get("recovery_closure_quality") or runtime_state.get("overall_recovery_quality") or "")
+            .strip()
+            .lower()
+        )
     gap_types = _extract_recovery_gap_types(runtime_state)
 
     if not closure_quality and not gap_types:
@@ -969,11 +938,7 @@ def _assess_recovery_truth_adjustment(
         sort_keys=True,
         separators=(",", ":"),
     )
-    cause = (
-        None
-        if quality == AndroidEvidenceGrade.strong.value
-        else f"recovery_truth:{quality}:{diagnosis}"
-    )
+    cause = None if quality == AndroidEvidenceGrade.strong.value else f"recovery_truth:{quality}:{diagnosis}"
     return {
         "applies": True,
         "quality": quality,
@@ -1042,9 +1007,7 @@ def evaluate_android_evidence_integration(
         degradation_causes: List[str] = []
         for r in dimension_results:
             if not r.passed:
-                degradation_causes.append(
-                    f"{r.dimension.value}:{r.grade.value}:{r.reason[:120]}"
-                )
+                degradation_causes.append(f"{r.dimension.value}:{r.grade.value}:{r.reason[:120]}")
 
         recovery_adjustment = _assess_recovery_truth_adjustment(runtime_state)
         if recovery_adjustment["applies"]:
@@ -1078,8 +1041,7 @@ def evaluate_android_evidence_integration(
         # Broad catch is intentional: this function is documented to never raise.
         # All errors produce a conservative deny verdict.
         logger.warning(
-            "evaluate_android_evidence_integration: unexpected error "
-            "for device=%r exec=%r: %s",
+            "evaluate_android_evidence_integration: unexpected error " "for device=%r exec=%r: %s",
             device_id,
             execution_id,
             exc,

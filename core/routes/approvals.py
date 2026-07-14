@@ -38,10 +38,10 @@ logger = logging.getLogger("Galaxy.API.Approvals")
 
 
 class ApprovalActionRequest(BaseModel):
-    action: str = "approve"      # "approve" | "deny"
+    action: str = "approve"  # "approve" | "deny"
     token: Optional[str] = None  # required when action == "approve"
     operator: str = ""
-    reason: str = ""             # optional deny reason
+    reason: str = ""  # optional deny reason
     # 审批分级(自治拨盘配套):approve 时授权的档位。
     #   once=仅此次(默认,用后即焚) session=本会话 always=永久(持久化,可撤销)
     grant: str = "once"
@@ -53,6 +53,7 @@ def create_router() -> APIRouter:
 
     def _registry():
         from core.control_plane._globals import get_approval_registry
+
         return get_approval_registry()
 
     @router.get("/api/v1/approvals")
@@ -86,9 +87,7 @@ def create_router() -> APIRouter:
                     status_code=404,
                     content={"ok": False, "error": f"Approval request '{request_id}' not found"},
                 )
-            return JSONResponse(
-                content={"ok": True, "approval": req.model_dump(mode="json")}
-            )
+            return JSONResponse(content={"ok": True, "approval": req.model_dump(mode="json")})
         except Exception as exc:
             logger.error("get_approval failed: %s", exc, exc_info=True)
             return JSONResponse(
@@ -142,13 +141,17 @@ def create_router() -> APIRouter:
                 # 请求由 autonomy_gate 发起时 context 里带 node_id/node_action。
                 try:
                     from core.autonomy_policy import GrantScope, get_grant_store
+
                     ctx = req.context or {}
                     n_id, n_act = ctx.get("node_id"), ctx.get("node_action")
                     if n_id and n_act:
-                        scope = GrantScope(body.grant) if body.grant in (
-                            s.value for s in GrantScope) else GrantScope.ONCE
+                        scope = (
+                            GrantScope(body.grant) if body.grant in (s.value for s in GrantScope) else GrantScope.ONCE
+                        )
                         get_grant_store().grant(
-                            n_id, n_act, scope,
+                            n_id,
+                            n_act,
+                            scope,
                             operator=body.operator or "api_operator",
                         )
                 except Exception as _g_exc:  # noqa: BLE001 — 授权失败不影响 ack 结果
@@ -197,6 +200,7 @@ def create_router() -> APIRouter:
         """列出全部授权记录(always 持久 / session / once 待消费),供面板展示与撤销。"""
         try:
             from core.autonomy_policy import get_grant_store
+
             return JSONResponse(content={"ok": True, "grants": get_grant_store().list_grants()})
         except Exception as exc:  # noqa: BLE001
             logger.error("list_grants failed: %s", exc, exc_info=True)
@@ -207,6 +211,7 @@ def create_router() -> APIRouter:
         """撤销一条授权(key 形如 "Node_36_UIAWindows:click")。「永久允许」由此收回。"""
         try:
             from core.autonomy_policy import get_grant_store
+
             ok = get_grant_store().revoke(grant_key)
             return JSONResponse(content={"ok": ok, "revoked": grant_key if ok else None})
         except Exception as exc:  # noqa: BLE001

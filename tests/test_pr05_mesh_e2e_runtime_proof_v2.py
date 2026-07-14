@@ -61,9 +61,7 @@ def _make_coordinator_state(
         for spec in participant_specs
     ]
     waiting_device_ids = [
-        spec["device_id"]
-        for spec in participant_specs
-        if spec["status"] == MeshParticipantStatus.waiting.value
+        spec["device_id"] for spec in participant_specs if spec["status"] == MeshParticipantStatus.waiting.value
     ]
     barrier = MeshBarrierState(
         status=MeshBarrierStatus(barrier_status),

@@ -453,6 +453,7 @@ class NodeLifecycleGovernor:
         try:
             import json as _json
             from unittest.mock import MagicMock as _MM
+
             from launcher.node_startup import NodeSystemLauncher
 
             _ndj_path = Path(__file__).parent.parent / "node_dependencies.json"
@@ -516,11 +517,7 @@ class NodeLifecycleGovernor:
             except (ValueError, TypeError):
                 callable_result = False
 
-            outcome = (
-                NodeGovernanceOutcome.PASSED
-                if callable_result
-                else NodeGovernanceOutcome.FAILED
-            )
+            outcome = NodeGovernanceOutcome.PASSED if callable_result else NodeGovernanceOutcome.FAILED
             detail = f"callable={callable_result}, arch_class={arch_str}"
         except Exception as exc:
             logger.debug("Fallback triggered: %s", exc)
@@ -559,16 +556,10 @@ class NodeLifecycleGovernor:
             items = registry.list_items()
             registered = any(
                 getattr(item, "source_node", None) == node_name
-                or (
-                    getattr(item, "metadata", {}) or {}
-                ).get("source_node") == node_name
+                or (getattr(item, "metadata", {}) or {}).get("source_node") == node_name
                 for item in items
             )
-            outcome = (
-                NodeGovernanceOutcome.PASSED
-                if registered
-                else NodeGovernanceOutcome.FAILED
-            )
+            outcome = NodeGovernanceOutcome.PASSED if registered else NodeGovernanceOutcome.FAILED
             detail = f"capability_registered={registered}"
         except Exception as exc:
             logger.debug("Fallback triggered: %s", exc)
@@ -639,9 +630,7 @@ class NodeLifecycleGovernor:
                 )
                 if note:
                     rec.promotion_notes.append(f"[PROMOTED] {note}")
-                logger.info(
-                    "NodeLifecycleGovernor: promoted '%s' to ACTIVE", node_name
-                )
+                logger.info("NodeLifecycleGovernor: promoted '%s' to ACTIVE", node_name)
             elif current == NodeLifecycleStage.REGISTERED:
                 # Move through intermediate stages
                 rec.lifecycle_stage = NodeLifecycleStage.OPTIONAL
@@ -736,23 +725,13 @@ class NodeLifecycleGovernor:
             compiled_at=time.time(),
             total_nodes=len(records),
             registered_count=stage_counts.get(NodeLifecycleStage.REGISTERED.value, 0),
-            readiness_checked_count=stage_counts.get(
-                NodeLifecycleStage.READINESS_CHECKED.value, 0
-            ),
-            callable_classified_count=stage_counts.get(
-                NodeLifecycleStage.CALLABLE_CLASSIFIED.value, 0
-            ),
-            capability_registered_count=stage_counts.get(
-                NodeLifecycleStage.CAPABILITY_REGISTERED.value, 0
-            ),
+            readiness_checked_count=stage_counts.get(NodeLifecycleStage.READINESS_CHECKED.value, 0),
+            callable_classified_count=stage_counts.get(NodeLifecycleStage.CALLABLE_CLASSIFIED.value, 0),
+            capability_registered_count=stage_counts.get(NodeLifecycleStage.CAPABILITY_REGISTERED.value, 0),
             optional_count=stage_counts.get(NodeLifecycleStage.OPTIONAL.value, 0),
-            experimental_count=stage_counts.get(
-                NodeLifecycleStage.EXPERIMENTAL.value, 0
-            ),
+            experimental_count=stage_counts.get(NodeLifecycleStage.EXPERIMENTAL.value, 0),
             active_count=stage_counts.get(NodeLifecycleStage.ACTIVE.value, 0),
-            deprecated_count=stage_counts.get(
-                NodeLifecycleStage.DEPRECATED.value, 0
-            ),
+            deprecated_count=stage_counts.get(NodeLifecycleStage.DEPRECATED.value, 0),
             wild_growth_count=len(wild_growth),
             governance_debt_nodes=wild_growth[:20],  # cap for output safety
         )
@@ -773,9 +752,7 @@ class NodeLifecycleGovernor:
                     "auto-registered on first lifecycle gate call",
                 )
                 self._records[node_name] = rec
-                logger.debug(
-                    "NodeLifecycleGovernor: auto-registered node '%s'", node_name
-                )
+                logger.debug("NodeLifecycleGovernor: auto-registered node '%s'", node_name)
             return self._records[node_name]
 
 

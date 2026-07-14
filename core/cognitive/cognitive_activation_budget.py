@@ -149,12 +149,12 @@ _MAX_AGENTS_BROAD: int = 20  # matches ExecutionPlanner swarm cap
 # These offset the ExecutionPlanner's existing complexity thresholds so that
 # passive posture raises the bar for complex strategies (fewer strategies
 # trigger) and manifest posture lowers the bar (more strategies are eligible).
-_COMPLEXITY_ADJ_NARROW: float = +0.15   # passive: harder to unlock complex strategies
-_COMPLEXITY_ADJ_MODERATE: float = 0.0   # liminal: no adjustment
-_COMPLEXITY_ADJ_BROAD: float = -0.10    # manifest: easier to unlock complex strategies
+_COMPLEXITY_ADJ_NARROW: float = +0.15  # passive: harder to unlock complex strategies
+_COMPLEXITY_ADJ_MODERATE: float = 0.0  # liminal: no adjustment
+_COMPLEXITY_ADJ_BROAD: float = -0.10  # manifest: easier to unlock complex strategies
 
 # Budget thresholds for intensity classification
-_THRESHOLD_LOW_MAX: float = 0.40     # budget <= 0.40 → low intensity
+_THRESHOLD_LOW_MAX: float = 0.40  # budget <= 0.40 → low intensity
 _THRESHOLD_MODERATE_MAX: float = 0.75  # 0.40 < budget <= 0.75 → moderate intensity
 # budget > 0.75 → high intensity
 
@@ -355,9 +355,7 @@ def _derive_budget_impl(
 ) -> ActivationBudget:
     """Internal implementation of budget derivation."""
     if hint is None:
-        logger.debug(
-            "derive_activation_budget: hint is None (trace_id=%s) — using fallback", trace_id
-        )
+        logger.debug("derive_activation_budget: hint is None (trace_id=%s) — using fallback", trace_id)
         return FALLBACK_ACTIVATION_BUDGET
 
     # Read budget_value and cognitive_region from the hint

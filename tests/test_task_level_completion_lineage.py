@@ -75,12 +75,15 @@ def _mock_idempotency_store():
         seen.add(key)
         return True
 
-    with patch(
-        "core.durable_result_idempotency.check_result_idempotency",
-        side_effect=_check,
-    ), patch(
-        "core.durable_result_idempotency.record_result_idempotency",
-        side_effect=_record,
+    with (
+        patch(
+            "core.durable_result_idempotency.check_result_idempotency",
+            side_effect=_check,
+        ),
+        patch(
+            "core.durable_result_idempotency.record_result_idempotency",
+            side_effect=_record,
+        ),
     ):
         yield seen
 
@@ -106,10 +109,7 @@ def test_first_accepted_completion_records_lineage_evidence():
     assert outcome.completion_lineage["session_epoch"] == 7
     assert outcome.completion_lineage["completion_emission_id"] == "handoff-1"
     assert outcome.closure_evidence_ledger["first_accepted_completion"]["disposition"] == "first_accepted"
-    assert (
-        outcome.final_truth_provenance["accepted_event_identity"]["completion_emission_id"]
-        == "handoff-1"
-    )
+    assert outcome.final_truth_provenance["accepted_event_identity"]["completion_emission_id"] == "handoff-1"
 
 
 def test_same_completion_resend_is_duplicate_ignored_with_distinct_evidence():
@@ -124,17 +124,9 @@ def test_same_completion_resend_is_duplicate_ignored_with_distinct_evidence():
     assert first.completion_disposition == "first_accepted"
     assert duplicate.was_deduplicated is True
     assert duplicate.completion_disposition == "duplicate_ignored"
-    assert (
-        first.joint_idempotency_evidence["joint_idempotency_decision"]
-        == "first_accepted"
-    )
-    assert (
-        duplicate.joint_idempotency_evidence["joint_idempotency_decision"]
-        == "duplicate_ignored"
-    )
-    assert duplicate.joint_idempotency_evidence["duplicate_reason"] == (
-        "result_idempotency+completion_lineage"
-    )
+    assert first.joint_idempotency_evidence["joint_idempotency_decision"] == "first_accepted"
+    assert duplicate.joint_idempotency_evidence["joint_idempotency_decision"] == "duplicate_ignored"
+    assert duplicate.joint_idempotency_evidence["duplicate_reason"] == ("result_idempotency+completion_lineage")
     assert ingress.get_last_closure_outcome()["completion_disposition"] == "duplicate_ignored"
     ledger = ingress.get_last_closure_outcome()["closure_evidence_ledger"]
     assert ledger["competing_summary"]["duplicate_ignored"] == 1
@@ -147,9 +139,12 @@ def test_same_task_different_epoch_completion_is_stale_rejected():
     ingress = _make_ingress()
     task_id = _task_id()
 
-    with _mock_idempotency_store(), patch(
-        "core.attached_runtime_session_registry.lookup_session_by_device",
-        return_value=_registry_entry(9),
+    with (
+        _mock_idempotency_store(),
+        patch(
+            "core.attached_runtime_session_registry.lookup_session_by_device",
+            return_value=_registry_entry(9),
+        ),
     ):
         outcome = ingress.process(_event(task_id=task_id, session_epoch=8))
 
@@ -158,10 +153,7 @@ def test_same_task_different_epoch_completion_is_stale_rejected():
     assert outcome.stale_classification == "epoch_mismatch"
     assert outcome.joint_idempotency_evidence["joint_idempotency_decision"] == "stale_rejected"
     assert outcome.closure_evidence_ledger["competing_summary"]["stale_rejected"] == 1
-    assert (
-        outcome.final_truth_provenance["competing_rejected_or_ignored_summary"]["stale_rejected"]
-        == 1
-    )
+    assert outcome.final_truth_provenance["competing_rejected_or_ignored_summary"]["stale_rejected"] == 1
 
 
 def test_reconnect_repeated_terminal_upload_is_caught_by_lineage_evidence():
@@ -177,13 +169,8 @@ def test_reconnect_repeated_terminal_upload_is_caught_by_lineage_evidence():
     assert first_outcome.completion_disposition == "first_accepted"
     assert replay_outcome.was_deduplicated is True
     assert replay_outcome.completion_disposition == "duplicate_ignored"
-    assert replay_outcome.joint_idempotency_evidence["duplicate_reason"] == (
-        "completion_lineage"
-    )
-    assert (
-        replay_outcome.joint_idempotency_evidence["result_idempotency_key"]
-        == "result-b"
-    )
+    assert replay_outcome.joint_idempotency_evidence["duplicate_reason"] == ("completion_lineage")
+    assert replay_outcome.joint_idempotency_evidence["result_idempotency_key"] == "result-b"
 
 
 def test_final_truth_provenance_distinguishes_accepted_and_competing_events():

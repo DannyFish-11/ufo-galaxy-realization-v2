@@ -65,8 +65,9 @@ class ProviderInventoryEntry:
         ``config_has_key`` are both ``True``.  Routing candidate-pool
         formation uses this flag as the primary gate.
     """
+
     entry: NormalizedTopologyEntry
-    health_status: str = "unknown"   # "healthy" | "degraded" | "down" | "unknown"
+    health_status: str = "unknown"  # "healthy" | "degraded" | "down" | "unknown"
     latency_avg_ms: float = 0.0
     error_rate: float = 0.0
     # PR-4: config-authority-driven participation flags
@@ -138,7 +139,7 @@ class ProviderInventory:
     ) -> None:
         self._entries: Dict[str, ProviderInventoryEntry] = {}
         self.aggregator_hints: List[AggregatorRouterHint] = list(aggregator_hints or [])
-        for e in (entries or []):
+        for e in entries or []:
             self.add(e)
 
     # ------------------------------------------------------------------
@@ -148,9 +149,7 @@ class ProviderInventory:
     def add(self, inv_entry: ProviderInventoryEntry) -> None:
         pid = inv_entry.provider_id
         if pid in self._entries:
-            logger.warning(
-                "ProviderInventory: duplicate provider_id '%s'; overwriting.", pid
-            )
+            logger.warning("ProviderInventory: duplicate provider_id '%s'; overwriting.", pid)
         self._entries[pid] = inv_entry
 
     # ------------------------------------------------------------------
@@ -228,10 +227,7 @@ class ProviderInventory:
         They may appear in diagnostic / inventory views as *enabled but
         unconfigured*.
         """
-        return [
-            e for e in self._entries.values()
-            if e.config_enabled and not e.config_has_key
-        ]
+        return [e for e in self._entries.values() if e.config_enabled and not e.config_has_key]
 
     def multimodal_entries(self) -> List[ProviderInventoryEntry]:
         """Entries whose provider natively supports multimodal input."""
@@ -241,10 +237,7 @@ class ProviderInventory:
         return [e for e in self._entries.values() if e.entry.category == category]
 
     def by_role(self, role: TopologyRole) -> List[ProviderInventoryEntry]:
-        return [
-            e for e in self._entries.values()
-            if role in e.entry.role_hints
-        ]
+        return [e for e in self._entries.values() if role in e.entry.role_hints]
 
     def top_by_quality(self, n: int = 5, available_only: bool = True) -> List[ProviderInventoryEntry]:
         pool = self.available_entries() if available_only else self.all_entries()
@@ -286,10 +279,7 @@ class ProviderInventory:
                 "enabled": len(self.enabled_entries()),
                 "disabled": len(self.disabled_entries()),
                 "unconfigured": len(self.unconfigured_entries()),
-                "categories": {
-                    cat.value: len(self.by_category(cat))
-                    for cat in ProviderCategory
-                },
+                "categories": {cat.value: len(self.by_category(cat)) for cat in ProviderCategory},
             },
         }
 

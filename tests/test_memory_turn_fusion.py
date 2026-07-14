@@ -11,6 +11,7 @@ SessionManager 是唯一属主,WM/CM 变成它的读视图:
 - ConversationMemory: add_turn 直写 SM(带相邻去重);get_context/get_summary 读 SM;
   独有的偏好学习保留(learn 钩子)。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -51,11 +52,12 @@ def cm(monkeypatch):
 
 def _record(session_id: str, role: str, content: str, **kw):
     from core.session_memory_facade import record_session_turn
-    asyncio.run(record_session_turn(
-        conversation_session_id=session_id, role=role, content=content, **kw))
+
+    asyncio.run(record_session_turn(conversation_session_id=session_id, role=role, content=content, **kw))
 
 
 # ── 单写:一轮只落在唯一属主 ──
+
 
 class TestSingleWrite:
     def test_turn_lands_in_sm_only(self, sm, wm, cm):
@@ -80,13 +82,13 @@ class TestSingleWrite:
 
 # ── 读视图:WM/CM 透传唯一属主 ──
 
+
 class TestReadThrough:
     def test_wm_get_reads_sm(self, sm, wm, cm):
         _record("s2", "user", "问题一", device_id="phone")
         _record("s2", "assistant", "回答一")
         entries = wm.get(session_id="s2")
-        assert [(e["role"], e["content"]) for e in entries] == [
-            ("user", "问题一"), ("assistant", "回答一")]
+        assert [(e["role"], e["content"]) for e in entries] == [("user", "问题一"), ("assistant", "回答一")]
         # metadata 里带 device_id(去重/跨设备语义依赖它)
         assert entries[0]["metadata"].get("device_id") == "phone"
 
@@ -100,8 +102,7 @@ class TestReadThrough:
         _record("s4", "user", "甲")
         _record("s4", "assistant", "乙")
         ctx = asyncio.run(cm.get_context("s4"))
-        assert ctx == [{"role": "user", "content": "甲"},
-                       {"role": "assistant", "content": "乙"}]
+        assert ctx == [{"role": "user", "content": "甲"}, {"role": "assistant", "content": "乙"}]
 
     def test_cm_get_summary_reads_sm(self, sm, wm, cm):
         _record("s5", "user", "聊聊天气")
@@ -110,11 +111,13 @@ class TestReadThrough:
 
     def test_facade_get_session_context_reads_sm(self, sm, wm, cm):
         from core.session_memory_facade import get_session_context
+
         _record("s6", "user", "上下文")
         assert get_session_context("s6") == [{"role": "user", "content": "上下文"}]
 
 
 # ── CM.add_turn 直写唯一属主(routes/ai 路径) ──
+
 
 class TestAddTurnDoor:
     def test_add_turn_writes_sm(self, sm, wm, cm):
@@ -134,6 +137,7 @@ class TestAddTurnDoor:
 
 
 # ── 易失 scratch 会话(ambient)仍走本地 deque ──
+
 
 class TestVolatileSessions:
     def test_ambient_stays_local(self, sm, wm, cm):

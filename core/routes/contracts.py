@@ -68,6 +68,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.contract_map import get_planes_snapshot
+
             payload = get_planes_snapshot()
             return JSONResponse(content=payload, status_code=200)
         except Exception as exc:  # pragma: no cover
@@ -111,6 +112,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.contract_map import get_messages_snapshot
+
             payload = get_messages_snapshot()
             return JSONResponse(content=payload, status_code=200)
         except Exception as exc:  # pragma: no cover
@@ -160,6 +162,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.reliability_contract import get_reliability_registry_snapshot
+
             payload = get_reliability_registry_snapshot()
             return JSONResponse(content=payload, status_code=200)
         except Exception as exc:  # pragma: no cover

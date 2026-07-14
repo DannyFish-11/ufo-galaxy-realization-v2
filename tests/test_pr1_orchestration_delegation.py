@@ -16,9 +16,9 @@ Confirms that:
 from __future__ import annotations
 
 import asyncio
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # ===========================================================================
 # Helper — shared CR mock result
@@ -48,6 +48,7 @@ _CR_FAILURE = {
 # ===========================================================================
 # D) wrap_as_orchestration_response helper
 # ===========================================================================
+
 
 class TestWrapAsOrchestrationResponse:
     def test_success_shapes_correctly(self):
@@ -81,6 +82,7 @@ class TestWrapAsOrchestrationResponse:
 # A) Node_110 — delegates to ConstellationRuntime
 # ===========================================================================
 
+
 class TestNode110Delegation:
     @pytest.mark.asyncio
     async def test_orchestrate_delegates_to_cr_by_default(self):
@@ -92,8 +94,7 @@ class TestNode110Delegation:
             "core.constellation_runtime.get_constellation_runtime",
             return_value=mock_runtime,
         ):
-            from nodes.Node_110_SmartOrchestrator.server import orchestrate_task
-            from nodes.Node_110_SmartOrchestrator.server import OrchestrationRequest
+            from nodes.Node_110_SmartOrchestrator.server import OrchestrationRequest, orchestrate_task
 
             req = OrchestrationRequest(task_description="take a screenshot")
             response = await orchestrate_task(req)
@@ -141,6 +142,7 @@ class TestNode110Delegation:
 # B) Node_81 — delegates to ConstellationRuntime
 # ===========================================================================
 
+
 class TestNode81Delegation:
     @pytest.mark.asyncio
     async def test_workflow_delegates_to_cr_by_default(self):
@@ -152,8 +154,7 @@ class TestNode81Delegation:
             "core.constellation_runtime.get_constellation_runtime",
             return_value=mock_runtime,
         ):
-            from nodes.Node_81_Orchestrator.main import execute_workflow
-            from nodes.Node_81_Orchestrator.main import WorkflowRequest, Task, TaskType, NodeCall
+            from nodes.Node_81_Orchestrator.main import NodeCall, Task, TaskType, WorkflowRequest, execute_workflow
 
             req = WorkflowRequest(
                 description="coordinate screenshot and analysis",
@@ -177,12 +178,12 @@ class TestNode81Delegation:
     async def test_workflow_falls_back_when_cr_raises(self):
         """When ConstellationRuntime raises, Node_81 uses its own engine."""
         from nodes.Node_81_Orchestrator.main import (
+            NodeCall,
+            Task,
+            TaskStatus,
+            TaskType,
             WorkflowRequest,
             WorkflowResult,
-            TaskStatus,
-            Task,
-            TaskType,
-            NodeCall,
         )
 
         fallback_result = WorkflowResult(
@@ -226,23 +227,19 @@ class TestNode81Delegation:
 # C) Node_50 — marked as subordinate/legacy
 # ===========================================================================
 
+
 class TestNode50LegacyMarker:
     def test_task_orchestrator_docstring_marks_subordinate(self):
         """task_orchestrator module docstring must contain legacy/subordinate marker."""
         import ast
         import pathlib
 
-        src_path = (
-            pathlib.Path(__file__).parent.parent
-            / "nodes"
-            / "Node_50_Transformer"
-            / "task_orchestrator.py"
-        )
+        src_path = pathlib.Path(__file__).parent.parent / "nodes" / "Node_50_Transformer" / "task_orchestrator.py"
         source = src_path.read_text(encoding="utf-8")
         tree = ast.parse(source)
         # The first statement of the module should be the docstring
         doc = ast.get_docstring(tree) or ""
         doc_lower = doc.lower()
-        assert "legacy" in doc_lower or "从属" in doc or "subordinate" in doc_lower, (
-            "task_orchestrator.py docstring must mark this as a legacy/subordinate component"
-        )
+        assert (
+            "legacy" in doc_lower or "从属" in doc or "subordinate" in doc_lower
+        ), "task_orchestrator.py docstring must mark this as a legacy/subordinate component"

@@ -105,6 +105,7 @@ if _REPO_ROOT not in sys.path:
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _healthy_provider_record(
     provider_id: str = "openai",
     model: str = "gpt-4o",
@@ -154,15 +155,12 @@ def _make_supply_state_dict(
     primary_provider_id: str = None,
 ) -> dict:
     available_ids = available_ids or [
-        pid for pid, rec in providers.items()
-        if rec.get("health_status", "") not in ("down", "unavailable")
+        pid for pid, rec in providers.items() if rec.get("health_status", "") not in ("down", "unavailable")
     ]
     return {
         "providers": providers,
         "available_provider_ids": available_ids,
-        "unavailable_provider_ids": [
-            pid for pid in providers if pid not in available_ids
-        ],
+        "unavailable_provider_ids": [pid for pid in providers if pid not in available_ids],
         "fallback_candidates": fallback_candidates or [],
         "primary_provider_id": primary_provider_id,
     }
@@ -170,8 +168,10 @@ def _make_supply_state_dict(
 
 def _make_route_decision(provider: str = "openai", model: str = "gpt-4o") -> object:
     """Return a minimal stub LLMRouteDecision."""
+
     class _StubDecision:
         pass
+
     d = _StubDecision()
     d.provider = provider
     d.model = model
@@ -186,17 +186,20 @@ def _make_route_decision(provider: str = "openai", model: str = "gpt-4o") -> obj
 
 def test_01_llm_supply_authority_sentinel_importable():
     from core.llm.supply_authority import LLM_SUPPLY_AUTHORITY
+
     assert LLM_SUPPLY_AUTHORITY is not None
 
 
 def test_02_llm_supply_authority_sentinel_non_empty():
     from core.llm.supply_authority import LLM_SUPPLY_AUTHORITY
+
     assert isinstance(LLM_SUPPLY_AUTHORITY, str)
     assert len(LLM_SUPPLY_AUTHORITY) > 0
 
 
 def test_03_llm_supply_authority_sentinel_identifies_class():
     from core.llm.supply_authority import LLM_SUPPLY_AUTHORITY
+
     assert "LLMSupplyAuthority" in LLM_SUPPLY_AUTHORITY
     assert "supply_authority" in LLM_SUPPLY_AUTHORITY
 
@@ -208,41 +211,48 @@ def test_03_llm_supply_authority_sentinel_identifies_class():
 
 def test_04_fallback_legality_importable():
     from core.llm.supply_authority import FallbackLegality
+
     assert FallbackLegality is not None
 
 
 def test_05_fallback_legality_none_exists():
     from core.llm.supply_authority import FallbackLegality
+
     assert FallbackLegality.NONE is not None
     assert FallbackLegality.NONE.value == "none"
 
 
 def test_06_fallback_legality_primary_unavailable_exists():
     from core.llm.supply_authority import FallbackLegality
+
     assert FallbackLegality.PRIMARY_UNAVAILABLE is not None
     assert FallbackLegality.PRIMARY_UNAVAILABLE.value == "primary_unavailable"
 
 
 def test_07_fallback_legality_primary_degraded_exists():
     from core.llm.supply_authority import FallbackLegality
+
     assert FallbackLegality.PRIMARY_DEGRADED is not None
     assert FallbackLegality.PRIMARY_DEGRADED.value == "primary_degraded"
 
 
 def test_08_fallback_legality_capability_mismatch_exists():
     from core.llm.supply_authority import FallbackLegality
+
     assert FallbackLegality.CAPABILITY_MISMATCH is not None
     assert FallbackLegality.CAPABILITY_MISMATCH.value == "capability_mismatch"
 
 
 def test_09_fallback_legality_explicit_caller_preference_exists():
     from core.llm.supply_authority import FallbackLegality
+
     assert FallbackLegality.EXPLICIT_CALLER_PREFERENCE is not None
     assert FallbackLegality.EXPLICIT_CALLER_PREFERENCE.value == "explicit_caller_preference"
 
 
 def test_10_fallback_legality_no_supply_available_exists():
     from core.llm.supply_authority import FallbackLegality
+
     assert FallbackLegality.NO_SUPPLY_AVAILABLE is not None
     assert FallbackLegality.NO_SUPPLY_AVAILABLE.value == "no_supply_available"
 
@@ -254,29 +264,34 @@ def test_10_fallback_legality_no_supply_available_exists():
 
 def test_11_provider_ordering_policy_importable():
     from core.llm.supply_authority import ProviderOrderingPolicy
+
     assert ProviderOrderingPolicy is not None
 
 
 def test_12_provider_ordering_policy_default_allow_degraded():
     from core.llm.supply_authority import ProviderOrderingPolicy
+
     p = ProviderOrderingPolicy()
     assert p.allow_degraded_fallback is True
 
 
 def test_13_provider_ordering_policy_default_max_fallback_depth():
     from core.llm.supply_authority import ProviderOrderingPolicy
+
     p = ProviderOrderingPolicy()
     assert p.max_fallback_depth == 5
 
 
 def test_14_provider_ordering_policy_default_prefer_canonical_list():
     from core.llm.supply_authority import ProviderOrderingPolicy
+
     p = ProviderOrderingPolicy()
     assert p.prefer_canonical_fallback_list is True
 
 
 def test_15_provider_ordering_policy_to_dict_keys():
     from core.llm.supply_authority import ProviderOrderingPolicy
+
     p = ProviderOrderingPolicy()
     d = p.to_dict()
     assert isinstance(d, dict)
@@ -293,11 +308,13 @@ def test_15_provider_ordering_policy_to_dict_keys():
 
 def test_16_supply_resolution_step_importable():
     from core.llm.supply_authority import SupplyResolutionStep
+
     assert SupplyResolutionStep is not None
 
 
 def test_17_supply_resolution_step_to_dict_keys():
     from core.llm.supply_authority import FallbackLegality, SupplyResolutionStep
+
     step = SupplyResolutionStep(provider="openai", model="gpt-4o")
     d = step.to_dict()
     assert "provider" in d
@@ -315,71 +332,83 @@ def test_17_supply_resolution_step_to_dict_keys():
 
 def test_18_supply_resolution_result_importable():
     from core.llm.supply_authority import SupplyResolutionResult
+
     assert SupplyResolutionResult is not None
 
 
 def test_19_supply_resolution_result_authority_default():
     from core.llm.supply_authority import LLM_SUPPLY_AUTHORITY, SupplyResolutionResult
+
     r = SupplyResolutionResult(requested_provider="openai", requested_model="gpt-4o")
     assert r.authority == LLM_SUPPLY_AUTHORITY
 
 
 def test_20_supply_resolution_result_to_dict_has_requested_provider():
     from core.llm.supply_authority import SupplyResolutionResult
+
     r = SupplyResolutionResult(requested_provider="openai", requested_model="gpt-4o")
     assert "requested_provider" in r.to_dict()
 
 
 def test_21_supply_resolution_result_to_dict_has_requested_model():
     from core.llm.supply_authority import SupplyResolutionResult
+
     r = SupplyResolutionResult(requested_provider="openai", requested_model="gpt-4o")
     assert "requested_model" in r.to_dict()
 
 
 def test_22_supply_resolution_result_to_dict_has_supplied_provider():
     from core.llm.supply_authority import SupplyResolutionResult
+
     r = SupplyResolutionResult(requested_provider="openai", requested_model="gpt-4o")
     assert "supplied_provider" in r.to_dict()
 
 
 def test_23_supply_resolution_result_to_dict_has_supplied_model():
     from core.llm.supply_authority import SupplyResolutionResult
+
     r = SupplyResolutionResult(requested_provider="openai", requested_model="gpt-4o")
     assert "supplied_model" in r.to_dict()
 
 
 def test_24_supply_resolution_result_to_dict_has_fallback_legality():
     from core.llm.supply_authority import SupplyResolutionResult
+
     r = SupplyResolutionResult(requested_provider="openai", requested_model="gpt-4o")
     assert "fallback_legality" in r.to_dict()
 
 
 def test_25_supply_resolution_result_to_dict_has_ordering_basis():
     from core.llm.supply_authority import SupplyResolutionResult
+
     r = SupplyResolutionResult(requested_provider="openai", requested_model="gpt-4o")
     assert "ordering_basis" in r.to_dict()
 
 
 def test_26_supply_resolution_result_to_dict_has_is_satisfied():
     from core.llm.supply_authority import SupplyResolutionResult
+
     r = SupplyResolutionResult(requested_provider="openai", requested_model="gpt-4o")
     assert "is_satisfied" in r.to_dict()
 
 
 def test_27_supply_resolution_result_to_dict_has_resolution_trace():
     from core.llm.supply_authority import SupplyResolutionResult
+
     r = SupplyResolutionResult(requested_provider="openai", requested_model="gpt-4o")
     assert "resolution_trace" in r.to_dict()
 
 
 def test_28_supply_resolution_result_to_dict_has_authority():
     from core.llm.supply_authority import SupplyResolutionResult
+
     r = SupplyResolutionResult(requested_provider="openai", requested_model="gpt-4o")
     assert "authority" in r.to_dict()
 
 
 def test_29_supply_resolution_result_to_dict_authority_equals_sentinel():
     from core.llm.supply_authority import LLM_SUPPLY_AUTHORITY, SupplyResolutionResult
+
     r = SupplyResolutionResult(requested_provider="openai", requested_model="gpt-4o")
     assert r.to_dict()["authority"] == LLM_SUPPLY_AUTHORITY
 
@@ -391,28 +420,33 @@ def test_29_supply_resolution_result_to_dict_authority_equals_sentinel():
 
 def test_30_llm_supply_authority_importable():
     from core.llm.supply_authority import LLMSupplyAuthority
+
     assert LLMSupplyAuthority is not None
 
 
 def test_31_llm_supply_authority_has_resolve_supply():
     from core.llm.supply_authority import LLMSupplyAuthority
+
     auth = LLMSupplyAuthority()
     assert callable(getattr(auth, "resolve_supply", None))
 
 
 def test_32_llm_supply_authority_has_policy_property():
     from core.llm.supply_authority import LLMSupplyAuthority, ProviderOrderingPolicy
+
     auth = LLMSupplyAuthority()
     assert isinstance(auth.policy, ProviderOrderingPolicy)
 
 
 def test_33_get_llm_supply_authority_importable():
     from core.llm.supply_authority import get_llm_supply_authority
+
     assert callable(get_llm_supply_authority)
 
 
 def test_34_get_llm_supply_authority_returns_instance():
     from core.llm.supply_authority import LLMSupplyAuthority, get_llm_supply_authority, refresh_llm_supply_authority
+
     refresh_llm_supply_authority()  # ensure fresh singleton
     auth = get_llm_supply_authority()
     assert isinstance(auth, LLMSupplyAuthority)
@@ -420,6 +454,7 @@ def test_34_get_llm_supply_authority_returns_instance():
 
 def test_35_get_llm_supply_authority_singleton():
     from core.llm.supply_authority import get_llm_supply_authority, refresh_llm_supply_authority
+
     refresh_llm_supply_authority()
     a1 = get_llm_supply_authority()
     a2 = get_llm_supply_authority()
@@ -432,6 +467,7 @@ def test_36_refresh_llm_supply_authority_fresh_instance():
         get_llm_supply_authority,
         refresh_llm_supply_authority,
     )
+
     refresh_llm_supply_authority()
     old = get_llm_supply_authority()
     fresh = refresh_llm_supply_authority()
@@ -446,6 +482,7 @@ def test_36_refresh_llm_supply_authority_fresh_instance():
 
 def test_37_resolve_supply_healthy_primary_satisfies():
     from core.llm.supply_authority import LLMSupplyAuthority
+
     auth = LLMSupplyAuthority()
     supply = _make_supply_state_dict(
         providers={"openai": _healthy_provider_record("openai", "gpt-4o")},
@@ -458,6 +495,7 @@ def test_37_resolve_supply_healthy_primary_satisfies():
 
 def test_38_resolve_supply_result_has_authority_sentinel():
     from core.llm.supply_authority import LLM_SUPPLY_AUTHORITY, LLMSupplyAuthority
+
     auth = LLMSupplyAuthority()
     supply = _make_supply_state_dict(
         providers={"openai": _healthy_provider_record("openai", "gpt-4o")},
@@ -470,6 +508,7 @@ def test_38_resolve_supply_result_has_authority_sentinel():
 
 def test_39_resolve_supply_primary_fallback_legality_none():
     from core.llm.supply_authority import FallbackLegality, LLMSupplyAuthority
+
     auth = LLMSupplyAuthority()
     supply = _make_supply_state_dict(
         providers={"openai": _healthy_provider_record("openai", "gpt-4o")},
@@ -482,6 +521,7 @@ def test_39_resolve_supply_primary_fallback_legality_none():
 
 def test_40_resolve_supply_down_primary_falls_back():
     from core.llm.supply_authority import LLMSupplyAuthority
+
     auth = LLMSupplyAuthority()
     supply = _make_supply_state_dict(
         providers={
@@ -499,6 +539,7 @@ def test_40_resolve_supply_down_primary_falls_back():
 
 def test_41_resolve_supply_down_primary_legality_primary_unavailable():
     from core.llm.supply_authority import FallbackLegality, LLMSupplyAuthority
+
     auth = LLMSupplyAuthority()
     supply = _make_supply_state_dict(
         providers={
@@ -515,6 +556,7 @@ def test_41_resolve_supply_down_primary_legality_primary_unavailable():
 
 def test_42_resolve_supply_trace_records_skipped_primary():
     from core.llm.supply_authority import LLMSupplyAuthority
+
     auth = LLMSupplyAuthority()
     supply = _make_supply_state_dict(
         providers={
@@ -532,6 +574,7 @@ def test_42_resolve_supply_trace_records_skipped_primary():
 
 def test_43_resolve_supply_trace_records_selected_secondary():
     from core.llm.supply_authority import LLMSupplyAuthority
+
     auth = LLMSupplyAuthority()
     supply = _make_supply_state_dict(
         providers={
@@ -550,6 +593,7 @@ def test_43_resolve_supply_trace_records_selected_secondary():
 
 def test_44_resolve_supply_no_available_providers_not_satisfied():
     from core.llm.supply_authority import LLMSupplyAuthority
+
     auth = LLMSupplyAuthority()
     supply = _make_supply_state_dict(
         providers={
@@ -564,6 +608,7 @@ def test_44_resolve_supply_no_available_providers_not_satisfied():
 
 def test_45_resolve_supply_no_available_legality_no_supply():
     from core.llm.supply_authority import FallbackLegality, LLMSupplyAuthority
+
     auth = LLMSupplyAuthority()
     supply = _make_supply_state_dict(
         providers={
@@ -578,6 +623,7 @@ def test_45_resolve_supply_no_available_legality_no_supply():
 
 def test_46_resolve_supply_fallback_supplied_differs_from_requested():
     from core.llm.supply_authority import LLMSupplyAuthority
+
     auth = LLMSupplyAuthority()
     supply = _make_supply_state_dict(
         providers={
@@ -594,6 +640,7 @@ def test_46_resolve_supply_fallback_supplied_differs_from_requested():
 
 def test_47_resolve_supply_degraded_primary_allowed_by_policy():
     from core.llm.supply_authority import FallbackLegality, LLMSupplyAuthority, ProviderOrderingPolicy
+
     policy = ProviderOrderingPolicy(allow_degraded_fallback=True)
     auth = LLMSupplyAuthority(policy=policy)
     supply = _make_supply_state_dict(
@@ -610,6 +657,7 @@ def test_47_resolve_supply_degraded_primary_allowed_by_policy():
 
 def test_48_resolve_supply_degraded_primary_not_allowed_falls_back():
     from core.llm.supply_authority import LLMSupplyAuthority, ProviderOrderingPolicy
+
     policy = ProviderOrderingPolicy(allow_degraded_fallback=False)
     auth = LLMSupplyAuthority(policy=policy)
     supply = _make_supply_state_dict(
@@ -627,6 +675,7 @@ def test_48_resolve_supply_degraded_primary_not_allowed_falls_back():
 
 def test_49_resolve_supply_degraded_fallback_legality_primary_degraded():
     from core.llm.supply_authority import FallbackLegality, LLMSupplyAuthority, ProviderOrderingPolicy
+
     policy = ProviderOrderingPolicy(allow_degraded_fallback=False)
     auth = LLMSupplyAuthority(policy=policy)
     supply = _make_supply_state_dict(
@@ -644,6 +693,7 @@ def test_49_resolve_supply_degraded_fallback_legality_primary_degraded():
 
 def test_50_resolve_supply_max_fallback_depth_zero_no_fallback():
     from core.llm.supply_authority import LLMSupplyAuthority, ProviderOrderingPolicy
+
     policy = ProviderOrderingPolicy(max_fallback_depth=0)
     auth = LLMSupplyAuthority(policy=policy)
     supply = _make_supply_state_dict(
@@ -661,6 +711,7 @@ def test_50_resolve_supply_max_fallback_depth_zero_no_fallback():
 
 def test_51_resolve_supply_uses_canonical_fallback_candidates_list():
     from core.llm.supply_authority import LLMSupplyAuthority
+
     auth = LLMSupplyAuthority()
     # anthropic is in fallback_candidates; gemini is available but not in candidates
     supply = _make_supply_state_dict(
@@ -680,6 +731,7 @@ def test_51_resolve_supply_uses_canonical_fallback_candidates_list():
 
 def test_52_resolve_supply_resolution_trace_non_empty():
     from core.llm.supply_authority import LLMSupplyAuthority
+
     auth = LLMSupplyAuthority()
     supply = _make_supply_state_dict(
         providers={"openai": _healthy_provider_record("openai", "gpt-4o")},
@@ -692,6 +744,7 @@ def test_52_resolve_supply_resolution_trace_non_empty():
 
 def test_53_resolve_supply_ordering_basis_non_empty():
     from core.llm.supply_authority import LLMSupplyAuthority
+
     auth = LLMSupplyAuthority()
     supply = _make_supply_state_dict(
         providers={"openai": _healthy_provider_record("openai", "gpt-4o")},
@@ -705,6 +758,7 @@ def test_53_resolve_supply_ordering_basis_non_empty():
 
 def test_54_resolve_supply_healthy_primary_is_satisfied():
     from core.llm.supply_authority import LLMSupplyAuthority
+
     auth = LLMSupplyAuthority()
     supply = _make_supply_state_dict(
         providers={"openai": _healthy_provider_record("openai", "gpt-4o")},
@@ -717,6 +771,7 @@ def test_54_resolve_supply_healthy_primary_is_satisfied():
 
 def test_55_resolve_supply_to_dict_json_serialisable():
     from core.llm.supply_authority import LLMSupplyAuthority
+
     auth = LLMSupplyAuthority()
     supply = _make_supply_state_dict(
         providers={"openai": _healthy_provider_record("openai", "gpt-4o")},
@@ -735,31 +790,37 @@ def test_55_resolve_supply_to_dict_json_serialisable():
 
 def test_56_llm_supply_authority_re_exported_from_core_llm():
     from core.llm import LLM_SUPPLY_AUTHORITY
+
     assert LLM_SUPPLY_AUTHORITY is not None
 
 
 def test_57_fallback_legality_re_exported_from_core_llm():
     from core.llm import FallbackLegality
+
     assert FallbackLegality is not None
 
 
 def test_58_provider_ordering_policy_re_exported_from_core_llm():
     from core.llm import ProviderOrderingPolicy
+
     assert ProviderOrderingPolicy is not None
 
 
 def test_59_supply_resolution_result_re_exported_from_core_llm():
     from core.llm import SupplyResolutionResult
+
     assert SupplyResolutionResult is not None
 
 
 def test_60_llm_supply_authority_class_re_exported_from_core_llm():
     from core.llm import LLMSupplyAuthority
+
     assert LLMSupplyAuthority is not None
 
 
 def test_61_get_llm_supply_authority_re_exported_from_core_llm():
     from core.llm import get_llm_supply_authority
+
     assert callable(get_llm_supply_authority)
 
 
@@ -771,6 +832,7 @@ def test_61_get_llm_supply_authority_re_exported_from_core_llm():
 def test_62_supply_authority_differs_from_route_authority():
     from core.llm.route_authority import LLM_ROUTE_AUTHORITY
     from core.llm.supply_authority import LLM_SUPPLY_AUTHORITY
+
     assert LLM_SUPPLY_AUTHORITY != LLM_ROUTE_AUTHORITY
 
 
@@ -780,9 +842,7 @@ def test_62_supply_authority_differs_from_route_authority():
 
 
 def _read_routing_authority_doc() -> str:
-    doc_path = os.path.join(
-        _REPO_ROOT, "docs", "MODEL_ROUTING_AUTHORITY.md"
-    )
+    doc_path = os.path.join(_REPO_ROOT, "docs", "MODEL_ROUTING_AUTHORITY.md")
     if not os.path.exists(doc_path):
         return ""
     with open(doc_path, encoding="utf-8") as f:
@@ -821,6 +881,7 @@ def test_67_docs_section_10_exists():
 
 def test_68_resolve_supply_none_supply_state_not_satisfied():
     from core.llm.supply_authority import LLMSupplyAuthority
+
     auth = LLMSupplyAuthority()
     decision = _make_route_decision("openai", "gpt-4o")
     result = auth.resolve_supply(decision, None)
@@ -829,6 +890,7 @@ def test_68_resolve_supply_none_supply_state_not_satisfied():
 
 def test_69_resolve_supply_empty_supply_dict_not_satisfied():
     from core.llm.supply_authority import LLMSupplyAuthority
+
     auth = LLMSupplyAuthority()
     decision = _make_route_decision("openai", "gpt-4o")
     result = auth.resolve_supply(decision, {})
@@ -837,6 +899,7 @@ def test_69_resolve_supply_empty_supply_dict_not_satisfied():
 
 def test_70_resolve_supply_requested_provider_preserved():
     from core.llm.supply_authority import LLMSupplyAuthority
+
     auth = LLMSupplyAuthority()
     supply = _make_supply_state_dict(
         providers={"openai": _healthy_provider_record("openai", "gpt-4o")},
@@ -849,6 +912,7 @@ def test_70_resolve_supply_requested_provider_preserved():
 
 def test_71_resolve_supply_requested_model_preserved():
     from core.llm.supply_authority import LLMSupplyAuthority
+
     auth = LLMSupplyAuthority()
     supply = _make_supply_state_dict(
         providers={"openai": _healthy_provider_record("openai", "gpt-4o")},
@@ -861,6 +925,7 @@ def test_71_resolve_supply_requested_model_preserved():
 
 def test_72_supply_resolution_step_fallback_legality_string_in_to_dict():
     from core.llm.supply_authority import FallbackLegality, SupplyResolutionStep
+
     step = SupplyResolutionStep(
         provider="openai",
         model="gpt-4o",
@@ -875,6 +940,7 @@ def test_72_supply_resolution_step_fallback_legality_string_in_to_dict():
 
 def test_73_supply_resolution_result_fallback_legality_string_in_to_dict():
     from core.llm.supply_authority import FallbackLegality, SupplyResolutionResult
+
     r = SupplyResolutionResult(
         requested_provider="openai",
         requested_model="gpt-4o",
@@ -888,6 +954,7 @@ def test_73_supply_resolution_result_fallback_legality_string_in_to_dict():
 def test_74_resolve_supply_capability_mismatch_when_required():
     """Provider lacking required capabilities triggers CAPABILITY_MISMATCH fallback."""
     from core.llm.supply_authority import FallbackLegality, LLMSupplyAuthority, ProviderOrderingPolicy
+
     policy = ProviderOrderingPolicy(required_capabilities=["tool_use"])
     auth = LLMSupplyAuthority(policy=policy)
 
@@ -923,5 +990,6 @@ def test_74_resolve_supply_capability_mismatch_when_required():
 
 def test_75_core_llm_supply_authority_module_importable():
     import importlib
+
     mod = importlib.import_module("core.llm.supply_authority")
     assert mod is not None

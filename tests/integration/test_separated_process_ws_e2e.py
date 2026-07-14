@@ -113,9 +113,7 @@ def _wait_for_port(host: str, port: int, timeout: float = 20.0) -> None:
                 return
         except (ConnectionRefusedError, OSError):
             time.sleep(0.1)
-    raise RuntimeError(
-        f"Server on {host}:{port} did not start within {timeout}s"
-    )
+    raise RuntimeError(f"Server on {host}:{port} did not start within {timeout}s")
 
 
 # ---------------------------------------------------------------------------
@@ -195,9 +193,7 @@ class NetworkE2EClient:
         await self.send(_v3("device_register", self.device_id, platform=platform))
         return await self.recv()
 
-    async def report_capabilities(
-        self, caps: List[str]
-    ) -> Dict[str, Any]:
+    async def report_capabilities(self, caps: List[str]) -> Dict[str, Any]:
         await self.send(
             _v3(
                 "capability_report",
@@ -257,9 +253,7 @@ class TestSeparatedProcessNetworkE2E:
     # Test 1 — register + capability_report + heartbeat (network level)
     # ------------------------------------------------------------------
 
-    async def test_register_capability_heartbeat_network_e2e(
-        self, live_server: str
-    ) -> None:
+    async def test_register_capability_heartbeat_network_e2e(self, live_server: str) -> None:
         """register → capability_report → heartbeat over real network.
 
         Verifies the first two canonical steps at true network level.
@@ -273,41 +267,29 @@ class TestSeparatedProcessNetworkE2E:
 
             # Step 1 — register
             reg_ack = await client.register()
-            assert reg_ack["type"] == "device_register_ack", (
-                f"Expected device_register_ack; got {reg_ack.get('type')!r}"
-            )
-            assert reg_ack.get("success") is True, (
-                "register_ack.success must be True"
-            )
-            assert reg_ack.get("device_id") == device_id, (
-                "register_ack.device_id mismatch"
-            )
-            assert reg_ack.get("version") == "3.0", (
-                "AIP v3 version string must be '3.0'"
-            )
+            assert (
+                reg_ack["type"] == "device_register_ack"
+            ), f"Expected device_register_ack; got {reg_ack.get('type')!r}"
+            assert reg_ack.get("success") is True, "register_ack.success must be True"
+            assert reg_ack.get("device_id") == device_id, "register_ack.device_id mismatch"
+            assert reg_ack.get("version") == "3.0", "AIP v3 version string must be '3.0'"
 
             # Step 2 — capability_report
             cap_ack = await client.report_capabilities(caps)
-            assert cap_ack["type"] == "capability_report_ack", (
-                f"Expected capability_report_ack; got {cap_ack.get('type')!r}"
-            )
-            assert cap_ack.get("accepted") is True, (
-                "capability_report_ack.accepted must be True"
-            )
+            assert (
+                cap_ack["type"] == "capability_report_ack"
+            ), f"Expected capability_report_ack; got {cap_ack.get('type')!r}"
+            assert cap_ack.get("accepted") is True, "capability_report_ack.accepted must be True"
 
             # Heartbeat — session is alive after registration
             hb_ack = await client.heartbeat()
-            assert hb_ack["type"] == "heartbeat_ack", (
-                f"Expected heartbeat_ack; got {hb_ack.get('type')!r}"
-            )
+            assert hb_ack["type"] == "heartbeat_ack", f"Expected heartbeat_ack; got {hb_ack.get('type')!r}"
 
     # ------------------------------------------------------------------
     # Test 2 — task_result → session continuity (heartbeat after result)
     # ------------------------------------------------------------------
 
-    async def test_task_result_session_continuity_network_e2e(
-        self, live_server: str
-    ) -> None:
+    async def test_task_result_session_continuity_network_e2e(self, live_server: str) -> None:
         """task_result sent over real network; session stays open (heartbeat_ack).
 
         Verifies that the V2 gateway correctly processes a task_result arriving
@@ -325,24 +307,19 @@ class TestSeparatedProcessNetworkE2E:
             await client.report_capabilities(["screenshot"])
 
             # Send task_result (no server response expected for this message type)
-            await client.task_result(
-                task_id, status="completed", result_data={"image": "base64abc"}
-            )
+            await client.task_result(task_id, status="completed", result_data={"image": "base64abc"})
 
             # Heartbeat — proves session is alive after task_result
             hb_ack = await client.heartbeat()
             assert hb_ack["type"] == "heartbeat_ack", (
-                f"Session broke after task_result: "
-                f"expected heartbeat_ack, got {hb_ack.get('type')!r}"
+                f"Session broke after task_result: " f"expected heartbeat_ack, got {hb_ack.get('type')!r}"
             )
 
     # ------------------------------------------------------------------
     # Test 3 — full canonical six-step sequence at network level
     # ------------------------------------------------------------------
 
-    async def test_full_six_step_canonical_network_e2e(
-        self, live_server: str
-    ) -> None:
+    async def test_full_six_step_canonical_network_e2e(self, live_server: str) -> None:
         """Full six-step canonical sequence over real separated-process WebSocket.
 
         Steps verified at network level
@@ -361,9 +338,7 @@ class TestSeparatedProcessNetworkE2E:
         device_id = f"net-six-{uuid.uuid4().hex[:8]}"
         task_id = str(uuid.uuid4())
         ws_url = live_server.replace("http://", "ws://") + f"/ws/device/{device_id}"
-        http_dispatch_url = (
-            f"{live_server}/test/dispatch-task/{device_id}"
-        )
+        http_dispatch_url = f"{live_server}/test/dispatch-task/{device_id}"
 
         async with ws_connect(ws_url, open_timeout=10) as ws:
             client = NetworkE2EClient(ws, device_id)
@@ -371,23 +346,17 @@ class TestSeparatedProcessNetworkE2E:
             # ── Step 1: register ──────────────────────────────────────────
             reg_ack = await client.register()
             assert reg_ack["type"] == "device_register_ack", (
-                f"Step 1 FAILED: expected device_register_ack, "
-                f"got {reg_ack.get('type')!r}"
+                f"Step 1 FAILED: expected device_register_ack, " f"got {reg_ack.get('type')!r}"
             )
-            assert reg_ack.get("success") is True, (
-                "Step 1 FAILED: success is not True"
-            )
+            assert reg_ack.get("success") is True, "Step 1 FAILED: success is not True"
 
             # ── Step 2: capability_report ─────────────────────────────────
             caps = ["tap", "screenshot", "input_text", "swipe"]
             cap_ack = await client.report_capabilities(caps)
             assert cap_ack["type"] == "capability_report_ack", (
-                f"Step 2 FAILED: expected capability_report_ack, "
-                f"got {cap_ack.get('type')!r}"
+                f"Step 2 FAILED: expected capability_report_ack, " f"got {cap_ack.get('type')!r}"
             )
-            assert cap_ack.get("accepted") is True, (
-                "Step 2 FAILED: capabilities not accepted"
-            )
+            assert cap_ack.get("accepted") is True, "Step 2 FAILED: capabilities not accepted"
 
             # ── Step 3: V2 dispatches task_assign (HTTP trigger) ──────────
             # The HTTP endpoint pushes task_assign over the live WebSocket
@@ -398,28 +367,23 @@ class TestSeparatedProcessNetworkE2E:
                 timeout=5.0,
             )
             assert dispatch_resp.status_code == 200, (
-                f"Step 3 FAILED: dispatch endpoint returned "
-                f"{dispatch_resp.status_code}"
+                f"Step 3 FAILED: dispatch endpoint returned " f"{dispatch_resp.status_code}"
             )
             dispatch_body = dispatch_resp.json()
-            assert dispatch_body.get("dispatched") is True, (
-                "Step 3 FAILED: dispatched flag not True"
-            )
+            assert dispatch_body.get("dispatched") is True, "Step 3 FAILED: dispatched flag not True"
             server_task_id: str = dispatch_body["task_id"]
 
             # ── Step 4: device receives task_assign ───────────────────────
             task_assign_msg = await client.recv(timeout=5.0)
             assert task_assign_msg["type"] == "task_assign", (
-                f"Step 4 FAILED: expected task_assign, "
-                f"got {task_assign_msg.get('type')!r}"
+                f"Step 4 FAILED: expected task_assign, " f"got {task_assign_msg.get('type')!r}"
             )
-            assert task_assign_msg.get("task_id") == server_task_id, (
-                "Step 4 FAILED: task_id in task_assign does not match dispatched id"
-            )
+            assert (
+                task_assign_msg.get("task_id") == server_task_id
+            ), "Step 4 FAILED: task_id in task_assign does not match dispatched id"
             received_command = (task_assign_msg.get("payload") or {}).get("command")
             assert received_command == "screenshot", (
-                f"Step 4 FAILED: expected command='screenshot', "
-                f"got {received_command!r}"
+                f"Step 4 FAILED: expected command='screenshot', " f"got {received_command!r}"
             )
 
             # ── Step 5: device sends task_result ──────────────────────────
@@ -436,17 +400,14 @@ class TestSeparatedProcessNetworkE2E:
             #     breaking the WebSocket session.
             hb_ack = await client.heartbeat()
             assert hb_ack["type"] == "heartbeat_ack", (
-                f"Step 6 FAILED: continuation broken — "
-                f"expected heartbeat_ack, got {hb_ack.get('type')!r}"
+                f"Step 6 FAILED: continuation broken — " f"expected heartbeat_ack, got {hb_ack.get('type')!r}"
             )
 
     # ------------------------------------------------------------------
     # Test 4 — reconnect and re-register (runtime recovery at network level)
     # ------------------------------------------------------------------
 
-    async def test_reconnect_reregisters_network_e2e(
-        self, live_server: str
-    ) -> None:
+    async def test_reconnect_reregisters_network_e2e(self, live_server: str) -> None:
         """Device disconnects and reconnects; new session is correctly established.
 
         Verifies that the V2 gateway accepts a fresh registration from a device
@@ -467,26 +428,20 @@ class TestSeparatedProcessNetworkE2E:
         async with ws_connect(ws_url, open_timeout=10) as ws:
             client2 = NetworkE2EClient(ws, device_id)
             reg2 = await client2.register()
-            assert reg2["type"] == "device_register_ack", (
-                "Reconnect FAILED: device_register_ack not received on second session"
-            )
-            assert reg2.get("success") is True, (
-                "Reconnect FAILED: success not True on second session"
-            )
+            assert (
+                reg2["type"] == "device_register_ack"
+            ), "Reconnect FAILED: device_register_ack not received on second session"
+            assert reg2.get("success") is True, "Reconnect FAILED: success not True on second session"
 
             # Confirm session is fully functional
             hb_ack = await client2.heartbeat()
-            assert hb_ack["type"] == "heartbeat_ack", (
-                "Reconnect FAILED: heartbeat_ack missing after re-register"
-            )
+            assert hb_ack["type"] == "heartbeat_ack", "Reconnect FAILED: heartbeat_ack missing after re-register"
 
     # ------------------------------------------------------------------
     # Test 5 — multiple sequential tasks at network level
     # ------------------------------------------------------------------
 
-    async def test_multiple_sequential_tasks_network_e2e(
-        self, live_server: str
-    ) -> None:
+    async def test_multiple_sequential_tasks_network_e2e(self, live_server: str) -> None:
         """Multiple sequential task roundtrips over real network in one session.
 
         Each iteration: HTTP trigger → task_assign received → task_result sent
@@ -515,8 +470,7 @@ class TestSeparatedProcessNetworkE2E:
                 # Receive task_assign over real network
                 assign_msg = await client.recv(timeout=5.0)
                 assert assign_msg["type"] == "task_assign", (
-                    f"Iteration {i}: expected task_assign, "
-                    f"got {assign_msg.get('type')!r}"
+                    f"Iteration {i}: expected task_assign, " f"got {assign_msg.get('type')!r}"
                 )
                 server_task_id = assign_msg["task_id"]
 
@@ -528,9 +482,7 @@ class TestSeparatedProcessNetworkE2E:
 
             # Final heartbeat — session alive after 3 task roundtrips
             hb_ack = await client.heartbeat()
-            assert hb_ack["type"] == "heartbeat_ack", (
-                "Session broken after sequential task roundtrips"
-            )
+            assert hb_ack["type"] == "heartbeat_ack", "Session broken after sequential task roundtrips"
 
 
 # ---------------------------------------------------------------------------
@@ -552,12 +504,6 @@ class TestGapJointIntegrationTestResolved:
             (g for g in WORKSTREAM_GAP_REGISTRY if g.gap_id == "GAP_JOINT_INTEGRATION_TEST"),
             None,
         )
-        assert gap is not None, (
-            "GAP_JOINT_INTEGRATION_TEST not found in WORKSTREAM_GAP_REGISTRY"
-        )
-        assert gap.resolved is True, (
-            "GAP_JOINT_INTEGRATION_TEST.resolved must be True after this PR"
-        )
-        assert gap.resolution_pr, (
-            "GAP_JOINT_INTEGRATION_TEST.resolution_pr must be non-empty"
-        )
+        assert gap is not None, "GAP_JOINT_INTEGRATION_TEST not found in WORKSTREAM_GAP_REGISTRY"
+        assert gap.resolved is True, "GAP_JOINT_INTEGRATION_TEST.resolved must be True after this PR"
+        assert gap.resolution_pr, "GAP_JOINT_INTEGRATION_TEST.resolution_pr must be non-empty"

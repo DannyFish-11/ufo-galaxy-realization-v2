@@ -17,6 +17,7 @@
 
 规划器**模型无关、设备无关**:桌面与手机复用同一份。
 """
+
 from __future__ import annotations
 
 from typing import List, Optional
@@ -35,15 +36,16 @@ from core.ui_grounding import (
 
 class PlannedAction(BaseModel):
     """一步可执行动作(或"需要模型判断"的待决状态)。"""
+
     action: UIActionKind = UIActionKind.TAP
-    node_id: str = ""                     # 目标控件端内标识(设备侧据此/坐标复定位)
+    node_id: str = ""  # 目标控件端内标识(设备侧据此/坐标复定位)
     label: str = ""
     coordinates: Optional[List[int]] = None  # [x, y] 目标中心;结构点中才有
-    text: str = ""                        # SET_TEXT 要输入的文字
+    text: str = ""  # SET_TEXT 要输入的文字
     confidence: float = 0.0
     strategy: GroundingStrategy = GroundingStrategy.NONE
-    needs_model: bool = False             # True=结构点不准,得让模型(看着截图+结构)判断
-    grounding_prompt: str = ""            # needs_model 时:与截图一同发给模型的辅助提示
+    needs_model: bool = False  # True=结构点不准,得让模型(看着截图+结构)判断
+    grounding_prompt: str = ""  # needs_model 时:与截图一同发给模型的辅助提示
     reason: str = ""
 
     @property
@@ -52,9 +54,9 @@ class PlannedAction(BaseModel):
         return not self.needs_model and (self.coordinates is not None or bool(self.node_id) or bool(self.label))
 
 
-def plan(graph: UIGraph, instruction: str, *,
-         model_reply: Optional[str] = None,
-         action: Optional[UIActionKind] = None) -> PlannedAction:
+def plan(
+    graph: UIGraph, instruction: str, *, model_reply: Optional[str] = None, action: Optional[UIActionKind] = None
+) -> PlannedAction:
     """规划一步。
 
     - 未给 model_reply:先走结构确定性快路径 :func:`resolve_target`。命中→直接动作;

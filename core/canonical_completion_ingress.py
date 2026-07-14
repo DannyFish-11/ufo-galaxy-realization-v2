@@ -149,15 +149,12 @@ class CanonicalCompletionIngress:
                         existing.cancel()
                     except Exception as _cancel_exc:
                         logger.debug(
-                            "canonical_completion_ingress: cancel() raised for "
-                            "handoff_id=%r: %s",
+                            "canonical_completion_ingress: cancel() raised for " "handoff_id=%r: %s",
                             handoff_id,
                             _cancel_exc,
                         )
                 self._futures_by_handoff_id[handoff_id] = fut
-                logger.debug(
-                    "canonical_completion_ingress: registered handoff_id=%r", handoff_id
-                )
+                logger.debug("canonical_completion_ingress: registered handoff_id=%r", handoff_id)
             if task_id:
                 existing_tid = self._futures_by_task_id.get(task_id)
                 if existing_tid is not None and not existing_tid.done():
@@ -171,15 +168,12 @@ class CanonicalCompletionIngress:
                         existing_tid.cancel()
                     except Exception as _cancel_exc:
                         logger.debug(
-                            "canonical_completion_ingress: cancel() raised for "
-                            "task_id=%r: %s",
+                            "canonical_completion_ingress: cancel() raised for " "task_id=%r: %s",
                             task_id,
                             _cancel_exc,
                         )
                 self._futures_by_task_id[task_id] = fut
-                logger.debug(
-                    "canonical_completion_ingress: registered task_id=%r", task_id
-                )
+                logger.debug("canonical_completion_ingress: registered task_id=%r", task_id)
 
         return fut
 
@@ -279,8 +273,7 @@ class CanonicalCompletionIngress:
             )
         else:
             logger.debug(
-                "canonical_completion_ingress: notify miss handoff_id=%r "
-                "task_id=%r",
+                "canonical_completion_ingress: notify miss handoff_id=%r " "task_id=%r",
                 handoff_id,
                 task_id,
             )
@@ -359,9 +352,7 @@ class CanonicalCompletionIngress:
                 record_operator_evidence_entry(
                     task_id=task_id or handoff_id,
                     device_id=android_device_id,
-                    evidence_state="confirmed_strong"
-                    if verdict == "accept"
-                    else "circumstantial",
+                    evidence_state="confirmed_strong" if verdict == "accept" else "circumstantial",
                     trust_level="trusted" if verdict == "accept" else "provisional",
                     acceptance_verdict=verdict,
                     truth_chain_complete=True,
@@ -376,8 +367,7 @@ class CanonicalCompletionIngress:
                 )
             except Exception as _obs_err:
                 logger.debug(
-                    "canonical_completion_ingress: observability record failed "
-                    "(non-fatal): %s",
+                    "canonical_completion_ingress: observability record failed " "(non-fatal): %s",
                     _obs_err,
                 )
 
@@ -413,9 +403,7 @@ class CanonicalCompletionIngress:
             return False
 
         if fut.done():
-            logger.debug(
-                "canonical_completion_ingress: Future already resolved for key=%r", key
-            )
+            logger.debug("canonical_completion_ingress: Future already resolved for key=%r", key)
             return False
 
         try:
@@ -485,8 +473,7 @@ class CanonicalCompletionIngress:
 
         if fut.done():
             logger.debug(
-                "canonical_completion_ingress: Future already resolved for key=%r "
-                "(fail_key no-op)",
+                "canonical_completion_ingress: Future already resolved for key=%r " "(fail_key no-op)",
                 key,
             )
             return False
@@ -496,8 +483,7 @@ class CanonicalCompletionIngress:
             return True
         except asyncio.InvalidStateError:
             logger.debug(
-                "canonical_completion_ingress: InvalidStateError failing key=%r "
-                "(race condition, already resolved)",
+                "canonical_completion_ingress: InvalidStateError failing key=%r " "(race condition, already resolved)",
                 key,
             )
             return False
@@ -547,9 +533,7 @@ def register_pending_dispatch(
     task_id: Optional[str] = None,
 ) -> "asyncio.Future[Any]":
     """Module-level shortcut: ``get_canonical_completion_ingress().register_pending_dispatch(...)``."""
-    return get_canonical_completion_ingress().register_pending_dispatch(
-        handoff_id, task_id
-    )
+    return get_canonical_completion_ingress().register_pending_dispatch(handoff_id, task_id)
 
 
 def complete_pending_dispatch(
@@ -557,9 +541,7 @@ def complete_pending_dispatch(
     envelope: Any,
 ) -> bool:
     """Module-level shortcut: ``get_canonical_completion_ingress().complete_pending_dispatch(...)``."""
-    return get_canonical_completion_ingress().complete_pending_dispatch(
-        handoff_id_or_task_id, envelope
-    )
+    return get_canonical_completion_ingress().complete_pending_dispatch(handoff_id_or_task_id, envelope)
 
 
 def fail_pending_dispatch(
@@ -567,9 +549,7 @@ def fail_pending_dispatch(
     exc: BaseException,
 ) -> bool:
     """Module-level shortcut: ``get_canonical_completion_ingress().fail_pending_dispatch(...)``."""
-    return get_canonical_completion_ingress().fail_pending_dispatch(
-        handoff_id_or_task_id, exc
-    )
+    return get_canonical_completion_ingress().fail_pending_dispatch(handoff_id_or_task_id, exc)
 
 
 __all__ = [

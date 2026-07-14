@@ -41,9 +41,7 @@ class SessionMemoryManager:
         self._session_memory[session_id].append({"role": role, "content": content})
         # Keep a rolling window to bound memory growth
         if len(self._session_memory[session_id]) > self._MAX_HISTORY_BUFFER:
-            self._session_memory[session_id] = (
-                self._session_memory[session_id][-self._ROLLING_WINDOW_SIZE :]
-            )
+            self._session_memory[session_id] = self._session_memory[session_id][-self._ROLLING_WINDOW_SIZE :]
 
     async def clear_session(self, session_id: str) -> None:
         """Remove all history for *session_id*."""
@@ -56,10 +54,7 @@ class SessionMemoryManager:
 
     def list_sessions(self) -> List[Dict]:
         """Return a summary list of all active sessions."""
-        return [
-            {"session_id": sid, "turn_count": len(turns)}
-            for sid, turns in self._session_memory.items()
-        ]
+        return [{"session_id": sid, "turn_count": len(turns)} for sid, turns in self._session_memory.items()]
 
 
 # ---------------------------------------------------------------------------
@@ -78,6 +73,7 @@ class ContinuumStateAdapter:
         if getattr(openclawd_instance, "_continuum_orchestrator", None) is None:
             try:
                 from core.continuum_orchestrator import ContinuumOrchestrator
+
                 openclawd_instance._continuum_orchestrator = ContinuumOrchestrator()
             except Exception as exc:
                 logger.warning("ContinuumOrchestrator unavailable: %s", exc)

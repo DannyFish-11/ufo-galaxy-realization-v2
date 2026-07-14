@@ -41,7 +41,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -67,19 +66,23 @@ def _task_id() -> str:
 class TestGroupA_DurableResultIdSetBasic:
     def setup_method(self):
         from core.durable_result_idempotency import reset_durable_result_id_store
+
         reset_durable_result_id_store()
 
     def teardown_method(self):
         from core.durable_result_idempotency import reset_durable_result_id_store
+
         reset_durable_result_id_store()
 
     def test_A01_new_result_id_not_contained(self, tmp_path):
         from core.durable_result_idempotency import DurableResultIdSet
+
         store = DurableResultIdSet(store_path=str(tmp_path / "ids.json"))
         assert not store.contains(_result_id())
 
     def test_A02_add_then_contains(self, tmp_path):
         from core.durable_result_idempotency import DurableResultIdSet
+
         store = DurableResultIdSet(store_path=str(tmp_path / "ids.json"))
         rid = _result_id()
         assert store.add(rid) is True
@@ -87,6 +90,7 @@ class TestGroupA_DurableResultIdSetBasic:
 
     def test_A03_add_duplicate_returns_false(self, tmp_path):
         from core.durable_result_idempotency import DurableResultIdSet
+
         store = DurableResultIdSet(store_path=str(tmp_path / "ids.json"))
         rid = _result_id()
         store.add(rid)
@@ -94,6 +98,7 @@ class TestGroupA_DurableResultIdSetBasic:
 
     def test_A04_size_tracks_unique_additions(self, tmp_path):
         from core.durable_result_idempotency import DurableResultIdSet
+
         store = DurableResultIdSet(store_path=str(tmp_path / "ids.json"))
         for _ in range(5):
             store.add(_result_id())
@@ -108,6 +113,7 @@ class TestGroupA_DurableResultIdSetBasic:
 class TestGroupB_DurableResultIdSetRestart:
     def test_B01_ids_persist_across_new_instance(self, tmp_path):
         from core.durable_result_idempotency import DurableResultIdSet
+
         path = str(tmp_path / "ids.json")
         rid = _result_id()
 
@@ -121,6 +127,7 @@ class TestGroupB_DurableResultIdSetRestart:
 
     def test_B02_new_ids_not_in_reloaded_store(self, tmp_path):
         from core.durable_result_idempotency import DurableResultIdSet
+
         path = str(tmp_path / "ids.json")
         rid_old = _result_id()
         rid_new = _result_id()
@@ -141,6 +148,7 @@ class TestGroupB_DurableResultIdSetRestart:
 class TestGroupC_DurableResultIdSetDuplicate:
     def test_C01_add_returns_false_on_duplicate(self, tmp_path):
         from core.durable_result_idempotency import DurableResultIdSet
+
         store = DurableResultIdSet(store_path=str(tmp_path / "ids.json"))
         rid = _result_id()
         assert store.add(rid) is True
@@ -148,6 +156,7 @@ class TestGroupC_DurableResultIdSetDuplicate:
 
     def test_C02_after_restart_duplicate_still_false(self, tmp_path):
         from core.durable_result_idempotency import DurableResultIdSet
+
         path = str(tmp_path / "ids.json")
         rid = _result_id()
         store1 = DurableResultIdSet(store_path=path)
@@ -165,6 +174,7 @@ class TestGroupC_DurableResultIdSetDuplicate:
 class TestGroupD_DurableResultIdSetClear:
     def test_D01_clear_removes_file(self, tmp_path):
         from core.durable_result_idempotency import DurableResultIdSet
+
         path = str(tmp_path / "ids.json")
         store = DurableResultIdSet(store_path=path)
         store.add(_result_id())
@@ -173,6 +183,7 @@ class TestGroupD_DurableResultIdSetClear:
 
     def test_D02_contains_returns_false_after_clear(self, tmp_path):
         from core.durable_result_idempotency import DurableResultIdSet
+
         store = DurableResultIdSet(store_path=str(tmp_path / "ids.json"))
         rid = _result_id()
         store.add(rid)
@@ -181,6 +192,7 @@ class TestGroupD_DurableResultIdSetClear:
 
     def test_D03_clear_safe_when_no_file(self, tmp_path):
         from core.durable_result_idempotency import DurableResultIdSet
+
         store = DurableResultIdSet(store_path=str(tmp_path / "ids_none.json"))
         store.clear()  # must not raise
 
@@ -193,6 +205,7 @@ class TestGroupD_DurableResultIdSetClear:
 class TestGroupE_DurableResultIdSetBounded:
     def test_E01_evicts_oldest_when_over_cap(self, tmp_path):
         from core.durable_result_idempotency import DurableResultIdSet
+
         store = DurableResultIdSet(store_path=str(tmp_path / "ids.json"), max_entries=3)
         ids = [_result_id() for _ in range(5)]
         for rid in ids:
@@ -214,39 +227,47 @@ class TestGroupE_DurableResultIdSetBounded:
 class TestGroupF_ResultIdempotencyHelpers:
     def setup_method(self):
         from core.durable_result_idempotency import reset_durable_result_id_store
+
         reset_durable_result_id_store()
 
     def teardown_method(self):
         from core.durable_result_idempotency import reset_durable_result_id_store
+
         reset_durable_result_id_store()
 
     def test_F01_check_returns_false_for_unseen(self, tmp_path, monkeypatch):
         import core.durable_result_idempotency as idem
+
         store_path = str(tmp_path / "ids.json")
         monkeypatch.setattr(idem, "_DEFAULT_RESULT_ID_STORE_PATH", store_path)
 
         from core.durable_result_idempotency import check_result_idempotency
+
         assert check_result_idempotency(_result_id()) is False
 
     def test_F02_record_then_check_returns_true(self, tmp_path, monkeypatch):
         import core.durable_result_idempotency as idem
+
         store_path = str(tmp_path / "ids.json")
         monkeypatch.setattr(idem, "_DEFAULT_RESULT_ID_STORE_PATH", store_path)
 
         from core.durable_result_idempotency import (
-            record_result_idempotency,
             check_result_idempotency,
+            record_result_idempotency,
         )
+
         rid = _result_id()
         assert record_result_idempotency(rid) is True
         assert check_result_idempotency(rid) is True
 
     def test_F03_record_duplicate_returns_false(self, tmp_path, monkeypatch):
         import core.durable_result_idempotency as idem
+
         store_path = str(tmp_path / "ids.json")
         monkeypatch.setattr(idem, "_DEFAULT_RESULT_ID_STORE_PATH", store_path)
 
         from core.durable_result_idempotency import record_result_idempotency
+
         rid = _result_id()
         assert record_result_idempotency(rid) is True
         assert record_result_idempotency(rid) is False
@@ -260,19 +281,23 @@ class TestGroupF_ResultIdempotencyHelpers:
 class TestGroupG_SessionTruthSnapshotStore:
     def setup_method(self):
         from core.session_truth_snapshot import reset_session_truth_snapshot_store
+
         reset_session_truth_snapshot_store()
 
     def teardown_method(self):
         from core.session_truth_snapshot import reset_session_truth_snapshot_store
+
         reset_session_truth_snapshot_store()
 
     def test_G01_load_empty_when_no_file(self, tmp_path):
         from core.session_truth_snapshot import SessionTruthSnapshotStore
+
         store = SessionTruthSnapshotStore(store_path=str(tmp_path / "st.json"))
         assert store.load() == []
 
     def test_G02_append_creates_file(self, tmp_path):
         from core.session_truth_snapshot import SessionTruthSnapshotStore
+
         path = str(tmp_path / "st.json")
         store = SessionTruthSnapshotStore(store_path=path)
         store.append({"session_id": "s1", "task_id": "t1"})
@@ -280,6 +305,7 @@ class TestGroupG_SessionTruthSnapshotStore:
 
     def test_G03_load_returns_appended_records(self, tmp_path):
         from core.session_truth_snapshot import SessionTruthSnapshotStore
+
         store = SessionTruthSnapshotStore(store_path=str(tmp_path / "st.json"))
         store.append({"session_id": "s1"})
         store.append({"session_id": "s2"})
@@ -290,6 +316,7 @@ class TestGroupG_SessionTruthSnapshotStore:
 
     def test_G04_clear_removes_records(self, tmp_path):
         from core.session_truth_snapshot import SessionTruthSnapshotStore
+
         path = str(tmp_path / "st.json")
         store = SessionTruthSnapshotStore(store_path=path)
         store.append({"session_id": "s1"})
@@ -305,6 +332,7 @@ class TestGroupG_SessionTruthSnapshotStore:
 class TestGroupH_SessionTruthSnapshotRestart:
     def test_H01_records_survive_new_instance(self, tmp_path):
         from core.session_truth_snapshot import SessionTruthSnapshotStore
+
         path = str(tmp_path / "st.json")
         store1 = SessionTruthSnapshotStore(store_path=path)
         store1.append({"session_id": "s1", "task_id": "t1"})
@@ -316,6 +344,7 @@ class TestGroupH_SessionTruthSnapshotRestart:
 
     def test_H02_multiple_records_survive_restart(self, tmp_path):
         from core.session_truth_snapshot import SessionTruthSnapshotStore
+
         path = str(tmp_path / "st.json")
         store1 = SessionTruthSnapshotStore(store_path=path)
         for i in range(5):
@@ -333,9 +362,8 @@ class TestGroupH_SessionTruthSnapshotRestart:
 class TestGroupI_SessionTruthSnapshotBounded:
     def test_I01_trims_to_max_records(self, tmp_path):
         from core.session_truth_snapshot import SessionTruthSnapshotStore
-        store = SessionTruthSnapshotStore(
-            store_path=str(tmp_path / "st.json"), max_records=3
-        )
+
+        store = SessionTruthSnapshotStore(store_path=str(tmp_path / "st.json"), max_records=3)
         for i in range(5):
             store.append({"session_id": f"s{i}"})
         records = store.load()
@@ -361,6 +389,7 @@ class TestGroupJ_CanonicalSessionTruthRecordFromDict:
         if not _pydantic_available:
             pytest.skip("pydantic not installed — skipping canonical_session_truth tests")
         from core.canonical_session_truth import CanonicalSessionTruthRecord
+
         rec = CanonicalSessionTruthRecord(
             session_id=_session_id(),
             task_id=_task_id(),
@@ -379,6 +408,7 @@ class TestGroupJ_CanonicalSessionTruthRecordFromDict:
         if not _pydantic_available:
             pytest.skip("pydantic not installed — skipping canonical_session_truth tests")
         from core.canonical_session_truth import CanonicalSessionTruthRecord
+
         rec = CanonicalSessionTruthRecord.from_dict({"session_id": "s1"})
         assert rec.session_id == "s1"
         assert rec.merge_success is False
@@ -396,6 +426,7 @@ class TestGroupK_CanonicalSessionTruthRuntimeSnapshotWiring:
             return
         from core.canonical_session_truth import reset_canonical_session_truth_runtime
         from core.session_truth_snapshot import reset_session_truth_snapshot_store
+
         reset_canonical_session_truth_runtime()
         reset_session_truth_snapshot_store()
 
@@ -404,6 +435,7 @@ class TestGroupK_CanonicalSessionTruthRuntimeSnapshotWiring:
             return
         from core.canonical_session_truth import reset_canonical_session_truth_runtime
         from core.session_truth_snapshot import reset_session_truth_snapshot_store
+
         reset_canonical_session_truth_runtime()
         reset_session_truth_snapshot_store()
 
@@ -411,17 +443,16 @@ class TestGroupK_CanonicalSessionTruthRuntimeSnapshotWiring:
         if not _pydantic_available:
             pytest.skip("pydantic not installed — skipping canonical_session_truth tests")
         from core.canonical_session_truth import (
-            CanonicalSessionTruthRuntime,
             CanonicalSessionTruthRecord,
+            CanonicalSessionTruthRuntime,
         )
         from core.session_truth_snapshot import SessionTruthSnapshotStore
+
         runtime = CanonicalSessionTruthRuntime()
         store = SessionTruthSnapshotStore(store_path=str(tmp_path / "st.json"))
         runtime.set_snapshot_store(store)
 
-        rec = CanonicalSessionTruthRecord(
-            session_id=_session_id(), task_id=_task_id(), merge_success=True
-        )
+        rec = CanonicalSessionTruthRecord(session_id=_session_id(), task_id=_task_id(), merge_success=True)
         runtime.record(rec)
         records = store.load()
         assert len(records) == 1
@@ -431,9 +462,10 @@ class TestGroupK_CanonicalSessionTruthRuntimeSnapshotWiring:
         if not _pydantic_available:
             pytest.skip("pydantic not installed — skipping canonical_session_truth tests")
         from core.canonical_session_truth import (
-            CanonicalSessionTruthRuntime,
             CanonicalSessionTruthRecord,
+            CanonicalSessionTruthRuntime,
         )
+
         runtime = CanonicalSessionTruthRuntime()
         # No snapshot store attached — should not raise
         rec = CanonicalSessionTruthRecord(session_id=_session_id())
@@ -452,6 +484,7 @@ class TestGroupL_RestoreSessionTruth:
             return
         from core.canonical_session_truth import reset_canonical_session_truth_runtime
         from core.session_truth_snapshot import reset_session_truth_snapshot_store
+
         reset_canonical_session_truth_runtime()
         reset_session_truth_snapshot_store()
 
@@ -460,6 +493,7 @@ class TestGroupL_RestoreSessionTruth:
             return
         from core.canonical_session_truth import reset_canonical_session_truth_runtime
         from core.session_truth_snapshot import reset_session_truth_snapshot_store
+
         reset_canonical_session_truth_runtime()
         reset_session_truth_snapshot_store()
 
@@ -467,22 +501,21 @@ class TestGroupL_RestoreSessionTruth:
         if not _pydantic_available:
             pytest.skip("pydantic not installed — skipping canonical_session_truth tests")
         from core.canonical_session_truth import (
-            CanonicalSessionTruthRuntime,
             CanonicalSessionTruthRecord,
+            CanonicalSessionTruthRuntime,
         )
         from core.session_truth_snapshot import (
             SessionTruthSnapshotStore,
             restore_session_truth_from_snapshot,
         )
+
         # First "process": record some truth
         store = SessionTruthSnapshotStore(store_path=str(tmp_path / "st.json"))
         runtime1 = CanonicalSessionTruthRuntime()
         runtime1.set_snapshot_store(store)
         for i in range(3):
             runtime1.record(
-                CanonicalSessionTruthRecord(
-                    session_id=f"sess_{i}", task_id=f"task_{i}", merge_success=True
-                )
+                CanonicalSessionTruthRecord(session_id=f"sess_{i}", task_id=f"task_{i}", merge_success=True)
             )
 
         # Simulated restart: new runtime, same store
@@ -500,6 +533,7 @@ class TestGroupL_RestoreSessionTruth:
             SessionTruthSnapshotStore,
             restore_session_truth_from_snapshot,
         )
+
         store = SessionTruthSnapshotStore(store_path=str(tmp_path / "st.json"))
         runtime = CanonicalSessionTruthRuntime()
         restored = restore_session_truth_from_snapshot(runtime=runtime, store=store)
@@ -514,21 +548,22 @@ class TestGroupL_RestoreSessionTruth:
 class TestGroupM_RestartWithInflightTask:
     def setup_method(self):
         from core.task_lifecycle_persistence import reset_task_lifecycle_store
+
         reset_task_lifecycle_store()
 
     def teardown_method(self):
         from core.task_lifecycle_persistence import reset_task_lifecycle_store
+
         reset_task_lifecycle_store()
 
     def test_M01_inflight_task_recovered_after_restart(self, tmp_path):
         from core.task_lifecycle_persistence import (
             TaskLifecyclePersistenceStore,
-            save_task_lifecycle_snapshot,
             restore_inflight_tasks_from_snapshot,
+            save_task_lifecycle_snapshot,
         )
-        store = TaskLifecyclePersistenceStore(
-            store_path=str(tmp_path / "tl.json")
-        )
+
+        store = TaskLifecyclePersistenceStore(store_path=str(tmp_path / "tl.json"))
         tid = _task_id()
         records = [
             {
@@ -554,9 +589,8 @@ class TestGroupM_RestartWithInflightTask:
             TaskLifecyclePersistenceStore,
             restore_inflight_tasks_from_snapshot,
         )
-        store = TaskLifecyclePersistenceStore(
-            store_path=str(tmp_path / "tl_empty.json")
-        )
+
+        store = TaskLifecyclePersistenceStore(store_path=str(tmp_path / "tl_empty.json"))
         assert restore_inflight_tasks_from_snapshot(store=store) == []
 
 
@@ -568,14 +602,17 @@ class TestGroupM_RestartWithInflightTask:
 class TestGroupN_AndroidReattachDuplicateResult:
     def setup_method(self):
         from core.durable_result_idempotency import reset_durable_result_id_store
+
         reset_durable_result_id_store()
 
     def teardown_method(self):
         from core.durable_result_idempotency import reset_durable_result_id_store
+
         reset_durable_result_id_store()
 
     def test_N01_result_from_before_restart_suppressed(self, tmp_path):
         from core.durable_result_idempotency import DurableResultIdSet
+
         path = str(tmp_path / "ids.json")
         rid = _result_id()
 
@@ -589,6 +626,7 @@ class TestGroupN_AndroidReattachDuplicateResult:
 
     def test_N02_new_result_after_restart_accepted(self, tmp_path):
         from core.durable_result_idempotency import DurableResultIdSet
+
         path = str(tmp_path / "ids.json")
         rid_old = _result_id()
         rid_new = _result_id()
@@ -609,6 +647,7 @@ class TestGroupN_AndroidReattachDuplicateResult:
 class TestGroupO_ReplaySafetyAcrossRestart:
     def test_O01_replay_after_restart_is_suppressed(self, tmp_path):
         from core.durable_result_idempotency import DurableResultIdSet
+
         path = str(tmp_path / "ids.json")
         rids = [_result_id() for _ in range(3)]
 
@@ -624,6 +663,7 @@ class TestGroupO_ReplaySafetyAcrossRestart:
 
     def test_O02_new_results_after_replay_accepted(self, tmp_path):
         from core.durable_result_idempotency import DurableResultIdSet
+
         path = str(tmp_path / "ids.json")
         old_rid = _result_id()
         new_rid = _result_id()
@@ -653,9 +693,9 @@ class TestGroupP_StartupSessionTruthSnapshotWiring:
         with open(startup_path) as f:
             src = f.read()
         # The key must be set somewhere in bootstrap_subsystems
-        assert 'session_truth_snapshot' in src, (
-            "startup.py must wire session_truth_snapshot into bootstrap_subsystems results"
-        )
+        assert (
+            "session_truth_snapshot" in src
+        ), "startup.py must wire session_truth_snapshot into bootstrap_subsystems results"
 
     def test_P02_set_snapshot_store_called_in_startup(self):
         """startup.py must call set_snapshot_store on the canonical runtime."""
@@ -683,9 +723,7 @@ class TestGroupQ_StartupRecoveryWiring:
         )
         with open(startup_path) as f:
             src = f.read()
-        assert 'startup_recovery' in src, (
-            "startup.py must wire startup_recovery into bootstrap_subsystems results"
-        )
+        assert "startup_recovery" in src, "startup.py must wire startup_recovery into bootstrap_subsystems results"
 
     def test_Q02_run_startup_recovery_called_in_startup(self):
         startup_path = os.path.join(
@@ -712,7 +750,7 @@ class TestGroupR_StartupDurableResultIdempotencyWiring:
         )
         with open(startup_path) as f:
             src = f.read()
-        assert 'durable_result_idempotency' in src
+        assert "durable_result_idempotency" in src
 
     def test_R02_get_durable_result_id_store_called_in_startup(self):
         startup_path = os.path.join(
@@ -739,9 +777,7 @@ class TestGroupS_ShutdownPersistsLifecycleSnapshot:
         )
         with open(startup_path) as f:
             src = f.read()
-        assert "persist_snapshot" in src, (
-            "shutdown_subsystems must call persist_snapshot on task lifecycle registry"
-        )
+        assert "persist_snapshot" in src, "shutdown_subsystems must call persist_snapshot on task lifecycle registry"
 
     def test_S02_get_lifecycle_registry_called_in_shutdown(self):
         startup_path = os.path.join(
@@ -765,15 +801,18 @@ class TestGroupT_DeviceRouterDurableIdempotency:
 
     def setup_method(self):
         from core.durable_result_idempotency import reset_durable_result_id_store
+
         reset_durable_result_id_store()
 
     def teardown_method(self):
         from core.durable_result_idempotency import reset_durable_result_id_store
+
         reset_durable_result_id_store()
 
     def test_T01_device_router_uses_durable_idempotency(self):
         """device_router.py must import and call check/record_result_idempotency."""
         import os
+
         dr_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             "galaxy_gateway",
@@ -781,16 +820,15 @@ class TestGroupT_DeviceRouterDurableIdempotency:
         )
         with open(dr_path) as f:
             src = f.read()
-        assert "check_result_idempotency" in src, (
-            "device_router must call check_result_idempotency from durable store"
-        )
-        assert "record_result_idempotency" in src, (
-            "device_router must call record_result_idempotency from durable store"
-        )
+        assert "check_result_idempotency" in src, "device_router must call check_result_idempotency from durable store"
+        assert (
+            "record_result_idempotency" in src
+        ), "device_router must call record_result_idempotency from durable store"
 
     def test_T02_device_router_imports_durable_idempotency_module(self):
         """device_router.py must import from core.durable_result_idempotency."""
         import os
+
         dr_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             "galaxy_gateway",
@@ -803,6 +841,7 @@ class TestGroupT_DeviceRouterDurableIdempotency:
     def test_T03_durable_store_suppresses_result_across_restart(self, tmp_path):
         """Simulated restart: a result recorded in process-1 must be suppressed in process-2."""
         from core.durable_result_idempotency import DurableResultIdSet
+
         path = str(tmp_path / "dr_ids.json")
         tid = _task_id()
 
@@ -813,16 +852,13 @@ class TestGroupT_DeviceRouterDurableIdempotency:
         # Process 2: new DeviceRouter instance (restart), same durable path
         store2 = DurableResultIdSet(store_path=path)
         # Android replays the same result — must be rejected
-        assert store2.contains(tid), (
-            "Durable store must still contain the result after simulated restart"
-        )
-        assert store2.add(tid) is False, (
-            "Replayed result must be rejected by the durable store after restart"
-        )
+        assert store2.contains(tid), "Durable store must still contain the result after simulated restart"
+        assert store2.add(tid) is False, "Replayed result must be rejected by the durable store after restart"
 
     def test_T04_new_result_after_restart_accepted(self, tmp_path):
         """A genuinely new result after restart must still be accepted."""
         from core.durable_result_idempotency import DurableResultIdSet
+
         path = str(tmp_path / "dr_ids2.json")
         tid_old = _task_id()
         tid_new = _task_id()
@@ -846,6 +882,7 @@ class TestGroupU_MessageHandlerDurableIdempotency:
     def test_U01_message_handler_uses_durable_idempotency(self):
         """message_handler.py must import and call check/record_result_idempotency."""
         import os
+
         mh_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             "galaxy_gateway",
@@ -854,16 +891,17 @@ class TestGroupU_MessageHandlerDurableIdempotency:
         )
         with open(mh_path) as f:
             src = f.read()
-        assert "check_result_idempotency" in src, (
-            "message_handler must call check_result_idempotency from durable store"
-        )
-        assert "record_result_idempotency" in src, (
-            "message_handler must call record_result_idempotency from durable store"
-        )
+        assert (
+            "check_result_idempotency" in src
+        ), "message_handler must call check_result_idempotency from durable store"
+        assert (
+            "record_result_idempotency" in src
+        ), "message_handler must call record_result_idempotency from durable store"
 
     def test_U02_message_handler_imports_durable_idempotency_module(self):
         """message_handler.py must import from core.durable_result_idempotency."""
         import os
+
         mh_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             "galaxy_gateway",
@@ -888,6 +926,7 @@ class TestGroupV_TaskLifecycleDurableIdempotency:
     def test_V01_task_lifecycle_uses_durable_idempotency(self):
         """task_lifecycle.py must import and call check/record_result_idempotency."""
         import os
+
         tl_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             "galaxy_gateway",
@@ -897,16 +936,15 @@ class TestGroupV_TaskLifecycleDurableIdempotency:
         )
         with open(tl_path) as f:
             src = f.read()
-        assert "check_result_idempotency" in src, (
-            "task_lifecycle must call check_result_idempotency from durable store"
-        )
-        assert "record_result_idempotency" in src, (
-            "task_lifecycle must call record_result_idempotency from durable store"
-        )
+        assert "check_result_idempotency" in src, "task_lifecycle must call check_result_idempotency from durable store"
+        assert (
+            "record_result_idempotency" in src
+        ), "task_lifecycle must call record_result_idempotency from durable store"
 
     def test_V02_task_lifecycle_imports_durable_idempotency_module(self):
         """task_lifecycle.py must import from core.durable_result_idempotency."""
         import os
+
         tl_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             "galaxy_gateway",
@@ -923,6 +961,7 @@ class TestGroupV_TaskLifecycleDurableIdempotency:
         completion block so that a duplicate result does not double-resolve
         the awaiting coroutine."""
         import os
+
         tl_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             "galaxy_gateway",
@@ -935,6 +974,4 @@ class TestGroupV_TaskLifecycleDurableIdempotency:
         durable_pos = src.find("check_result_idempotency")
         future_pos = src.find("_pending_responses")
         assert durable_pos != -1 and future_pos != -1
-        assert durable_pos < future_pos, (
-            "Durable idempotency guard must be applied before Future resolution"
-        )
+        assert durable_pos < future_pos, "Durable idempotency guard must be applied before Future resolution"

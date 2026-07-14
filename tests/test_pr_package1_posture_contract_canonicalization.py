@@ -105,9 +105,9 @@ Group M — Backwards compatibility.
 
 from __future__ import annotations
 
-import pytest
 from typing import Any, Dict
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # A — Authority and policy sentinel presence
@@ -121,6 +121,7 @@ class TestSentinels:
         from core.posture_contract_canonicalization import (
             POSTURE_CONTRACT_CANONICALIZATION_AUTHORITY,
         )
+
         assert isinstance(POSTURE_CONTRACT_CANONICALIZATION_AUTHORITY, str)
         assert len(POSTURE_CONTRACT_CANONICALIZATION_AUTHORITY) > 0
 
@@ -128,6 +129,7 @@ class TestSentinels:
         from core.posture_contract_canonicalization import (
             POSTURE_BOUNDARY_NO_ENTRY_MODE_CONFLATION_POLICY,
         )
+
         assert isinstance(POSTURE_BOUNDARY_NO_ENTRY_MODE_CONFLATION_POLICY, str)
         assert len(POSTURE_BOUNDARY_NO_ENTRY_MODE_CONFLATION_POLICY) > 0
 
@@ -135,6 +137,7 @@ class TestSentinels:
         from core.posture_contract_canonicalization import (
             POSTURE_BOUNDARY_NO_CROSS_DEVICE_FLAG_CONFLATION_POLICY,
         )
+
         assert isinstance(POSTURE_BOUNDARY_NO_CROSS_DEVICE_FLAG_CONFLATION_POLICY, str)
         assert len(POSTURE_BOUNDARY_NO_CROSS_DEVICE_FLAG_CONFLATION_POLICY) > 0
 
@@ -142,6 +145,7 @@ class TestSentinels:
         from core.posture_contract_canonicalization import (
             POSTURE_BOUNDARY_NO_FORMATION_ROLE_CONFLATION_POLICY,
         )
+
         assert isinstance(POSTURE_BOUNDARY_NO_FORMATION_ROLE_CONFLATION_POLICY, str)
         assert len(POSTURE_BOUNDARY_NO_FORMATION_ROLE_CONFLATION_POLICY) > 0
 
@@ -149,6 +153,7 @@ class TestSentinels:
         from core.posture_contract_canonicalization import (
             POSTURE_CONTRACT_PR_PACKAGE_1_SENTINEL,
         )
+
         assert isinstance(POSTURE_CONTRACT_PR_PACKAGE_1_SENTINEL, str)
         assert len(POSTURE_CONTRACT_PR_PACKAGE_1_SENTINEL) > 0
 
@@ -156,6 +161,7 @@ class TestSentinels:
         from contracts.source_posture_contract import (
             SOURCE_POSTURE_CONTRACT_PR_PACKAGE_1_CANONICALIZATION_SENTINEL,
         )
+
         assert isinstance(SOURCE_POSTURE_CONTRACT_PR_PACKAGE_1_CANONICALIZATION_SENTINEL, str)
         assert len(SOURCE_POSTURE_CONTRACT_PR_PACKAGE_1_CANONICALIZATION_SENTINEL) > 0
 
@@ -169,9 +175,10 @@ class TestSentinels:
 
     def test_sentinels_contain_traceability_substrings(self):
         from core.posture_contract_canonicalization import (
-            POSTURE_CONTRACT_PR_PACKAGE_1_SENTINEL,
             POSTURE_CONTRACT_CANONICALIZATION_AUTHORITY,
+            POSTURE_CONTRACT_PR_PACKAGE_1_SENTINEL,
         )
+
         assert "PR_PACKAGE_1" in POSTURE_CONTRACT_PR_PACKAGE_1_SENTINEL
         assert "post-533" in POSTURE_CONTRACT_CANONICALIZATION_AUTHORITY.lower()
 
@@ -186,6 +193,7 @@ class TestNormalizePostureForIngress:
 
     def _fn(self, raw):
         from contracts.source_posture_contract import normalize_posture_for_ingress
+
         return normalize_posture_for_ingress(raw)
 
     def test_none_returns_control_only(self):
@@ -228,6 +236,7 @@ class TestCanonicalizePostureInPayload:
 
     def _fn(self, payload, **kwargs):
         from core.posture_contract_canonicalization import canonicalize_posture_in_payload
+
         return canonicalize_posture_in_payload(payload, **kwargs)
 
     def test_returns_copy_original_unchanged(self):
@@ -273,6 +282,7 @@ class TestValidatePostureFieldConsistency:
 
     def _fn(self, payload, **kwargs):
         from core.posture_contract_canonicalization import validate_posture_field_consistency
+
         return validate_posture_field_consistency(payload, **kwargs)
 
     def test_clean_payload_returns_true_empty_violations(self):
@@ -345,35 +355,42 @@ class TestAssertPostureBoundaryCompliance:
 
     def test_clean_payload_does_not_raise(self):
         from core.posture_contract_canonicalization import assert_posture_boundary_compliance
+
         assert_posture_boundary_compliance({"source_runtime_posture": "control_only", "entry_mode": "local"})
 
     def test_entry_mode_posture_value_raises(self):
         from core.posture_contract_canonicalization import (
-            assert_posture_boundary_compliance,
             PostureBoundaryViolation,
+            assert_posture_boundary_compliance,
         )
+
         with pytest.raises(PostureBoundaryViolation):
             assert_posture_boundary_compliance({"entry_mode": "control_only"})
 
     def test_boundary_violation_is_value_error_subclass(self):
         from core.posture_contract_canonicalization import PostureBoundaryViolation
+
         assert issubclass(PostureBoundaryViolation, ValueError)
 
     def test_boundary_violation_violations_list_populated(self):
         from core.posture_contract_canonicalization import (
-            assert_posture_boundary_compliance,
             PostureBoundaryViolation,
+            assert_posture_boundary_compliance,
         )
+
         with pytest.raises(PostureBoundaryViolation) as exc_info:
             assert_posture_boundary_compliance({"entry_mode": "join_runtime"})
         assert len(exc_info.value.violations) >= 1
 
     def test_valid_entry_mode_does_not_raise(self):
         from core.posture_contract_canonicalization import assert_posture_boundary_compliance
-        assert_posture_boundary_compliance({
-            "source_runtime_posture": "join_runtime",
-            "entry_mode": "cross_device",
-        })
+
+        assert_posture_boundary_compliance(
+            {
+                "source_runtime_posture": "join_runtime",
+                "entry_mode": "cross_device",
+            }
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -386,6 +403,7 @@ class TestGetPostureFromPayload:
 
     def _fn(self, payload, **kwargs):
         from core.posture_contract_canonicalization import get_posture_from_payload
+
         return get_posture_from_payload(payload, **kwargs)
 
     def test_join_runtime_present(self):
@@ -420,6 +438,7 @@ class TestChatRequestIngressUsesContractLayer:
 
     def _make_request(self, **kwargs):
         from core.routes._models import ChatRequest
+
         return ChatRequest(message="hello", **kwargs)
 
     def test_accepts_control_only(self):
@@ -453,15 +472,18 @@ class TestContractsReExports:
 
     def test_normalize_posture_for_ingress_importable(self):
         from contracts import normalize_posture_for_ingress  # noqa: F401
+
         assert callable(normalize_posture_for_ingress)
 
     def test_pr_package_1_canonicalization_sentinel_importable(self):
         from contracts import SOURCE_POSTURE_CONTRACT_PR_PACKAGE_1_CANONICALIZATION_SENTINEL
+
         assert isinstance(SOURCE_POSTURE_CONTRACT_PR_PACKAGE_1_CANONICALIZATION_SENTINEL, str)
         assert len(SOURCE_POSTURE_CONTRACT_PR_PACKAGE_1_CANONICALIZATION_SENTINEL) > 0
 
     def test_canonical_posture_adjacent_fields_importable(self):
         from contracts import CANONICAL_POSTURE_ADJACENT_FIELDS
+
         assert isinstance(CANONICAL_POSTURE_ADJACENT_FIELDS, frozenset)
 
 
@@ -475,22 +497,27 @@ class TestCoreRuntimeReExports:
 
     def test_canonicalize_posture_in_payload_importable(self):
         from core.runtime import canonicalize_posture_in_payload  # noqa: F401
+
         assert callable(canonicalize_posture_in_payload)
 
     def test_validate_posture_field_consistency_importable(self):
         from core.runtime import validate_posture_field_consistency  # noqa: F401
+
         assert callable(validate_posture_field_consistency)
 
     def test_assert_posture_boundary_compliance_importable(self):
         from core.runtime import assert_posture_boundary_compliance  # noqa: F401
+
         assert callable(assert_posture_boundary_compliance)
 
     def test_posture_boundary_violation_importable(self):
         from core.runtime import PostureBoundaryViolation  # noqa: F401
+
         assert issubclass(PostureBoundaryViolation, ValueError)
 
     def test_pr_package_1_sentinel_importable(self):
         from core.runtime import POSTURE_CONTRACT_PR_PACKAGE_1_SENTINEL
+
         assert isinstance(POSTURE_CONTRACT_PR_PACKAGE_1_SENTINEL, str)
         assert len(POSTURE_CONTRACT_PR_PACKAGE_1_SENTINEL) > 0
 
@@ -505,26 +532,35 @@ class TestBoundaryPostureNotEntryMode:
 
     def test_local_entry_mode_with_control_only_is_clean(self):
         from core.posture_contract_canonicalization import validate_posture_field_consistency
-        ok, violations = validate_posture_field_consistency({
-            "source_runtime_posture": "control_only",
-            "entry_mode": "local",
-        })
+
+        ok, violations = validate_posture_field_consistency(
+            {
+                "source_runtime_posture": "control_only",
+                "entry_mode": "local",
+            }
+        )
         assert ok is True
 
     def test_cross_device_entry_mode_with_join_runtime_is_clean(self):
         from core.posture_contract_canonicalization import validate_posture_field_consistency
-        ok, violations = validate_posture_field_consistency({
-            "source_runtime_posture": "join_runtime",
-            "entry_mode": "cross_device",
-        })
+
+        ok, violations = validate_posture_field_consistency(
+            {
+                "source_runtime_posture": "join_runtime",
+                "entry_mode": "cross_device",
+            }
+        )
         assert ok is True
 
     def test_entry_mode_encoding_posture_is_caught(self):
         from core.posture_contract_canonicalization import validate_posture_field_consistency
-        ok, violations = validate_posture_field_consistency({
-            "source_runtime_posture": "control_only",
-            "entry_mode": "control_only",  # overloaded!
-        })
+
+        ok, violations = validate_posture_field_consistency(
+            {
+                "source_runtime_posture": "control_only",
+                "entry_mode": "control_only",  # overloaded!
+            }
+        )
         assert ok is False
 
 
@@ -538,25 +574,34 @@ class TestBoundaryPostureNotCrossDeviceEnabled:
 
     def test_false_cross_device_enabled_with_join_runtime_is_clean(self):
         from core.posture_contract_canonicalization import validate_posture_field_consistency
-        ok, violations = validate_posture_field_consistency({
-            "source_runtime_posture": "join_runtime",
-            "cross_device_enabled": False,
-        })
+
+        ok, violations = validate_posture_field_consistency(
+            {
+                "source_runtime_posture": "join_runtime",
+                "cross_device_enabled": False,
+            }
+        )
         assert ok is True
 
     def test_true_cross_device_enabled_with_control_only_is_clean(self):
         from core.posture_contract_canonicalization import validate_posture_field_consistency
-        ok, violations = validate_posture_field_consistency({
-            "source_runtime_posture": "control_only",
-            "cross_device_enabled": True,
-        })
+
+        ok, violations = validate_posture_field_consistency(
+            {
+                "source_runtime_posture": "control_only",
+                "cross_device_enabled": True,
+            }
+        )
         assert ok is True
 
     def test_cross_device_enabled_as_posture_string_is_violation(self):
         from core.posture_contract_canonicalization import validate_posture_field_consistency
-        ok, violations = validate_posture_field_consistency({
-            "cross_device_enabled": "join_runtime",  # overloaded!
-        })
+
+        ok, violations = validate_posture_field_consistency(
+            {
+                "cross_device_enabled": "join_runtime",  # overloaded!
+            }
+        )
         assert ok is False
 
 
@@ -570,10 +615,11 @@ class TestConsistencyWithPR533:
 
     def test_normalize_agrees_with_resolve_source_posture_value(self):
         from contracts.source_posture_contract import (
+            SourcePostureValue,
             normalize_posture_for_ingress,
             resolve_source_posture_value,
-            SourcePostureValue,
         )
+
         for raw in ("control_only", "join_runtime", None, "bad"):
             normalised = normalize_posture_for_ingress(raw)
             resolved = resolve_source_posture_value(raw).value
@@ -584,6 +630,7 @@ class TestConsistencyWithPR533:
             normalize_posture_for_ingress,
             validate_source_posture_value,
         )
+
         for valid in ("control_only", "join_runtime"):
             ok, err = validate_source_posture_value(normalize_posture_for_ingress(valid))
             assert ok is True
@@ -609,6 +656,7 @@ class TestBackwardsCompatibility:
 
     def test_canonicalize_idempotent_on_canonical_values(self):
         from core.posture_contract_canonicalization import canonicalize_posture_in_payload
+
         for val in ("control_only", "join_runtime"):
             payload = {"source_runtime_posture": val}
             result = canonicalize_posture_in_payload(payload)
@@ -616,11 +664,13 @@ class TestBackwardsCompatibility:
 
     def test_validate_consistency_safe_on_empty_dict(self):
         from core.posture_contract_canonicalization import validate_posture_field_consistency
+
         ok, violations = validate_posture_field_consistency({})
         assert ok is True
         assert violations == []
 
     def test_get_posture_from_empty_dict_returns_default(self):
         from core.posture_contract_canonicalization import get_posture_from_payload
+
         result = get_posture_from_payload({})
         assert result == "control_only"

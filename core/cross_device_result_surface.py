@@ -78,9 +78,7 @@ logger = logging.getLogger(__name__)
 
 #: Authority sentinel — import from consumer modules to signal write-through
 #: into canonical result surfaces.
-CROSS_DEVICE_RESULT_SURFACE_AUTHORITY = (
-    "CROSS_DEVICE_RESULT_SURFACE::PR519_CANONICAL_RESULT_SURFACE_AUTHORITY_V1"
-)
+CROSS_DEVICE_RESULT_SURFACE_AUTHORITY = "CROSS_DEVICE_RESULT_SURFACE::PR519_CANONICAL_RESULT_SURFACE_AUTHORITY_V1"
 
 #: Architectural layer position (sits above gateway substrate, layer 12).
 CROSS_DEVICE_RESULT_SURFACE_LAYER_POSITION = 12
@@ -107,6 +105,7 @@ CROSS_DEVICE_RESULT_SURFACE_GAP007_RESOLVED = (
 # ---------------------------------------------------------------------------
 # surface_cross_device_result
 # ---------------------------------------------------------------------------
+
 
 def surface_cross_device_result(
     raw_result: Dict[str, Any],
@@ -193,6 +192,7 @@ def surface_cross_device_result(
     # ── Step 1: Build ResultEnvelope ──────────────────────────────────────
     try:
         from core.cross_device_execution_chain import build_result_envelope
+
         envelope = build_result_envelope(
             raw_result,
             task_id=_task_id,
@@ -203,18 +203,16 @@ def surface_cross_device_result(
         )
     except Exception as exc:
         logger.warning(
-            "surface_cross_device_result: build_result_envelope failed "
-            "(task_id=%s): %s",
+            "surface_cross_device_result: build_result_envelope failed " "(task_id=%s): %s",
             _task_id,
             exc,
         )
-        surface_gap_reasons.append(
-            f"GAP-517-007: ResultEnvelope build failed: {exc}"
-        )
+        surface_gap_reasons.append(f"GAP-517-007: ResultEnvelope build failed: {exc}")
 
     # ── Step 2: Record ChainExecutionRecord ───────────────────────────────
     try:
         from core.cross_device_execution_chain import record_chain_execution
+
         chain_record = record_chain_execution(
             task_id=_task_id,
             trace_id=_trace_id,
@@ -227,27 +225,26 @@ def surface_cross_device_result(
         )
     except Exception as exc:
         logger.warning(
-            "surface_cross_device_result: record_chain_execution failed "
-            "(task_id=%s): %s",
+            "surface_cross_device_result: record_chain_execution failed " "(task_id=%s): %s",
             _task_id,
             exc,
         )
-        surface_gap_reasons.append(
-            f"GAP-517-007: chain_execution record failed: {exc}"
-        )
+        surface_gap_reasons.append(f"GAP-517-007: chain_execution record failed: {exc}")
 
     # ── Step 3: Update TaskGraphRuntime ───────────────────────────────────
     if envelope is not None and _task_id:
         try:
             from core.task_graph_runtime import (
-                get_task_graph_runtime,
                 WorkflowContributorKind,
+                get_task_graph_runtime,
             )
+
             tgr = get_task_graph_runtime()
             # If the task is not yet in the graph, register a minimal node so
             # complete_from_result_envelope() can transition it.
             if tgr.get_node_by_task_id(_task_id) is None:
                 from core.task_graph_runtime import GraphNode, GraphNodeState
+
                 _node = GraphNode(
                     node_id=_task_id,
                     task_id=_task_id,
@@ -264,27 +261,19 @@ def surface_cross_device_result(
             graph_updated = True
         except Exception as exc:
             logger.warning(
-                "surface_cross_device_result: TaskGraphRuntime update failed "
-                "(task_id=%s): %s",
+                "surface_cross_device_result: TaskGraphRuntime update failed " "(task_id=%s): %s",
                 _task_id,
                 exc,
             )
-            surface_gap_reasons.append(
-                f"GAP-517-007: TaskGraphRuntime update failed: {exc}"
-            )
+            surface_gap_reasons.append(f"GAP-517-007: TaskGraphRuntime update failed: {exc}")
 
     # ── Step 4: Emit to ReplayFoundation ──────────────────────────────────
     if _task_id:
         try:
-            from core.replay_foundation import emit_runtime_event, ReplayEventKind
-            _success = envelope.success if envelope is not None else bool(
-                raw_result.get("success", False)
-            )
-            _event_kind = (
-                ReplayEventKind.TASK_COMPLETED
-                if _success
-                else ReplayEventKind.TASK_FAILED
-            )
+            from core.replay_foundation import ReplayEventKind, emit_runtime_event
+
+            _success = envelope.success if envelope is not None else bool(raw_result.get("success", False))
+            _event_kind = ReplayEventKind.TASK_COMPLETED if _success else ReplayEventKind.TASK_FAILED
             emit_runtime_event(
                 _event_kind,
                 task_id=_task_id,
@@ -294,14 +283,11 @@ def surface_cross_device_result(
             replay_updated = True
         except Exception as exc:
             logger.warning(
-                "surface_cross_device_result: ReplayFoundation emit failed "
-                "(task_id=%s): %s",
+                "surface_cross_device_result: ReplayFoundation emit failed " "(task_id=%s): %s",
                 _task_id,
                 exc,
             )
-            surface_gap_reasons.append(
-                f"GAP-517-007: ReplayFoundation emit failed: {exc}"
-            )
+            surface_gap_reasons.append(f"GAP-517-007: ReplayFoundation emit failed: {exc}")
 
     # ── Step 5: Build ResultSurfaceRecord ─────────────────────────────────
     # OperatorSurface is a read-only projection of TaskGraphRuntime — updating
@@ -309,6 +295,7 @@ def surface_cross_device_result(
     # query.  Mark operator_surface_updated=graph_updated accordingly.
     try:
         from core.multi_device_control_integrity import build_result_surface_record
+
         surface_record = build_result_surface_record(
             task_id=_task_id,
             trace_id=_trace_id,
@@ -323,21 +310,19 @@ def surface_cross_device_result(
             extra={
                 "route_mode": route_mode,
                 "legacy_path_used": legacy_path_used,
-                "chain_record_id": (
-                    chain_record.record_id if chain_record is not None else ""
-                ),
+                "chain_record_id": (chain_record.record_id if chain_record is not None else ""),
                 **_extra,
             },
         )
     except Exception as exc:
         logger.warning(
-            "surface_cross_device_result: ResultSurfaceRecord build failed "
-            "(task_id=%s): %s",
+            "surface_cross_device_result: ResultSurfaceRecord build failed " "(task_id=%s): %s",
             _task_id,
             exc,
         )
         # Return a minimal fallback object
         from types import SimpleNamespace
+
         surface_record = SimpleNamespace(
             task_id=_task_id,
             is_canonically_surfaced=False,
@@ -349,15 +334,13 @@ def surface_cross_device_result(
 
     if surface_gap_reasons:
         logger.warning(
-            "surface_cross_device_result: incomplete surface coverage "
-            "task_id=%s gaps=%s",
+            "surface_cross_device_result: incomplete surface coverage " "task_id=%s gaps=%s",
             _task_id,
             surface_gap_reasons,
         )
     else:
         logger.debug(
-            "surface_cross_device_result: all surfaces updated task_id=%s "
-            "graph=%s replay=%s",
+            "surface_cross_device_result: all surfaces updated task_id=%s " "graph=%s replay=%s",
             _task_id,
             graph_updated,
             replay_updated,

@@ -13,8 +13,8 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from .contract_registry import get_contract_registry
-from .plane_kind import PlaneKind
 from .message_kind import MessageKind
+from .plane_kind import PlaneKind
 
 
 def get_planes_snapshot() -> Dict[str, Any]:
@@ -55,8 +55,7 @@ def get_planes_snapshot() -> Dict[str, Any]:
             "delivery, worker heartbeat, MCP calls, capability events."
         ),
         PlaneKind.runtime_handoff_plane.value: (
-            "Gateway-to-runtime handoff: HandoffContract (agent_bridge), "
-            "SwarmAgentManifest (remote swarm dispatch)."
+            "Gateway-to-runtime handoff: HandoffContract (agent_bridge), " "SwarmAgentManifest (remote swarm dispatch)."
         ),
         PlaneKind.projection_plane.value: (
             "Read-only derived state surfaces: RuntimeProjection, return "

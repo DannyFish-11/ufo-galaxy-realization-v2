@@ -306,13 +306,14 @@ class ReadinessMatrix:
         """Return a compact list of human-readable summary lines."""
         lines = [f"ReadinessMatrix [{self.matrix_id}] verdict={self.verdict.value}"]
         for dim in self.dimensions:
-            icon = "✅" if dim.status == DimensionStatus.PASSED else (
-                "❌" if dim.status == DimensionStatus.FAILED else "⚠️"
+            icon = (
+                "✅"
+                if dim.status == DimensionStatus.PASSED
+                else ("❌" if dim.status == DimensionStatus.FAILED else "⚠️")
             )
             lines.append(
                 f"  {icon} [{dim.severity.value.upper()}] {dim.display_name}: "
-                f"{dim.status.value}"
-                + (f" — {dim.detail}" if dim.detail else "")
+                f"{dim.status.value}" + (f" — {dim.detail}" if dim.detail else "")
             )
         if self.blocked_dimensions:
             lines.append(f"  BLOCKED on: {self.blocked_dimensions}")
@@ -356,17 +357,16 @@ def _eval_capability_enforcement() -> Tuple[DimensionStatus, str]:
         assert hasattr(ceh, "CapabilityHardRejectError")
         # Smoke: strict mode on empty caps is a no-op
         from core.capability_enforcement_hardener import (
-            enforce_mainline_capability_gate,
             CapabilityHardRejectError,
             EnforcementMode,
             HardenedVerdict,
+            enforce_mainline_capability_gate,
         )
+
         rec = enforce_mainline_capability_gate(
             "smoke-device", [], [], mode=EnforcementMode.STRICT, calling_site="readiness_matrix"
         )
-        assert rec.verdict == HardenedVerdict.NO_REQUIREMENTS, (
-            f"Expected NO_REQUIREMENTS, got {rec.verdict!r}"
-        )
+        assert rec.verdict == HardenedVerdict.NO_REQUIREMENTS, f"Expected NO_REQUIREMENTS, got {rec.verdict!r}"
         # Smoke: strict mode raises on actual mismatch (non-empty device caps missing required)
         raised = False
         try:
@@ -380,9 +380,7 @@ def _eval_capability_enforcement() -> Tuple[DimensionStatus, str]:
         except CapabilityHardRejectError:
             raised = True
         assert raised, "STRICT enforcement did not raise CapabilityHardRejectError on mismatch"
-        return DimensionStatus.PASSED, (
-            "Capability enforcement modules importable; smoke gate passes."
-        )
+        return DimensionStatus.PASSED, ("Capability enforcement modules importable; smoke gate passes.")
     except Exception as exc:
         return DimensionStatus.FAILED, f"Capability enforcement check failed: {exc}"
 
@@ -391,10 +389,11 @@ def _eval_capability_status_registry() -> Tuple[DimensionStatus, str]:
     """Check that the canonical capability status registry is functional."""
     try:
         from core.canonical_capability_status import (
+            CapabilityRuntimeStatus,
             get_canonical_capability_status_registry,
             is_mainline_active,
-            CapabilityRuntimeStatus,
         )
+
         registry = get_canonical_capability_status_registry()
         assert len(registry) > 0
         # Validate known statuses
@@ -420,15 +419,14 @@ def _eval_protocol_regression_surface() -> Tuple[DimensionStatus, str]:
     try:
         importlib.import_module("galaxy_gateway.android_bridge")
         from galaxy_gateway.android_bridge import AndroidBridge
+
         bridge = AndroidBridge()
         registered = {mt.value for mt in bridge._message_handlers}
         required = {"device_register", "capability_report", "heartbeat", "task_result"}
         missing = required - registered
         if missing:
             return DimensionStatus.FAILED, f"Bridge missing handlers: {missing}"
-        return DimensionStatus.PASSED, (
-            f"Protocol surface: all canonical message types handled ({sorted(required)})."
-        )
+        return DimensionStatus.PASSED, (f"Protocol surface: all canonical message types handled ({sorted(required)}).")
     except Exception as exc:
         return DimensionStatus.FAILED, f"Protocol regression surface check failed: {exc}"
 
@@ -436,6 +434,7 @@ def _eval_protocol_regression_surface() -> Tuple[DimensionStatus, str]:
 def _eval_mainline_routing_enforcement_callsite() -> Tuple[DimensionStatus, str]:
     """Check that openclawd.py still contains the enforcement call site."""
     import pathlib
+
     openclawd_path = pathlib.Path(__file__).resolve().parent / "openclawd.py"
     if not openclawd_path.exists():
         return DimensionStatus.UNKNOWN, "core/openclawd.py not found."
@@ -456,13 +455,10 @@ def _eval_android_local_ai_status_declared() -> Tuple[DimensionStatus, str]:
         flag = getattr(mod, "ANDROID_LOCAL_AI_DEFAULT_CAPABILITY_FLAG", None)
         if sentinel is None:
             return DimensionStatus.FAILED, (
-                "ANDROID_LOCAL_AI_UNAVAILABLE_BY_DEFAULT sentinel missing from "
-                "core.android_runtime_host."
+                "ANDROID_LOCAL_AI_UNAVAILABLE_BY_DEFAULT sentinel missing from " "core.android_runtime_host."
             )
         if flag is not False:
-            return DimensionStatus.FAILED, (
-                f"ANDROID_LOCAL_AI_DEFAULT_CAPABILITY_FLAG should be False; got {flag!r}."
-            )
+            return DimensionStatus.FAILED, (f"ANDROID_LOCAL_AI_DEFAULT_CAPABILITY_FLAG should be False; got {flag!r}.")
         return DimensionStatus.PASSED, (
             "Android local AI unavailable-by-default status is declared and machine-checkable."
         )
@@ -474,12 +470,11 @@ def _eval_aip_v3_version_stable() -> Tuple[DimensionStatus, str]:
     """Check AIP v3 version string stability."""
     try:
         from galaxy_gateway.android.message_builder import MessageBuilder
+
         ack = MessageBuilder.device_register_ack("smoke", True, "ok")
         version = ack.get("version")
         if version != "3.0":
-            return DimensionStatus.FAILED, (
-                f"AIP v3 version string changed: expected '3.0', got {version!r}"
-            )
+            return DimensionStatus.FAILED, (f"AIP v3 version string changed: expected '3.0', got {version!r}")
         return DimensionStatus.PASSED, f"AIP v3 version string stable: '{version}'."
     except Exception as exc:
         return DimensionStatus.FAILED, f"AIP v3 version check failed: {exc}"
@@ -499,8 +494,7 @@ def _eval_nats_posture_contract() -> Tuple[DimensionStatus, str]:
             )
         return (
             DimensionStatus.FAILED,
-            "NATS posture assertion failed: "
-            f"{posture.get('violation_reason') or 'unknown_reason'}",
+            "NATS posture assertion failed: " f"{posture.get('violation_reason') or 'unknown_reason'}",
         )
     except Exception as exc:
         return DimensionStatus.UNKNOWN, f"NATS posture evaluation unavailable: {exc}"
@@ -629,8 +623,7 @@ def evaluate_readiness_matrix() -> ReadinessMatrix:
         verdict = MatrixVerdict.UNKNOWN
     else:
         has_degraded = any(
-            d.status in (DimensionStatus.FAILED, DimensionStatus.UNKNOWN)
-            and d.severity == DimensionSeverity.HIGH
+            d.status in (DimensionStatus.FAILED, DimensionStatus.UNKNOWN) and d.severity == DimensionSeverity.HIGH
             for d in dimensions
         )
         verdict = MatrixVerdict.DEGRADED if has_degraded else MatrixVerdict.READY

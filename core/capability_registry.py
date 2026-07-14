@@ -209,7 +209,7 @@ def _guard_routing_context_usage(
 
     try:
         stack = inspect.stack()
-    except Exception as exc:
+    except Exception:
         return
 
     for frameinfo in stack[2:]:
@@ -286,13 +286,13 @@ def _collect_from_capability_bus(device_id: str) -> Dict[str, Any]:
     """
     result: Dict[str, Any] = {"caps": [], "reason": None}
     try:
-        from core.capability_bus import get_capability_bus, CapabilityBusRole
+        from core.capability_bus import CapabilityBusRole, get_capability_bus
 
         bus = get_capability_bus()
         prefix = f"device__{device_id}__"
         entries = [e for e in bus.list_by_role(CapabilityBusRole.DEVICE) if e.name.startswith(prefix)]
         # Extract action suffix as capability name
-        caps = [e.name[len(prefix):] for e in entries if e.name[len(prefix):] != ""]
+        caps = [e.name[len(prefix) :] for e in entries if e.name[len(prefix) :] != ""]
         result["caps"] = caps
     except Exception as exc:  # pragma: no cover — defensive
         logger.debug("Fallback triggered: %s", exc)

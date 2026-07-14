@@ -13,19 +13,21 @@
 import logging
 import time
 import traceback
-from typing import Dict, List, Optional, Any, Callable
+from collections import defaultdict, deque
 from dataclasses import dataclass
 from enum import Enum
-from collections import defaultdict, deque
 from functools import wraps
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.ErrorFramework")
 
 
 # ───────────────────── 错误分类 ─────────────────────
 
+
 class ErrorSeverity(Enum):
     """错误严重性"""
+
     DEBUG = "debug"
     INFO = "info"
     WARNING = "warning"
@@ -36,40 +38,47 @@ class ErrorSeverity(Enum):
 
 class ErrorCategory(Enum):
     """错误类别"""
-    NETWORK = "network"           # 网络通信错误
-    DEVICE = "device"             # 设备交互错误
-    LLM = "llm"                   # LLM 调用错误
-    AUTH = "auth"                 # 认证/授权错误
-    CONFIG = "config"             # 配置错误
-    RESOURCE = "resource"         # 资源不足/不可用
-    CONCURRENCY = "concurrency"   # 并发/锁错误
-    DATA = "data"                 # 数据格式/验证错误
-    TIMEOUT = "timeout"           # 超时
-    NODE = "node"                 # 节点错误
-    INTERNAL = "internal"         # 内部逻辑错误
-    EXTERNAL = "external"         # 外部服务错误
+
+    NETWORK = "network"  # 网络通信错误
+    DEVICE = "device"  # 设备交互错误
+    LLM = "llm"  # LLM 调用错误
+    AUTH = "auth"  # 认证/授权错误
+    CONFIG = "config"  # 配置错误
+    RESOURCE = "resource"  # 资源不足/不可用
+    CONCURRENCY = "concurrency"  # 并发/锁错误
+    DATA = "data"  # 数据格式/验证错误
+    TIMEOUT = "timeout"  # 超时
+    NODE = "node"  # 节点错误
+    INTERNAL = "internal"  # 内部逻辑错误
+    EXTERNAL = "external"  # 外部服务错误
 
 
 class RecoveryStrategy(Enum):
     """恢复策略"""
-    RETRY = "retry"               # 重试
-    FAILOVER = "failover"         # 故障转移
-    DEGRADE = "degrade"           # 降级
-    SKIP = "skip"                 # 跳过
-    ABORT = "abort"               # 中止
-    MANUAL = "manual"             # 需人工介入
+
+    RETRY = "retry"  # 重试
+    FAILOVER = "failover"  # 故障转移
+    DEGRADE = "degrade"  # 降级
+    SKIP = "skip"  # 跳过
+    ABORT = "abort"  # 中止
+    MANUAL = "manual"  # 需人工介入
 
 
 # ───────────────────── 错误类型层级 ─────────────────────
 
+
 class GalaxyError(Exception):
     """Galaxy 错误基类"""
 
-    def __init__(self, message: str, category: ErrorCategory = ErrorCategory.INTERNAL,
-                 severity: ErrorSeverity = ErrorSeverity.ERROR,
-                 recovery: RecoveryStrategy = RecoveryStrategy.ABORT,
-                 context: Optional[Dict] = None,
-                 cause: Optional[Exception] = None):
+    def __init__(
+        self,
+        message: str,
+        category: ErrorCategory = ErrorCategory.INTERNAL,
+        severity: ErrorSeverity = ErrorSeverity.ERROR,
+        recovery: RecoveryStrategy = RecoveryStrategy.ABORT,
+        context: Optional[Dict] = None,
+        cause: Optional[Exception] = None,
+    ):
         super().__init__(message)
         self.message = message
         self.category = category
@@ -96,92 +105,117 @@ class GalaxyError(Exception):
 
 class NetworkError(GalaxyError):
     """网络错误"""
+
     def __init__(self, message: str, **kwargs):
-        super().__init__(message, category=ErrorCategory.NETWORK,
-                         recovery=RecoveryStrategy.RETRY, **kwargs)
+        super().__init__(message, category=ErrorCategory.NETWORK, recovery=RecoveryStrategy.RETRY, **kwargs)
 
 
 class DeviceError(GalaxyError):
     """设备错误"""
+
     def __init__(self, message: str, device_id: str = "", **kwargs):
         ctx = kwargs.pop("context", {})
         ctx["device_id"] = device_id
-        super().__init__(message, category=ErrorCategory.DEVICE,
-                         recovery=RecoveryStrategy.FAILOVER, context=ctx, **kwargs)
+        super().__init__(
+            message, category=ErrorCategory.DEVICE, recovery=RecoveryStrategy.FAILOVER, context=ctx, **kwargs
+        )
 
 
 class LLMError(GalaxyError):
     """LLM 调用错误"""
+
     def __init__(self, message: str, provider: str = "", model: str = "", **kwargs):
         ctx = kwargs.pop("context", {})
         ctx.update({"provider": provider, "model": model})
-        super().__init__(message, category=ErrorCategory.LLM,
-                         recovery=RecoveryStrategy.FAILOVER, context=ctx, **kwargs)
+        super().__init__(message, category=ErrorCategory.LLM, recovery=RecoveryStrategy.FAILOVER, context=ctx, **kwargs)
 
 
 class AuthError(GalaxyError):
     """认证/授权错误"""
+
     def __init__(self, message: str, **kwargs):
-        super().__init__(message, category=ErrorCategory.AUTH,
-                         severity=ErrorSeverity.WARNING,
-                         recovery=RecoveryStrategy.ABORT, **kwargs)
+        super().__init__(
+            message,
+            category=ErrorCategory.AUTH,
+            severity=ErrorSeverity.WARNING,
+            recovery=RecoveryStrategy.ABORT,
+            **kwargs,
+        )
 
 
 class ConfigError(GalaxyError):
     """配置错误"""
+
     def __init__(self, message: str, **kwargs):
-        super().__init__(message, category=ErrorCategory.CONFIG,
-                         severity=ErrorSeverity.CRITICAL,
-                         recovery=RecoveryStrategy.MANUAL, **kwargs)
+        super().__init__(
+            message,
+            category=ErrorCategory.CONFIG,
+            severity=ErrorSeverity.CRITICAL,
+            recovery=RecoveryStrategy.MANUAL,
+            **kwargs,
+        )
 
 
 class ResourceError(GalaxyError):
     """资源错误"""
+
     def __init__(self, message: str, resource: str = "", **kwargs):
         ctx = kwargs.pop("context", {})
         ctx["resource"] = resource
-        super().__init__(message, category=ErrorCategory.RESOURCE,
-                         recovery=RecoveryStrategy.DEGRADE, context=ctx, **kwargs)
+        super().__init__(
+            message, category=ErrorCategory.RESOURCE, recovery=RecoveryStrategy.DEGRADE, context=ctx, **kwargs
+        )
 
 
 class TimeoutError_(GalaxyError):
     """超时错误 (名称避免与内置 TimeoutError 冲突)"""
+
     def __init__(self, message: str, timeout_seconds: float = 0, **kwargs):
         ctx = kwargs.pop("context", {})
         ctx["timeout_seconds"] = timeout_seconds
-        super().__init__(message, category=ErrorCategory.TIMEOUT,
-                         recovery=RecoveryStrategy.RETRY, context=ctx, **kwargs)
+        super().__init__(
+            message, category=ErrorCategory.TIMEOUT, recovery=RecoveryStrategy.RETRY, context=ctx, **kwargs
+        )
 
 
 class NodeError(GalaxyError):
     """节点错误"""
+
     def __init__(self, message: str, node_id: str = "", **kwargs):
         ctx = kwargs.pop("context", {})
         ctx["node_id"] = node_id
-        super().__init__(message, category=ErrorCategory.NODE,
-                         recovery=RecoveryStrategy.FAILOVER, context=ctx, **kwargs)
+        super().__init__(
+            message, category=ErrorCategory.NODE, recovery=RecoveryStrategy.FAILOVER, context=ctx, **kwargs
+        )
 
 
 class DataError(GalaxyError):
     """数据错误"""
+
     def __init__(self, message: str, **kwargs):
-        super().__init__(message, category=ErrorCategory.DATA,
-                         severity=ErrorSeverity.WARNING,
-                         recovery=RecoveryStrategy.SKIP, **kwargs)
+        super().__init__(
+            message,
+            category=ErrorCategory.DATA,
+            severity=ErrorSeverity.WARNING,
+            recovery=RecoveryStrategy.SKIP,
+            **kwargs,
+        )
 
 
 class ConcurrencyError(GalaxyError):
     """并发错误"""
+
     def __init__(self, message: str, **kwargs):
-        super().__init__(message, category=ErrorCategory.CONCURRENCY,
-                         recovery=RecoveryStrategy.RETRY, **kwargs)
+        super().__init__(message, category=ErrorCategory.CONCURRENCY, recovery=RecoveryStrategy.RETRY, **kwargs)
 
 
 # ───────────────────── 错误记录器 ─────────────────────
 
+
 @dataclass
 class ErrorRecord:
     """错误记录"""
+
     error: GalaxyError
     handled: bool = False
     recovered: bool = False
@@ -202,12 +236,13 @@ class ErrorTracker:
         self._recent_errors: Dict[str, List[float]] = defaultdict(list)  # category → timestamps
         self._handlers: Dict[ErrorCategory, List[Callable]] = defaultdict(list)
 
-    def record(self, error: GalaxyError, handled: bool = False,
-               recovered: bool = False, recovery_action: str = ""):
+    def record(self, error: GalaxyError, handled: bool = False, recovered: bool = False, recovery_action: str = ""):
         """记录错误"""
         record = ErrorRecord(
-            error=error, handled=handled,
-            recovered=recovered, recovery_action=recovery_action,
+            error=error,
+            handled=handled,
+            recovered=recovered,
+            recovery_action=recovery_action,
         )
         self._records.append(record)
         self._by_category[error.category.value] += 1
@@ -225,8 +260,7 @@ class ErrorTracker:
         }.get(error.severity, logger.error)
 
         log_method(
-            f"[{error.category.value}] {error.message} "
-            f"(recovery={error.recovery.value}, id={error.error_id})"
+            f"[{error.category.value}] {error.message} " f"(recovery={error.recovery.value}, id={error.error_id})"
         )
 
         # 通知处理器
@@ -240,8 +274,7 @@ class ErrorTracker:
         """注册错误处理回调"""
         self._handlers[category].append(handler)
 
-    def get_error_rate(self, category: Optional[str] = None,
-                       window_seconds: int = 60) -> float:
+    def get_error_rate(self, category: Optional[str] = None, window_seconds: int = 60) -> float:
         """获取最近 N 秒的错误率"""
         now = time.time()
         cutoff = now - window_seconds
@@ -250,15 +283,11 @@ class ErrorTracker:
             timestamps = self._recent_errors.get(category, [])
             count = sum(1 for t in timestamps if t > cutoff)
         else:
-            count = sum(
-                sum(1 for t in ts if t > cutoff)
-                for ts in self._recent_errors.values()
-            )
+            count = sum(sum(1 for t in ts if t > cutoff) for ts in self._recent_errors.values())
 
         return count / window_seconds if window_seconds > 0 else 0
 
-    def is_error_spike(self, category: str, threshold: float = 0.5,
-                       window: int = 60) -> bool:
+    def is_error_spike(self, category: str, threshold: float = 0.5, window: int = 60) -> bool:
         """检测是否有错误峰值"""
         return self.get_error_rate(category, window) > threshold
 
@@ -269,22 +298,24 @@ class ErrorTracker:
             "by_severity": dict(self._by_severity),
             "error_rate_1m": round(self.get_error_rate(window_seconds=60), 3),
             "error_rate_5m": round(self.get_error_rate(window_seconds=300), 3),
-            "recent_errors": [
-                r.error.to_dict() for r in list(self._records)[-10:]
-            ],
+            "recent_errors": [r.error.to_dict() for r in list(self._records)[-10:]],
         }
 
 
 # ───────────────────── 装饰器 ─────────────────────
 
-def error_boundary(category: ErrorCategory = ErrorCategory.INTERNAL,
-                   recovery: RecoveryStrategy = RecoveryStrategy.ABORT,
-                   default_return=None):
+
+def error_boundary(
+    category: ErrorCategory = ErrorCategory.INTERNAL,
+    recovery: RecoveryStrategy = RecoveryStrategy.ABORT,
+    default_return=None,
+):
     """
     错误边界装饰器
 
     将未处理的异常包装为 GalaxyError 并记录。
     """
+
     def decorator(func):
         @wraps(func)
         async def async_wrapper(*args, **kwargs):
@@ -325,6 +356,7 @@ def error_boundary(category: ErrorCategory = ErrorCategory.INTERNAL,
                 return default_return
 
         import asyncio
+
         if asyncio.iscoroutinefunction(func):
             return async_wrapper
         return sync_wrapper
@@ -334,9 +366,8 @@ def error_boundary(category: ErrorCategory = ErrorCategory.INTERNAL,
 
 # ───────────────────── FastAPI 集成 ─────────────────────
 
-def api_response(data: Any = None, message: str = "ok",
-                 error: Optional[Dict] = None,
-                 status_code: int = 200) -> Dict:
+
+def api_response(data: Any = None, message: str = "ok", error: Optional[Dict] = None, status_code: int = 200) -> Dict:
     """
     统一 API 响应信封格式
 
@@ -358,8 +389,10 @@ def api_response(data: Any = None, message: str = "ok",
 
 # ───────────────────── 标准错误码 ─────────────────────
 
+
 class ErrorCode:
     """统一错误码常量，客户端按此判断错误类型"""
+
     # 通用
     INTERNAL_ERROR = "E0001"
     INVALID_REQUEST = "E0002"

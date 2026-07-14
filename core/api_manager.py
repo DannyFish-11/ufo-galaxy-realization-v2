@@ -10,13 +10,14 @@ Galaxy API 管理器
 版本: v1.1
 """
 
-import os
-import json
 import asyncio
+import json
 import logging
-from datetime import datetime
-from typing import Dict, List, Any
+import os
 from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Dict, List
+
 import httpx
 
 logger = logging.getLogger("APIManager")
@@ -25,6 +26,7 @@ logger = logging.getLogger("APIManager")
 @dataclass
 class ModelConfig:
     """模型配置"""
+
     provider: str
     model_id: str
     model_name: str
@@ -37,6 +39,7 @@ class ModelConfig:
 @dataclass
 class ToolConfig:
     """工具配置"""
+
     tool_id: str
     name: str
     api_key: str = ""
@@ -50,6 +53,7 @@ class ToolConfig:
 @dataclass
 class NodeConfig:
     """节点配置"""
+
     node_id: str
     name: str
     port: int
@@ -132,8 +136,7 @@ class APIManager:
     def __init__(self, config_path: str = None):
         if config_path is None:
             config_path = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                "config", "api_config.json"
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config", "api_config.json"
             )
 
         self.config_path = config_path
@@ -148,7 +151,7 @@ class APIManager:
         """加载配置"""
         if os.path.exists(self.config_path):
             try:
-                with open(self.config_path, 'r', encoding='utf-8') as f:
+                with open(self.config_path, "r", encoding="utf-8") as f:
                     content = f.read()
                     if not content.strip():
                         # 文件为空
@@ -186,7 +189,7 @@ class APIManager:
             "oneapi": {"enabled": True, "api_key": "", "base_url": "http://localhost:8001/v1"},
             "direct_models": {},
             "tools": {},
-            "nodes": {}
+            "nodes": {},
         }
         logger.info("使用默认配置")
 
@@ -203,7 +206,7 @@ class APIManager:
                     model_name=model["name"],
                     api_key=oneapi.get("api_key", ""),
                     base_url=oneapi.get("base_url", ""),
-                    enabled=True
+                    enabled=True,
                 )
 
         # 解析直接模型
@@ -219,7 +222,7 @@ class APIManager:
                         api_key=config.get("api_key", ""),
                         base_url=config.get("base_url", ""),
                         enabled=True,
-                        env_key=config.get("env_key", f"{provider.upper()}_API_KEY")
+                        env_key=config.get("env_key", f"{provider.upper()}_API_KEY"),
                     )
 
         # 解析工具
@@ -233,7 +236,7 @@ class APIManager:
                 enabled=config.get("enabled", True),
                 description=config.get("description", ""),
                 node=config.get("node", ""),
-                env_key=config.get("env_key", f"{tool_id.upper()}_API_KEY")
+                env_key=config.get("env_key", f"{tool_id.upper()}_API_KEY"),
             )
 
         # 解析节点
@@ -246,7 +249,7 @@ class APIManager:
                 name=config.get("name", f"Node_{node_id}"),
                 port=config.get("port", 8000),
                 status=config.get("status", "configured"),
-                endpoint=f"{base_url}:{config.get('port', 8000)}"
+                endpoint=f"{base_url}:{config.get('port', 8000)}",
             )
 
         logger.info(f"已解析 {len(self.models)} 个模型, {len(self.tools)} 个工具, {len(self.nodes)} 个节点")
@@ -347,7 +350,7 @@ class APIManager:
         """保存配置"""
         try:
             os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
-            with open(self.config_path, 'w', encoding='utf-8') as f:
+            with open(self.config_path, "w", encoding="utf-8") as f:
                 json.dump(self.config, f, indent=2, ensure_ascii=False)
             logger.info(f"配置已保存: {self.config_path}")
         except Exception as e:
@@ -418,7 +421,7 @@ class APIManager:
                 "model_name": model.model_name,
                 "enabled": model.enabled,
                 "configured": bool(model.api_key),
-                "env_key": model.env_key
+                "env_key": model.env_key,
             }
             for key, model in self.models.items()
         ]
@@ -426,12 +429,7 @@ class APIManager:
     def get_available_models(self) -> List[Dict[str, Any]]:
         """获取已配置的可用模型"""
         return [
-            {
-                "key": key,
-                "provider": model.provider,
-                "model_id": model.model_id,
-                "model_name": model.model_name
-            }
+            {"key": key, "provider": model.provider, "model_id": model.model_id, "model_name": model.model_name}
             for key, model in self.models.items()
             if model.enabled and model.api_key
         ]
@@ -450,7 +448,7 @@ class APIManager:
                 "configured": bool(tool.api_key),
                 "description": tool.description,
                 "node": tool.node,
-                "env_key": tool.env_key
+                "env_key": tool.env_key,
             }
             for tool in self.tools.values()
         ]
@@ -458,11 +456,7 @@ class APIManager:
     def get_available_tools(self) -> List[Dict[str, Any]]:
         """获取已配置的可用工具"""
         return [
-            {
-                "tool_id": tool.tool_id,
-                "name": tool.name,
-                "node": tool.node
-            }
+            {"tool_id": tool.tool_id, "name": tool.name, "node": tool.node}
             for tool in self.tools.values()
             if tool.enabled and tool.api_key
         ]
@@ -479,7 +473,7 @@ class APIManager:
                 "name": node.name,
                 "port": node.port,
                 "status": node.status,
-                "endpoint": node.endpoint
+                "endpoint": node.endpoint,
             }
             for node in self.nodes.values()
         ]
@@ -518,10 +512,7 @@ class APIManager:
     # =========================================================================
 
     async def call_llm(
-        self,
-        messages: List[Dict[str, str]],
-        model: str = "auto",
-        max_tokens: int = 1000
+        self, messages: List[Dict[str, str]], model: str = "auto", max_tokens: int = 1000
     ) -> Dict[str, Any]:
         """调用 LLM"""
         available = self.get_available_models()
@@ -538,10 +529,7 @@ class APIManager:
         return {"success": False, "error": "All models failed"}
 
     async def _call_model(
-        self,
-        model_info: Dict[str, Any],
-        messages: List[Dict[str, str]],
-        max_tokens: int
+        self, model_info: Dict[str, Any], messages: List[Dict[str, str]], max_tokens: int
     ) -> Dict[str, Any]:
         """调用单个模型"""
         model_key = model_info["key"]
@@ -561,15 +549,8 @@ class APIManager:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     f"{_bu.rstrip('/')}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {model_config.api_key}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "model": model_config.model_id,
-                        "messages": messages,
-                        "max_tokens": max_tokens
-                    }
+                    headers={"Authorization": f"Bearer {model_config.api_key}", "Content-Type": "application/json"},
+                    json={"model": model_config.model_id, "messages": messages, "max_tokens": max_tokens},
                 )
 
                 if response.status_code == 200:
@@ -579,7 +560,7 @@ class APIManager:
                         "provider": model_config.provider,
                         "model": model_config.model_id,
                         "content": data["choices"][0]["message"]["content"],
-                        "usage": data.get("usage", {})
+                        "usage": data.get("usage", {}),
                     }
 
                 return {"success": False, "error": f"HTTP {response.status_code}"}
@@ -621,7 +602,7 @@ class APIManager:
             "zhipu": ("https://open.bigmodel.cn/api/paas/v4/chat/completions", "glm-4-flash"),
             "groq": ("https://api.groq.com/openai/v1/chat/completions", "llama-3.1-8b-instant"),
             "openrouter": ("https://openrouter.ai/api/v1/chat/completions", "openai/gpt-3.5-turbo"),
-            "gemini": ("https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent", None)
+            "gemini": ("https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent", None),
         }
 
         if provider not in endpoints:
@@ -636,7 +617,7 @@ class APIManager:
                     response = await client.post(
                         url,
                         headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
-                        json={"contents": [{"parts": [{"text": "Hi"}]}]}
+                        json={"contents": [{"parts": [{"text": "Hi"}]}]},
                     )
                 elif provider == "anthropic":
                     response = await client.post(
@@ -644,26 +625,15 @@ class APIManager:
                         headers={
                             "x-api-key": api_key,
                             "anthropic-version": "2023-06-01",
-                            "Content-Type": "application/json"
+                            "Content-Type": "application/json",
                         },
-                        json={
-                            "model": model,
-                            "max_tokens": 10,
-                            "messages": [{"role": "user", "content": "Hi"}]
-                        }
+                        json={"model": model, "max_tokens": 10, "messages": [{"role": "user", "content": "Hi"}]},
                     )
                 else:
                     response = await client.post(
                         url,
-                        headers={
-                            "Authorization": f"Bearer {api_key}",
-                            "Content-Type": "application/json"
-                        },
-                        json={
-                            "model": model,
-                            "messages": [{"role": "user", "content": "Hi"}],
-                            "max_tokens": 10
-                        }
+                        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                        json={"model": model, "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 10},
                     )
 
                 if response.status_code == 200:
@@ -684,7 +654,7 @@ class APIManager:
                     response = await client.get(
                         "https://api.search.brave.com/res/v1/web/search",
                         headers={"X-Subscription-Token": api_key, "Accept": "application/json"},
-                        params={"q": "test", "count": 1}
+                        params={"q": "test", "count": 1},
                     )
                     if response.status_code == 200:
                         return {"valid": True, "message": "Brave API Key 有效"}
@@ -696,8 +666,7 @@ class APIManager:
             try:
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     response = await client.get(
-                        "https://api.openweathermap.org/data/2.5/weather",
-                        params={"q": "London", "appid": api_key}
+                        "https://api.openweathermap.org/data/2.5/weather", params={"q": "London", "appid": api_key}
                     )
                     if response.status_code == 200:
                         return {"valid": True, "message": "OpenWeather API Key 有效"}
@@ -713,10 +682,7 @@ class APIManager:
 
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.get(
-                    f"{base_url}/models",
-                    headers={"Authorization": f"Bearer {api_key}"}
-                )
+                response = await client.get(f"{base_url}/models", headers={"Authorization": f"Bearer {api_key}"})
                 if response.status_code == 200:
                     return {"valid": True, "message": "OneAPI 连接成功"}
                 return {"valid": False, "error": f"HTTP {response.status_code}"}
@@ -740,7 +706,7 @@ class APIManager:
             "total_nodes": len(self.nodes),
             "oneapi_enabled": self.config.get("oneapi", {}).get("enabled", False),
             "oneapi_configured": bool(self.config.get("oneapi", {}).get("api_key")),
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
 

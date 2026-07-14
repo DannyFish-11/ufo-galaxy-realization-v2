@@ -32,10 +32,11 @@ Date: 2026-02-12
 """
 
 import hmac
-import os
 import logging
+import os
 from datetime import datetime, timezone
 from typing import List, Optional, Set
+
 from fastapi import Header, HTTPException, status
 
 logger = logging.getLogger("Galaxy.Auth")
@@ -64,10 +65,7 @@ def is_auth_enabled() -> bool:
     dev_mode = os.environ.get("GALAXY_DEV_MODE", "").lower()
     if dev_mode in ("1", "true", "yes"):
         # DEV_MODE no longer bypasses authentication; only enables extra debug logging
-        logger.warning(
-            "GALAXY_DEV_MODE is deprecated for auth bypass. "
-            "Use proper test tokens instead."
-        )
+        logger.warning("GALAXY_DEV_MODE is deprecated for auth bypass. " "Use proper test tokens instead.")
 
     env = os.environ.get("GALAXY_AUTH_ENABLED", "false").strip().lower()
     if env in ("1", "true", "yes"):
@@ -97,15 +95,11 @@ def validate_auth_config() -> None:
             )
         # Production mode: DEV_MODE not allowed
         if os.environ.get("GALAXY_DEV_MODE", "").lower() in ("1", "true", "yes"):
-            raise RuntimeError(
-                "GALAXY_DEV_MODE is not allowed in production mode"
-            )
+            raise RuntimeError("GALAXY_DEV_MODE is not allowed in production mode")
         # Production mode: auth cannot be disabled
         auth = os.environ.get("GALAXY_AUTH_ENABLED", "true").lower()
         if auth in ("0", "false", "no", ""):
-            raise RuntimeError(
-                "Cannot disable authentication in production mode"
-            )
+            raise RuntimeError("Cannot disable authentication in production mode")
 
     if is_auth_enabled() and not os.getenv("GALAXY_API_TOKEN"):
         raise RuntimeError(
@@ -130,6 +124,7 @@ def ensure_auth_config_validated() -> None:
 # ---------------------------------------------------------------------------
 # Key rotation helpers
 # ---------------------------------------------------------------------------
+
 
 def _parse_token_list(env_value: str) -> List[str]:
     """Split a comma-separated token list, dropping empty entries."""
@@ -178,8 +173,7 @@ def get_active_tokens() -> List[str]:
         expiry_str = os.getenv("GALAXY_API_TOKEN_EXPIRY", "").strip()
         if expiry_str and _is_token_expired(expiry_str):
             logger.warning(
-                "GALAXY_API_TOKEN has expired (GALAXY_API_TOKEN_EXPIRY=%s); "
-                "it will not be accepted.",
+                "GALAXY_API_TOKEN has expired (GALAXY_API_TOKEN_EXPIRY=%s); " "it will not be accepted.",
                 expiry_str,
             )
         else:
@@ -207,6 +201,7 @@ def get_active_tokens() -> List[str]:
 # ---------------------------------------------------------------------------
 # Dev-mode detection & startup warning
 # ---------------------------------------------------------------------------
+
 
 def _is_dev_mode() -> bool:
     """Return True when GALAXY_DEV_MODE=1 is explicitly set.
@@ -237,8 +232,7 @@ def _warn_no_token_once():
     if not _no_token_warning_issued:
         _no_token_warning_issued = True
         logger.warning(
-            "GALAXY_API_TOKEN is not set. "
-            "Set GALAXY_API_TOKEN before enabling GALAXY_AUTH_ENABLED in production."
+            "GALAXY_API_TOKEN is not set. " "Set GALAXY_API_TOKEN before enabling GALAXY_AUTH_ENABLED in production."
         )
 
 
@@ -311,8 +305,7 @@ def verify_device_id(device_id: str) -> bool:
 
 
 async def require_auth(
-    authorization: Optional[str] = Header(None),
-    x_device_id: Optional[str] = Header(None, alias="X-Device-ID")
+    authorization: Optional[str] = Header(None), x_device_id: Optional[str] = Header(None, alias="X-Device-ID")
 ) -> dict:
     """
     FastAPI 依赖函数，用于端点鉴权
@@ -350,10 +343,7 @@ async def require_auth(
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=(
-                "Server is not configured for authentication. "
-                "Set GALAXY_API_TOKEN environment variable."
-            ),
+            detail=("Server is not configured for authentication. " "Set GALAXY_API_TOKEN environment variable."),
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -383,15 +373,8 @@ async def require_auth(
         )
 
     if x_device_id and not verify_device_id(x_device_id):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid Device ID"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid Device ID")
 
     logger.info(f"认证成功: device_id={x_device_id}")
 
-    return {
-        "authenticated": True,
-        "device_id": x_device_id,
-        "dev_mode": False
-    }
+    return {"authenticated": True, "device_id": x_device_id, "dev_mode": False}

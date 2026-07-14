@@ -23,21 +23,21 @@ import uuid
 
 import pytest
 
-from galaxy_gateway.protocol.aip_v3 import AIPMessage, MessageType
-from galaxy_gateway.protocol.compat import inject_trace_metadata, parse_message_compat
 from core.unified.command_envelope import (
     CommandEnvelope,
     EnvelopeValidationError,
     ResultEnvelope,
-    validate_command_envelope,
     log_command_envelope,
     log_result_envelope,
+    validate_command_envelope,
 )
-
+from galaxy_gateway.protocol.aip_v3 import AIPMessage, MessageType
+from galaxy_gateway.protocol.compat import inject_trace_metadata, parse_message_compat
 
 # ===========================================================================
 # A) AIPMessage carries PR-2 unified envelope fields
 # ===========================================================================
+
 
 class TestAIPMessageEnvelopeFields:
     """AIPMessage must have trace_id, runtime_session_id, idempotency_key."""
@@ -90,6 +90,7 @@ class TestAIPMessageEnvelopeFields:
 # B) inject_trace_metadata injects all required envelope fields
 # ===========================================================================
 
+
 class TestInjectTraceMetadata:
     """inject_trace_metadata must inject trace_id, runtime_session_id, idempotency_key."""
 
@@ -119,14 +120,13 @@ class TestInjectTraceMetadata:
 
     def test_idempotency_key_uses_task_id_when_present(self):
         out = inject_trace_metadata({"device_id": "d1", "type": "task_submit", "task_id": "t123"})
-        assert "t123" in out["idempotency_key"], (
-            "idempotency_key should reference task_id when available"
-        )
+        assert "t123" in out["idempotency_key"], "idempotency_key should reference task_id when available"
 
 
 # ===========================================================================
 # C) inject_trace_metadata preserves existing values
 # ===========================================================================
+
 
 class TestInjectTraceMetadataPreservesValues:
 
@@ -137,18 +137,24 @@ class TestInjectTraceMetadataPreservesValues:
 
     def test_preserves_existing_runtime_session_id(self):
         existing_sid = "session-existing-abc"
-        out = inject_trace_metadata({
-            "device_id": "d1", "type": "heartbeat",
-            "runtime_session_id": existing_sid,
-        })
+        out = inject_trace_metadata(
+            {
+                "device_id": "d1",
+                "type": "heartbeat",
+                "runtime_session_id": existing_sid,
+            }
+        )
         assert out["runtime_session_id"] == existing_sid
 
     def test_preserves_existing_idempotency_key(self):
         existing_key = "idem-existing-xyz"
-        out = inject_trace_metadata({
-            "device_id": "d1", "type": "heartbeat",
-            "idempotency_key": existing_key,
-        })
+        out = inject_trace_metadata(
+            {
+                "device_id": "d1",
+                "type": "heartbeat",
+                "idempotency_key": existing_key,
+            }
+        )
         assert out["idempotency_key"] == existing_key
 
     def test_input_not_mutated(self):
@@ -160,6 +166,7 @@ class TestInjectTraceMetadataPreservesValues:
 # ===========================================================================
 # D) CommandEnvelope ↔ AIPMessage round-trip
 # ===========================================================================
+
 
 class TestCommandEnvelopeAIPRoundTrip:
 
@@ -212,6 +219,7 @@ class TestCommandEnvelopeAIPRoundTrip:
 # ===========================================================================
 # E) validate_command_envelope raises on missing required fields
 # ===========================================================================
+
 
 class TestValidateCommandEnvelope:
 
@@ -274,6 +282,7 @@ class TestValidateCommandEnvelope:
 # F) ResultEnvelope carries required fields and serialises cleanly
 # ===========================================================================
 
+
 class TestResultEnvelope:
 
     def test_basic_construction(self):
@@ -305,8 +314,11 @@ class TestResultEnvelope:
 
     def test_error_result_carries_error_code(self):
         result = ResultEnvelope(
-            task_id="t-err", trace_id="trace-err", success=False,
-            error="Device unreachable", error_code="DEVICE_TIMEOUT",
+            task_id="t-err",
+            trace_id="trace-err",
+            success=False,
+            error="Device unreachable",
+            error_code="DEVICE_TIMEOUT",
         )
         d = result.to_dict()
         assert d["error"] == "Device unreachable"
@@ -316,6 +328,7 @@ class TestResultEnvelope:
 # ===========================================================================
 # G) CommandEnvelope auto-generates defaults and idempotency_key
 # ===========================================================================
+
 
 class TestCommandEnvelopeDefaults:
 
@@ -342,6 +355,7 @@ class TestCommandEnvelopeDefaults:
 
     def test_version_is_canonical(self):
         from core.unified.command_envelope import ENVELOPE_VERSION
+
         env = CommandEnvelope()
         assert env.version == ENVELOPE_VERSION
 
@@ -349,6 +363,7 @@ class TestCommandEnvelopeDefaults:
 # ===========================================================================
 # H) CommandEnvelope.to_dict / from_dict round-trip
 # ===========================================================================
+
 
 class TestCommandEnvelopeSerialisation:
 
@@ -361,8 +376,14 @@ class TestCommandEnvelopeSerialisation:
         )
         d = env.to_dict()
         for field in (
-            "trace_id", "runtime_session_id", "task_id", "device_id",
-            "version", "idempotency_key", "payload", "response_metadata",
+            "trace_id",
+            "runtime_session_id",
+            "task_id",
+            "device_id",
+            "version",
+            "idempotency_key",
+            "payload",
+            "response_metadata",
         ):
             assert field in d, f"to_dict() must contain '{field}'"
 
@@ -383,9 +404,15 @@ class TestCommandEnvelopeSerialisation:
 
     def test_unknown_keys_go_to_extra(self):
         d = {
-            "trace_id": "t", "runtime_session_id": "s", "task_id": "tid",
-            "device_id": "", "version": "3.0", "idempotency_key": "idem_tid",
-            "payload": {}, "response_metadata": {}, "created_at": 0.0,
+            "trace_id": "t",
+            "runtime_session_id": "s",
+            "task_id": "tid",
+            "device_id": "",
+            "version": "3.0",
+            "idempotency_key": "idem_tid",
+            "payload": {},
+            "response_metadata": {},
+            "created_at": 0.0,
             "extra": {},
             "unknown_future_field": "should_be_captured",
         }
@@ -397,6 +424,7 @@ class TestCommandEnvelopeSerialisation:
 # I) parse_message_compat injects envelope fields
 # ===========================================================================
 
+
 class TestParseMessageCompatEnvelopeFields:
 
     def test_parsed_message_has_trace_id_injected(self):
@@ -407,13 +435,10 @@ class TestParseMessageCompatEnvelopeFields:
         payload_trace = (msg.payload or {}).get("trace_id", "") if isinstance(msg.payload, dict) else ""
         direct_trace = getattr(msg, "trace_id", "")
         has_trace = bool(payload_trace or direct_trace)
-        assert has_trace, (
-            "parse_message_compat must ensure trace_id is present in the normalised message"
-        )
+        assert has_trace, "parse_message_compat must ensure trace_id is present in the normalised message"
 
     def test_parsed_message_has_runtime_session_id(self):
-        raw = {"type": "task_submit", "device_id": "d-compat-02",
-               "version": "2.0", "trace_id": "t-001"}
+        raw = {"type": "task_submit", "device_id": "d-compat-02", "version": "2.0", "trace_id": "t-001"}
         msg = parse_message_compat(raw)
         payload_sid = (msg.payload or {}).get("runtime_session_id", "") if isinstance(msg.payload, dict) else ""
         direct_sid = getattr(msg, "runtime_session_id", "")
@@ -427,6 +452,7 @@ class TestParseMessageCompatEnvelopeFields:
 # ===========================================================================
 # J) Logging helpers do not raise
 # ===========================================================================
+
 
 class TestLoggingHelpers:
 

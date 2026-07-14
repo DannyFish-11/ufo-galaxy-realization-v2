@@ -17,7 +17,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-
 # Interaction modes that request overlay by default
 _OVERLAY_MODES = frozenset({"field_assistant"})
 

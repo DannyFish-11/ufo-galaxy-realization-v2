@@ -311,9 +311,7 @@ class TaskLifecycleSnapshotRecord:
         .PendingEnvelopeRecord` dicts.
     """
 
-    snapshot_id: str = field(
-        default_factory=lambda: f"tls_{uuid.uuid4().hex[:12]}"
-    )
+    snapshot_id: str = field(default_factory=lambda: f"tls_{uuid.uuid4().hex[:12]}")
     created_at: float = field(default_factory=time.time)
     process_pid: int = field(default_factory=os.getpid)
     records: List[Dict[str, Any]] = field(default_factory=list)
@@ -451,9 +449,7 @@ class TaskLifecyclePersistenceStore:
         try:
             os.makedirs(os.path.dirname(os.path.abspath(self._store_path)), exist_ok=True)
         except Exception as exc:
-            logger.warning(
-                "TaskLifecyclePersistence: could not create store directory: %s", exc
-            )
+            logger.warning("TaskLifecyclePersistence: could not create store directory: %s", exc)
 
     # ── Write ────────────────────────────────────────────────────────────────
 
@@ -493,9 +489,7 @@ class TaskLifecyclePersistenceStore:
             )
             return True
         except Exception as exc:
-            logger.warning(
-                "TaskLifecyclePersistence: failed to save snapshot: %s", exc
-            )
+            logger.warning("TaskLifecyclePersistence: failed to save snapshot: %s", exc)
             return False
 
     # ── Read ─────────────────────────────────────────────────────────────────
@@ -516,9 +510,7 @@ class TaskLifecyclePersistenceStore:
                     data = json.load(fh)
                 return TaskLifecycleSnapshotRecord.from_dict(data)
             except Exception as exc:
-                logger.warning(
-                    "TaskLifecyclePersistence: failed to load snapshot: %s", exc
-                )
+                logger.warning("TaskLifecyclePersistence: failed to load snapshot: %s", exc)
                 return None
 
     # ── Clear ────────────────────────────────────────────────────────────────
@@ -541,9 +533,7 @@ class TaskLifecyclePersistenceStore:
                 logger.debug("TaskLifecyclePersistence: snapshot cleared")
                 return True
             except Exception as exc:
-                logger.warning(
-                    "TaskLifecyclePersistence: failed to clear snapshot: %s", exc
-                )
+                logger.warning("TaskLifecyclePersistence: failed to clear snapshot: %s", exc)
                 return False
 
     @property
@@ -692,10 +682,7 @@ def restore_inflight_tasks_from_snapshot(
 
     snapshot = _store.load()
     if snapshot is None:
-        logger.debug(
-            "TaskLifecyclePersistence: no lifecycle snapshot found; "
-            "nothing to restore"
-        )
+        logger.debug("TaskLifecyclePersistence: no lifecycle snapshot found; " "nothing to restore")
         return []
 
     restored: List[RestoredTaskRecord] = []
@@ -711,8 +698,7 @@ def restore_inflight_tasks_from_snapshot(
             )
         except Exception as exc:
             logger.warning(
-                "TaskLifecyclePersistence: skipping malformed record in "
-                "snapshot %s: %s",
+                "TaskLifecyclePersistence: skipping malformed record in " "snapshot %s: %s",
                 snapshot.snapshot_id,
                 exc,
             )

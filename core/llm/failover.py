@@ -27,6 +27,7 @@ iterates the candidate list, skipping providers whose circuit breaker is
 open, and returns on the first success.  On exhaustion it raises the last
 observed exception.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -73,9 +74,9 @@ class RetryPolicy:
     def compute_delay(self, attempt: int) -> float:
         """Return the delay for *attempt* (0-indexed) in seconds."""
         safe_exp = min(attempt, 20)  # cap exponent to prevent overflow
-        delay = min(self.base_delay_s * (2 ** safe_exp), self.max_delay_s)
+        delay = min(self.base_delay_s * (2**safe_exp), self.max_delay_s)
         if self.jitter:
-            delay *= (0.5 + random.random() * 0.5)
+            delay *= 0.5 + random.random() * 0.5
         return delay
 
 
@@ -152,9 +153,7 @@ class FailoverStrategy:
         for attempt_idx, (provider, model) in enumerate(candidates):
             cb = self._cbs.get(provider)
             if cb is not None and not cb.allow_request():
-                logger.debug(
-                    "FailoverStrategy: circuit open for '%s', skipping", provider
-                )
+                logger.debug("FailoverStrategy: circuit open for '%s', skipping", provider)
                 self._stats["provider_switches"] += 1
                 continue
 
@@ -193,9 +192,7 @@ class FailoverStrategy:
                 )
 
                 if attempt_idx >= self._policy.max_retries:
-                    logger.error(
-                        "FailoverStrategy: exhausted all %d retries", attempt_idx + 1
-                    )
+                    logger.error("FailoverStrategy: exhausted all %d retries", attempt_idx + 1)
                     break
 
         if last_exc is not None:
@@ -206,9 +203,7 @@ class FailoverStrategy:
     # Circuit-breaker management
     # ------------------------------------------------------------------
 
-    def register_circuit_breaker(
-        self, provider: str, cb: ProviderCircuitBreaker
-    ) -> None:
+    def register_circuit_breaker(self, provider: str, cb: ProviderCircuitBreaker) -> None:
         """Register (or replace) the circuit breaker for *provider*."""
         self._cbs[provider] = cb
 

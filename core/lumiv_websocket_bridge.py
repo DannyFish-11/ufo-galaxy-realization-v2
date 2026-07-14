@@ -14,7 +14,7 @@ Lumiv Presence Bridge — 桌面覆盖层事件推送
 import asyncio
 import logging
 import os
-from typing import Optional, Dict, Any, Set
+from typing import Any, Dict, Optional, Set
 
 try:
     from fastapi import WebSocket, WebSocketDisconnect
@@ -30,8 +30,7 @@ except ImportError:
 logger = logging.getLogger("Lumiv.PresenceBridge")
 
 # PR-IPC: Electron HTTP 接收端端口（从环境变量读取，兼容用户自定义端口）
-_ELECTRON_PORT = int(os.environ.get("GALAXY_ELECTRON_PORT",
-                                   os.environ.get("GATEWAY_PORT", "9229")))
+_ELECTRON_PORT = int(os.environ.get("GALAXY_ELECTRON_PORT", os.environ.get("GATEWAY_PORT", "9229")))
 _ELECTRON_IPC_URL = f"http://127.0.0.1:{_ELECTRON_PORT}/ipc/presence-state"
 
 
@@ -40,8 +39,8 @@ _ELECTRON_IPC_URL = f"http://127.0.0.1:{_ELECTRON_PORT}/ipc/presence-state"
 # LIMINAL(认知)   → 0.15-0.85  (Liminal 透视空间展开)
 # MANIFEST(执行)  → 0.90-0.95  (Manifest 透明)
 MODE_DEPTH_MAP = {
-    "static":   0.05,
-    "liminal":  0.50,
+    "static": 0.05,
+    "liminal": 0.50,
     "manifest": 0.92,
 }
 
@@ -71,7 +70,7 @@ class GalaxyPresenceBridge:
     # 自发注意力（ambient）最近一拍：供面板在场栏显示"它正在看什么/刚才为何开口"。
     _ambient_seeing: bool = False
     _ambient_hearing: bool = False
-    _ambient_action: str = ""       # speak | silent | delegate
+    _ambient_action: str = ""  # speak | silent | delegate
     _ambient_rationale: str = ""
     _ambient_ts: float = 0.0
 
@@ -104,15 +103,16 @@ class GalaxyPresenceBridge:
             # 到任何事件】：连三态相位订阅都是死的（面板相位靠另一条 IPC feed
             # 才没露馅）。改用正确的模块级单例入口，让订阅真正生效。
             from core.state_event_bus import get_state_event_bus
+
             bus = get_state_event_bus()
 
             # 订阅三态转换事件
-            bus.subscribe("phase.silent",   self._on_phase_silent)
-            bus.subscribe("phase.liminal",  self._on_phase_liminal)
+            bus.subscribe("phase.silent", self._on_phase_silent)
+            bus.subscribe("phase.liminal", self._on_phase_liminal)
             bus.subscribe("phase.manifest", self._on_phase_manifest)
 
             # 订阅 intent 强度更新
-            bus.subscribe("intent.update",  self._on_intent_update)
+            bus.subscribe("intent.update", self._on_intent_update)
 
             # 订阅自发注意力事件 → 面板在场栏实时显示"在看/在听 + 决策理由"。
             bus.subscribe("ambient.observed", self._on_ambient_observed)
@@ -193,10 +193,18 @@ class GalaxyPresenceBridge:
             # ingress 总线 200ms tick),黑名单挡不全会退化成"每秒必推"。只有
             # 真正改变面板数据的事件族才触发推送。
             et = str(getattr(event, "type", "") or getattr(event, "event_type", "") or "")
-            if not et.startswith((
-                "device.", "task.", "skill.", "executor.", "mesh.",
-                "hitl.", "shell.", "entry_mode.",
-            )):
+            if not et.startswith(
+                (
+                    "device.",
+                    "task.",
+                    "skill.",
+                    "executor.",
+                    "mesh.",
+                    "hitl.",
+                    "shell.",
+                    "entry_mode.",
+                )
+            ):
                 return
             if not self._clients:
                 return
@@ -218,6 +226,7 @@ class GalaxyPresenceBridge:
         try:
             import os as _os
             import time as _t
+
             try:
                 min_iv = float(_os.environ.get("GALAXY_PANEL_PUSH_MIN_INTERVAL", "1.0") or "1.0")
             except ValueError:
@@ -238,6 +247,7 @@ class GalaxyPresenceBridge:
             return
         try:
             from core.routes.panel import build_panel_feed
+
             feed = await build_panel_feed()
         except Exception as exc:  # noqa: BLE001
             logger.debug("panel feed 构建失败(不推送): %s", exc)
@@ -245,6 +255,7 @@ class GalaxyPresenceBridge:
         text: Optional[str] = None
         try:
             import orjson
+
             text = orjson.dumps({"type": "panel_feed", "feed": feed}).decode()
         except Exception:  # noqa: BLE001
             pass
@@ -253,6 +264,7 @@ class GalaxyPresenceBridge:
         try:
             import hashlib
             import json as _json
+
             basis = text if text is not None else _json.dumps(feed, sort_keys=True, default=str)
             digest = hashlib.sha1(basis.encode()).hexdigest()
             if digest == getattr(type(self), "_last_feed_hash", ""):
@@ -272,6 +284,7 @@ class GalaxyPresenceBridge:
     def _on_ambient_observed(self, event: Any) -> None:
         """自发注意力：门控放行、正在观察一帧（看/听）。"""
         import time as _t
+
         p = self._payload_of(event)
         self._ambient_seeing = bool(p.get("has_frame"))
         self._ambient_hearing = bool(p.get("has_audio"))
@@ -281,6 +294,7 @@ class GalaxyPresenceBridge:
     def _on_ambient_decision(self, event: Any) -> None:
         """自发注意力：三选一决策（speak/silent/delegate）+ 理由。"""
         import time as _t
+
         p = self._payload_of(event)
         self._ambient_action = str(p.get("action", ""))
         self._ambient_rationale = str(p.get("rationale") or p.get("utterance") or p.get("task") or "")
@@ -401,6 +415,7 @@ class GalaxyPresenceBridge:
 # 对话推送到面板"实时上下文"一直是死的(PresencePanel 的 turns 永远空)。这两个
 # 用户可见功能名义上接了、实际从没生效。这里补齐定义。
 
+
 def _schedule(coro) -> None:
     """在当前事件循环里调度协程；无运行循环时同步兜底跑一次。"""
     try:
@@ -425,8 +440,7 @@ def get_current_phase() -> str:
         mode = GalaxyPresenceBridge.get_instance()._current_mode
     except Exception:  # noqa: BLE001
         return "silent"
-    return {"static": "silent", "silent": "silent",
-            "liminal": "liminal", "manifest": "manifest"}.get(mode, "silent")
+    return {"static": "silent", "silent": "silent", "liminal": "liminal", "manifest": "manifest"}.get(mode, "silent")
 
 
 def set_ai_speaking(speaking: bool) -> None:

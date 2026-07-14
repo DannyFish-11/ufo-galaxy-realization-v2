@@ -55,30 +55,31 @@ The following representative real paths are seeded:
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
+
 logger = logging.getLogger(__name__)
 
 
 import dataclasses
 from typing import Any, Dict, List, Optional
 
-from .ack_policy import AckPolicy, AckStage, NO_ACK_POLICY, ACCEPTED_ACK_POLICY, COMPLETED_ACK_POLICY
+from .ack_policy import ACCEPTED_ACK_POLICY, COMPLETED_ACK_POLICY, NO_ACK_POLICY, AckPolicy, AckStage
 from .delivery_mode import DeliveryMode
 from .fallback_owner import FallbackOwner
 from .idempotency import (
-    DeduplicationKey,
-    NO_DEDUP_KEY,
-    TASK_ENVELOPE_DEDUP_KEY,
-    NATS_TASK_DEDUP_KEY,
-    HANDOFF_DEDUP_KEY,
     COMMAND_ROUTER_DEDUP_KEY,
     DEVICE_WEBSOCKET_DEDUP_KEY,
+    HANDOFF_DEDUP_KEY,
+    NATS_TASK_DEDUP_KEY,
+    NO_DEDUP_KEY,
+    TASK_ENVELOPE_DEDUP_KEY,
+    DeduplicationKey,
 )
 from .retry_policy import (
-    RetryPolicy,
-    NO_RETRY_POLICY,
-    TRANSPORT_RETRY_POLICY,
-    RUNTIME_RETRY_POLICY,
     COORDINATOR_RETRY_POLICY,
+    NO_RETRY_POLICY,
+    RUNTIME_RETRY_POLICY,
+    TRANSPORT_RETRY_POLICY,
+    RetryPolicy,
 )
 from .timeout_owner import TimeoutOwner
 
@@ -266,7 +267,6 @@ RELIABILITY_PATH_REGISTRY: Dict[str, ReliabilitySummary] = {
         ),
         schema_version=SCHEMA_VERSION,
     ),
-
     # ------------------------------------------------------------------
     # 2. NATS task dispatch / result path
     # ------------------------------------------------------------------
@@ -292,7 +292,6 @@ RELIABILITY_PATH_REGISTRY: Dict[str, ReliabilitySummary] = {
         ),
         schema_version=SCHEMA_VERSION,
     ),
-
     # ------------------------------------------------------------------
     # 3. AgentBridge / HandoffContract runtime handoff
     # ------------------------------------------------------------------
@@ -318,7 +317,6 @@ RELIABILITY_PATH_REGISTRY: Dict[str, ReliabilitySummary] = {
         ),
         schema_version=SCHEMA_VERSION,
     ),
-
     # ------------------------------------------------------------------
     # 4. CommandRouter remote agent dispatch
     # ------------------------------------------------------------------
@@ -343,7 +341,6 @@ RELIABILITY_PATH_REGISTRY: Dict[str, ReliabilitySummary] = {
         ),
         schema_version=SCHEMA_VERSION,
     ),
-
     # ------------------------------------------------------------------
     # 5. Device WebSocket execution path
     # ------------------------------------------------------------------

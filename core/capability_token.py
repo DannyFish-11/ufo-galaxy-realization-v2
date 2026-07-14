@@ -19,6 +19,7 @@ Astrid 用 ed25519(跨方公钥验证)。本系统是**单一属主**的 Mesh—
 密钥来源:``GALAXY_MESH_SECRET`` 环境变量;缺省则在 ``.galaxy_mesh_key`` 生成并复用
 (0600)。令牌格式:``v1.<payload_b64url>.<sig_b64url>``,均为无填充 base64url。
 """
+
 from __future__ import annotations
 
 import base64
@@ -155,8 +156,7 @@ def reset_revoked_cache() -> None:
 
 
 # ── 签发 / 验证 ───────────────────────────────────────────────────────────────
-def issue_token(subject: str, scopes: List[str], *, ttl_s: float = 3600.0,
-                now: Optional[float] = None) -> str:
+def issue_token(subject: str, scopes: List[str], *, ttl_s: float = 3600.0, now: Optional[float] = None) -> str:
     """签发一张能力令牌。``now`` 可注入(测试/确定性)。"""
     issued = float(now if now is not None else time.time())
     claims = {
@@ -179,16 +179,20 @@ class TokenVerdict:
     scopes: tuple = ()
 
     def to_dict(self) -> Dict[str, Any]:
-        return {"valid": self.valid, "reason": self.reason,
-                "subject": self.subject, "jti": self.jti, "scopes": list(self.scopes)}
+        return {
+            "valid": self.valid,
+            "reason": self.reason,
+            "subject": self.subject,
+            "jti": self.jti,
+            "scopes": list(self.scopes),
+        }
 
 
 def _scope_grants(scopes: List[str], required: str) -> bool:
     return any(required == s or fnmatch(required, s) for s in scopes)
 
 
-def verify_token(token: str, *, required_scope: Optional[str] = None,
-                 now: Optional[float] = None) -> TokenVerdict:
+def verify_token(token: str, *, required_scope: Optional[str] = None, now: Optional[float] = None) -> TokenVerdict:
     """验证令牌:格式 → 签名(防篡改)→ 过期 → 撤销 → 作用域。任一不过即 invalid。"""
     t = (token or "").strip()
     parts = t.split(".")

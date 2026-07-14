@@ -69,16 +69,19 @@ def _reset_openclawd_singleton() -> None:
     """Reset the OpenClawd singleton so each test gets a fresh instance."""
     try:
         import core.openclawd as _oc_mod
+
         _oc_mod._openclawd_instance = None
     except Exception:
         pass
     try:
         from core.unified.llm_router import reset_unified_llm_router
+
         reset_unified_llm_router()
     except Exception:
         pass
     try:
         from core.session_execution_lane import reset_session_execution_lane_manager
+
         reset_session_execution_lane_manager()
     except Exception:
         pass
@@ -88,6 +91,7 @@ def _reset_dpr_singleton() -> None:
     """Reset the DesktopPresenceRuntime singleton."""
     try:
         import core.desktop_presence_runtime as _dpr_mod
+
         _dpr_mod._desktop_presence_runtime = None
     except Exception:
         pass
@@ -96,6 +100,7 @@ def _reset_dpr_singleton() -> None:
 def _make_stub():
     """Return a fresh LLMContractStub."""
     from tests.integration.stubs.llm_contract_stub import LLMContractStub
+
     return LLMContractStub()
 
 
@@ -110,6 +115,7 @@ def _patch_llm_router(stub):
 async def _run_dpr(message: str, source: str = "chat", **kwargs) -> Dict[str, Any]:
     """Run a fresh DesktopPresenceRuntime with the given message and source."""
     from core.desktop_presence_runtime import DesktopPresenceRuntime
+
     runtime = DesktopPresenceRuntime()
     kwargs.setdefault("session_id", "android-nl-test-session")
     kwargs.setdefault("user_id", "android-nl-test-user")
@@ -132,6 +138,7 @@ class TestGoalNormalizerBoundaryContract:
     def test_goal_normalizer_role_constant_is_correct(self):
         """GOAL_NORMALIZER_ROLE must describe structural normalization."""
         from core.android_nl_semantic_chain_contract import GOAL_NORMALIZER_ROLE
+
         assert GOAL_NORMALIZER_ROLE == "android_structural_normalization", (
             "GOAL_NORMALIZER_ROLE must be 'android_structural_normalization' — "
             "GoalNormalizer only converts a raw NL string to NormalizedGoal, "
@@ -144,6 +151,7 @@ class TestGoalNormalizerBoundaryContract:
             GOAL_NORMALIZER_ROLE,
             V2_SEMANTIC_AUTHORITY,
         )
+
         assert GOAL_NORMALIZER_ROLE != V2_SEMANTIC_AUTHORITY, (
             "GoalNormalizer is a structural normalization component. "
             "It must NOT be conflated with V2_SEMANTIC_AUTHORITY."
@@ -154,6 +162,7 @@ class TestGoalNormalizerBoundaryContract:
         from core.android_nl_semantic_chain_contract import (
             ANDROID_NL_SEMANTIC_CHAIN_CONTRACT_SENTINEL,
         )
+
         assert ANDROID_NL_SEMANTIC_CHAIN_CONTRACT_SENTINEL, (
             "ANDROID_NL_SEMANTIC_CHAIN_CONTRACT_SENTINEL must be a non-empty string "
             "so the contract presence can be machine-verified."
@@ -165,6 +174,7 @@ class TestGoalNormalizerBoundaryContract:
             ANDROID_CARRIER_SOURCES,
             ANDROID_NL_CARRIER_SOURCE,
         )
+
         assert ANDROID_NL_CARRIER_SOURCE in ANDROID_CARRIER_SOURCES, (
             "android_goal_execution must be in ANDROID_CARRIER_SOURCES so "
             "is_android_nl_carrier() returns True for this source tag."
@@ -173,6 +183,7 @@ class TestGoalNormalizerBoundaryContract:
     def test_is_android_nl_carrier_true_for_goal_execution(self):
         """is_android_nl_carrier() must return True for 'android_goal_execution'."""
         from core.android_nl_semantic_chain_contract import is_android_nl_carrier
+
         assert is_android_nl_carrier("android_goal_execution") is True, (
             "is_android_nl_carrier('android_goal_execution') must be True — "
             "Android cross-device NL uses this source tag."
@@ -181,9 +192,9 @@ class TestGoalNormalizerBoundaryContract:
     def test_is_android_nl_carrier_false_for_chat(self):
         """is_android_nl_carrier() must return False for 'chat'."""
         from core.android_nl_semantic_chain_contract import is_android_nl_carrier
+
         assert is_android_nl_carrier("chat") is False, (
-            "is_android_nl_carrier('chat') must be False — "
-            "'chat' is the desktop-direct NL path."
+            "is_android_nl_carrier('chat') must be False — " "'chat' is the desktop-direct NL path."
         )
 
 
@@ -198,6 +209,7 @@ class TestLocalPlannerServiceBoundaryContract:
     def test_local_planner_service_role_constant_is_correct(self):
         """LOCAL_PLANNER_SERVICE_ROLE must describe local task decomposition."""
         from core.android_nl_semantic_chain_contract import LOCAL_PLANNER_SERVICE_ROLE
+
         assert LOCAL_PLANNER_SERVICE_ROLE == "android_local_task_decomposition", (
             "LOCAL_PLANNER_SERVICE_ROLE must be 'android_local_task_decomposition' — "
             "LocalPlannerService decomposes goals into steps locally "
@@ -211,6 +223,7 @@ class TestLocalPlannerServiceBoundaryContract:
             LOCAL_PLANNER_SERVICE_ROLE,
             V2_SEMANTIC_AUTHORITY,
         )
+
         assert LOCAL_PLANNER_SERVICE_ROLE != V2_SEMANTIC_AUTHORITY, (
             "LocalPlannerService is a local task decomposition component. "
             "It must NOT be conflated with V2_SEMANTIC_AUTHORITY."
@@ -219,9 +232,10 @@ class TestLocalPlannerServiceBoundaryContract:
     def test_local_planner_service_path_type_distinct_from_cross_device(self):
         """Android local NL path type must differ from cross-device path type."""
         from core.android_nl_semantic_chain_contract import (
-            ANDROID_LOCAL_NL_PATH_TYPE,
             ANDROID_CROSS_DEVICE_NL_PATH_TYPE,
+            ANDROID_LOCAL_NL_PATH_TYPE,
         )
+
         assert ANDROID_LOCAL_NL_PATH_TYPE != ANDROID_CROSS_DEVICE_NL_PATH_TYPE, (
             "android_local_nl and android_cross_device_nl must be distinct "
             "path type values — the two paths have completely different semantic "
@@ -231,19 +245,19 @@ class TestLocalPlannerServiceBoundaryContract:
     def test_nl_path_types_covers_local_and_cross_device(self):
         """NL_PATH_TYPES must include both Android local and cross-device variants."""
         from core.android_nl_semantic_chain_contract import (
-            NL_PATH_TYPES,
-            ANDROID_LOCAL_NL_PATH_TYPE,
             ANDROID_CROSS_DEVICE_NL_PATH_TYPE,
+            ANDROID_LOCAL_NL_PATH_TYPE,
             DESKTOP_DIRECT_NL_PATH_TYPE,
+            NL_PATH_TYPES,
         )
+
         for expected in (
             ANDROID_LOCAL_NL_PATH_TYPE,
             ANDROID_CROSS_DEVICE_NL_PATH_TYPE,
             DESKTOP_DIRECT_NL_PATH_TYPE,
         ):
             assert expected in NL_PATH_TYPES, (
-                f"NL_PATH_TYPES must include {expected!r} — all three NL paths "
-                f"must be enumerated in the contract."
+                f"NL_PATH_TYPES must include {expected!r} — all three NL paths " f"must be enumerated in the contract."
             )
 
 
@@ -296,9 +310,9 @@ class TestAndroidCrossDeviceNLToV2SemanticChain:
                 )
             )
 
-        assert "ingress_carrier_context" in result, (
-            "ingress_carrier_context must be stamped on android_goal_execution results"
-        )
+        assert (
+            "ingress_carrier_context" in result
+        ), "ingress_carrier_context must be stamped on android_goal_execution results"
 
     def test_semantic_authority_is_v2_for_android_goal_execution(self):
         """semantic_authority must be 'v2_openclawd' for android_goal_execution source."""
@@ -359,9 +373,9 @@ class TestAndroidCrossDeviceNLToV2SemanticChain:
             )
 
         ctx = result.get("ingress_carrier_context", {})
-        assert ctx.get("is_android_carrier") is True, (
-            "is_android_carrier must be True for android_goal_execution source"
-        )
+        assert (
+            ctx.get("is_android_carrier") is True
+        ), "is_android_carrier must be True for android_goal_execution source"
 
     def test_nl_path_type_is_android_cross_device(self):
         """ingress_carrier_context.nl_path_type must be 'android_cross_device_nl'."""
@@ -422,9 +436,7 @@ class TestDesktopDirectNLPath:
         _reset_dpr_singleton()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_dpr("帮我截图", source="chat")
-            )
+            result = asyncio.run(_run_dpr("帮我截图", source="chat"))
 
         ctx = result.get("ingress_carrier_context", {})
         assert ctx.get("semantic_authority") == "v2_openclawd", (
@@ -439,9 +451,7 @@ class TestDesktopDirectNLPath:
         _reset_dpr_singleton()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_dpr("你好", source="chat")
-            )
+            result = asyncio.run(_run_dpr("你好", source="chat"))
 
         ctx = result.get("ingress_carrier_context", {})
         assert ctx.get("nl_path_type") == "desktop_direct_nl", (
@@ -456,14 +466,10 @@ class TestDesktopDirectNLPath:
         _reset_dpr_singleton()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_dpr("测试", source="chat")
-            )
+            result = asyncio.run(_run_dpr("测试", source="chat"))
 
         ctx = result.get("ingress_carrier_context", {})
-        assert ctx.get("is_android_carrier") is False, (
-            "is_android_carrier must be False for desktop NL (source='chat')"
-        )
+        assert ctx.get("is_android_carrier") is False, "is_android_carrier must be False for desktop NL (source='chat')"
 
 
 # ---------------------------------------------------------------------------
@@ -474,13 +480,16 @@ class TestDesktopDirectNLPath:
 class TestSemanticAuthorityIsAlwaysV2:
     """Prove semantic_authority=='v2_openclawd' for all DPR-processed paths."""
 
-    @pytest.mark.parametrize("source", [
-        "chat",
-        "android_goal_execution",
-        "android_vision",
-        "openclawd",
-        "operator",
-    ])
+    @pytest.mark.parametrize(
+        "source",
+        [
+            "chat",
+            "android_goal_execution",
+            "android_vision",
+            "openclawd",
+            "operator",
+        ],
+    )
     def test_semantic_authority_is_v2_for_all_sources(self, source: str):
         """semantic_authority must be 'v2_openclawd' regardless of source."""
         stub = _make_stub()
@@ -488,9 +497,7 @@ class TestSemanticAuthorityIsAlwaysV2:
         _reset_dpr_singleton()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_dpr(f"test from {source}", source=source)
-            )
+            result = asyncio.run(_run_dpr(f"test from {source}", source=source))
 
         ctx = result.get("ingress_carrier_context", {})
         assert ctx.get("semantic_authority") == "v2_openclawd", (
@@ -515,11 +522,10 @@ class TestAndroidNLCarrierVsSemanticAuthorityContracts:
         _reset_dpr_singleton()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_dpr("合同断言测试", source="android_goal_execution")
-            )
+            result = asyncio.run(_run_dpr("合同断言测试", source="android_goal_execution"))
 
         from core.android_nl_semantic_chain_contract import assert_v2_is_semantic_authority
+
         # Must not raise
         assert_v2_is_semantic_authority(result, context="android_goal_execution")
 
@@ -530,11 +536,10 @@ class TestAndroidNLCarrierVsSemanticAuthorityContracts:
         _reset_dpr_singleton()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_dpr("Android carrier 断言", source="android_goal_execution")
-            )
+            result = asyncio.run(_run_dpr("Android carrier 断言", source="android_goal_execution"))
 
         from core.android_nl_semantic_chain_contract import assert_android_nl_carrier
+
         # Must not raise
         assert_android_nl_carrier(result, context="android_goal_execution")
 
@@ -545,17 +550,15 @@ class TestAndroidNLCarrierVsSemanticAuthorityContracts:
         _reset_dpr_singleton()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_dpr("NL path 类型断言", source="android_goal_execution")
-            )
+            result = asyncio.run(_run_dpr("NL path 类型断言", source="android_goal_execution"))
 
         from core.android_nl_semantic_chain_contract import (
-            assert_nl_path_type,
             ANDROID_CROSS_DEVICE_NL_PATH_TYPE,
+            assert_nl_path_type,
         )
+
         # Must not raise
-        assert_nl_path_type(result, ANDROID_CROSS_DEVICE_NL_PATH_TYPE,
-                            context="android_cross_device")
+        assert_nl_path_type(result, ANDROID_CROSS_DEVICE_NL_PATH_TYPE, context="android_cross_device")
 
     def test_assert_android_nl_carrier_fails_for_chat_source(self):
         """assert_android_nl_carrier must FAIL for desktop 'chat' source."""
@@ -564,22 +567,22 @@ class TestAndroidNLCarrierVsSemanticAuthorityContracts:
         _reset_dpr_singleton()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_dpr("桌面直接对话", source="chat")
-            )
+            result = asyncio.run(_run_dpr("桌面直接对话", source="chat"))
 
         from core.android_nl_semantic_chain_contract import assert_android_nl_carrier
+
         with pytest.raises(AssertionError):
             assert_android_nl_carrier(result, context="chat_should_not_be_android")
 
     def test_build_android_nl_carrier_context_shape(self):
         """build_android_nl_carrier_context must return a dict with all required fields."""
         from core.android_nl_semantic_chain_contract import (
-            build_android_nl_carrier_context,
             ANDROID_CROSS_DEVICE_NL_PATH_TYPE,
-            V2_SEMANTIC_AUTHORITY,
             ANDROID_NL_CARRIER_SOURCE,
+            V2_SEMANTIC_AUTHORITY,
+            build_android_nl_carrier_context,
         )
+
         ctx = build_android_nl_carrier_context(
             device_id="android_device_x",
             session_id="session_y",
@@ -606,9 +609,9 @@ class TestGoalExecutionHandlerUsesCorrectSource:
         This is the root fix that ensures the carrier is correctly identified
         so ingress_carrier_context.carrier != 'chat' for Android NL requests.
         """
-        handler_src = (
-            REPO_ROOT / "galaxy_gateway" / "android" / "handlers" / "goal_execution.py"
-        ).read_text(encoding="utf-8")
+        handler_src = (REPO_ROOT / "galaxy_gateway" / "android" / "handlers" / "goal_execution.py").read_text(
+            encoding="utf-8"
+        )
         # Must NOT use source="chat" for the goal_execution → DPR call
         # (the old broken pattern that hid the Android carrier identity).
         assert 'source="android_goal_execution"' in handler_src, (
@@ -620,12 +623,13 @@ class TestGoalExecutionHandlerUsesCorrectSource:
 
     def test_goal_execution_handler_does_not_use_chat_as_source(self):
         """The goal_execution handler must NOT call DPR with source='chat'."""
-        handler_src = (
-            REPO_ROOT / "galaxy_gateway" / "android" / "handlers" / "goal_execution.py"
-        ).read_text(encoding="utf-8")
+        handler_src = (REPO_ROOT / "galaxy_gateway" / "android" / "handlers" / "goal_execution.py").read_text(
+            encoding="utf-8"
+        )
         # Count occurrences of source="chat" — should be 0 in handle_request calls.
         # (Comments mentioning 'chat' are acceptable; we check for the assignment.)
         import re
+
         # Find all handle_request calls that use source="chat"
         chat_sources = re.findall(
             r'handle_request\s*\([^)]*source\s*=\s*["\']chat["\']',
@@ -644,9 +648,7 @@ class TestGoalExecutionHandlerUsesCorrectSource:
         Ensures the source is not silently treated as 'unknown' and falls back
         with a warning instead of routing through the canonical OpenClawd path.
         """
-        dpr_src = (
-            REPO_ROOT / "core" / "desktop_presence_runtime.py"
-        ).read_text(encoding="utf-8")
+        dpr_src = (REPO_ROOT / "core" / "desktop_presence_runtime.py").read_text(encoding="utf-8")
         assert "android_goal_execution" in dpr_src, (
             "core/desktop_presence_runtime.py must recognize 'android_goal_execution' "
             "as a first-class source in _dispatch() so it routes through OpenClawd "
@@ -655,9 +657,7 @@ class TestGoalExecutionHandlerUsesCorrectSource:
 
     def test_dpr_ingress_carrier_context_has_semantic_authority_field(self):
         """DPR must stamp semantic_authority in ingress_carrier_context."""
-        dpr_src = (
-            REPO_ROOT / "core" / "desktop_presence_runtime.py"
-        ).read_text(encoding="utf-8")
+        dpr_src = (REPO_ROOT / "core" / "desktop_presence_runtime.py").read_text(encoding="utf-8")
         assert "semantic_authority" in dpr_src, (
             "core/desktop_presence_runtime.py must stamp 'semantic_authority' in "
             "ingress_carrier_context so the V2 LLM authority is machine-verifiable "

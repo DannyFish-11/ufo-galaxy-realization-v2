@@ -294,9 +294,7 @@ _RING_BUFFER_CAPACITY: int = 256
 _VALID_BINDING_STATES: frozenset = frozenset({"bound", "dispatching"})
 
 # Flow phases that indicate an active or in-progress execution context
-_ACTIVE_FLOW_PHASES: frozenset = frozenset(
-    {"dispatched", "executing", "reconciling", "suspended"}
-)
+_ACTIVE_FLOW_PHASES: frozenset = frozenset({"dispatched", "executing", "reconciling", "suspended"})
 
 # Execution phases that imply partial results may be present
 _PARTIAL_RESULT_PHASES: frozenset = frozenset({"in_progress", "acknowledged"})
@@ -312,6 +310,7 @@ def _try_import_flow_entity_runtime():
         from core.delegated_flow_entity import (  # type: ignore
             get_delegated_flow_entity_runtime,
         )
+
         return get_delegated_flow_entity_runtime
     except Exception:
         return None
@@ -323,6 +322,7 @@ def _try_import_persistence_bundle():
         from core.delegated_flow_persistence import (  # type: ignore
             get_delegated_flow_persistence_bundle,
         )
+
         return get_delegated_flow_persistence_bundle
     except Exception:
         return None
@@ -334,6 +334,7 @@ def _try_import_execution_tracker():
         from core.delegated_runtime_execution_tracker import (  # type: ignore
             get_execution_tracking_runtime,
         )
+
         return get_execution_tracking_runtime
     except Exception:
         return None
@@ -345,6 +346,7 @@ def _try_import_dispatch_binding_runtime():
         from core.android_runtime_dispatch_binding import (  # type: ignore
             get_dispatch_binding_runtime,
         )
+
         return get_dispatch_binding_runtime
     except Exception:
         return None
@@ -356,6 +358,7 @@ def _try_import_task_lifecycle_persistence():
         from core.task_lifecycle_persistence import (  # type: ignore
             load_task_lifecycle_snapshot,
         )
+
         return load_task_lifecycle_snapshot
     except Exception:
         return None
@@ -367,6 +370,7 @@ def _try_import_continuity_coordinator():
         from core.flow_continuity_coordinator import (  # type: ignore
             get_flow_continuity_coordinator,
         )
+
         return get_flow_continuity_coordinator
     except Exception:
         return None
@@ -422,9 +426,7 @@ class RecoveryAction(str, Enum):
     require_review = "require_review"
 
     @classmethod
-    def from_string(
-        cls, value: str, default: Optional["RecoveryAction"] = None
-    ) -> "RecoveryAction":
+    def from_string(cls, value: str, default: Optional["RecoveryAction"] = None) -> "RecoveryAction":
         """Return the enum member matching *value*, or *default* / fail_closed."""
         if not isinstance(value, str):
             return default if default is not None else cls.fail_closed
@@ -821,12 +823,8 @@ class RecoveryAttemptRecord:
             flow_id=data.get("flow_id", ""),
             flow_lineage_id=data.get("flow_lineage_id", ""),
             trigger=RecoveryTrigger.from_string(data.get("trigger", "unknown")),
-            state=RecoveryAttemptState(
-                data.get("state", RecoveryAttemptState.in_progress.value)
-            ),
-            action_decided=RecoveryAction.from_string(
-                data.get("action_decided", "fail_closed")
-            ),
+            state=RecoveryAttemptState(data.get("state", RecoveryAttemptState.in_progress.value)),
+            action_decided=RecoveryAction.from_string(data.get("action_decided", "fail_closed")),
             artifact_id=data.get("artifact_id", ""),
             started_at=data.get("started_at", time.time()),
             completed_at=data.get("completed_at", 0.0),
@@ -912,9 +910,7 @@ class DelegatedFlowRecoveryCoordinator:
         self._capacity = capacity
         self._buffer: Deque[RecoveryDecisionArtifact] = deque(maxlen=capacity)
         # attempt_id → RecoveryAttemptRecord for audit trail
-        self._attempt_log: Deque[RecoveryAttemptRecord] = deque(
-            maxlen=capacity
-        )
+        self._attempt_log: Deque[RecoveryAttemptRecord] = deque(maxlen=capacity)
         # flow_id → attempt_id for in-progress duplicate suppression
         self._active_attempts: Dict[str, str] = {}
         self._lock = threading.Lock()
@@ -967,9 +963,7 @@ class DelegatedFlowRecoveryCoordinator:
     def _binding_runtime(self):
         """Return AndroidRuntimeDispatchBindingRuntime or None."""
         if self._get_dispatch_binding_runtime is None:
-            self._get_dispatch_binding_runtime = (
-                _try_import_dispatch_binding_runtime()
-            )
+            self._get_dispatch_binding_runtime = _try_import_dispatch_binding_runtime()
         if self._get_dispatch_binding_runtime is None:
             return None
         try:
@@ -1055,14 +1049,10 @@ class DelegatedFlowRecoveryCoordinator:
                 return ""
             record = None
             if ctx.tracker_id:
-                record = getattr(runtime, "get", lambda *a, **kw: None)(
-                    ctx.tracker_id
-                )
+                record = getattr(runtime, "get", lambda *a, **kw: None)(ctx.tracker_id)
             if record is None and ctx.session_id:
                 # fall back to session-keyed lookup
-                get_by_session = getattr(
-                    runtime, "get_by_session_id", None
-                )
+                get_by_session = getattr(runtime, "get_by_session_id", None)
                 if get_by_session:
                     record = get_by_session(ctx.session_id)
             if record is None:
@@ -1115,10 +1105,7 @@ class DelegatedFlowRecoveryCoordinator:
             if not snapshots:
                 return False
             if ctx.flow_id:
-                return any(
-                    getattr(s, "delegated_flow_id", None) == ctx.flow_id
-                    for s in snapshots
-                )
+                return any(getattr(s, "delegated_flow_id", None) == ctx.flow_id for s in snapshots)
             return True
         except Exception:
             return False
@@ -1171,9 +1158,7 @@ class DelegatedFlowRecoveryCoordinator:
             artifact = self._base_artifact(
                 ctx,
                 RecoveryAction.fail_closed,
-                policy_reference=(
-                    "FAIL_CLOSED_ON_AMBIGUOUS_RECOVERY_CONTEXT_POLICY"
-                ),
+                policy_reference=("FAIL_CLOSED_ON_AMBIGUOUS_RECOVERY_CONTEXT_POLICY"),
                 detail="flow_id is required for recovery decision",
             )
             self._record(artifact)
@@ -1185,9 +1170,7 @@ class DelegatedFlowRecoveryCoordinator:
             artifact = self._base_artifact(
                 ctx,
                 RecoveryAction.suppress_duplicate_recovery,
-                policy_reference=(
-                    "DUPLICATE_RECOVERY_SUPPRESSION_IS_COORDINATOR_OWNED_POLICY"
-                ),
+                policy_reference=("DUPLICATE_RECOVERY_SUPPRESSION_IS_COORDINATOR_OWNED_POLICY"),
                 detail=(
                     f"duplicate recovery attempt for flow_id={ctx.flow_id!r}; "
                     f"existing attempt_id={existing_attempt_id!r}"
@@ -1207,13 +1190,8 @@ class DelegatedFlowRecoveryCoordinator:
             artifact = self._base_artifact(
                 ctx,
                 RecoveryAction.preserve_partial_then_resume,
-                policy_reference=(
-                    "PARTIAL_RESULT_CONVERGENCE_PRECEDES_RESUME_POLICY"
-                ),
-                detail=(
-                    "partial result detected; preserving before resume "
-                    f"(tracker_phase={tracker_phase!r})"
-                ),
+                policy_reference=("PARTIAL_RESULT_CONVERGENCE_PRECEDES_RESUME_POLICY"),
+                detail=("partial result detected; preserving before resume " f"(tracker_phase={tracker_phase!r})"),
                 flow_entity_phase=flow_phase,
                 binding_state_at_decision=binding_state,
                 tracker_phase_at_decision=tracker_phase,
@@ -1229,9 +1207,7 @@ class DelegatedFlowRecoveryCoordinator:
             artifact = self._base_artifact(
                 ctx,
                 RecoveryAction.replay_from_checkpoint,
-                policy_reference=(
-                    "RECOVERY_COORDINATOR_IS_UNIFIED_ORCHESTRATION_OWNER_POLICY"
-                ),
+                policy_reference=("RECOVERY_COORDINATOR_IS_UNIFIED_ORCHESTRATION_OWNER_POLICY"),
                 detail=(
                     "durable checkpoint available; replay from boundary "
                     f"(boundary_phase={ctx.checkpoint_boundary_phase!r})"
@@ -1245,27 +1221,18 @@ class DelegatedFlowRecoveryCoordinator:
             return artifact
 
         # 4. Re-dispatch when binding is gone or invalid
-        has_invalid_binding_state = (
-            bool(binding_state) and binding_state not in _VALID_BINDING_STATES
-        )
+        has_invalid_binding_state = bool(binding_state) and binding_state not in _VALID_BINDING_STATES
         requires_redispatch_trigger = ctx.trigger in (
             RecoveryTrigger.android_binding_lost,
             RecoveryTrigger.process_recreation,
         )
-        binding_invalid = has_invalid_binding_state or (
-            requires_redispatch_trigger and not binding_state
-        )
+        binding_invalid = has_invalid_binding_state or (requires_redispatch_trigger and not binding_state)
         if binding_invalid:
             artifact = self._base_artifact(
                 ctx,
                 RecoveryAction.redispatch_runtime,
-                policy_reference=(
-                    "REDISPATCH_REQUIRES_BINDING_INVALIDATION_POLICY"
-                ),
-                detail=(
-                    f"binding state {binding_state!r} is not valid; "
-                    "re-dispatch required"
-                ),
+                policy_reference=("REDISPATCH_REQUIRES_BINDING_INVALIDATION_POLICY"),
+                detail=(f"binding state {binding_state!r} is not valid; " "re-dispatch required"),
                 flow_entity_phase=flow_phase,
                 binding_state_at_decision=binding_state,
                 tracker_phase_at_decision=tracker_phase,
@@ -1274,21 +1241,14 @@ class DelegatedFlowRecoveryCoordinator:
             return artifact
 
         # 5. Resume in-place when flow is active and continuity says so
-        continuity_resumable = ctx.continuity_decision in (
-            "continuity_resume", "preserve_partial_and_wait"
-        )
+        continuity_resumable = ctx.continuity_decision in ("continuity_resume", "preserve_partial_and_wait")
         flow_is_active = flow_phase in _ACTIVE_FLOW_PHASES or not flow_phase
         if continuity_resumable or flow_is_active:
             artifact = self._base_artifact(
                 ctx,
                 RecoveryAction.resume_in_place,
-                policy_reference=(
-                    "RECOVERY_COORDINATOR_IS_UNIFIED_ORCHESTRATION_OWNER_POLICY"
-                ),
-                detail=(
-                    "flow context is active and continuity is resumable; "
-                    "resuming in place"
-                ),
+                policy_reference=("RECOVERY_COORDINATOR_IS_UNIFIED_ORCHESTRATION_OWNER_POLICY"),
+                detail=("flow context is active and continuity is resumable; " "resuming in place"),
                 flow_entity_phase=flow_phase,
                 binding_state_at_decision=binding_state,
                 tracker_phase_at_decision=tracker_phase,
@@ -1300,13 +1260,8 @@ class DelegatedFlowRecoveryCoordinator:
         artifact = self._base_artifact(
             ctx,
             RecoveryAction.require_review,
-            policy_reference=(
-                "FAIL_CLOSED_ON_AMBIGUOUS_RECOVERY_CONTEXT_POLICY"
-            ),
-            detail=(
-                "insufficient context to determine recovery action; "
-                "operator review required"
-            ),
+            policy_reference=("FAIL_CLOSED_ON_AMBIGUOUS_RECOVERY_CONTEXT_POLICY"),
+            detail=("insufficient context to determine recovery action; " "operator review required"),
             flow_entity_phase=flow_phase,
             binding_state_at_decision=binding_state,
             tracker_phase_at_decision=tracker_phase,
@@ -1339,9 +1294,7 @@ class DelegatedFlowRecoveryCoordinator:
         """
         cad = continuity_artifact_dict or {}
         enriched = RecoveryTriggerContext(
-            trigger=ctx.trigger
-            if ctx.trigger != RecoveryTrigger.unknown
-            else RecoveryTrigger.continuity_decision,
+            trigger=ctx.trigger if ctx.trigger != RecoveryTrigger.unknown else RecoveryTrigger.continuity_decision,
             flow_id=ctx.flow_id or cad.get("flow_id", ""),
             flow_lineage_id=ctx.flow_lineage_id or cad.get("flow_lineage_id", ""),
             session_id=ctx.session_id or cad.get("session_id", ""),
@@ -1350,15 +1303,10 @@ class DelegatedFlowRecoveryCoordinator:
             device_id=ctx.device_id or cad.get("device_id", ""),
             binding_id=ctx.binding_id,
             runtime_attachment_session_id=(
-                ctx.runtime_attachment_session_id
-                or cad.get("runtime_attachment_session_id", "")
+                ctx.runtime_attachment_session_id or cad.get("runtime_attachment_session_id", "")
             ),
-            continuity_artifact_id=(
-                ctx.continuity_artifact_id or cad.get("artifact_id", "")
-            ),
-            continuity_decision=(
-                ctx.continuity_decision or cad.get("decision", "")
-            ),
+            continuity_artifact_id=(ctx.continuity_artifact_id or cad.get("artifact_id", "")),
+            continuity_decision=(ctx.continuity_decision or cad.get("decision", "")),
             has_partial_result=ctx.has_partial_result,
             partial_result_payload=ctx.partial_result_payload,
             checkpoint_available=ctx.checkpoint_available,
@@ -1373,9 +1321,7 @@ class DelegatedFlowRecoveryCoordinator:
     # Attempt lifecycle management
     # ------------------------------------------------------------------
 
-    def begin_attempt(
-        self, ctx: RecoveryTriggerContext
-    ) -> Tuple[RecoveryAttemptRecord, RecoveryDecisionArtifact]:
+    def begin_attempt(self, ctx: RecoveryTriggerContext) -> Tuple[RecoveryAttemptRecord, RecoveryDecisionArtifact]:
         """Begin a new recovery attempt and decide the action.
 
         Registers the flow_id in the active-attempt registry, calls
@@ -1396,9 +1342,7 @@ class DelegatedFlowRecoveryCoordinator:
         """
         attempt_id = ctx.recovery_attempt_id or str(uuid.uuid4())
         # Inject attempt_id so the artifact can reference it
-        enriched = RecoveryTriggerContext(
-            **{**ctx.__dict__, "recovery_attempt_id": attempt_id}
-        )
+        enriched = RecoveryTriggerContext(**{**ctx.__dict__, "recovery_attempt_id": attempt_id})
 
         artifact = self.decide(enriched)
 
@@ -1457,18 +1401,12 @@ class DelegatedFlowRecoveryCoordinator:
         with self._lock:
             for rec in reversed(list(self._attempt_log)):
                 if rec.attempt_id == attempt_id:
-                    rec.state = (
-                        RecoveryAttemptState.completed
-                        if success
-                        else RecoveryAttemptState.failed
-                    )
+                    rec.state = RecoveryAttemptState.completed if success else RecoveryAttemptState.failed
                     rec.completed_at = time.time()
                     return rec
         return None
 
-    def suppress_attempt(
-        self, attempt_id: str, flow_id: str
-    ) -> Optional[RecoveryAttemptRecord]:
+    def suppress_attempt(self, attempt_id: str, flow_id: str) -> Optional[RecoveryAttemptRecord]:
         """Mark an attempt as suppressed (idempotent duplicate call path).
 
         Parameters
@@ -1507,12 +1445,8 @@ class DelegatedFlowRecoveryCoordinator:
             key = art.action.value
             counts[key] = counts.get(key, 0) + 1
 
-        recent_artifacts = [
-            a.to_dict() for a in reversed(artifacts[-10:])
-        ]
-        recent_attempts = [
-            r.to_dict() for r in reversed(attempts[-10:])
-        ]
+        recent_artifacts = [a.to_dict() for a in reversed(artifacts[-10:])]
+        recent_attempts = [r.to_dict() for r in reversed(attempts[-10:])]
 
         return RecoveryCoordinatorSnapshot(
             total_decisions=len(artifacts),
@@ -1529,9 +1463,7 @@ class DelegatedFlowRecoveryCoordinator:
             items = list(self._buffer)
         return list(reversed(items[-n:]))
 
-    def get_by_artifact_id(
-        self, artifact_id: str
-    ) -> Optional[RecoveryDecisionArtifact]:
+    def get_by_artifact_id(self, artifact_id: str) -> Optional[RecoveryDecisionArtifact]:
         """Return the artifact with *artifact_id*, or None."""
         with self._lock:
             for art in self._buffer:

@@ -240,9 +240,7 @@ class CanonicalStateAdapter:
                 "canonical_fact_surface": "response.metadata.canonical_perception_state",
                 "canonical_fact_present": self.canonical_perception_state() is not None,
                 "compat_surfaces_present": (
-                    ["response.metadata.multimodal_context"]
-                    if self.multimodal_context_compat() is not None
-                    else []
+                    ["response.metadata.multimodal_context"] if self.multimodal_context_compat() is not None else []
                 ),
             }
 
@@ -281,8 +279,6 @@ class CanonicalStateAdapter:
             "compat_multimodal_context_present": self.multimodal_context_compat() is not None,
             "compat_top_level_route_present": self._meta.get("multimodal_route_decision") is not None,
             # Canonical routing embedded in UCP (PR-24)
-            "canonical_route_in_ucp": (
-                ucp.get("multimodal_route_decision") is not None if ucp else False
-            ),
+            "canonical_route_in_ucp": (ucp.get("multimodal_route_decision") is not None if ucp else False),
             "perception_boundary": self.perception_boundary_summary(),
         }

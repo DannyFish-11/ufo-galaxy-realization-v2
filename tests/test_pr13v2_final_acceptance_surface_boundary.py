@@ -5,8 +5,8 @@ def test_boundary_module_exports_pr13v2_sentinels() -> None:
     from core.final_acceptance_surface_boundary import (
         FINAL_ACCEPTANCE_SURFACE_BOUNDARY_AUTHORITY,
         FINAL_ACCEPTANCE_SURFACE_BOUNDARY_PR13V2_SENTINEL,
-        FINAL_INTEGRATION_BOUNDARY_CONVERGENCE_POLICY,
         FINAL_ACCEPTANCE_SURFACE_NO_AUTHORITY_REASSEMBLY_POLICY,
+        FINAL_INTEGRATION_BOUNDARY_CONVERGENCE_POLICY,
     )
 
     assert "AUTHORITY" in FINAL_ACCEPTANCE_SURFACE_BOUNDARY_AUTHORITY
@@ -42,9 +42,10 @@ def test_boundary_builder_exposes_final_integration_boundary_axes() -> None:
     assert integration["distributed_contract"]["contract_version"] == "distributed_subject_contract_v1"
     assert integration["outward_consumption"]["canonical_outputs_only"] is True
     assert integration["product_facing_integration"]["surface"] == "/api/v1/panel/unified"
-    assert "core.android_participant_truth_ingress" in boundary["android_v2_contract_alignment"][
-        "android_ingress_to_v2_truth_chain"
-    ]
+    assert (
+        "core.android_participant_truth_ingress"
+        in boundary["android_v2_contract_alignment"]["android_ingress_to_v2_truth_chain"]
+    )
 
 
 def test_projection_truth_acceptance_contract_exposes_final_acceptance_boundary() -> None:

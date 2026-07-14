@@ -38,20 +38,21 @@ M. proof_input_diagnosis is computed before gate call in governance state.
 
 from __future__ import annotations
 
-import pytest
-
 from typing import Any, Dict, Optional
 
+import pytest
 
 # ===========================================================================
 # A — Policy sentinel accessibility
 # ===========================================================================
+
 
 class TestPolicySentinelAccessibility:
     def test_capability_absent_governance_policy_importable(self) -> None:
         from galaxy_gateway.android.capabilities import (
             CAPABILITY_ABSENT_GOVERNANCE_POLICY,
         )
+
         assert isinstance(CAPABILITY_ABSENT_GOVERNANCE_POLICY, str)
         assert "CAPABILITY_ABSENT_GOVERNANCE" in CAPABILITY_ABSENT_GOVERNANCE_POLICY
 
@@ -59,27 +60,29 @@ class TestPolicySentinelAccessibility:
         from core.android_mode_gate_policy import (
             ANDROID_CAPABILITY_TRUTH_ABSENT_DEGRADES_READINESS_POLICY,
         )
+
         assert isinstance(ANDROID_CAPABILITY_TRUTH_ABSENT_DEGRADES_READINESS_POLICY, str)
-        assert "ANDROID_CAPABILITY_TRUTH_ABSENT" in (
-            ANDROID_CAPABILITY_TRUTH_ABSENT_DEGRADES_READINESS_POLICY
-        )
+        assert "ANDROID_CAPABILITY_TRUTH_ABSENT" in (ANDROID_CAPABILITY_TRUTH_ABSENT_DEGRADES_READINESS_POLICY)
 
     def test_policy_references_deny_semantics(self) -> None:
         from core.android_mode_gate_policy import (
             ANDROID_CAPABILITY_TRUTH_ABSENT_DEGRADES_READINESS_POLICY,
         )
+
         assert "deny" in ANDROID_CAPABILITY_TRUTH_ABSENT_DEGRADES_READINESS_POLICY.lower()
 
     def test_capability_absent_policy_references_none(self) -> None:
         from galaxy_gateway.android.capabilities import (
             CAPABILITY_ABSENT_GOVERNANCE_POLICY,
         )
+
         assert "NONE" in CAPABILITY_ABSENT_GOVERNANCE_POLICY or "0" in CAPABILITY_ABSENT_GOVERNANCE_POLICY
 
     def test_capability_absent_policy_references_absent_semantics(self) -> None:
         from galaxy_gateway.android.capabilities import (
             CAPABILITY_ABSENT_GOVERNANCE_POLICY,
         )
+
         policy_lower = CAPABILITY_ABSENT_GOVERNANCE_POLICY.lower()
         # Must reference the degradation semantics
         assert "absent" in policy_lower or "missing" in policy_lower
@@ -89,6 +92,7 @@ class TestPolicySentinelAccessibility:
 # ===========================================================================
 # B — resolve_android_execution_gate_decision: degrading truth → "deny"
 # ===========================================================================
+
 
 class TestGateDecisionDegradingTruth:
     """
@@ -100,6 +104,7 @@ class TestGateDecisionDegradingTruth:
 
     def _resolve(self, truth_quality: str, **kwargs: Any):
         from core.android_mode_gate_policy import resolve_android_execution_gate_decision
+
         defaults = dict(
             policy_eligible=True,
             readiness_ready=True,
@@ -173,9 +178,11 @@ class TestGateDecisionDegradingTruth:
 # C — resolve_android_execution_gate_decision: non-degrading truth → normal
 # ===========================================================================
 
+
 class TestGateDecisionNonDegradingTruth:
     def _resolve(self, truth_quality: Optional[str], **kwargs: Any):
         from core.android_mode_gate_policy import resolve_android_execution_gate_decision
+
         defaults = dict(
             policy_eligible=True,
             readiness_ready=True,
@@ -198,9 +205,11 @@ class TestGateDecisionNonDegradingTruth:
 # D — resolve_android_execution_gate_decision: None truth quality → normal
 # ===========================================================================
 
+
 class TestGateDecisionNullTruthQuality:
     def test_none_truth_quality_follows_normal_gate_logic_allow(self) -> None:
         from core.android_mode_gate_policy import resolve_android_execution_gate_decision
+
         result = resolve_android_execution_gate_decision(
             policy_eligible=True,
             readiness_ready=True,
@@ -213,6 +222,7 @@ class TestGateDecisionNullTruthQuality:
 
     def test_none_truth_quality_follows_normal_gate_logic_deny(self) -> None:
         from core.android_mode_gate_policy import resolve_android_execution_gate_decision
+
         result = resolve_android_execution_gate_decision(
             policy_eligible=False,
             readiness_ready=True,
@@ -227,6 +237,7 @@ class TestGateDecisionNullTruthQuality:
     def test_omitted_truth_quality_follows_normal_gate_logic(self) -> None:
         """Backward-compat: callers that don't pass truth_quality still work."""
         from core.android_mode_gate_policy import resolve_android_execution_gate_decision
+
         result = resolve_android_execution_gate_decision(
             policy_eligible=True,
             readiness_ready=True,
@@ -242,9 +253,11 @@ class TestGateDecisionNullTruthQuality:
 # E — Decision reasons include truth-degraded token
 # ===========================================================================
 
+
 class TestDegradedDecisionReasons:
     def _resolve(self, quality: str):
         from core.android_mode_gate_policy import resolve_android_execution_gate_decision
+
         return resolve_android_execution_gate_decision(
             policy_eligible=True,
             readiness_ready=True,
@@ -332,9 +345,11 @@ class TestDegradedDecisionReasons:
 # F — android_capability_truth_degraded flag
 # ===========================================================================
 
+
 class TestTruthDegradedFlag:
     def _resolve(self, quality: Optional[str]):
         from core.android_mode_gate_policy import resolve_android_execution_gate_decision
+
         return resolve_android_execution_gate_decision(
             policy_eligible=True,
             readiness_ready=True,
@@ -379,9 +394,11 @@ class TestTruthDegradedFlag:
 # G — AndroidCanonicalExecutionGateDecision.to_dict includes truth fields
 # ===========================================================================
 
+
 class TestGateDecisionToDict:
     def test_to_dict_includes_android_capability_truth_quality(self) -> None:
         from core.android_mode_gate_policy import resolve_android_execution_gate_decision
+
         result = resolve_android_execution_gate_decision(
             policy_eligible=True,
             readiness_ready=True,
@@ -396,6 +413,7 @@ class TestGateDecisionToDict:
 
     def test_to_dict_includes_android_capability_truth_degraded(self) -> None:
         from core.android_mode_gate_policy import resolve_android_execution_gate_decision
+
         result = resolve_android_execution_gate_decision(
             policy_eligible=True,
             readiness_ready=True,
@@ -410,6 +428,7 @@ class TestGateDecisionToDict:
 
     def test_to_dict_degraded_false_when_complete(self) -> None:
         from core.android_mode_gate_policy import resolve_android_execution_gate_decision
+
         result = resolve_android_execution_gate_decision(
             policy_eligible=True,
             readiness_ready=True,
@@ -423,9 +442,10 @@ class TestGateDecisionToDict:
 
     def test_to_dict_includes_policy_reference(self) -> None:
         from core.android_mode_gate_policy import (
-            resolve_android_execution_gate_decision,
             CANONICAL_ANDROID_EXECUTION_GATE_POLICY,
+            resolve_android_execution_gate_decision,
         )
+
         result = resolve_android_execution_gate_decision(
             policy_eligible=True,
             readiness_ready=True,
@@ -441,21 +461,25 @@ class TestGateDecisionToDict:
 # H — AndroidDevice.from_registration: absent capabilities → not reported
 # ===========================================================================
 
+
 class TestFromRegistrationAbsentCapabilities:
     def test_no_capabilities_in_data_sets_not_reported(self) -> None:
         from galaxy_gateway.android.models import AndroidDevice
+
         device = AndroidDevice.from_registration({"device_id": "dev1"})
         assert device.capabilities_explicitly_reported is False
 
     def test_no_capabilities_in_data_sets_capabilities_to_zero(self) -> None:
         from galaxy_gateway.android.models import AndroidDevice
+
         device = AndroidDevice.from_registration({"device_id": "dev1"})
         # PR-7A: absent capabilities = 0 (NONE), not optimistic default
         assert device.capabilities == 0
 
     def test_absent_capabilities_not_treated_as_default_android_caps(self) -> None:
-        from galaxy_gateway.android.models import AndroidDevice
         from galaxy_gateway.android.capabilities import DeviceCapability
+        from galaxy_gateway.android.models import AndroidDevice
+
         device = AndroidDevice.from_registration({"device_id": "dev1"})
         # Must NOT equal the old optimistic default
         assert device.capabilities != DeviceCapability.get_android_default()
@@ -465,10 +489,12 @@ class TestFromRegistrationAbsentCapabilities:
 # I — AndroidDevice.from_registration: explicit capabilities → reported
 # ===========================================================================
 
+
 class TestFromRegistrationExplicitCapabilities:
     def test_explicit_capabilities_sets_reported_true(self) -> None:
-        from galaxy_gateway.android.models import AndroidDevice
         from galaxy_gateway.android.capabilities import DeviceCapability
+        from galaxy_gateway.android.models import AndroidDevice
+
         data = {
             "device_id": "dev2",
             "capabilities": DeviceCapability.get_android_default(),
@@ -477,8 +503,9 @@ class TestFromRegistrationExplicitCapabilities:
         assert device.capabilities_explicitly_reported is True
 
     def test_explicit_capabilities_preserves_value(self) -> None:
-        from galaxy_gateway.android.models import AndroidDevice
         from galaxy_gateway.android.capabilities import DeviceCapability
+        from galaxy_gateway.android.models import AndroidDevice
+
         caps = DeviceCapability.NETWORK | DeviceCapability.GUI_READ
         data = {"device_id": "dev3", "capabilities": caps}
         device = AndroidDevice.from_registration(data)
@@ -487,6 +514,7 @@ class TestFromRegistrationExplicitCapabilities:
 
     def test_explicit_zero_capabilities_still_sets_reported_true(self) -> None:
         from galaxy_gateway.android.models import AndroidDevice
+
         data = {"device_id": "dev4", "capabilities": 0}
         device = AndroidDevice.from_registration(data)
         # 0 was explicitly provided, so it IS reported
@@ -498,14 +526,17 @@ class TestFromRegistrationExplicitCapabilities:
 # J — capabilities default to NONE when absent
 # ===========================================================================
 
+
 class TestDefaultCapabilitiesNone:
     def test_no_capabilities_key_gives_zero(self) -> None:
         from galaxy_gateway.android.models import AndroidDevice
+
         device = AndroidDevice.from_registration({"device_id": "x"})
         assert device.capabilities == 0
 
     def test_capabilities_list_is_empty_when_absent(self) -> None:
         from galaxy_gateway.android.models import AndroidDevice
+
         device = AndroidDevice.from_registration({"device_id": "x"})
         d = device.to_dict()
         assert d["capabilities_list"] == []
@@ -515,9 +546,11 @@ class TestDefaultCapabilitiesNone:
 # K — AndroidDevice.to_dict includes capabilities_explicitly_reported
 # ===========================================================================
 
+
 class TestToDict:
     def test_to_dict_includes_capabilities_explicitly_reported_false(self) -> None:
         from galaxy_gateway.android.models import AndroidDevice
+
         device = AndroidDevice.from_registration({"device_id": "dev5"})
         d = device.to_dict()
         assert "capabilities_explicitly_reported" in d
@@ -525,6 +558,7 @@ class TestToDict:
 
     def test_to_dict_includes_capabilities_explicitly_reported_true(self) -> None:
         from galaxy_gateway.android.models import AndroidDevice
+
         data = {"device_id": "dev6", "capabilities": 1}
         device = AndroidDevice.from_registration(data)
         d = device.to_dict()
@@ -534,6 +568,7 @@ class TestToDict:
 # ===========================================================================
 # L — build_unified_governance_state wires Android truth into gate decision
 # ===========================================================================
+
 
 class TestGovernanceStateWiring:
     """
@@ -569,14 +604,13 @@ class TestGovernanceStateWiring:
         mode_value: str = "cross_device",
     ) -> Dict[str, Any]:
         """Build governance state with a mocked single device."""
-        from unittest.mock import patch
         from types import SimpleNamespace
+        from unittest.mock import patch
+
         from core.unified_governance_semantics import build_unified_governance_state
 
         active_sessions = [SimpleNamespace(device_id=device_id)]
-        mode_map = {
-            device_id: SimpleNamespace(mode=SimpleNamespace(value=mode_value))
-        }
+        mode_map = {device_id: SimpleNamespace(mode=SimpleNamespace(value=mode_value))}
         readiness_map = {
             device_id: SimpleNamespace(
                 is_dispatch_eligible=True,
@@ -586,26 +620,33 @@ class TestGovernanceStateWiring:
         }
         runtime_snapshot = self._make_runtime_snapshot_with_device(device_id)
 
-        with patch(
-            "core.attached_runtime_session_registry.list_active_sessions",
-            return_value=active_sessions,
-        ), patch(
-            "core.android_mode_gate_policy.build_mode_state_for_device",
-            side_effect=lambda d: mode_map[d],
-        ), patch(
-            "core.android_mode_gate_policy.evaluate_android_mode_readiness",
-            side_effect=lambda d: readiness_map[d],
-        ), patch(
-            "core.unified_execution_governance.is_takeover_active",
-            return_value=False,
-        ), patch(
-            "core.unified_execution_governance.get_execution_runtime_snapshot",
-            return_value=runtime_snapshot,
+        with (
+            patch(
+                "core.attached_runtime_session_registry.list_active_sessions",
+                return_value=active_sessions,
+            ),
+            patch(
+                "core.android_mode_gate_policy.build_mode_state_for_device",
+                side_effect=lambda d: mode_map[d],
+            ),
+            patch(
+                "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+                side_effect=lambda d: readiness_map[d],
+            ),
+            patch(
+                "core.unified_execution_governance.is_takeover_active",
+                return_value=False,
+            ),
+            patch(
+                "core.unified_execution_governance.get_execution_runtime_snapshot",
+                return_value=runtime_snapshot,
+            ),
         ):
             return build_unified_governance_state()
 
     def test_governance_state_returns_without_raising(self) -> None:
         from core.unified_governance_semantics import build_unified_governance_state
+
         # With no active sessions, should return a valid structure
         result = build_unified_governance_state(device_ids=[])
         assert isinstance(result, dict)
@@ -619,8 +660,7 @@ class TestGovernanceStateWiring:
         for path_data in device.get("governance_precedence", {}).values():
             causality = path_data.get("decision_causality", {})
             assert "android_capability_truth_quality" in causality, (
-                f"android_capability_truth_quality missing from causality for path "
-                f"{path_data.get('path', '?')}"
+                f"android_capability_truth_quality missing from causality for path " f"{path_data.get('path', '?')}"
             )
 
     def test_decision_causality_includes_android_capability_truth_degraded(self) -> None:
@@ -630,9 +670,9 @@ class TestGovernanceStateWiring:
         device = result["devices"][0]
         for path_data in device.get("governance_precedence", {}).values():
             causality = path_data.get("decision_causality", {})
-            assert "android_capability_truth_degraded" in causality, (
-                "android_capability_truth_degraded missing from causality"
-            )
+            assert (
+                "android_capability_truth_degraded" in causality
+            ), "android_capability_truth_degraded missing from causality"
 
     def test_missing_android_truth_degrades_canonical_gate_to_deny(self) -> None:
         """When Android truth is missing, the canonical gate must be deny, not allow."""
@@ -642,9 +682,9 @@ class TestGovernanceStateWiring:
         delegated = device["governance_precedence"].get("delegated_execution", {})
         causality = delegated.get("decision_causality", {})
         # Missing Android truth must degrade to deny
-        assert causality.get("canonical_execution_gate_decision") == "deny", (
-            "Expected canonical_execution_gate_decision='deny' when Android truth is missing"
-        )
+        assert (
+            causality.get("canonical_execution_gate_decision") == "deny"
+        ), "Expected canonical_execution_gate_decision='deny' when Android truth is missing"
         assert causality.get("android_capability_truth_degraded") is True
         assert causality.get("android_capability_truth_quality") == "missing"
 
@@ -652,6 +692,7 @@ class TestGovernanceStateWiring:
 # ===========================================================================
 # M — proof_input_diagnosis is pre-computed before gate call
 # ===========================================================================
+
 
 class TestProofInputDiagnosisPreComputed:
     """
@@ -664,8 +705,9 @@ class TestProofInputDiagnosisPreComputed:
     def _build_state_with_device(
         self, device_id: str = "dev_m", android_semantics: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        from unittest.mock import patch
         from types import SimpleNamespace
+        from unittest.mock import patch
+
         from core.unified_governance_semantics import build_unified_governance_state
 
         device_snapshot: Dict[str, Any] = {
@@ -683,9 +725,7 @@ class TestProofInputDiagnosisPreComputed:
             device_snapshot.update(android_semantics)
 
         active_sessions = [SimpleNamespace(device_id=device_id)]
-        mode_map = {
-            device_id: SimpleNamespace(mode=SimpleNamespace(value="cross_device"))
-        }
+        mode_map = {device_id: SimpleNamespace(mode=SimpleNamespace(value="cross_device"))}
         readiness_map = {
             device_id: SimpleNamespace(
                 is_dispatch_eligible=True,
@@ -699,21 +739,27 @@ class TestProofInputDiagnosisPreComputed:
             "active_execution_total_count": 0,
         }
 
-        with patch(
-            "core.attached_runtime_session_registry.list_active_sessions",
-            return_value=active_sessions,
-        ), patch(
-            "core.android_mode_gate_policy.build_mode_state_for_device",
-            side_effect=lambda d: mode_map[d],
-        ), patch(
-            "core.android_mode_gate_policy.evaluate_android_mode_readiness",
-            side_effect=lambda d: readiness_map[d],
-        ), patch(
-            "core.unified_execution_governance.is_takeover_active",
-            return_value=False,
-        ), patch(
-            "core.unified_execution_governance.get_execution_runtime_snapshot",
-            return_value=runtime_snapshot,
+        with (
+            patch(
+                "core.attached_runtime_session_registry.list_active_sessions",
+                return_value=active_sessions,
+            ),
+            patch(
+                "core.android_mode_gate_policy.build_mode_state_for_device",
+                side_effect=lambda d: mode_map[d],
+            ),
+            patch(
+                "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+                side_effect=lambda d: readiness_map[d],
+            ),
+            patch(
+                "core.unified_execution_governance.is_takeover_active",
+                return_value=False,
+            ),
+            patch(
+                "core.unified_execution_governance.get_execution_runtime_snapshot",
+                return_value=runtime_snapshot,
+            ),
         ):
             return build_unified_governance_state()
 
@@ -731,8 +777,7 @@ class TestProofInputDiagnosisPreComputed:
             proof_diagnosis = causality.get("proof_input_diagnosis", {})
             expected_class = proof_diagnosis.get("proof_input_class")
             assert truth_quality == expected_class, (
-                f"android_capability_truth_quality={truth_quality!r} "
-                f"!= proof_input_class={expected_class!r}"
+                f"android_capability_truth_quality={truth_quality!r} " f"!= proof_input_class={expected_class!r}"
             )
 
     def test_missing_truth_quality_is_deny_in_governance_state(self) -> None:
@@ -812,9 +857,7 @@ class TestProofInputDiagnosisPreComputed:
         result = self._build_state_with_device(
             android_semantics={
                 "android_semantics_contract_state": "incompatible",
-                "android_semantics_conflicts": [
-                    "android_capability_contract_incompatible"
-                ],
+                "android_semantics_conflicts": ["android_capability_contract_incompatible"],
                 "android_runtime_truth_authority": "downgraded_to_unknown",
                 "android_runtime_truth_usable": False,
             }
@@ -833,6 +876,7 @@ class TestProofInputDiagnosisPreComputed:
         This is the canonical contract for PR-7A.
         """
         from core.android_mode_gate_policy import resolve_android_execution_gate_decision
+
         gate = resolve_android_execution_gate_decision(
             policy_eligible=True,
             readiness_ready=True,

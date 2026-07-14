@@ -111,56 +111,59 @@ L) Integration: merge + recovery + summary round-trip
 from __future__ import annotations
 
 import dataclasses
+
 import pytest
+
+from core.distributed_execution import MergeStatus as _MSPublic
+from core.distributed_execution import MergeSummary as _SummaryPublic
+from core.distributed_execution import RecoveryPosture as _RPPublic
+from core.distributed_execution import merge_any as _merge_any_public
+from core.distributed_execution.merge_status import (
+    MERGE_STATUS_ORDER,
+    MergeStatus,
+    is_successful_outcome,
+    is_terminal_failure,
+    merge_status_severity,
+    worst_of,
+)
+from core.distributed_execution.merge_summary import (
+    EMPTY_MERGE_SUMMARY,
+    MergeSummary,
+    attach_merge_summary_to_projection,
+    get_merge_hints,
+)
+from core.distributed_execution.recovery_policy import (
+    POSTURE_DESCRIPTIONS,
+    RecoveryPosture,
+    RecoveryRecommendation,
+    recommend_recovery,
+)
+from core.distributed_execution.result_merge import (
+    merge_any,
+    merge_dict_results,
+    merge_graph_result,
+    merge_result_envelopes,
+)
 
 # ---------------------------------------------------------------------------
 # Module-level imports
 # ---------------------------------------------------------------------------
-
-from core.distributed_execution.merge_status import (
-    MergeStatus,
-    MERGE_STATUS_ORDER,
-    merge_status_severity,
-    worst_of,
-    is_terminal_failure,
-    is_successful_outcome,
-)
-from core.distributed_execution.recovery_policy import (
-    RecoveryPosture,
-    POSTURE_DESCRIPTIONS,
-    RecoveryRecommendation,
-    recommend_recovery,
-)
-from core.distributed_execution.merge_summary import (
-    MergeSummary,
-    EMPTY_MERGE_SUMMARY,
-    attach_merge_summary_to_projection,
-    get_merge_hints,
-)
-from core.distributed_execution.result_merge import (
-    merge_result_envelopes,
-    merge_graph_result,
-    merge_dict_results,
-    merge_any,
-)
-from core.distributed_execution import (
-    MergeStatus as _MSPublic,
-    RecoveryPosture as _RPPublic,
-    MergeSummary as _SummaryPublic,
-    merge_any as _merge_any_public,
-)
 
 
 # ===========================================================================
 # A) MergeStatus enum
 # ===========================================================================
 
+
 class TestMergeStatus:
 
     def test_all_expected_values_present(self):
         expected = {
-            "success", "partial_success", "degraded_success",
-            "failed", "timed_out",
+            "success",
+            "partial_success",
+            "degraded_success",
+            "failed",
+            "timed_out",
         }
         actual = {s.value for s in MergeStatus}
         assert expected == actual
@@ -221,12 +224,17 @@ class TestMergeStatus:
 # B) RecoveryPosture enum
 # ===========================================================================
 
+
 class TestRecoveryPosture:
 
     def test_all_expected_values_present(self):
         expected = {
-            "no_recovery_needed", "retry_same_device", "reroute_device",
-            "skip_optional_branch", "require_confirmation", "abort_task",
+            "no_recovery_needed",
+            "retry_same_device",
+            "reroute_device",
+            "skip_optional_branch",
+            "require_confirmation",
+            "abort_task",
         }
         actual = {p.value for p in RecoveryPosture}
         assert expected == actual
@@ -252,6 +260,7 @@ class TestRecoveryPosture:
 # ===========================================================================
 # C) RecoveryRecommendation dataclass
 # ===========================================================================
+
 
 class TestRecoveryRecommendation:
 
@@ -316,6 +325,7 @@ class TestRecoveryRecommendation:
 # ===========================================================================
 # D) recommend_recovery logic
 # ===========================================================================
+
 
 class TestRecommendRecovery:
 
@@ -431,6 +441,7 @@ class TestRecommendRecovery:
 # E) MergeSummary dataclass
 # ===========================================================================
 
+
 class TestMergeSummary:
 
     def _build(self, **kwargs):
@@ -462,11 +473,23 @@ class TestMergeSummary:
         s = self._build()
         d = s.to_dict()
         for key in [
-            "merge_status", "total_count", "successful_count", "failed_count",
-            "timed_out_count", "skipped_count", "success_rate", "is_successful",
-            "is_terminal_failure", "merged_payloads", "errors", "warnings",
-            "recovery_recommendation", "task_id", "trace_id",
-            "runtime_session_id", "merged_at",
+            "merge_status",
+            "total_count",
+            "successful_count",
+            "failed_count",
+            "timed_out_count",
+            "skipped_count",
+            "success_rate",
+            "is_successful",
+            "is_terminal_failure",
+            "merged_payloads",
+            "errors",
+            "warnings",
+            "recovery_recommendation",
+            "task_id",
+            "trace_id",
+            "runtime_session_id",
+            "merged_at",
         ]:
             assert key in d, f"Missing key: {key}"
 
@@ -557,10 +580,21 @@ class TestMergeSummary:
 # F) merge_result_envelopes helper
 # ===========================================================================
 
+
 class _FakeEnvelope:
     """Minimal stand-in for ResultEnvelope."""
-    def __init__(self, success, error="", task_id="", trace_id="",
-                 device_id="", runtime_session_id="", elapsed_ms=0.0, result=None):
+
+    def __init__(
+        self,
+        success,
+        error="",
+        task_id="",
+        trace_id="",
+        device_id="",
+        runtime_session_id="",
+        elapsed_ms=0.0,
+        result=None,
+    ):
         self.success = success
         self.error = error
         self.task_id = task_id
@@ -639,8 +673,10 @@ class TestMergeResultEnvelopes:
 # G) merge_graph_result helper
 # ===========================================================================
 
+
 class _FakeGraphResult:
     """Minimal stand-in for GraphExecutionResult."""
+
     def __init__(
         self,
         success=True,
@@ -736,6 +772,7 @@ class TestMergeGraphResult:
 # H) merge_dict_results helper
 # ===========================================================================
 
+
 class TestMergeDictResults:
 
     def test_empty_list_returns_failed(self):
@@ -748,25 +785,31 @@ class TestMergeDictResults:
         assert s.merge_status == MergeStatus.FAILED
 
     def test_all_success(self):
-        s = merge_dict_results([
-            {"success": True},
-            {"success": True},
-            {"success": True},
-        ])
+        s = merge_dict_results(
+            [
+                {"success": True},
+                {"success": True},
+                {"success": True},
+            ]
+        )
         assert s.merge_status == MergeStatus.SUCCESS
         assert s.successful_count == 3
 
     def test_mixed_success_failure(self):
-        s = merge_dict_results([
-            {"success": True},
-            {"success": False, "error": "bad"},
-        ])
+        s = merge_dict_results(
+            [
+                {"success": True},
+                {"success": False, "error": "bad"},
+            ]
+        )
         assert s.merge_status == MergeStatus.PARTIAL_SUCCESS
 
     def test_timed_out_flag(self):
-        s = merge_dict_results([
-            {"success": False, "timed_out": True},
-        ])
+        s = merge_dict_results(
+            [
+                {"success": False, "timed_out": True},
+            ]
+        )
         assert s.timed_out_count == 1
         assert s.merge_status == MergeStatus.TIMED_OUT
 
@@ -782,15 +825,14 @@ class TestMergeDictResults:
         assert s.task_id == "override"
 
     def test_errors_list_populated_on_failure(self):
-        s = merge_dict_results([
-            {"success": False, "error": "something went wrong", "device_id": "dev-x"}
-        ])
+        s = merge_dict_results([{"success": False, "error": "something went wrong", "device_id": "dev-x"}])
         assert any("something went wrong" in e for e in s.errors)
 
 
 # ===========================================================================
 # I) merge_any helper
 # ===========================================================================
+
 
 class TestMergeAny:
 
@@ -805,6 +847,7 @@ class TestMergeAny:
     def test_single_graph_result_delegates(self):
         try:
             from core.task_graph import GraphExecutionResult
+
             gr = GraphExecutionResult(
                 graph_id="g1",
                 trace_id="tr-1",
@@ -822,19 +865,23 @@ class TestMergeAny:
             pytest.skip("core.task_graph not importable in this environment")
 
     def test_list_of_dicts(self):
-        s = merge_any([
-            {"success": True},
-            {"success": False, "error": "oops"},
-        ])
+        s = merge_any(
+            [
+                {"success": True},
+                {"success": False, "error": "oops"},
+            ]
+        )
         assert s.merge_status == MergeStatus.PARTIAL_SUCCESS
 
     def test_worst_of_applied(self):
         # One group succeeds, one fails → overall FAILED (worst)
         gr_ok = _FakeGraphResult(success=True, done_nodes=2, total_nodes=2)
-        s = merge_any([
-            gr_ok,
-            {"success": False, "error": "err"},
-        ])
+        s = merge_any(
+            [
+                gr_ok,
+                {"success": False, "error": "err"},
+            ]
+        )
         # Should be at least partial_success or worse
         assert not is_successful_outcome(s.merge_status) or s.merge_status in (
             MergeStatus.PARTIAL_SUCCESS,
@@ -845,6 +892,7 @@ class TestMergeAny:
 # ===========================================================================
 # J) attach_merge_summary_to_projection helper
 # ===========================================================================
+
 
 class TestAttachMergeSummaryToProjection:
 
@@ -880,6 +928,7 @@ class TestAttachMergeSummaryToProjection:
 # ===========================================================================
 # K) get_merge_hints helper
 # ===========================================================================
+
 
 class TestGetMergeHints:
 
@@ -924,6 +973,7 @@ class TestGetMergeHints:
 # ===========================================================================
 # L) Integration: merge + recovery + summary round-trip
 # ===========================================================================
+
 
 class TestIntegration:
 

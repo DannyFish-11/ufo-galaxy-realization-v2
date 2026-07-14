@@ -45,6 +45,7 @@ SCHEMA_VERSION = 1
 # Leaf-level media models
 # ---------------------------------------------------------------------------
 
+
 class MultiModalImage(BaseModel):
     """A single image payload attached to a multi-modal request.
 
@@ -102,6 +103,7 @@ class MultiModalAudio(BaseModel):
 # Aggregate context model
 # ---------------------------------------------------------------------------
 
+
 class MultiModalContext(BaseModel):
     """Aggregated multi-modal context attached to a single request.
 
@@ -144,6 +146,7 @@ class MultiModalContext(BaseModel):
 # ---------------------------------------------------------------------------
 # Top-level input model
 # ---------------------------------------------------------------------------
+
 
 class MultiModalInput(BaseModel):
     """Canonical top-level model for a multi-modal chat / agent request.

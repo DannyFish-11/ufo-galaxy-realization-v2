@@ -24,6 +24,7 @@ The canonical implementation currently lives in ``core.command_router``
 package-based import path incrementally; once the implementation is fully
 decomposed the canonical path will remain ``core.commands.router``.
 """
+
 from __future__ import annotations
 
 # ── module authority sentinel ─────────────────────────────────────────────
@@ -36,17 +37,17 @@ command routing entry point.
 
 # ── re-export from canonical implementation ───────────────────────────────
 from core.command_router import (  # noqa: F401
-    CommandRouter,
+    COMMAND_ROUTER_ORCHESTRATION_AUTHORITY,
+    CommandMode,
     CommandRequest,
     CommandResult,
+    CommandRouter,
     CommandStatus,
-    CommandMode,
-    TargetResult,
     GatewayError,
     GatewayErrorCode,
-    validate_command_envelope,
+    TargetResult,
     get_command_router,
-    COMMAND_ROUTER_ORCHESTRATION_AUTHORITY,
+    validate_command_envelope,
 )
 
 __all__ = [

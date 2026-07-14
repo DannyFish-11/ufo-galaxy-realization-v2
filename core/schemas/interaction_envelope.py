@@ -23,10 +23,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-
 # ---------------------------------------------------------------------------
 # OutputPlan
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class OutputPlan:
@@ -78,28 +78,46 @@ class OutputPlan:
         """
         _MODE_DEFAULTS: Dict[str, Dict[str, Any]] = {
             "chat": {
-                "text": True, "voice": False, "avatar": False,
-                "overlay": False, "ui_surface": "chat_panel",
+                "text": True,
+                "voice": False,
+                "avatar": False,
+                "overlay": False,
+                "ui_surface": "chat_panel",
             },
             "deep_thinking": {
-                "text": True, "voice": False, "avatar": True,
-                "overlay": False, "ui_surface": "infinite_canvas",
+                "text": True,
+                "voice": False,
+                "avatar": True,
+                "overlay": False,
+                "ui_surface": "infinite_canvas",
             },
             "control_console": {
-                "text": True, "voice": False, "avatar": False,
-                "overlay": False, "ui_surface": "control_console",
+                "text": True,
+                "voice": False,
+                "avatar": False,
+                "overlay": False,
+                "ui_surface": "control_console",
             },
             "field_assistant": {
-                "text": True, "voice": True, "avatar": True,
-                "overlay": True, "ui_surface": "field_overlay",
+                "text": True,
+                "voice": True,
+                "avatar": True,
+                "overlay": True,
+                "ui_surface": "field_overlay",
             },
             "ambient_companion": {
-                "text": True, "voice": True, "avatar": True,
-                "overlay": False, "ui_surface": "ambient",
+                "text": True,
+                "voice": True,
+                "avatar": True,
+                "overlay": False,
+                "ui_surface": "ambient",
             },
             "execution_bridge": {
-                "text": True, "voice": False, "avatar": False,
-                "overlay": False, "ui_surface": "control_console",
+                "text": True,
+                "voice": False,
+                "avatar": False,
+                "overlay": False,
+                "ui_surface": "control_console",
             },
         }
         defaults = _MODE_DEFAULTS.get(mode, _MODE_DEFAULTS["chat"])
@@ -109,6 +127,7 @@ class OutputPlan:
 # ---------------------------------------------------------------------------
 # InteractionEnvelope
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class InteractionEnvelope:
@@ -137,9 +156,7 @@ class InteractionEnvelope:
         created_at:        UTC timestamp when the envelope was constructed.
     """
 
-    interaction_id: str = field(
-        default_factory=lambda: f"ix_{uuid.uuid4().hex[:16]}"
-    )
+    interaction_id: str = field(default_factory=lambda: f"ix_{uuid.uuid4().hex[:16]}")
     trace_id: Optional[str] = None
     session_id: str = "__global__"
     mode: str = "chat"
@@ -147,9 +164,7 @@ class InteractionEnvelope:
     persona_state: Optional[Dict[str, Any]] = None
     multimodal_context: Optional[Dict[str, Any]] = None
     output_plan: OutputPlan = field(default_factory=OutputPlan)
-    created_at: datetime = field(
-        default_factory=lambda: datetime.now(tz=timezone.utc)
-    )
+    created_at: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
 
     # ------------------------------------------------------------------
     # Serialisation

@@ -18,6 +18,7 @@
 结构优先命中 → 直接动作;点不准 → needs_model=True + 返回【与截图一同发给模型】的
 结构化辅助提示(由前端把它 + 截图交给多模态模型,再带 model_reply 回调本接口)。
 """
+
 from __future__ import annotations
 
 import logging
@@ -43,13 +44,16 @@ def _safe_node_id(raw: str) -> Optional[str]:
 
 # 规范化动作 → 各操作节点的动作名(节点动作名与 UIActionKind 略有出入)。
 _ACTION_ALIAS = {
-    "Node_36_UIAWindows": {"tap": "click", "double_tap": "double_click",
-                           "right_click": "right_click", "set_text": "type_text",
-                           "scroll": "scroll", "focus": "focus"},
-    "Node_45_DesktopAuto": {"tap": "click", "double_tap": "double_click",
-                            "set_text": "type", "scroll": "scroll"},
-    "Node_33_ADB": {"tap": "tap", "long_press": "tap", "set_text": "input",
-                    "swipe": "swipe", "scroll": "swipe"},
+    "Node_36_UIAWindows": {
+        "tap": "click",
+        "double_tap": "double_click",
+        "right_click": "right_click",
+        "set_text": "type_text",
+        "scroll": "scroll",
+        "focus": "focus",
+    },
+    "Node_45_DesktopAuto": {"tap": "click", "double_tap": "double_click", "set_text": "type", "scroll": "scroll"},
+    "Node_33_ADB": {"tap": "tap", "long_press": "tap", "set_text": "input", "swipe": "swipe", "scroll": "swipe"},
     "Node_92_AutoControl": {"tap": "click", "set_text": "input", "scroll": "scroll"},
 }
 
@@ -69,8 +73,8 @@ def _node_action(node_id: str, action_value: str) -> str:
 @router.post("/act")
 async def ui_act(req: UIActRequest) -> Dict[str, Any]:
     """结构化操作:意图 + 界面图 → 规划 →(可选)派发执行。"""
-    from core.schemas.ui_element import UIGraph
     from core.grounded_planner import plan as plan_step
+    from core.schemas.ui_element import UIGraph
 
     if not req.ui_graph:
         return {"success": False, "error": "ui_graph 必填(结构化界面图)"}
@@ -107,17 +111,24 @@ async def ui_act(req: UIActRequest) -> Dict[str, Any]:
         params["text"] = planned.text
 
     try:
-        from core.node_invocation import invoke_node, InvocationSource
+        from core.node_invocation import InvocationSource, invoke_node
+
         result = await invoke_node(
-            node_id, node_action, params,
+            node_id,
+            node_action,
+            params,
             invocation_source=InvocationSource.UNKNOWN,
             ui_graph=req.ui_graph,  # 结构化界面态随 TASK_ASSIGN 流转
         )
         out["dispatched"] = True
-        out["result"] = result.to_legacy_dict() if hasattr(result, "to_legacy_dict") else {
-            "success": getattr(result, "success", False),
-            "error": getattr(result, "error", ""),
-        }
+        out["result"] = (
+            result.to_legacy_dict()
+            if hasattr(result, "to_legacy_dict")
+            else {
+                "success": getattr(result, "success", False),
+                "error": getattr(result, "error", ""),
+            }
+        )
         out["dispatched_action"] = f"{node_id}.{node_action}"
     except Exception as exc:  # noqa: BLE001
         logger.warning("ui_act 派发失败: %s", exc)

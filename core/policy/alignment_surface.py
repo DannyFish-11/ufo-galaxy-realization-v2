@@ -217,26 +217,16 @@ class AlignmentDimensionSummary(BaseModel):
 
     dimension: str = Field(description="Canonical dimension name.")
     available: bool = Field(default=False, description="True when real data was sourced.")
-    posture_signal: Optional[str] = Field(
-        default=None, description="Policy posture signal from this dimension."
-    )
+    posture_signal: Optional[str] = Field(default=None, description="Policy posture signal from this dimension.")
     blocked: bool = Field(default=False, description="True when this dimension signals a block.")
-    degraded: bool = Field(
-        default=False, description="True when this dimension signals degraded state."
-    )
-    confirmation_required: bool = Field(
-        default=False, description="True when this dimension requires confirmation."
-    )
+    degraded: bool = Field(default=False, description="True when this dimension signals degraded state.")
+    confirmation_required: bool = Field(default=False, description="True when this dimension requires confirmation.")
     cross_device_allowed: Optional[bool] = Field(
         default=None,
         description="True when cross-device execution is allowed per this dimension.",
     )
-    runtime_domain: Optional[str] = Field(
-        default=None, description="Runtime domain from this dimension."
-    )
-    action_level: Optional[str] = Field(
-        default=None, description="Action level from this dimension."
-    )
+    runtime_domain: Optional[str] = Field(default=None, description="Runtime domain from this dimension.")
+    action_level: Optional[str] = Field(default=None, description="Action level from this dimension.")
     summary_fields: Dict[str, Any] = Field(
         default_factory=dict,
         description="Additional dimension-specific fields for mismatch context.",
@@ -298,33 +288,19 @@ class ExecutionPolicyHints(BaseModel):
         ``"empty"`` (no dimensions available) data.
     """
 
-    can_execute_locally: bool = Field(
-        default=False, description="True when local execution is currently permitted."
-    )
-    can_expand_cross_device: bool = Field(
-        default=False, description="True when cross-device expansion is permitted."
-    )
+    can_execute_locally: bool = Field(default=False, description="True when local execution is currently permitted.")
+    can_expand_cross_device: bool = Field(default=False, description="True when cross-device expansion is permitted.")
     is_confirmation_gated: bool = Field(
         default=False, description="True when confirmation is required by at least one dimension."
     )
-    is_blocked: bool = Field(
-        default=False, description="True when any dimension signals a hard block."
-    )
-    is_degraded: bool = Field(
-        default=False, description="True when operating in degraded mode."
-    )
-    preferred_domain: Optional[str] = Field(
-        default=None, description="Best-guess preferred runtime domain."
-    )
+    is_blocked: bool = Field(default=False, description="True when any dimension signals a hard block.")
+    is_degraded: bool = Field(default=False, description="True when operating in degraded mode.")
+    preferred_domain: Optional[str] = Field(default=None, description="Best-guess preferred runtime domain.")
     effective_action_level: str = Field(
         default="observe", description="Most conservative action level across dimensions."
     )
-    alignment_confidence: float = Field(
-        default=0.0, description="Alignment assessment confidence [0.0, 1.0]."
-    )
-    policy_posture: str = Field(
-        default=POSTURE_UNKNOWN, description="Resolved policy posture string."
-    )
+    alignment_confidence: float = Field(default=0.0, description="Alignment assessment confidence [0.0, 1.0].")
+    policy_posture: str = Field(default=POSTURE_UNKNOWN, description="Resolved policy posture string.")
     hint_source: str = Field(
         default="empty",
         description="Data completeness: 'full' | 'partial' | 'empty'.",
@@ -408,27 +384,13 @@ class ExecutionPolicyAlignmentSummary(BaseModel):
     )
     trace_id: Optional[str] = Field(default=None, description="Execution trace ID.")
     runtime_session_id: Optional[str] = Field(default=None, description="Runtime session ID.")
-    runtime_domain: Optional[str] = Field(
-        default=None, description="Resolved runtime domain."
-    )
-    tri_state_phase: Optional[str] = Field(
-        default=None, description="Tri-state phase at alignment time."
-    )
-    aligned: bool = Field(
-        default=False, description="True when all available dimensions are in agreement."
-    )
-    blocked: bool = Field(
-        default=False, description="True when any dimension signals a hard block."
-    )
-    degraded: bool = Field(
-        default=False, description="True when operating in degraded/partial mode."
-    )
-    confirmation_required: bool = Field(
-        default=False, description="True when confirmation is required."
-    )
-    policy_posture: str = Field(
-        default=POSTURE_UNKNOWN, description="Resolved policy posture."
-    )
+    runtime_domain: Optional[str] = Field(default=None, description="Resolved runtime domain.")
+    tri_state_phase: Optional[str] = Field(default=None, description="Tri-state phase at alignment time.")
+    aligned: bool = Field(default=False, description="True when all available dimensions are in agreement.")
+    blocked: bool = Field(default=False, description="True when any dimension signals a hard block.")
+    degraded: bool = Field(default=False, description="True when operating in degraded/partial mode.")
+    confirmation_required: bool = Field(default=False, description="True when confirmation is required.")
+    policy_posture: str = Field(default=POSTURE_UNKNOWN, description="Resolved policy posture.")
     runtime_policy_summary: AlignmentDimensionSummary = Field(
         default_factory=lambda: AlignmentDimensionSummary(dimension="runtime_policy"),
         description="Dimension summary for runtime policy.",
@@ -724,10 +686,7 @@ def _build_hints(
         cross_signals = [d.cross_device_allowed for d in available if d.cross_device_allowed is not None]
         can_expand_cross_device = bool(cross_signals) and all(s is True for s in cross_signals)
 
-        can_execute_locally = (
-            not is_blocked
-            and posture not in (POSTURE_BLOCKED, POSTURE_REMOTE_REQUIRED)
-        )
+        can_execute_locally = not is_blocked and posture not in (POSTURE_BLOCKED, POSTURE_REMOTE_REQUIRED)
 
         # Preferred domain
         preferred_domain: Optional[str] = runtime_domain
@@ -806,8 +765,9 @@ def summarize_runtime_policy_alignment(
             degraded = _safe_bool(runtime_governance_snapshot.get("degraded")) or _safe_bool(readiness.get("degraded"))
             confirmation_required = _safe_bool(readiness.get("requires_confirmation"))
             runtime_domain = (
-                _safe_str(runtime_governance_snapshot.get("runtime_domain")) or
-                _safe_str(intent_s.get("runtime_domain")) or None
+                _safe_str(runtime_governance_snapshot.get("runtime_domain"))
+                or _safe_str(intent_s.get("runtime_domain"))
+                or None
             )
             action_level = _safe_str(intent_s.get("action_level"), "observe") or "observe"
             return AlignmentDimensionSummary(
@@ -852,15 +812,19 @@ def summarize_runtime_policy_alignment(
         action_level = "observe"
         intent_mode = ""
         if intent_s is not None:
-            runtime_domain = _safe_str(
-                getattr(intent_s, "runtime_domain", None)
-                or (intent_s.get("runtime_domain") if isinstance(intent_s, dict) else None)
-            ) or None
+            runtime_domain = (
+                _safe_str(
+                    getattr(intent_s, "runtime_domain", None)
+                    or (intent_s.get("runtime_domain") if isinstance(intent_s, dict) else None)
+                )
+                or None
+            )
             action_level = (
                 _safe_str(
                     getattr(intent_s, "action_level", None)
                     or (intent_s.get("action_level") if isinstance(intent_s, dict) else None)
-                ) or "observe"
+                )
+                or "observe"
             )
             intent_mode = _safe_str(
                 getattr(intent_s, "intent_mode", None)
@@ -930,9 +894,7 @@ def summarize_dispatch_policy_alignment(
                 blocked = max_handoff_depth == 0
             else:
                 ack_required = _safe_bool(getattr(handoff_policy, "ack_required", False))
-                recovery_permitted = _safe_bool(
-                    getattr(handoff_policy, "recovery_permitted", True), True
-                )
+                recovery_permitted = _safe_bool(getattr(handoff_policy, "recovery_permitted", True), True)
                 max_handoff_depth = int(getattr(handoff_policy, "max_handoff_depth", 5) or 5)
                 blocked = max_handoff_depth == 0
 
@@ -945,9 +907,7 @@ def summarize_dispatch_policy_alignment(
                 if dispatch_status in ("failed", "blocked"):
                     blocked = True
             else:
-                dispatch_status = _safe_str(
-                    getattr(dispatch_summary, "status", "unknown"), "unknown"
-                )
+                dispatch_status = _safe_str(getattr(dispatch_summary, "status", "unknown"), "unknown")
                 if dispatch_status in ("failed", "blocked"):
                     blocked = True
 
@@ -994,18 +954,12 @@ def summarize_projection_policy_alignment(
         if isinstance(projection_governance, dict):
             gov_available = _safe_bool(projection_governance.get("governance_available"))
             if not gov_available:
-                return AlignmentDimensionSummary(
-                    dimension="projection_policy", available=False
-                )
+                return AlignmentDimensionSummary(dimension="projection_policy", available=False)
 
             policy_s = projection_governance.get("policy", {}) or {}
             exec_s = projection_governance.get("execution", {}) or {}
-            tri_phase = (
-                _safe_str(projection_governance.get("tri_state_phase")) or None
-            )
-            runtime_domain = (
-                _safe_str(projection_governance.get("runtime_domain")) or None
-            )
+            tri_phase = _safe_str(projection_governance.get("tri_state_phase")) or None
+            runtime_domain = _safe_str(projection_governance.get("runtime_domain")) or None
             blocked = _safe_bool(policy_s.get("blocked"))
             degraded = _safe_bool(policy_s.get("degraded"))
             confirmation_required = _safe_bool(policy_s.get("requires_confirmation"))
@@ -1046,9 +1000,7 @@ def summarize_projection_policy_alignment(
         confirmation_required = _safe_bool(_get(policy_s, "requires_confirmation"))
         action_level = _safe_str(_get(exec_s, "action_level"), "observe") or "observe"
         tri_phase = _safe_str(getattr(projection_governance, "tri_state_phase", None)) or None
-        runtime_domain = (
-            _safe_str(getattr(projection_governance, "runtime_domain", None)) or None
-        )
+        runtime_domain = _safe_str(getattr(projection_governance, "runtime_domain", None)) or None
 
         return AlignmentDimensionSummary(
             dimension="projection_policy",
@@ -1099,9 +1051,7 @@ def _summarize_readiness_dimension(readiness_result: Optional[Any]) -> Alignment
         ready = _safe_bool(getattr(readiness_result, "ready", False))
         status = _safe_str(getattr(readiness_result, "status", "blocked"), "blocked")
         reason = _safe_str(getattr(readiness_result, "reason", ""))
-        requires_confirmation = _safe_bool(
-            getattr(readiness_result, "requires_confirmation", False)
-        )
+        requires_confirmation = _safe_bool(getattr(readiness_result, "requires_confirmation", False))
         action_level = _safe_str(getattr(readiness_result, "action_level", "observe"), "observe")
         blocked = not ready or status == "blocked"
         degraded = action_level == "observe" and not blocked
@@ -1256,19 +1206,19 @@ def build_execution_policy_alignment_surface(
         if execution_trace_envelope is not None:
             try:
                 if isinstance(execution_trace_envelope, dict):
-                    resolved_trace_id = resolved_trace_id or _safe_str(
-                        execution_trace_envelope.get("trace_id")
-                    ) or None
-                    resolved_session_id = resolved_session_id or _safe_str(
-                        execution_trace_envelope.get("runtime_session_id")
-                    ) or None
+                    resolved_trace_id = resolved_trace_id or _safe_str(execution_trace_envelope.get("trace_id")) or None
+                    resolved_session_id = (
+                        resolved_session_id or _safe_str(execution_trace_envelope.get("runtime_session_id")) or None
+                    )
                 else:
-                    resolved_trace_id = resolved_trace_id or _safe_str(
-                        getattr(execution_trace_envelope, "trace_id", None)
-                    ) or None
-                    resolved_session_id = resolved_session_id or _safe_str(
-                        getattr(execution_trace_envelope, "runtime_session_id", None)
-                    ) or None
+                    resolved_trace_id = (
+                        resolved_trace_id or _safe_str(getattr(execution_trace_envelope, "trace_id", None)) or None
+                    )
+                    resolved_session_id = (
+                        resolved_session_id
+                        or _safe_str(getattr(execution_trace_envelope, "runtime_session_id", None))
+                        or None
+                    )
             except Exception as exc:
                 logger.warning("Exception suppressed: %s", exc)
 
@@ -1297,12 +1247,7 @@ def build_execution_policy_alignment_surface(
         blocked = posture == POSTURE_BLOCKED or any(d.blocked for d in available_dims)
         degraded = posture == POSTURE_DEGRADED or any(d.degraded for d in available_dims)
         confirmation_required = any(d.confirmation_required for d in available_dims)
-        aligned = (
-            len(available_dims) >= 2
-            and not mismatches
-            and not blocked
-            and not degraded
-        )
+        aligned = len(available_dims) >= 2 and not mismatches and not blocked and not degraded
 
         # 7. Build hints
         alignment_hints = _build_hints(dimensions, posture, mismatches, resolved_domain)
@@ -1330,8 +1275,7 @@ def build_execution_policy_alignment_surface(
 
     except Exception as exc:
         logger.warning(
-            "build_execution_policy_alignment_surface: assembly failed, "
-            "returning minimal summary: %s",
+            "build_execution_policy_alignment_surface: assembly failed, " "returning minimal summary: %s",
             exc,
         )
         return ExecutionPolicyAlignmentSummary(

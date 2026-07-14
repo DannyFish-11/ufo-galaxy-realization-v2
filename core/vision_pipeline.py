@@ -39,8 +39,10 @@ logger = logging.getLogger("VisionPipeline")
 # 数据结构
 # =============================================================================
 
+
 class ElementType(str, Enum):
     """GUI 元素类型"""
+
     BUTTON = "button"
     TEXT = "text"
     INPUT = "input"
@@ -66,6 +68,7 @@ class ElementType(str, Enum):
 
 class InteractionType(str, Enum):
     """交互类型"""
+
     CLICK = "click"
     LONG_PRESS = "long_press"
     TYPE = "type"
@@ -80,6 +83,7 @@ class InteractionType(str, Enum):
 @dataclass
 class BoundingBox:
     """元素边界框"""
+
     x: int
     y: int
     width: int
@@ -96,7 +100,7 @@ class BoundingBox:
     def contains(self, px: int, py: int) -> bool:
         return self.x <= px <= self.x + self.width and self.y <= py <= self.y + self.height
 
-    def overlap_ratio(self, other: 'BoundingBox') -> float:
+    def overlap_ratio(self, other: "BoundingBox") -> float:
         """计算两个边界框的重叠比例"""
         x1 = max(self.x, other.x)
         y1 = max(self.y, other.y)
@@ -109,13 +113,20 @@ class BoundingBox:
         return intersection / union if union > 0 else 0.0
 
     def to_dict(self) -> Dict:
-        return {"x": self.x, "y": self.y, "width": self.width, "height": self.height,
-                "center_x": self.center[0], "center_y": self.center[1]}
+        return {
+            "x": self.x,
+            "y": self.y,
+            "width": self.width,
+            "height": self.height,
+            "center_x": self.center[0],
+            "center_y": self.center[1],
+        }
 
 
 @dataclass
 class GUIElement:
     """GUI 元素"""
+
     element_id: str
     element_type: ElementType
     text: str
@@ -123,7 +134,7 @@ class GUIElement:
     confidence: float
     interactable: bool
     interaction_types: List[InteractionType] = field(default_factory=list)
-    children: List['GUIElement'] = field(default_factory=list)
+    children: List["GUIElement"] = field(default_factory=list)
     parent_id: Optional[str] = None
     attributes: Dict[str, Any] = field(default_factory=dict)
 
@@ -145,6 +156,7 @@ class GUIElement:
 @dataclass
 class OCRWord:
     """OCR 识别的单词/文本块"""
+
     text: str
     bbox: BoundingBox
     confidence: float
@@ -164,6 +176,7 @@ class OCRWord:
 @dataclass
 class SceneContext:
     """场景语义上下文"""
+
     app_name: str = ""
     page_type: str = ""  # login, home, settings, chat, browser, editor, etc.
     platform: str = ""  # android, windows, web
@@ -185,6 +198,7 @@ class SceneContext:
 @dataclass
 class ActionHint:
     """动作建议"""
+
     action: str
     target_element_id: Optional[str]
     description: str
@@ -204,6 +218,7 @@ class ActionHint:
 @dataclass
 class VisionResult:
     """统一视觉理解结果"""
+
     success: bool
     ocr_words: List[OCRWord] = field(default_factory=list)
     gui_elements: List[GUIElement] = field(default_factory=list)
@@ -270,6 +285,7 @@ class VisionResult:
 # 融合视觉引擎
 # =============================================================================
 
+
 class VisionPipeline:
     """
     融合视觉理解管线
@@ -294,7 +310,8 @@ You must return ONLY valid JSON (no markdown, no code blocks) with this exact st
   "elements": [
     {
       "id": "elem_0",
-      "type": "button|text|input|image|icon|checkbox|radio|toggle|slider|dropdown|tab|link|menu|toolbar|status_bar|navigation|dialog|list_item|card|container",
+      "type": "button|text|input|image|icon|checkbox|radio|toggle|slider|dropdown|tab|link|
+               menu|toolbar|status_bar|navigation|dialog|list_item|card|container",
       "text": "visible text content",
       "bbox": [x, y, width, height],
       "confidence": 0.95,
@@ -357,24 +374,24 @@ If not found, return: {{"found": false, "reason": "why not found"}}"""
         self.config = config or {}
 
         # DeepSeek OCR 2 配置
-        self.deepseek_api_key = self.config.get("deepseek_ocr2_api_key",
-            os.getenv("DEEPSEEK_OCR2_API_KEY", os.getenv("NOVITA_API_KEY", "")))
-        self.deepseek_api_base = self.config.get("deepseek_ocr2_api_base",
-            os.getenv("DEEPSEEK_OCR2_API_BASE", "https://api.novita.ai/v3/openai"))
-        self.deepseek_model = self.config.get("deepseek_ocr2_model",
-            os.getenv("DEEPSEEK_OCR2_MODEL", "deepseek/deepseek-ocr2"))
+        self.deepseek_api_key = self.config.get(
+            "deepseek_ocr2_api_key", os.getenv("DEEPSEEK_OCR2_API_KEY", os.getenv("NOVITA_API_KEY", ""))
+        )
+        self.deepseek_api_base = self.config.get(
+            "deepseek_ocr2_api_base", os.getenv("DEEPSEEK_OCR2_API_BASE", "https://api.novita.ai/v3/openai")
+        )
+        self.deepseek_model = self.config.get(
+            "deepseek_ocr2_model", os.getenv("DEEPSEEK_OCR2_MODEL", "deepseek/deepseek-ocr2")
+        )
 
         # Gemini 配置（Level 2 降级）
-        self.gemini_api_key = self.config.get("gemini_api_key",
-            os.getenv("GEMINI_API_KEY", ""))
+        self.gemini_api_key = self.config.get("gemini_api_key", os.getenv("GEMINI_API_KEY", ""))
 
         # OpenRouter 配置（Level 3 降级，Qwen3-VL）
-        self.openrouter_api_key = self.config.get("openrouter_api_key",
-            os.getenv("OPENROUTER_API_KEY", ""))
+        self.openrouter_api_key = self.config.get("openrouter_api_key", os.getenv("OPENROUTER_API_KEY", ""))
 
         # 本地 vLLM 配置
-        self.local_vllm_url = self.config.get("local_vllm_url",
-            os.getenv("LOCAL_VLLM_URL", ""))
+        self.local_vllm_url = self.config.get("local_vllm_url", os.getenv("LOCAL_VLLM_URL", ""))
 
         # 统计
         self._stats = {
@@ -504,9 +521,7 @@ If not found, return: {{"found": false, "reason": "why not found"}}"""
 
         # 更新统计
         total = self._stats["total_calls"]
-        self._stats["avg_time_ms"] = (
-            (self._stats["avg_time_ms"] * (total - 1) + processing_time) / total
-        )
+        self._stats["avg_time_ms"] = (self._stats["avg_time_ms"] * (total - 1) + processing_time) / total
 
         return vision_result
 
@@ -625,7 +640,10 @@ If not found, return: {{"found": false, "reason": "why not found"}}"""
             client = await self._get_client()
 
             headers = {"Content-Type": "application/json"}
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={self.gemini_api_key}"
+            url = (
+                "https://generativelanguage.googleapis.com/v1beta/models/"
+                f"gemini-2.0-flash:generateContent?key={self.gemini_api_key}"
+            )
 
             payload = {
                 "contents": [
@@ -694,9 +712,10 @@ If not found, return: {{"found": false, "reason": "why not found"}}"""
     async def _call_tesseract_fallback(self, image_base64: str) -> Optional[Dict]:
         """Tesseract 离线降级"""
         try:
+            import io
+
             import pytesseract
             from PIL import Image
-            import io
 
             image_data = base64.b64decode(image_base64)
             image = Image.open(io.BytesIO(image_data))
@@ -709,16 +728,18 @@ If not found, return: {{"found": false, "reason": "why not found"}}"""
                 text = ocr_data["text"][i].strip()
                 conf = int(ocr_data["conf"][i])
                 if text and conf > 30:
-                    texts.append({
-                        "text": text,
-                        "bbox": [
-                            ocr_data["left"][i],
-                            ocr_data["top"][i],
-                            ocr_data["width"][i],
-                            ocr_data["height"][i],
-                        ],
-                        "confidence": conf / 100.0,
-                    })
+                    texts.append(
+                        {
+                            "text": text,
+                            "bbox": [
+                                ocr_data["left"][i],
+                                ocr_data["top"][i],
+                                ocr_data["width"][i],
+                                ocr_data["height"][i],
+                            ],
+                            "confidence": conf / 100.0,
+                        }
+                    )
 
             full_text = pytesseract.image_to_string(image)
 
@@ -779,16 +800,18 @@ If not found, return: {{"found": false, "reason": "why not found"}}"""
         # 解析 OCR 文本
         for item in raw.get("ocr_texts", raw.get("texts", [])):
             bbox_data = item.get("bbox", [0, 0, 0, 0])
-            result.ocr_words.append(OCRWord(
-                text=item.get("text", ""),
-                bbox=BoundingBox(
-                    x=int(bbox_data[0]),
-                    y=int(bbox_data[1]),
-                    width=int(bbox_data[2]) if len(bbox_data) > 2 else 0,
-                    height=int(bbox_data[3]) if len(bbox_data) > 3 else 0,
-                ),
-                confidence=float(item.get("confidence", 0.5)),
-            ))
+            result.ocr_words.append(
+                OCRWord(
+                    text=item.get("text", ""),
+                    bbox=BoundingBox(
+                        x=int(bbox_data[0]),
+                        y=int(bbox_data[1]),
+                        width=int(bbox_data[2]) if len(bbox_data) > 2 else 0,
+                        height=int(bbox_data[3]) if len(bbox_data) > 3 else 0,
+                    ),
+                    confidence=float(item.get("confidence", 0.5)),
+                )
+            )
 
         result.raw_text = raw.get("full_text", "")
 
@@ -808,21 +831,23 @@ If not found, return: {{"found": false, "reason": "why not found"}}"""
                 except ValueError:
                     pass
 
-            result.gui_elements.append(GUIElement(
-                element_id=item.get("id", f"elem_{len(result.gui_elements)}"),
-                element_type=elem_type,
-                text=item.get("text", ""),
-                bbox=BoundingBox(
-                    x=int(bbox_data[0]),
-                    y=int(bbox_data[1]),
-                    width=int(bbox_data[2]) if len(bbox_data) > 2 else 0,
-                    height=int(bbox_data[3]) if len(bbox_data) > 3 else 0,
-                ),
-                confidence=float(item.get("confidence", 0.5)),
-                interactable=item.get("interactable", False),
-                interaction_types=interactions,
-                attributes=item.get("attributes", {}),
-            ))
+            result.gui_elements.append(
+                GUIElement(
+                    element_id=item.get("id", f"elem_{len(result.gui_elements)}"),
+                    element_type=elem_type,
+                    text=item.get("text", ""),
+                    bbox=BoundingBox(
+                        x=int(bbox_data[0]),
+                        y=int(bbox_data[1]),
+                        width=int(bbox_data[2]) if len(bbox_data) > 2 else 0,
+                        height=int(bbox_data[3]) if len(bbox_data) > 3 else 0,
+                    ),
+                    confidence=float(item.get("confidence", 0.5)),
+                    interactable=item.get("interactable", False),
+                    interaction_types=interactions,
+                    attributes=item.get("attributes", {}),
+                )
+            )
 
         # 解析场景
         scene_data = raw.get("scene", {})
@@ -837,12 +862,14 @@ If not found, return: {{"found": false, "reason": "why not found"}}"""
 
         # 解析动作建议
         for item in raw.get("action_hints", []):
-            result.action_hints.append(ActionHint(
-                action=item.get("action", ""),
-                target_element_id=item.get("target"),
-                description=item.get("action", ""),
-                priority=float(item.get("priority", 0.5)),
-            ))
+            result.action_hints.append(
+                ActionHint(
+                    action=item.get("action", ""),
+                    target_element_id=item.get("target"),
+                    description=item.get("action", ""),
+                    priority=float(item.get("priority", 0.5)),
+                )
+            )
 
         # 处理 find_element 模式
         if mode == "find_element" and raw.get("found"):
@@ -855,20 +882,22 @@ If not found, return: {{"found": false, "reason": "why not found"}}"""
                 except ValueError:
                     elem_type = ElementType.UNKNOWN
 
-                result.gui_elements = [GUIElement(
-                    element_id="found_0",
-                    element_type=elem_type,
-                    text=elem_data.get("text", ""),
-                    bbox=BoundingBox(
-                        x=int(bbox_data[0]),
-                        y=int(bbox_data[1]),
-                        width=int(bbox_data[2]) if len(bbox_data) > 2 else 0,
-                        height=int(bbox_data[3]) if len(bbox_data) > 3 else 0,
-                    ),
-                    confidence=float(elem_data.get("confidence", 0.5)),
-                    interactable=True,
-                    interaction_types=[InteractionType.CLICK],
-                )]
+                result.gui_elements = [
+                    GUIElement(
+                        element_id="found_0",
+                        element_type=elem_type,
+                        text=elem_data.get("text", ""),
+                        bbox=BoundingBox(
+                            x=int(bbox_data[0]),
+                            y=int(bbox_data[1]),
+                            width=int(bbox_data[2]) if len(bbox_data) > 2 else 0,
+                            height=int(bbox_data[3]) if len(bbox_data) > 3 else 0,
+                        ),
+                        confidence=float(elem_data.get("confidence", 0.5)),
+                        interactable=True,
+                        interaction_types=[InteractionType.CLICK],
+                    )
+                ]
 
         return result
 
@@ -915,14 +944,16 @@ If not found, return: {{"found": false, "reason": "why not found"}}"""
                         break
 
                 if not is_covered:
-                    result.gui_elements.append(GUIElement(
-                        element_id=f"ocr_text_{i}",
-                        element_type=ElementType.TEXT,
-                        text=word.text,
-                        bbox=word.bbox,
-                        confidence=word.confidence,
-                        interactable=False,
-                    ))
+                    result.gui_elements.append(
+                        GUIElement(
+                            element_id=f"ocr_text_{i}",
+                            element_type=ElementType.TEXT,
+                            text=word.text,
+                            bbox=word.bbox,
+                            confidence=word.confidence,
+                            interactable=False,
+                        )
+                    )
 
         # Step 3: 合并高度重叠的元素
         merged = []

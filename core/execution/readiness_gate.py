@@ -384,9 +384,7 @@ class ExecutionReadinessGate:
         # ----------------------------------------------------------------
         # 1. Extract signals from intent_profile (PR-22)
         # ----------------------------------------------------------------
-        _action_level, _target_ref, _session_id, _domain, _intent_id = (
-            _extract_intent_signals(intent_profile)
-        )
+        _action_level, _target_ref, _session_id, _domain, _intent_id = _extract_intent_signals(intent_profile)
 
         # Explicit overrides take precedence
         eff_action_level: str = action_level or _action_level or "observe"
@@ -425,10 +423,7 @@ class ExecutionReadinessGate:
             return ReadinessResult(
                 ready=False,
                 status=ReadinessStatus.OBSERVE_ONLY.value,
-                reason=(
-                    f"action_level='{eff_action_level}' does not permit "
-                    "side-effectful execution"
-                ),
+                reason=(f"action_level='{eff_action_level}' does not permit " "side-effectful execution"),
                 requires_confirmation=False,
                 blocked_by=BlockedBy.ACTION_LEVEL.value,
                 policy_band=None,
@@ -457,23 +452,19 @@ class ExecutionReadinessGate:
         # 6. Resolve execution policy
         # ----------------------------------------------------------------
         policy = self._resolve_policy(state_continuum, extra_notes)
-        policy_band_str: Optional[str] = (
-            policy.policy_band.value if policy is not None else None
-        )
+        policy_band_str: Optional[str] = policy.policy_band.value if policy is not None else None
 
         # ----------------------------------------------------------------
         # 7. Policy-band gate
         # ----------------------------------------------------------------
         if policy is not None:
             from core.execution_policy.policy_band import band_allows_execution  # noqa: PLC0415
+
             if not band_allows_execution(policy.policy_band):
                 return ReadinessResult(
                     ready=False,
                     status=ReadinessStatus.BLOCKED.value,
-                    reason=(
-                        f"execution blocked by policy band '{policy.policy_band.value}': "
-                        + policy.reason
-                    ),
+                    reason=(f"execution blocked by policy band '{policy.policy_band.value}': " + policy.reason),
                     requires_confirmation=False,
                     policy_band=policy_band_str,
                     blocked_by=BlockedBy.POLICY.value,
@@ -516,8 +507,7 @@ class ExecutionReadinessGate:
         # 9. Confirmation gate — policy requires_confirmation or HITL pending
         # ----------------------------------------------------------------
         requires_confirmation = bool(
-            (policy is not None and policy.requires_confirmation)
-            or hitl_result.get("requires_confirmation", False)
+            (policy is not None and policy.requires_confirmation) or hitl_result.get("requires_confirmation", False)
         )
 
         if requires_confirmation:
@@ -571,6 +561,7 @@ class ExecutionReadinessGate:
             if self._policy_resolver_fn is not None:
                 return self._policy_resolver_fn(state_continuum)
             from core.execution_policy import resolve_policy  # noqa: PLC0415
+
             if state_continuum:
                 phase = state_continuum.get("phase") or state_continuum.get("tri_state_phase")
                 domain = state_continuum.get("runtime_domain")
@@ -597,9 +588,11 @@ class ExecutionReadinessGate:
                 hitl_policy = self._hitl_policy_fn()
             else:
                 from core.policy.hitl_policy import get_hitl_policy  # noqa: PLC0415
+
                 hitl_policy = get_hitl_policy()
 
-            from core.policy.hitl_policy import HITLMode, HITLDecisionOutcome  # noqa: PLC0415
+            from core.policy.hitl_policy import HITLDecisionOutcome, HITLMode  # noqa: PLC0415
+
             decision = hitl_policy.evaluate(
                 action=action,
                 context=context,
@@ -625,10 +618,7 @@ class ExecutionReadinessGate:
 
             # SEMI mode + bounded_execute band → recommend confirmation for
             # high-risk or constrained-budget execution paths.
-            if (
-                hitl_policy.mode is HITLMode.SEMI
-                and context.get("policy_band") == "bounded_execute"
-            ):
+            if hitl_policy.mode is HITLMode.SEMI and context.get("policy_band") == "bounded_execute":
                 return {
                     "blocked": False,
                     "requires_confirmation": True,

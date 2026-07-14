@@ -82,6 +82,7 @@ DEFAULT_SIZE_BUDGET_MB = 6000
 
 def _default_list_repo_files(repo_id: str) -> List[str]:
     from huggingface_hub import HfApi
+
     return HfApi().list_repo_files(repo_id)
 
 
@@ -89,6 +90,7 @@ def _default_file_sizes(repo_id: str, filenames: List[str]) -> Dict[str, int]:
     """返回 {filename: size_bytes}；查不到的文件不出现在结果里（不阻断流程）。"""
     try:
         from huggingface_hub import HfApi
+
         info = HfApi().model_info(repo_id, files_metadata=True)
         sizes = {}
         for f in getattr(info, "siblings", None) or []:
@@ -169,12 +171,16 @@ def download_and_import_to_ollama(
     local_name = local_model_name or ("galaxy-" + tag.replace("/", "-").replace(":", "-") + "-hf")
 
     if hf_hub_download_fn is None:
+
         def hf_hub_download_fn(repo_id: str, filename: str, local_dir: str) -> str:  # type: ignore[no-redef]
             from huggingface_hub import hf_hub_download
-            return hf_hub_download(repo_id=repo_id, filename=filename,
-                                   local_dir=local_dir, local_dir_use_symlinks=False)
+
+            return hf_hub_download(
+                repo_id=repo_id, filename=filename, local_dir=local_dir, local_dir_use_symlinks=False
+            )
 
     if ollama_create_fn is None:
+
         def ollama_create_fn(name: str, gguf_path: str) -> bool:  # type: ignore[no-redef]
             return _ollama_create(name, gguf_path)
 
@@ -189,7 +195,9 @@ def download_and_import_to_ollama(
         try:
             gguf_filename = find_gguf_file_fn(repo_id, size_budget_mb=size_budget_mb)
             if not gguf_filename:
-                print(f"     · HuggingFace 候选 {repo_id}:未找到匹配的 .gguf 文件(repo 不存在，或没有 GGUF 量化版)，跳过")
+                print(
+                    f"     · HuggingFace 候选 {repo_id}:未找到匹配的 .gguf 文件(repo 不存在，或没有 GGUF 量化版)，跳过"
+                )
                 tried.append(repo_id)
                 continue
 
@@ -220,14 +228,15 @@ def download_and_import_to_ollama(
 def _ollama_create(name: str, gguf_path: str) -> bool:
     """写最小 Modelfile 并执行 ``ollama create <name> -f <modelfile>``。"""
     try:
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".modelfile", delete=False, encoding="utf-8"
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".modelfile", delete=False, encoding="utf-8") as f:
             f.write(f"FROM {gguf_path}\n")
             modelfile_path = f.name
         proc = subprocess.run(
             ["ollama", "create", name, "-f", modelfile_path],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=600,
         )
         return proc.returncode == 0

@@ -8,16 +8,16 @@ from contracts.cross_repo_schema_version_gate import (
     ANDROID_AIP_MODELS_SOURCE_SHA,
     ANDROID_AUDITED_REF,
     ANDROID_CANONICAL_DEDUPE_CONTRACT_VERSION,
-    ANDROID_COMPLETION_CLOSURE_CONTRACT_VERSION,
     ANDROID_COMPLETION_CLOSURE_ANCHOR,
     ANDROID_COMPLETION_CLOSURE_CONTRACT_SOURCE_SHA,
+    ANDROID_COMPLETION_CLOSURE_CONTRACT_VERSION,
     CROSS_REPO_SCHEMA_GATE_VERSION,
+    REQUIRED_AIP_MESSAGE_TYPES,
     REQUIRED_DIAGNOSTICS_SNAPSHOT_FIELDS,
     REQUIRED_PARTICIPATION_TRUTH_FIELDS,
     REQUIRED_SCHEMA_GATE_METADATA_FIELDS,
     REQUIRED_SHARED_EXECUTION_VISIBILITY_FIELDS,
     REQUIRED_STARTUP_READINESS_FIELDS,
-    REQUIRED_AIP_MESSAGE_TYPES,
     build_cross_repo_schema_gate_manifest,
     build_projection_schema_gate_metadata,
     evaluate_android_uplink_dedupe_contract,
@@ -64,7 +64,9 @@ def test_cross_repo_schema_gate_manifest_exposes_android_dedupe_contracts() -> N
         "replay_item_id",
         "replay_seq",
     ]
-    assert REQUIRED_SHARED_EXECUTION_VISIBILITY_FIELDS.issubset(set(manifest["required_shared_execution_visibility_fields"]))
+    assert REQUIRED_SHARED_EXECUTION_VISIBILITY_FIELDS.issubset(
+        set(manifest["required_shared_execution_visibility_fields"])
+    )
     assert REQUIRED_STARTUP_READINESS_FIELDS.issubset(set(manifest["required_startup_readiness_fields"]))
     assert REQUIRED_PARTICIPATION_TRUTH_FIELDS.issubset(set(manifest["required_participation_truth_fields"]))
     assert REQUIRED_DIAGNOSTICS_SNAPSHOT_FIELDS.issubset(set(manifest["required_diagnostics_snapshot_fields"]))

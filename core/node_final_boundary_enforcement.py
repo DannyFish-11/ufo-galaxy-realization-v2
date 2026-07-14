@@ -331,20 +331,14 @@ _SURFACE_CATALOGUE: List[NodeSurfaceBoundaryEntry] = [
         display_name="core.node_discovery_startup_health_closure",
         category=NodeSurfaceBoundaryCategory.CANONICAL,
         canonical_replacement=None,
-        rationale=(
-            "Canonical authority for discovery startup seeding and health "
-            "surface wiring (PR-12)."
-        ),
+        rationale=("Canonical authority for discovery startup seeding and health " "surface wiring (PR-12)."),
     ),
     NodeSurfaceBoundaryEntry(
         surface_id="canonical_node_list_route",
         display_name="GET /api/v1/nodes (core.routes.nodes)",
         category=NodeSurfaceBoundaryCategory.CANONICAL,
         canonical_replacement=None,
-        rationale=(
-            "Canonical node list/detail surface deriving membership from "
-            "NodeFabricRegistry (PR-3)."
-        ),
+        rationale=("Canonical node list/detail surface deriving membership from " "NodeFabricRegistry (PR-3)."),
     ),
     NodeSurfaceBoundaryEntry(
         surface_id="canonical_node_call_route",
@@ -390,10 +384,7 @@ _SURFACE_CATALOGUE: List[NodeSurfaceBoundaryEntry] = [
     ),
     NodeSurfaceBoundaryEntry(
         surface_id="compat_device_register_available_nodes",
-        display_name=(
-            "core.routes.compat / core.routes.devices — "
-            "available_nodes from node_status_cache"
-        ),
+        display_name=("core.routes.compat / core.routes.devices — " "available_nodes from node_status_cache"),
         category=NodeSurfaceBoundaryCategory.COMPAT_ONLY,
         canonical_replacement="node_fabric_registry",
         rationale=(
@@ -415,8 +406,7 @@ _SURFACE_CATALOGUE: List[NodeSurfaceBoundaryEntry] = [
     NodeSurfaceBoundaryEntry(
         surface_id="openclawd_legacy_node_scan",
         display_name=(
-            "core.openclawd_canonical_node_tool_exposure — "
-            "OPENCLAWD_LEGACY_NODE_SCAN_COMPAT_ENABLED layer"
+            "core.openclawd_canonical_node_tool_exposure — " "OPENCLAWD_LEGACY_NODE_SCAN_COMPAT_ENABLED layer"
         ),
         category=NodeSurfaceBoundaryCategory.COMPAT_ONLY,
         canonical_replacement="node_fabric_registry",
@@ -456,8 +446,7 @@ _SURFACE_CATALOGUE: List[NodeSurfaceBoundaryEntry] = [
         category=NodeSurfaceBoundaryCategory.INTERNAL_ONLY,
         canonical_replacement=None,
         rationale=(
-            "Internal dependency resolution helpers for the node subsystem.  "
-            "Not a canonical execution surface."
+            "Internal dependency resolution helpers for the node subsystem.  " "Not a canonical execution surface."
         ),
     ),
     NodeSurfaceBoundaryEntry(
@@ -487,10 +476,7 @@ _SURFACE_CATALOGUE: List[NodeSurfaceBoundaryEntry] = [
     ),
     NodeSurfaceBoundaryEntry(
         surface_id="system_status_node_count_from_compat_cache",
-        display_name=(
-            "GET /api/v1/system/status — nodes.total/active from "
-            "node_status_cache (legacy path)"
-        ),
+        display_name=("GET /api/v1/system/status — nodes.total/active from " "node_status_cache (legacy path)"),
         category=NodeSurfaceBoundaryCategory.DEPRECATED,
         canonical_replacement="node_fabric_registry",
         rationale=(
@@ -582,6 +568,7 @@ def get_node_count_from_canonical_source(
     if fab is None:
         try:
             from core.nodes.node_fabric_registry import get_node_fabric_registry
+
             fab = get_node_fabric_registry()
         except Exception as exc:
             logger.debug("get_node_count_from_canonical_source: registry unavailable: %s", exc)
@@ -596,10 +583,7 @@ def get_node_count_from_canonical_source(
                 active = len(healthy)
             except Exception as exc:
                 logger.debug("Fallback triggered: %s", exc)
-                active = sum(
-                    1 for n in all_nodes
-                    if _get_node_status_value(n) in ("running", "ready", "active")
-                )
+                active = sum(1 for n in all_nodes if _get_node_status_value(n) in ("running", "ready", "active"))
             return {
                 "total": total,
                 "active": active,
@@ -612,6 +596,7 @@ def get_node_count_from_canonical_source(
     # Compat fallback: node_status_cache
     try:
         from core.routes._shared import node_status_cache as _cache  # type: ignore[attr-defined]
+
         total = len(_cache)
         active = sum(1 for n in _cache.values() if n.get("status") == "running")
         return {
@@ -646,18 +631,10 @@ def build_final_boundary_snapshot(
     NodeFinalBoundarySnapshot
     """
     entries = build_node_surface_classification_registry()
-    canonical_count = sum(
-        1 for e in entries if e.category == NodeSurfaceBoundaryCategory.CANONICAL
-    )
-    compat_count = sum(
-        1 for e in entries if e.category == NodeSurfaceBoundaryCategory.COMPAT_ONLY
-    )
-    internal_count = sum(
-        1 for e in entries if e.category == NodeSurfaceBoundaryCategory.INTERNAL_ONLY
-    )
-    deprecated_count = sum(
-        1 for e in entries if e.category == NodeSurfaceBoundaryCategory.DEPRECATED
-    )
+    canonical_count = sum(1 for e in entries if e.category == NodeSurfaceBoundaryCategory.CANONICAL)
+    compat_count = sum(1 for e in entries if e.category == NodeSurfaceBoundaryCategory.COMPAT_ONLY)
+    internal_count = sum(1 for e in entries if e.category == NodeSurfaceBoundaryCategory.INTERNAL_ONLY)
+    deprecated_count = sum(1 for e in entries if e.category == NodeSurfaceBoundaryCategory.DEPRECATED)
 
     node_counts = get_node_count_from_canonical_source(registry=registry)
 

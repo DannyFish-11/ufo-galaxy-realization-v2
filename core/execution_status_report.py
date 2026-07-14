@@ -199,8 +199,7 @@ def _check_is_terminal(state: Optional[str]) -> Optional[bool]:
     """Check whether *state* is a recognised terminal lifecycle state."""
     if state is None:
         return None
-    _TERMINAL = {"succeeded", "failed", "timed_out", "cancelled", "degraded",
-                 "partially_succeeded"}
+    _TERMINAL = {"succeeded", "failed", "timed_out", "cancelled", "degraded", "partially_succeeded"}
     return state.lower() in _TERMINAL
 
 
@@ -331,10 +330,7 @@ def build_execution_status_report(
 
     # ── Orchestration data ────────────────────────────────────────────────────
     if orchestration_meta:
-        target_devices = (
-            _safe(orchestration_meta, "device_ids")
-            or _safe(orchestration_meta, "target_devices")
-        )
+        target_devices = _safe(orchestration_meta, "device_ids") or _safe(orchestration_meta, "target_devices")
         if target_devices and not report.target_devices:
             report.target_devices = list(target_devices)
         resolver_decision = _safe(orchestration_meta, "resolver_decision")

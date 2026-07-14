@@ -30,7 +30,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -39,6 +38,7 @@ import pytest
 def _reset_udm() -> None:
     """Reset the UnifiedDeviceManager singleton between tests."""
     from core.unified import device_manager as _udm_mod
+
     _udm_mod.UnifiedDeviceManager._instance = None
 
 
@@ -46,6 +46,7 @@ def _fresh_registry():
     """Return a fresh DeviceRegistry instance backed by a temp dir snapshot."""
     _reset_udm()
     from core.device_registry import DeviceRegistry
+
     reg = DeviceRegistry.__new__(DeviceRegistry)
     reg.devices = {}
     reg.groups = {}
@@ -106,9 +107,7 @@ class TestRegistrationAlignsWithUDM:
         device = udm.get_device("udm_src_01")
         assert device is not None
         meta = getattr(device, "metadata", {}) or {}
-        assert meta.get("source") == "device_registry", (
-            "UDM record must carry source='device_registry'"
-        )
+        assert meta.get("source") == "device_registry", "UDM record must carry source='device_registry'"
 
     @pytest.mark.asyncio
     async def test_registry_local_record_created(self):
@@ -128,9 +127,9 @@ class TestRegistrationAlignsWithUDM:
         from core.device_registry import _REGISTRY_ROLE
 
         assert "compatibility" in _REGISTRY_ROLE, "_REGISTRY_ROLE must mention compatibility layer"
-        assert "UDM" in _REGISTRY_ROLE or "UnifiedDeviceManager" in _REGISTRY_ROLE, (
-            "_REGISTRY_ROLE must reference UDM as canonical authority"
-        )
+        assert (
+            "UDM" in _REGISTRY_ROLE or "UnifiedDeviceManager" in _REGISTRY_ROLE
+        ), "_REGISTRY_ROLE must reference UDM as canonical authority"
 
 
 # ---------------------------------------------------------------------------
@@ -164,9 +163,7 @@ class TestDuplicateRegistrationNoDivergence:
         udm = UnifiedDeviceManager()
         all_devices = udm.list_devices()
         ids = [d.device_id for d in all_devices]
-        assert ids.count("dup_01") == 1, (
-            "Duplicate registration must not create two UDM records"
-        )
+        assert ids.count("dup_01") == 1, "Duplicate registration must not create two UDM records"
 
     @pytest.mark.asyncio
     async def test_double_register_local_single_record(self):
@@ -175,9 +172,9 @@ class TestDuplicateRegistrationNoDivergence:
         await reg.register(device_id="dup_local_01", device_type="android")
         await reg.register(device_id="dup_local_01", device_type="android")
 
-        assert list(reg.devices.keys()).count("dup_local_01") == 1, (
-            "Duplicate registration must not create two local records"
-        )
+        assert (
+            list(reg.devices.keys()).count("dup_local_01") == 1
+        ), "Duplicate registration must not create two local records"
 
     @pytest.mark.asyncio
     async def test_second_register_returns_same_object(self):
@@ -227,9 +224,7 @@ class TestPersistenceSnapshotSemantics:
         from core.device_types import DeviceStatus
 
         # Write a snapshot with an ONLINE device.
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             tmp_path = f.name
             json.dump(
                 {
@@ -281,12 +276,10 @@ class TestPersistenceSnapshotSemantics:
     @pytest.mark.asyncio
     async def test_snapshot_does_not_populate_udm(self):
         """Loading from snapshot does not push any records into UDM."""
-        from core.unified.device_manager import UnifiedDeviceManager
         from core.device_registry import DeviceRegistry
+        from core.unified.device_manager import UnifiedDeviceManager
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             tmp_path = f.name
             json.dump(
                 {
@@ -329,8 +322,7 @@ class TestPersistenceSnapshotSemantics:
         udm = UnifiedDeviceManager()
         ghost = udm.get_device("snap_udm_01")
         assert ghost is None, (
-            "Snapshot restore must NOT push devices into UDM — "
-            "UDM canonical state is populated only via register()"
+            "Snapshot restore must NOT push devices into UDM — " "UDM canonical state is populated only via register()"
         )
 
 

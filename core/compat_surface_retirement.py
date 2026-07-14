@@ -694,9 +694,7 @@ def classify_surface_tier(module_path: str) -> Optional[RetirementTier]:
         module path is not in the inventory.
     """
     for record in _COMPAT_SURFACE_INVENTORY:
-        if record.module_path == module_path or record.module_path.startswith(
-            module_path
-        ):
+        if record.module_path == module_path or record.module_path.startswith(module_path):
             return record.tier
     return None
 
@@ -716,33 +714,15 @@ def build_retirement_roadmap_summary() -> RetirementRoadmapSummary:
         tier_1_count=sum(1 for r in inventory if r.tier == RetirementTier.TIER_1),
         tier_2_count=sum(1 for r in inventory if r.tier == RetirementTier.TIER_2),
         tier_3_count=sum(1 for r in inventory if r.tier == RetirementTier.TIER_3),
-        tier_undecided_count=sum(
-            1 for r in inventory if r.tier == RetirementTier.TIER_UNDECIDED
-        ),
-        high_risk_count=sum(
-            1 for r in inventory if r.risk == CompatSurfaceRisk.HIGH
-        ),
-        medium_risk_count=sum(
-            1 for r in inventory if r.risk == CompatSurfaceRisk.MEDIUM
-        ),
-        low_risk_count=sum(
-            1 for r in inventory if r.risk == CompatSurfaceRisk.LOW
-        ),
-        hard_deprecated_count=sum(
-            1 for r in inventory if r.status == RetirementStatus.HARD_DEPRECATED
-        ),
-        tombstone_count=sum(
-            1 for r in inventory if r.status == RetirementStatus.TOMBSTONE
-        ),
-        legacy_compat_count=sum(
-            1 for r in inventory if r.status == RetirementStatus.LEGACY_COMPAT
-        ),
-        compat_only_count=sum(
-            1 for r in inventory if r.status == RetirementStatus.COMPAT_ONLY
-        ),
-        transitional_count=sum(
-            1 for r in inventory if r.status == RetirementStatus.TRANSITIONAL
-        ),
+        tier_undecided_count=sum(1 for r in inventory if r.tier == RetirementTier.TIER_UNDECIDED),
+        high_risk_count=sum(1 for r in inventory if r.risk == CompatSurfaceRisk.HIGH),
+        medium_risk_count=sum(1 for r in inventory if r.risk == CompatSurfaceRisk.MEDIUM),
+        low_risk_count=sum(1 for r in inventory if r.risk == CompatSurfaceRisk.LOW),
+        hard_deprecated_count=sum(1 for r in inventory if r.status == RetirementStatus.HARD_DEPRECATED),
+        tombstone_count=sum(1 for r in inventory if r.status == RetirementStatus.TOMBSTONE),
+        legacy_compat_count=sum(1 for r in inventory if r.status == RetirementStatus.LEGACY_COMPAT),
+        compat_only_count=sum(1 for r in inventory if r.status == RetirementStatus.COMPAT_ONLY),
+        transitional_count=sum(1 for r in inventory if r.status == RetirementStatus.TRANSITIONAL),
         policy_sentinels=[
             HIGH_RISK_COMPAT_SURFACES_MUST_BE_INVENTORIED_POLICY,
             COMPAT_SURFACES_MUST_NOT_MASQUERADE_AS_CANONICAL_POLICY,

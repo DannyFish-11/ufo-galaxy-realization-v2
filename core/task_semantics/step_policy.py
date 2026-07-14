@@ -41,7 +41,7 @@ from __future__ import annotations
 import dataclasses
 from typing import Any, Dict, Optional
 
-from .step_kind import StepKind, is_side_effectful_kind, coerce_step_kind
+from .step_kind import StepKind, coerce_step_kind, is_side_effectful_kind
 
 __all__ = [
     "StepSemanticPolicy",
@@ -110,9 +110,7 @@ class StepSemanticPolicy:
         Enum values are converted to their string ``.value``.
         """
         return {
-            "step_kind": self.step_kind.value
-            if isinstance(self.step_kind, StepKind)
-            else str(self.step_kind),
+            "step_kind": self.step_kind.value if isinstance(self.step_kind, StepKind) else str(self.step_kind),
             "side_effectful": self.side_effectful,
             "requires_confirmation": self.requires_confirmation,
             "cross_device_allowed": self.cross_device_allowed,
@@ -132,18 +130,12 @@ class StepSemanticPolicy:
         kind = coerce_step_kind(data.get("step_kind", StepKind.UNKNOWN))
         return cls(
             step_kind=kind,
-            side_effectful=bool(
-                data.get("side_effectful", is_side_effectful_kind(kind))
-            ),
+            side_effectful=bool(data.get("side_effectful", is_side_effectful_kind(kind))),
             requires_confirmation=bool(data.get("requires_confirmation", False)),
             cross_device_allowed=bool(data.get("cross_device_allowed", False)),
             failure_skippable=bool(data.get("failure_skippable", False)),
-            should_surface_in_manifest=bool(
-                data.get("should_surface_in_manifest", True)
-            ),
-            should_emit_observability_highlight=bool(
-                data.get("should_emit_observability_highlight", False)
-            ),
+            should_surface_in_manifest=bool(data.get("should_surface_in_manifest", True)),
+            should_emit_observability_highlight=bool(data.get("should_emit_observability_highlight", False)),
             preferred_recovery_posture=data.get("preferred_recovery_posture") or None,
             policy_reason=str(data.get("policy_reason") or ""),
         )

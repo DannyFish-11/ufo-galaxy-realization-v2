@@ -9,8 +9,9 @@ compatibility. Old import paths continue to work without changes.
     Import from ``tools.architecture.architecture_live_status`` directly.
     This shim will be removed in a future release.
 """
-import sys as _sys
+
 import importlib as _importlib
+import sys as _sys
 import warnings as _warnings
 
 _warnings.warn(

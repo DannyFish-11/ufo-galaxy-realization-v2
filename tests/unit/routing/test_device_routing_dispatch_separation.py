@@ -84,7 +84,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -131,31 +130,37 @@ class TestRoutingPackageImports:
 
     def test_health_policy_authority_sentinel(self):
         from galaxy_gateway.routing.health_policy import DEVICE_HEALTH_POLICY_AUTHORITY
+
         assert isinstance(DEVICE_HEALTH_POLICY_AUTHORITY, str)
         assert "health_policy" in DEVICE_HEALTH_POLICY_AUTHORITY
 
     def test_device_selection_authority_sentinel(self):
         from galaxy_gateway.routing.device_selection import DEVICE_SELECTION_AUTHORITY
+
         assert isinstance(DEVICE_SELECTION_AUTHORITY, str)
         assert "device_selection" in DEVICE_SELECTION_AUTHORITY
 
     def test_policy_authority_sentinel(self):
         from galaxy_gateway.routing.policy import ROUTING_POLICY_AUTHORITY
+
         assert isinstance(ROUTING_POLICY_AUTHORITY, str)
         assert "policy" in ROUTING_POLICY_AUTHORITY
 
     def test_dispatch_authority_sentinel(self):
         from galaxy_gateway.routing.dispatch import DISPATCH_AUTHORITY
+
         assert isinstance(DISPATCH_AUTHORITY, str)
         assert "dispatch" in DISPATCH_AUTHORITY
 
     def test_router_orchestration_sentinel(self):
         from galaxy_gateway.routing.router import ROUTING_ORCHESTRATION_AUTHORITY
+
         assert isinstance(ROUTING_ORCHESTRATION_AUTHORITY, str)
         assert "RoutingOrchestrator" in ROUTING_ORCHESTRATION_AUTHORITY
 
     def test_top_level_reexports_all_symbols(self):
         import galaxy_gateway.routing as r
+
         assert hasattr(r, "is_device_available")
         assert hasattr(r, "is_device_online")
         assert hasattr(r, "filter_eligible_devices")
@@ -166,6 +171,7 @@ class TestRoutingPackageImports:
 
     def test_routing_orchestrator_has_authority_constants(self):
         from galaxy_gateway.routing.router import RoutingOrchestrator
+
         orch = RoutingOrchestrator()
         assert hasattr(orch, "POLICY_AUTHORITY")
         assert hasattr(orch, "SELECTION_AUTHORITY")
@@ -183,26 +189,31 @@ class TestHealthPolicy:
 
     def test_is_device_available_true_with_websocket(self):
         from galaxy_gateway.routing.health_policy import is_device_available
+
         device = _make_device("d1", websocket=_make_ws())
         assert is_device_available(device) is True
 
     def test_is_device_available_false_without_websocket(self):
         from galaxy_gateway.routing.health_policy import is_device_available
+
         device = _make_device("d1", websocket=None)
         assert is_device_available(device) is False
 
     def test_is_device_online_true_for_online(self):
         from galaxy_gateway.routing.health_policy import is_device_online
+
         device = _make_device("d1", status="online")
         assert is_device_online(device) is True
 
     def test_is_device_online_false_for_offline(self):
         from galaxy_gateway.routing.health_policy import is_device_online
+
         device = _make_device("d1", status="offline")
         assert is_device_online(device) is False
 
     def test_is_device_online_handles_enum_status(self):
         from galaxy_gateway.routing.health_policy import is_device_online
+
         device = MagicMock()
         device.status = MagicMock()
         device.status.value = "online"
@@ -210,6 +221,7 @@ class TestHealthPolicy:
 
     def test_filter_eligible_devices_keeps_online(self):
         from galaxy_gateway.routing.health_policy import filter_eligible_devices
+
         devices = [
             _make_device("a", status="online"),
             _make_device("b", status="offline"),
@@ -220,6 +232,7 @@ class TestHealthPolicy:
 
     def test_filter_eligible_devices_empty_when_none_online(self):
         from galaxy_gateway.routing.health_policy import filter_eligible_devices
+
         devices = [_make_device("x", status="offline"), _make_device("y", status="unknown")]
         assert filter_eligible_devices(devices) == []
 
@@ -234,25 +247,30 @@ class TestRoutingPolicy:
 
     def _analyze(self, command: str, context=None):
         from galaxy_gateway.routing.policy import analyze_command
+
         return analyze_command(command, context)
 
     def test_android_keyword_maps_to_android(self):
         from core.device_types import DeviceType
+
         a = self._analyze("打开手机相册")
         assert a["target_device_type"] == DeviceType.ANDROID
 
     def test_windows_keyword_maps_to_windows(self):
         from core.device_types import DeviceType
+
         a = self._analyze("打开电脑文件")
         assert a["target_device_type"] == DeviceType.WINDOWS
 
     def test_tablet_keyword_maps_to_ios(self):
         from core.device_types import DeviceType
+
         a = self._analyze("在平板上查看文档")
         assert a["target_device_type"] == DeviceType.IOS
 
     def test_unknown_command_maps_to_unknown(self):
         from core.device_types import DeviceType
+
         a = self._analyze("do something")
         assert a["target_device_type"] == DeviceType.UNKNOWN
 
@@ -309,31 +327,52 @@ class TestDeviceSelection:
 
     def test_empty_candidates_returns_empty(self):
         from galaxy_gateway.routing.device_selection import select_devices
-        analysis = {"exec_mode": None, "actions": [], "requires_cross_device": False,
-                    "task_role": None, "required_capabilities": [], "target_device_type": "android"}
+
+        analysis = {
+            "exec_mode": None,
+            "actions": [],
+            "requires_cross_device": False,
+            "task_role": None,
+            "required_capabilities": [],
+            "target_device_type": "android",
+        }
         assert select_devices(analysis, []) == []
 
     def test_online_device_selected_when_pool_unavailable(self):
         from galaxy_gateway.routing.device_selection import select_devices
 
         candidates = [_make_device("d1", status="online")]
-        analysis = {"exec_mode": None, "actions": [], "requires_cross_device": False,
-                    "task_role": None, "required_capabilities": [], "target_device_type": "android"}
+        analysis = {
+            "exec_mode": None,
+            "actions": [],
+            "requires_cross_device": False,
+            "task_role": None,
+            "required_capabilities": [],
+            "target_device_type": "android",
+        }
 
-        with patch("galaxy_gateway.routing.device_selection.query_gateway_capabilities",
-                   side_effect=Exception("registry unavailable")), patch(
-                   "galaxy_gateway.routing.device_selection.get_gateway_capabilities_for_device",
-                   side_effect=Exception("registry unavailable")):
-            with patch("galaxy_gateway.routing.device_selection.get_device_pool_manager",
-                       side_effect=Exception("pool unavailable")):
+        with (
+            patch(
+                "galaxy_gateway.routing.device_selection.query_gateway_capabilities",
+                side_effect=Exception("registry unavailable"),
+            ),
+            patch(
+                "galaxy_gateway.routing.device_selection.get_gateway_capabilities_for_device",
+                side_effect=Exception("registry unavailable"),
+            ),
+        ):
+            with patch(
+                "galaxy_gateway.routing.device_selection.get_device_pool_manager",
+                side_effect=Exception("pool unavailable"),
+            ):
                 result = select_devices(analysis, candidates)
 
         assert len(result) == 1
         assert result[0].device_id == "d1"
 
     def test_exec_mode_local_selects_local_device(self):
+        from galaxy_gateway.capability_registry import ExecMode, GatewayCapabilityRegistry
         from galaxy_gateway.routing.device_selection import select_devices
-        from galaxy_gateway.capability_registry import GatewayCapabilityRegistry, ExecMode
 
         dev_local = _make_device("dev-local", status="online")
         dev_remote = _make_device("dev-remote", status="online")
@@ -342,26 +381,38 @@ class TestDeviceSelection:
         reg.upsert("dev-local", "click", {"exec_mode": "local"})
         reg.upsert("dev-remote", "click", {"exec_mode": "remote"})
 
-        analysis = {"exec_mode": "local", "actions": ["click"],
-                    "requires_cross_device": False, "task_role": None,
-                    "required_capabilities": [], "target_device_type": "android"}
+        analysis = {
+            "exec_mode": "local",
+            "actions": ["click"],
+            "requires_cross_device": False,
+            "task_role": None,
+            "required_capabilities": [],
+            "target_device_type": "android",
+        }
 
-        with patch("galaxy_gateway.routing.device_selection.query_gateway_capabilities",
-                   side_effect=reg.query), patch(
-                   "galaxy_gateway.routing.device_selection.get_gateway_capabilities_for_device",
-                   side_effect=reg.get_by_device):
-            with patch("galaxy_gateway.autonomous_filter.filter_autonomous_devices",
-                       side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"]):
-                with patch("galaxy_gateway.routing.device_selection.get_device_pool_manager",
-                           side_effect=Exception("pool unavailable")):
+        with (
+            patch("galaxy_gateway.routing.device_selection.query_gateway_capabilities", side_effect=reg.query),
+            patch(
+                "galaxy_gateway.routing.device_selection.get_gateway_capabilities_for_device",
+                side_effect=reg.get_by_device,
+            ),
+        ):
+            with patch(
+                "galaxy_gateway.autonomous_filter.filter_autonomous_devices",
+                side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"],
+            ):
+                with patch(
+                    "galaxy_gateway.routing.device_selection.get_device_pool_manager",
+                    side_effect=Exception("pool unavailable"),
+                ):
                     result = select_devices(analysis, [dev_local, dev_remote])
 
         assert len(result) == 1
         assert result[0].device_id == "dev-local"
 
     def test_exec_mode_remote_selects_remote_device(self):
-        from galaxy_gateway.routing.device_selection import select_devices
         from galaxy_gateway.capability_registry import GatewayCapabilityRegistry
+        from galaxy_gateway.routing.device_selection import select_devices
 
         dev_local = _make_device("dev-local", status="online")
         dev_remote = _make_device("dev-remote", status="online")
@@ -370,43 +421,67 @@ class TestDeviceSelection:
         reg.upsert("dev-local", "tap", {"exec_mode": "local"})
         reg.upsert("dev-remote", "tap", {"exec_mode": "remote"})
 
-        analysis = {"exec_mode": "remote", "actions": ["tap"],
-                    "requires_cross_device": False, "task_role": None,
-                    "required_capabilities": [], "target_device_type": "android"}
+        analysis = {
+            "exec_mode": "remote",
+            "actions": ["tap"],
+            "requires_cross_device": False,
+            "task_role": None,
+            "required_capabilities": [],
+            "target_device_type": "android",
+        }
 
-        with patch("galaxy_gateway.routing.device_selection.query_gateway_capabilities",
-                   side_effect=reg.query), patch(
-                   "galaxy_gateway.routing.device_selection.get_gateway_capabilities_for_device",
-                   side_effect=reg.get_by_device):
-            with patch("galaxy_gateway.autonomous_filter.filter_autonomous_devices",
-                       side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"]):
-                with patch("galaxy_gateway.routing.device_selection.get_device_pool_manager",
-                           side_effect=Exception("pool unavailable")):
+        with (
+            patch("galaxy_gateway.routing.device_selection.query_gateway_capabilities", side_effect=reg.query),
+            patch(
+                "galaxy_gateway.routing.device_selection.get_gateway_capabilities_for_device",
+                side_effect=reg.get_by_device,
+            ),
+        ):
+            with patch(
+                "galaxy_gateway.autonomous_filter.filter_autonomous_devices",
+                side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"],
+            ):
+                with patch(
+                    "galaxy_gateway.routing.device_selection.get_device_pool_manager",
+                    side_effect=Exception("pool unavailable"),
+                ):
                     result = select_devices(analysis, [dev_local, dev_remote])
 
         assert len(result) == 1
         assert result[0].device_id == "dev-remote"
 
     def test_legacy_device_kept_as_fallback_when_no_caps(self):
-        from galaxy_gateway.routing.device_selection import select_devices
         from galaxy_gateway.capability_registry import GatewayCapabilityRegistry
+        from galaxy_gateway.routing.device_selection import select_devices
 
         dev_legacy = _make_device("dev-legacy", status="online")
         reg = GatewayCapabilityRegistry()
         # dev-legacy has no capability_report entries at all
 
-        analysis = {"exec_mode": "local", "actions": ["tap"],
-                    "requires_cross_device": False, "task_role": None,
-                    "required_capabilities": [], "target_device_type": "android"}
+        analysis = {
+            "exec_mode": "local",
+            "actions": ["tap"],
+            "requires_cross_device": False,
+            "task_role": None,
+            "required_capabilities": [],
+            "target_device_type": "android",
+        }
 
-        with patch("galaxy_gateway.routing.device_selection.query_gateway_capabilities",
-                   side_effect=reg.query), patch(
-                   "galaxy_gateway.routing.device_selection.get_gateway_capabilities_for_device",
-                   side_effect=reg.get_by_device):
-            with patch("galaxy_gateway.autonomous_filter.filter_autonomous_devices",
-                       side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"]):
-                with patch("galaxy_gateway.routing.device_selection.get_device_pool_manager",
-                           side_effect=Exception("pool unavailable")):
+        with (
+            patch("galaxy_gateway.routing.device_selection.query_gateway_capabilities", side_effect=reg.query),
+            patch(
+                "galaxy_gateway.routing.device_selection.get_gateway_capabilities_for_device",
+                side_effect=reg.get_by_device,
+            ),
+        ):
+            with patch(
+                "galaxy_gateway.autonomous_filter.filter_autonomous_devices",
+                side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"],
+            ):
+                with patch(
+                    "galaxy_gateway.routing.device_selection.get_device_pool_manager",
+                    side_effect=Exception("pool unavailable"),
+                ):
                     result = select_devices(analysis, [dev_legacy])
 
         assert len(result) == 1
@@ -421,17 +496,27 @@ class TestDeviceSelection:
         mock_pool = MagicMock()
         mock_pool.select_device.return_value = "dev-b"
 
-        analysis = {"exec_mode": None, "actions": [], "requires_cross_device": False,
-                    "task_role": None, "required_capabilities": [], "target_device_type": "android"}
+        analysis = {
+            "exec_mode": None,
+            "actions": [],
+            "requires_cross_device": False,
+            "task_role": None,
+            "required_capabilities": [],
+            "target_device_type": "android",
+        }
 
-        with patch("galaxy_gateway.routing.device_selection.query_gateway_capabilities",
-                   side_effect=Exception("skip")), patch(
-                   "galaxy_gateway.routing.device_selection.get_gateway_capabilities_for_device",
-                   side_effect=Exception("skip")):
-            with patch("galaxy_gateway.autonomous_filter.filter_autonomous_devices",
-                       side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"]):
-                with patch("galaxy_gateway.routing.device_selection.get_device_pool_manager",
-                           return_value=mock_pool):
+        with (
+            patch("galaxy_gateway.routing.device_selection.query_gateway_capabilities", side_effect=Exception("skip")),
+            patch(
+                "galaxy_gateway.routing.device_selection.get_gateway_capabilities_for_device",
+                side_effect=Exception("skip"),
+            ),
+        ):
+            with patch(
+                "galaxy_gateway.autonomous_filter.filter_autonomous_devices",
+                side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"],
+            ):
+                with patch("galaxy_gateway.routing.device_selection.get_device_pool_manager", return_value=mock_pool):
                     result = select_devices(analysis, [dev_a, dev_b])
 
         assert len(result) == 1
@@ -443,17 +528,30 @@ class TestDeviceSelection:
         dev_a = _make_device("dev-a", status="online")
         dev_b = _make_device("dev-b", status="online")
 
-        analysis = {"exec_mode": None, "actions": [], "requires_cross_device": False,
-                    "task_role": None, "required_capabilities": [], "target_device_type": "android"}
+        analysis = {
+            "exec_mode": None,
+            "actions": [],
+            "requires_cross_device": False,
+            "task_role": None,
+            "required_capabilities": [],
+            "target_device_type": "android",
+        }
 
-        with patch("galaxy_gateway.routing.device_selection.query_gateway_capabilities",
-                   side_effect=Exception("skip")), patch(
-                   "galaxy_gateway.routing.device_selection.get_gateway_capabilities_for_device",
-                   side_effect=Exception("skip")):
-            with patch("galaxy_gateway.autonomous_filter.filter_autonomous_devices",
-                       side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"]):
-                with patch("galaxy_gateway.routing.device_selection.get_device_pool_manager",
-                           side_effect=Exception("pool error")):
+        with (
+            patch("galaxy_gateway.routing.device_selection.query_gateway_capabilities", side_effect=Exception("skip")),
+            patch(
+                "galaxy_gateway.routing.device_selection.get_gateway_capabilities_for_device",
+                side_effect=Exception("skip"),
+            ),
+        ):
+            with patch(
+                "galaxy_gateway.autonomous_filter.filter_autonomous_devices",
+                side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"],
+            ):
+                with patch(
+                    "galaxy_gateway.routing.device_selection.get_device_pool_manager",
+                    side_effect=Exception("pool error"),
+                ):
                     result = select_devices(analysis, [dev_a, dev_b])
 
         assert len(result) == 1
@@ -470,6 +568,7 @@ class TestBuildAipMessage:
 
     def _build(self, **kwargs):
         from galaxy_gateway.routing.dispatch import build_aip_message
+
         defaults = {
             "device_id": "dev-1",
             "task_id": "task-123",
@@ -541,6 +640,7 @@ class TestDispatchToWebsocket:
 
     def test_send_is_called(self):
         from galaxy_gateway.routing.dispatch import dispatch_to_websocket
+
         ws = _make_ws()
         device = _make_device("d1", websocket=ws)
         task_events: Dict = {}
@@ -554,6 +654,7 @@ class TestDispatchToWebsocket:
                 if "t-1" in task_events:
                     task_results["t-1"] = {"success": True, "result": "ok"}
                     task_events["t-1"].set()
+
             asyncio.create_task(_set_event())
             return await dispatch_to_websocket(device, msg, "t-1", task_events, task_results, timeout=1.0)
 
@@ -562,6 +663,7 @@ class TestDispatchToWebsocket:
 
     def test_returns_success_when_result_event_set(self):
         from galaxy_gateway.routing.dispatch import dispatch_to_websocket
+
         ws = _make_ws()
         device = _make_device("d1", websocket=ws)
         task_events: Dict = {}
@@ -572,6 +674,7 @@ class TestDispatchToWebsocket:
                 await asyncio.sleep(0.01)
                 task_results["t-1"] = {"success": True, "result": "done"}
                 task_events["t-1"].set()
+
             asyncio.create_task(_set_event())
             return await dispatch_to_websocket(
                 device, self._make_message(), "t-1", task_events, task_results, timeout=1.0
@@ -582,6 +685,7 @@ class TestDispatchToWebsocket:
 
     def test_returns_timeout_error_on_timeout(self):
         from galaxy_gateway.routing.dispatch import dispatch_to_websocket
+
         ws = _make_ws()
         device = _make_device("d1", websocket=ws)
         task_events: Dict = {}
@@ -598,6 +702,7 @@ class TestDispatchToWebsocket:
 
     def test_returns_send_error_when_websocket_send_raises(self):
         from galaxy_gateway.routing.dispatch import dispatch_to_websocket
+
         ws = MagicMock()
         ws.send = AsyncMock(side_effect=Exception("connection closed"))
         device = _make_device("d1", websocket=ws)
@@ -615,6 +720,7 @@ class TestDispatchToWebsocket:
 
     def test_task_event_cleaned_up_on_success(self):
         from galaxy_gateway.routing.dispatch import dispatch_to_websocket
+
         ws = _make_ws()
         device = _make_device("d1", websocket=ws)
         task_events: Dict = {}
@@ -625,6 +731,7 @@ class TestDispatchToWebsocket:
                 await asyncio.sleep(0.01)
                 task_results["t-1"] = {"success": True}
                 task_events["t-1"].set()
+
             asyncio.create_task(_set_event())
             return await dispatch_to_websocket(
                 device, self._make_message(), "t-1", task_events, task_results, timeout=1.0
@@ -635,6 +742,7 @@ class TestDispatchToWebsocket:
 
     def test_task_event_cleaned_up_on_timeout(self):
         from galaxy_gateway.routing.dispatch import dispatch_to_websocket
+
         ws = _make_ws()
         device = _make_device("d1", websocket=ws)
         task_events: Dict = {}
@@ -658,29 +766,42 @@ class TestRoutingOrchestrator:
     """RoutingOrchestrator delegates to the correct sub-module functions."""
 
     def test_analyze_delegates_to_analyze_command(self):
-        from galaxy_gateway.routing.router import RoutingOrchestrator
         from core.device_types import DeviceType
+        from galaxy_gateway.routing.router import RoutingOrchestrator
+
         orch = RoutingOrchestrator()
         analysis = orch.analyze("打开手机应用")
         assert analysis["target_device_type"] == DeviceType.ANDROID
 
     def test_select_delegates_to_select_devices(self):
         from galaxy_gateway.routing.router import RoutingOrchestrator
+
         orch = RoutingOrchestrator()
         candidates = [_make_device("d1", status="online")]
-        analysis = {"exec_mode": None, "actions": [], "requires_cross_device": False,
-                    "task_role": None, "required_capabilities": [], "target_device_type": "android"}
-        with patch("galaxy_gateway.routing.device_selection.query_gateway_capabilities",
-                   side_effect=Exception("skip")), patch(
-                   "galaxy_gateway.routing.device_selection.get_gateway_capabilities_for_device",
-                   side_effect=Exception("skip")):
-            with patch("galaxy_gateway.routing.device_selection.get_device_pool_manager",
-                       side_effect=Exception("skip")):
+        analysis = {
+            "exec_mode": None,
+            "actions": [],
+            "requires_cross_device": False,
+            "task_role": None,
+            "required_capabilities": [],
+            "target_device_type": "android",
+        }
+        with (
+            patch("galaxy_gateway.routing.device_selection.query_gateway_capabilities", side_effect=Exception("skip")),
+            patch(
+                "galaxy_gateway.routing.device_selection.get_gateway_capabilities_for_device",
+                side_effect=Exception("skip"),
+            ),
+        ):
+            with patch(
+                "galaxy_gateway.routing.device_selection.get_device_pool_manager", side_effect=Exception("skip")
+            ):
                 result = orch.select(analysis, candidates)
         assert result[0].device_id == "d1"
 
     def test_filter_eligible_delegates_to_filter(self):
         from galaxy_gateway.routing.router import RoutingOrchestrator
+
         orch = RoutingOrchestrator()
         devices = [_make_device("a", "online"), _make_device("b", "offline")]
         result = orch.filter_eligible(devices)
@@ -688,18 +809,21 @@ class TestRoutingOrchestrator:
 
     def test_is_available_delegates(self):
         from galaxy_gateway.routing.router import RoutingOrchestrator
+
         orch = RoutingOrchestrator()
         assert orch.is_available(_make_device("d", websocket=_make_ws())) is True
         assert orch.is_available(_make_device("d", websocket=None)) is False
 
     def test_is_online_delegates(self):
         from galaxy_gateway.routing.router import RoutingOrchestrator
+
         orch = RoutingOrchestrator()
         assert orch.is_online(_make_device("d", status="online")) is True
         assert orch.is_online(_make_device("d", status="offline")) is False
 
     def test_build_message_returns_aip_v3(self):
         from galaxy_gateway.routing.router import RoutingOrchestrator
+
         orch = RoutingOrchestrator()
         msg = orch.build_message("dev-1", "t-1", "tr-1", "click")
         assert msg["version"] == "3.0"
@@ -718,15 +842,18 @@ class TestDeviceRouterDelegation:
     def _fresh_router(self):
         try:
             from core.unified import device_manager as _udm_mod
+
             _udm_mod.UnifiedDeviceManager._instance = None
         except Exception:
             pass
         from galaxy_gateway.device_router import DeviceRouter
+
         return DeviceRouter()
 
     def test_analyze_command_output_matches_routing_policy(self):
-        from galaxy_gateway.routing.policy import analyze_command
         from core.device_types import DeviceType
+        from galaxy_gateway.routing.policy import analyze_command
+
         router = self._fresh_router()
         cmd = "打开手机微信"
         # _analyze_command is async in DeviceRouter but analyze_command is sync
@@ -736,9 +863,9 @@ class TestDeviceRouterDelegation:
         assert dr_result["task_type"] == rc_result["task_type"]
 
     def test_select_devices_delegates_to_routing_module(self):
-        from galaxy_gateway.routing.device_selection import select_devices
-        from galaxy_gateway.device_router import Device, DeviceRouter
         from core.device_types import DeviceType
+        from galaxy_gateway.device_router import Device, DeviceRouter
+        from galaxy_gateway.routing.device_selection import select_devices
 
         router = self._fresh_router()
         device = Device("dev-sel", "android_phone", [])
@@ -753,12 +880,16 @@ class TestDeviceRouterDelegation:
             "task_role": None,
             "required_capabilities": [],
         }
-        with patch("galaxy_gateway.routing.device_selection.query_gateway_capabilities",
-                   side_effect=Exception("skip")), patch(
-                   "galaxy_gateway.routing.device_selection.get_gateway_capabilities_for_device",
-                   side_effect=Exception("skip")):
-            with patch("galaxy_gateway.routing.device_selection.get_device_pool_manager",
-                       side_effect=Exception("skip")):
+        with (
+            patch("galaxy_gateway.routing.device_selection.query_gateway_capabilities", side_effect=Exception("skip")),
+            patch(
+                "galaxy_gateway.routing.device_selection.get_gateway_capabilities_for_device",
+                side_effect=Exception("skip"),
+            ),
+        ):
+            with patch(
+                "galaxy_gateway.routing.device_selection.get_device_pool_manager", side_effect=Exception("skip")
+            ):
                 result = router._select_devices(analysis)
 
         assert len(result) == 1
@@ -768,24 +899,21 @@ class TestDeviceRouterDelegation:
         router = self._fresh_router()
 
         async def _run():
-            return await router.send_command_to_device(
-                "nonexistent-device", "click", {}
-            )
+            return await router.send_command_to_device("nonexistent-device", "click", {})
 
         result = asyncio.run(_run())
         assert result is None
 
     def test_send_command_returns_error_for_no_websocket(self):
         from galaxy_gateway.device_router import Device
+
         router = self._fresh_router()
         device = Device("dev-nows", "android_phone", [])
         device.websocket = None
         router.devices["dev-nows"] = device
 
         async def _run():
-            return await router.send_command_to_device(
-                "dev-nows", "click", {}
-            )
+            return await router.send_command_to_device("dev-nows", "click", {})
 
         result = asyncio.run(_run())
         assert result is not None
@@ -811,11 +939,13 @@ class TestDeviceRouterDelegation:
                 for task_id, ev in list(router._task_events.items()):
                     router.task_results[task_id] = {"success": True}
                     ev.set()
+
             asyncio.create_task(_set())
             return await router.send_command_to_device("dev-ws", "click", {"x": 1}, timeout=0.5)
 
         # Patch at the device_router module level (where it's imported as _routing_build_aip_message)
         import galaxy_gateway.device_router as _dr_mod
+
         original = _dr_mod._routing_build_aip_message
 
         def _capturing_build(**kwargs):

@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import pytest
 
+import core.task_graph_runtime as _mod
 from core.task_graph_runtime import (
     FanoutRecord,
     GraphEdge,
@@ -44,8 +45,6 @@ from core.task_graph_runtime import (
     get_task_graph_runtime,
     reset_task_graph_runtime,
 )
-import core.task_graph_runtime as _mod
-
 
 # ===========================================================================
 # Helpers
@@ -169,6 +168,7 @@ def test_C01_fanout_absent_parent_still_creates_edges(caplog) -> None:
     rt = _fresh()
     _add_node(rt, "child_0")
     import logging
+
     with caplog.at_level(logging.WARNING, logger="Galaxy.TaskGraphRuntime"):
         rec = rt.register_fanout("missing_parent", ["child_0"])
     fanout_edges = [e for e in rt.all_edges() if e.kind == GraphEdgeKind.FANOUT]
@@ -279,6 +279,7 @@ def test_G01_fanin_absent_aggregator_still_creates_edges(caplog) -> None:
     rt = _fresh()
     _add_node(rt, "child_0")
     import logging
+
     with caplog.at_level(logging.WARNING, logger="Galaxy.TaskGraphRuntime"):
         rec = rt.register_fanin(["child_0"], "missing_agg")
     fanin_edges = [e for e in rt.all_edges() if e.kind == GraphEdgeKind.FANIN]

@@ -36,8 +36,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional, Tuple
 
-from core.schemas.persona_state import PersonaState
 from core.persona.emotion_engine import EmotionEngine
+from core.schemas.persona_state import PersonaState
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +59,7 @@ def get_state_store() -> "StateStore":
 # ---------------------------------------------------------------------------
 # StateStore
 # ---------------------------------------------------------------------------
+
 
 class StateStore:
     """In-memory persona state store, keyed by ``session_id``.

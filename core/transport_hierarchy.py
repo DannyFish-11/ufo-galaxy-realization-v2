@@ -78,7 +78,7 @@ MESH_ORCHESTRATION_AUTHORITY_EXCLUDED: bool = True
 # Maps preferred_path strings (as used in RoutabilitySummary) to roles.
 _PATH_TO_ROLE: dict[str, str] = {
     "direct_ws": TRANSPORT_ROLE_DIRECT_WS,
-    "ucm": TRANSPORT_ROLE_DIRECT_WS,       # UCM send is still direct WS delivery
+    "ucm": TRANSPORT_ROLE_DIRECT_WS,  # UCM send is still direct WS delivery
     "relay": TRANSPORT_ROLE_RELAY,
     # Mesh paths are listed for completeness but their role is overlay-only.
     # They should NOT appear as preferred_path after PR-4 hierarchy enforcement.

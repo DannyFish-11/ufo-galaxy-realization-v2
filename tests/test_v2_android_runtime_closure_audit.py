@@ -50,9 +50,9 @@ import pytest
 
 try:
     from core.runtime.source_dispatch_orchestrator import (
+        _ANDROID_TERMINAL_SIGNAL_KINDS,
         ANDROID_TERMINAL_SIGNAL_RECORDED_TO_CANONICAL_TRUTH_SENTINEL,
         ANDROID_TERMINAL_SIGNAL_RECORDS_TO_REPLAY_FOUNDATION_POLICY,
-        _ANDROID_TERMINAL_SIGNAL_KINDS,
         SourceDispatchOrchestrator,
         orchestrate_source_runtime_dispatch,
     )
@@ -63,8 +63,8 @@ except ImportError:
 
 try:
     from core.mesh.live_mesh_runtime_engine import (
-        LiveMeshRuntimeEngine,
         LiveMeshRunResult,
+        LiveMeshRuntimeEngine,
         run_live_mesh_session,
     )
 
@@ -74,8 +74,8 @@ except ImportError:
 
 try:
     from contracts.mesh_session_coordinator import (
-        MeshSessionCoordinatorState,
         MeshCoordinatorStatus,
+        MeshSessionCoordinatorState,
     )
 
     _COORDINATOR_AVAILABLE = True
@@ -84,10 +84,10 @@ except ImportError:
 
 try:
     from core.android_execution_signal_reconciler import (
+        AndroidSignalKind,
+        extract_signal_envelope,
         reconcile_android_execution_signal,
         reconcile_inbound_message,
-        extract_signal_envelope,
-        AndroidSignalKind,
     )
 
     _RECONCILER_AVAILABLE = True
@@ -96,8 +96,8 @@ except ImportError:
 
 try:
     from core.replay_foundation import (
-        get_replay_foundation,
         emit_runtime_event,
+        get_replay_foundation,
         reset_replay_foundation,
     )
 
@@ -107,12 +107,12 @@ except ImportError:
 
 try:
     from core.delegated_runtime_execution_tracker import (
-        DelegatedExecutionTrackingRuntime,
-        DelegatedExecutionTrackingRecord,
-        DelegatedExecutionPhase,
-        create_execution_tracking_record,
-        apply_acknowledgment_signal,
         AcknowledgmentSignal,
+        DelegatedExecutionPhase,
+        DelegatedExecutionTrackingRecord,
+        DelegatedExecutionTrackingRuntime,
+        apply_acknowledgment_signal,
+        create_execution_tracking_record,
     )
 
     _TRACKER_AVAILABLE = True
@@ -176,8 +176,7 @@ def _make_mesh_session_dict(n_participants: int = 2) -> Dict[str, Any]:
         "session_id": str(uuid.uuid4()),
         "mesh_id": "audit_mesh",
         "participants": [
-            {"device_id": f"dev_{i}", "status": "active", "role": "participant"}
-            for i in range(n_participants)
+            {"device_id": f"dev_{i}", "status": "active", "role": "participant"} for i in range(n_participants)
         ],
         "status": "active",
     }
@@ -256,7 +255,7 @@ class TestGroupA_AuthorityChain:
 
     def test_a5_replay_foundation_importable(self) -> None:
         """The ReplayFoundation (canonical truth store) must be importable."""
-        from core.replay_foundation import get_replay_foundation, emit_runtime_event  # noqa: F401
+        from core.replay_foundation import emit_runtime_event, get_replay_foundation  # noqa: F401
 
     @pytest.mark.skipif(not _ORCHESTRATOR_AVAILABLE, reason="orchestrator unavailable")
     def test_a6_android_terminal_signal_sentinel_present(self) -> None:
@@ -291,10 +290,9 @@ class TestGroupA_AuthorityChain:
     @pytest.mark.skipif(not _ORCHESTRATOR_AVAILABLE, reason="orchestrator unavailable")
     def test_a9_new_sentinels_reexported_from_core_runtime(self) -> None:
         """New sentinels must be reachable from the core.runtime package."""
-        from core.runtime import (
-            ANDROID_TERMINAL_SIGNAL_RECORDED_TO_CANONICAL_TRUTH_SENTINEL as s,
-            ANDROID_TERMINAL_SIGNAL_RECORDS_TO_REPLAY_FOUNDATION_POLICY as p,
-        )
+        from core.runtime import ANDROID_TERMINAL_SIGNAL_RECORDED_TO_CANONICAL_TRUTH_SENTINEL as s
+        from core.runtime import ANDROID_TERMINAL_SIGNAL_RECORDS_TO_REPLAY_FOUNDATION_POLICY as p
+
         assert isinstance(s, str) and s
         assert isinstance(p, str) and p
 
@@ -418,8 +416,8 @@ class TestGroupC_ParticipantPostureGatesRuntime:
         """The source dispatch orchestrator must carry posture-gating policy
         sentinels."""
         from core.runtime.source_dispatch_orchestrator import (
-            ANDROID_POSTURE_GATING_INTEGRATED_SENTINEL,
             ANDROID_CONTROL_ONLY_POSTURE_IS_NOT_DISPATCH_TARGET_POLICY,
+            ANDROID_POSTURE_GATING_INTEGRATED_SENTINEL,
         )
 
         assert "control_only" in ANDROID_CONTROL_ONLY_POSTURE_IS_NOT_DISPATCH_TARGET_POLICY
@@ -797,9 +795,7 @@ class TestGroupF_AndroidSignalPropagation:
         # Verify the event was emitted to ReplayFoundation using the task_id
         foundation = get_replay_foundation()
         events = foundation.get_events_for_task("tid-f6")
-        terminal_events = [
-            e for e in events if getattr(e, "kind", None) == "android_terminal_signal"
-        ]
+        terminal_events = [e for e in events if getattr(e, "kind", None) == "android_terminal_signal"]
         assert len(terminal_events) >= 1
         # The event must carry the contract_id in its payload
         last_event = terminal_events[-1]
@@ -1093,9 +1089,7 @@ class TestGroupH_EndToEndReachabilitySmoke:
         reset_replay_foundation()
 
         # Step 1: create tracking record (simulates dispatch to Android device)
-        rt, rec = _make_tracking_runtime(
-            contract_id="cid_h5", session_id="sid_h5", task_id="tid_h5"
-        )
+        rt, rec = _make_tracking_runtime(contract_id="cid_h5", session_id="sid_h5", task_id="tid_h5")
 
         # Step 2: Android device sends a cancel signal (simulates real device cancel)
         msg = _make_android_message(
@@ -1118,8 +1112,7 @@ class TestGroupH_EndToEndReachabilitySmoke:
         foundation = get_replay_foundation()
         android_terminal_events = foundation.get_events_for_task("tid_h5")
         android_terminal_events = [
-            e for e in android_terminal_events
-            if getattr(e, "kind", None) == "android_terminal_signal"
+            e for e in android_terminal_events if getattr(e, "kind", None) == "android_terminal_signal"
         ]
         assert len(android_terminal_events) >= 1
         last = android_terminal_events[-1]

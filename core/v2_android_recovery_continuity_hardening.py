@@ -778,11 +778,7 @@ def classify_session_reuse(
         )
 
     # --- Epoch mismatch (I-R1, I-R2) ---
-    if (
-        presented_epoch is not None
-        and stored_epoch is not None
-        and presented_epoch != stored_epoch
-    ):
+    if presented_epoch is not None and stored_epoch is not None and presented_epoch != stored_epoch:
         return SessionReuseAssessment(
             device_id=device_id,
             presented_attachment_id=presented_attachment_id,
@@ -959,9 +955,7 @@ def assess_attached_runtime_truth(
 # classify_evidence_ingress
 # ---------------------------------------------------------------------------
 
-_VALID_PROVENANCE_KEYS: frozenset[str] = frozenset(
-    {"real_android", "replay_queue", "locally_synthesised"}
-)
+_VALID_PROVENANCE_KEYS: frozenset[str] = frozenset({"real_android", "replay_queue", "locally_synthesised"})
 
 
 def classify_evidence_ingress(
@@ -1039,10 +1033,7 @@ def classify_evidence_ingress(
             device_id=device_id,
             provenance=EvidenceIngressProvenance.replay_queue_drained,
             is_degraded=False,
-            diagnosis=(
-                "Evidence provenance hint is replay_queue. "
-                "Classified as replay_queue_drained."
-            ),
+            diagnosis=("Evidence provenance hint is replay_queue. " "Classified as replay_queue_drained."),
         )
 
     if provenance_hint == "locally_synthesised":
@@ -1051,10 +1042,7 @@ def classify_evidence_ingress(
             device_id=device_id,
             provenance=EvidenceIngressProvenance.locally_synthesised,
             is_degraded=True,
-            diagnosis=(
-                "Evidence provenance hint is locally_synthesised. "
-                "Treated as degraded."
-            ),
+            diagnosis=("Evidence provenance hint is locally_synthesised. " "Treated as degraded."),
         )
 
     # Fallthrough: unknown provenance
@@ -1149,8 +1137,7 @@ def assess_recovery_closure_quality(
     else:
         quality = RecoveryClosureQuality.full_convergence
         diagnosis = (
-            f"All {resolved_task_count} in-flight tasks resolved with full evidence. "
-            "Classified as full_convergence."
+            f"All {resolved_task_count} in-flight tasks resolved with full evidence. " "Classified as full_convergence."
         )
 
     return RecoveryClosureAssessment(
@@ -1239,10 +1226,7 @@ def classify_result_delivery(
         classification=ResultDeliveryClassification.first_delivery,
         idempotency_key=idempotency_key,
         should_suppress=False,
-        diagnosis=(
-            f"First delivery for task_id={task_id!r}. "
-            "Idempotency key registered; result accepted."
-        ),
+        diagnosis=(f"First delivery for task_id={task_id!r}. " "Idempotency key registered; result accepted."),
     )
 
 
@@ -1294,11 +1278,7 @@ def interpret_replay_sequence(
         idem_key = str(item.get("idempotency_key", item_id))
 
         # --- Epoch mismatch → stale_dropped ---
-        if (
-            expected_epoch is not None
-            and item_epoch is not None
-            and item_epoch != expected_epoch
-        ):
+        if expected_epoch is not None and item_epoch is not None and item_epoch != expected_epoch:
             assessments.append(
                 ReplaySequenceItemAssessment(
                     sequence_index=idx,
@@ -1328,20 +1308,13 @@ def interpret_replay_sequence(
                     sequence_position=seq_pos,
                     last_accepted_position=last_accepted_position,
                     classification=ReplayItemClassification.duplicate_suppressed,
-                    diagnosis=(
-                        f"idempotency_key={idem_key!r} already seen; "
-                        "classified as duplicate_suppressed."
-                    ),
+                    diagnosis=(f"idempotency_key={idem_key!r} already seen; " "classified as duplicate_suppressed."),
                 )
             )
             continue
 
         # --- Sequence gap detection ---
-        if (
-            seq_pos is not None
-            and last_accepted_position is not None
-            and seq_pos > last_accepted_position + 1
-        ):
+        if seq_pos is not None and last_accepted_position is not None and seq_pos > last_accepted_position + 1:
             assessments.append(
                 ReplaySequenceItemAssessment(
                     sequence_index=idx,
@@ -1375,10 +1348,7 @@ def interpret_replay_sequence(
                 sequence_position=seq_pos,
                 last_accepted_position=last_accepted_position,
                 classification=ReplayItemClassification.convergence_eligible,
-                diagnosis=(
-                    "Item within expected epoch and sequence window; "
-                    "classified as convergence_eligible."
-                ),
+                diagnosis=("Item within expected epoch and sequence window; " "classified as convergence_eligible."),
             )
         )
 
@@ -1435,33 +1405,21 @@ def build_recovery_participation_report(
 
     # Attached runtime truth degradation
     if attached_runtime_truth.truth == AttachedRuntimeTruth.unverifiable:
-        if quality_order.index(worst_quality) < quality_order.index(
-            RecoveryClosureQuality.degraded_recovery
-        ):
+        if quality_order.index(worst_quality) < quality_order.index(RecoveryClosureQuality.degraded_recovery):
             worst_quality = RecoveryClosureQuality.degraded_recovery
     elif attached_runtime_truth.truth == AttachedRuntimeTruth.locally_inferred:
-        if quality_order.index(worst_quality) < quality_order.index(
-            RecoveryClosureQuality.degraded_recovery
-        ):
+        if quality_order.index(worst_quality) < quality_order.index(RecoveryClosureQuality.degraded_recovery):
             worst_quality = RecoveryClosureQuality.degraded_recovery
 
     # Evidence ingress degradation
     if evidence_ingress.is_degraded:
-        if quality_order.index(worst_quality) < quality_order.index(
-            RecoveryClosureQuality.degraded_recovery
-        ):
+        if quality_order.index(worst_quality) < quality_order.index(RecoveryClosureQuality.degraded_recovery):
             worst_quality = RecoveryClosureQuality.degraded_recovery
 
     # Replay gap exposure
-    gap_count = sum(
-        1
-        for r in items
-        if r.classification == ReplayItemClassification.gap_exposed
-    )
+    gap_count = sum(1 for r in items if r.classification == ReplayItemClassification.gap_exposed)
     if gap_count > 0:
-        if quality_order.index(worst_quality) < quality_order.index(
-            RecoveryClosureQuality.degraded_recovery
-        ):
+        if quality_order.index(worst_quality) < quality_order.index(RecoveryClosureQuality.degraded_recovery):
             worst_quality = RecoveryClosureQuality.degraded_recovery
 
     # Dual-repo participation eligibility: requires at least partial_convergence

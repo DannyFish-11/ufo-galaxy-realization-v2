@@ -486,8 +486,8 @@ def enrich_multi_device_projection(
     # ── Source 6: CoordinationRoleRuntime (PR-6, optional) ────────────────
     try:
         from core.multi_device_coordination_authority import (
-            get_coordination_role_runtime,
             build_coordination_role_snapshot,
+            get_coordination_role_runtime,
         )
 
         coord_rt = get_coordination_role_runtime()

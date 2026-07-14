@@ -47,15 +47,15 @@ from .decision_basis import (
     DecisionFactor,
     make_decision_basis,
 )
+from .explanation_summary import (
+    IDLE_EXPLANATION_SUMMARY,
+    RoutingExplanationSummary,
+    build_explanation_summary,
+)
 from .route_explanation import (
     RejectedCandidate,
     RouteExplanation,
     build_route_explanation,
-)
-from .explanation_summary import (
-    RoutingExplanationSummary,
-    build_explanation_summary,
-    IDLE_EXPLANATION_SUMMARY,
 )
 
 __all__ = [
@@ -79,13 +79,9 @@ _ROUTE_PATH_REASONS: Dict[str, str] = {
         "dispatch to the cross-device substrate (DeviceRouter)."
     ),
     ROUTE_PATH_WORKER: (
-        "Explicit executor_target_type=go_worker directed dispatch to the "
-        "MasterBrain worker domain."
+        "Explicit executor_target_type=go_worker directed dispatch to the " "MasterBrain worker domain."
     ),
-    ROUTE_PATH_LOCAL: (
-        "No cross-device or worker hint present; task dispatched via the local "
-        "execution runtime."
-    ),
+    ROUTE_PATH_LOCAL: ("No cross-device or worker hint present; task dispatched via the local " "execution runtime."),
     ROUTE_PATH_PARALLEL_FANOUT: (
         "metadata parallel_fanout=true directed dispatch to the canonical "
         "parallel fan-out path (multiple concurrent sub-envelopes)."
@@ -183,16 +179,13 @@ class LiveRoutingDecisionBuilder:
             basis = make_decision_basis(
                 factor=DecisionFactor.AVAILABILITY,
                 signal_value=validated,
-                description=(
-                    f"{len(validated)} target(s) passed admissibility check: "
-                    f"{validated}"
-                ),
+                description=(f"{len(validated)} target(s) passed admissibility check: " f"{validated}"),
                 accepted=True,
                 weight=0.15,
             )
             self._decision_bases.append(basis)
 
-        for dev_id, reasons in (excluded or []):
+        for dev_id, reasons in excluded or []:
             reason_str = ", ".join(str(r) for r in (reasons or [])) or "failed admissibility check"
             self._rejected_candidates.append(
                 RejectedCandidate(
@@ -204,9 +197,7 @@ class LiveRoutingDecisionBuilder:
             basis_rej = make_decision_basis(
                 factor=DecisionFactor.AVAILABILITY,
                 signal_value=False,
-                description=(
-                    f"Target '{dev_id}' excluded by admissibility gate: {reason_str}"
-                ),
+                description=(f"Target '{dev_id}' excluded by admissibility gate: {reason_str}"),
                 accepted=False,
                 weight=0.15,
             )
@@ -231,17 +222,19 @@ class LiveRoutingDecisionBuilder:
             block_reason: 拦截原因(全拦时的聚合说明)。
         """
         if approved:
-            self._decision_bases.append(make_decision_basis(
-                factor=DecisionFactor.AVAILABILITY,
-                signal_value=list(approved),
-                description=(
-                    f"{len(approved)} target(s) approved by V3 canonical "
-                    f"dispatch-slot authority: {list(approved)}"
-                ),
-                accepted=True,
-                weight=0.2,
-            ))
-        for dev_id in (blocked or []):
+            self._decision_bases.append(
+                make_decision_basis(
+                    factor=DecisionFactor.AVAILABILITY,
+                    signal_value=list(approved),
+                    description=(
+                        f"{len(approved)} target(s) approved by V3 canonical "
+                        f"dispatch-slot authority: {list(approved)}"
+                    ),
+                    accepted=True,
+                    weight=0.2,
+                )
+            )
+        for dev_id in blocked or []:
             reason_str = block_reason or "blocked by V3 canonical dispatch-slot authority"
             self._rejected_candidates.append(
                 RejectedCandidate(
@@ -250,15 +243,15 @@ class LiveRoutingDecisionBuilder:
                     was_available=False,
                 )
             )
-            self._decision_bases.append(make_decision_basis(
-                factor=DecisionFactor.AVAILABILITY,
-                signal_value=False,
-                description=(
-                    f"Target '{dev_id}' blocked by V3 slot gate: {reason_str}"
-                ),
-                accepted=False,
-                weight=0.2,
-            ))
+            self._decision_bases.append(
+                make_decision_basis(
+                    factor=DecisionFactor.AVAILABILITY,
+                    signal_value=False,
+                    description=(f"Target '{dev_id}' blocked by V3 slot gate: {reason_str}"),
+                    accepted=False,
+                    weight=0.2,
+                )
+            )
 
     def record_capability_enforcement(
         self,
@@ -278,10 +271,7 @@ class LiveRoutingDecisionBuilder:
             basis = make_decision_basis(
                 factor=DecisionFactor.CAPABILITY,
                 signal_value=confirmed,
-                description=(
-                    f"{len(confirmed)} target(s) confirmed in capability graph "
-                    f"({cap_str}): {confirmed}"
-                ),
+                description=(f"{len(confirmed)} target(s) confirmed in capability graph " f"({cap_str}): {confirmed}"),
                 accepted=True,
                 weight=0.15,
             )
@@ -291,19 +281,14 @@ class LiveRoutingDecisionBuilder:
             self._rejected_candidates.append(
                 RejectedCandidate(
                     candidate_id=str(dev_id),
-                    rejection_reason=(
-                        f"not confirmed in capability graph for {cap_str}"
-                    ),
+                    rejection_reason=(f"not confirmed in capability graph for {cap_str}"),
                     capability_match=False,
                 )
             )
             basis_rej = make_decision_basis(
                 factor=DecisionFactor.CAPABILITY,
                 signal_value=False,
-                description=(
-                    f"Target '{dev_id}' not confirmed in capability graph "
-                    f"({cap_str})"
-                ),
+                description=(f"Target '{dev_id}' not confirmed in capability graph " f"({cap_str})"),
                 accepted=False,
                 weight=0.15,
             )
@@ -369,10 +354,7 @@ class LiveRoutingDecisionBuilder:
             reason:              Optional description of why fallback was triggered.
         """
         if fallback_device_ids:
-            self._fallback_plan = (
-                reason
-                or f"Fallback device(s) available: {', '.join(fallback_device_ids)}"
-            )
+            self._fallback_plan = reason or f"Fallback device(s) available: {', '.join(fallback_device_ids)}"
         elif reason:
             self._fallback_plan = reason
 
@@ -403,10 +385,7 @@ class LiveRoutingDecisionBuilder:
             basis = make_decision_basis(
                 factor=DecisionFactor.AVAILABILITY,
                 signal_value=False,
-                description=(
-                    f"Dispatch failed: error_code='{error_code}'"
-                    + (f" via='{via}'" if via else "")
-                ),
+                description=(f"Dispatch failed: error_code='{error_code}'" + (f" via='{via}'" if via else "")),
                 accepted=False,
                 weight=0.10,
             )

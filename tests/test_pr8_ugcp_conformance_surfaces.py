@@ -9,40 +9,40 @@ import pytest
 from core.ugcp_conformance_surfaces import (
     CANONICAL_VS_TRANSITIONAL_CLASSIFICATION_POLICY,
     COMPATIBILITY_RETIREMENT_IS_PROGRESSIVE_POLICY,
-    CROSS_PROFILE_INVARIANTS_ARE_REVIEWABLE_POLICY,
     CONVERGENCE_VISIBILITY_SURFACES_ARE_REVIEWABLE_POLICY,
+    CROSS_PROFILE_INVARIANTS_ARE_REVIEWABLE_POLICY,
     DEPRECATION_EXECUTION_PATHWAY_IS_REVIEWABLE_POLICY,
     ENFORCEMENT_HANDLING_CLASSIFICATION_IS_EXPLICIT_POLICY,
     MIGRATION_READINESS_SURFACES_ARE_EXPLICIT_POLICY,
     NORMALIZATION_BOUNDARY_IS_EXPLICIT_POLICY,
     PROFILE_COMPOSITION_BACKBONE_IS_NORMALIZED_POLICY,
     PROGRESSIVE_STRICTNESS_IS_OPT_IN_POLICY,
-    ROLLOUT_GATING_REQUIRES_COORDINATION_POLICY,
     RETIREMENT_SEQUENCING_IS_STAGE_GATED_POLICY,
+    ROLLOUT_GATING_REQUIRES_COORDINATION_POLICY,
     STAGED_STRICTNESS_TIERS_ARE_EXPLICIT_POLICY,
     UGCP_CONFORMANCE_BACKBONE_CONSOLIDATION_PR9_SENTINEL,
+    UGCP_CONFORMANCE_SURFACES_AUTHORITY,
+    UGCP_CONFORMANCE_SURFACES_PR8_SENTINEL,
+    UGCP_CONVERGENCE_VISIBILITY_AUDIT_PR12_SENTINEL,
     UGCP_ENFORCEMENT_SCAFFOLDING_PR10_SENTINEL,
     UGCP_MIGRATION_READINESS_PR11_SENTINEL,
-    UGCP_CONVERGENCE_VISIBILITY_AUDIT_PR12_SENTINEL,
     UGCP_STAGED_STRICTNESS_ROLLOUT_GATING_PR14_SENTINEL,
+    UGCPConformanceSurface,
     UGCPDeprecationStage,
     UGCPEnforcementAction,
     UGCPEnforcementMode,
-    UGCP_CONFORMANCE_SURFACES_AUTHORITY,
-    UGCP_CONFORMANCE_SURFACES_PR8_SENTINEL,
-    UGCPConformanceSurface,
     UGCPSemanticClass,
-    build_enforcement_scaffold,
     build_conformance_invariant_report,
-    classify_surface_semantics,
+    build_enforcement_scaffold,
     build_migration_readiness_scaffold,
+    build_staged_strictness_rollout_gating_scaffold,
     build_ugcp_convergence_visibility_audit,
+    classify_surface_semantics,
     evaluate_surface_enforcement,
-    get_ugcp_retirement_stage_catalog,
     get_ugcp_conformance_surface_catalog,
+    get_ugcp_retirement_stage_catalog,
     normalize_conformance_backbone,
     normalize_conformance_payload,
-    build_staged_strictness_rollout_gating_scaffold,
 )
 from core.ugcp_truth_event_model import CanonicalTruthEventType
 
@@ -404,13 +404,9 @@ def test_staged_strictness_rollout_gating_scaffold_layers_tiers_and_gates() -> N
     assert "truth_event" in scaffold["coordination_required_surfaces"]
     assert "schema" in scaffold["earlier_tightening_candidates"]
     assert (
-        scaffold["surface_strictness_inventory"]["authority"]["rollout_gate"]
-        == "reject_ready_but_coordination_gated"
+        scaffold["surface_strictness_inventory"]["authority"]["rollout_gate"] == "reject_ready_but_coordination_gated"
     )
-    assert (
-        scaffold["surface_strictness_inventory"]["transfer"]["rollout_gate"]
-        == "reject_ready_for_canary_tightening"
-    )
+    assert scaffold["surface_strictness_inventory"]["transfer"]["rollout_gate"] == "reject_ready_for_canary_tightening"
 
 
 def test_staged_strictness_rollout_gating_scaffold_handles_empty_payload_and_invalid_mode() -> None:

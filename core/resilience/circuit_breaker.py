@@ -58,10 +58,7 @@ class CircuitOpenError(Exception):
         self.target = target
         self.opened_at = opened_at
         remaining = max(0.0, _ENV_RECOVERY_TIMEOUT - (time.monotonic() - opened_at))
-        super().__init__(
-            f"Circuit breaker OPEN for target '{target}'; "
-            f"retry in {remaining:.1f}s"
-        )
+        super().__init__(f"Circuit breaker OPEN for target '{target}'; " f"retry in {remaining:.1f}s")
 
 
 class CircuitBreaker:
@@ -149,9 +146,7 @@ class CircuitBreaker:
                 self._total_calls += 1
                 if self._fallback is not None:
                     self._total_fallbacks += 1
-                    logger.debug(
-                        "CircuitBreaker[%s] OPEN — invoking fallback", self.target
-                    )
+                    logger.debug("CircuitBreaker[%s] OPEN — invoking fallback", self.target)
                     return await self._fallback(*args, **kwargs)
                 raise CircuitOpenError(self.target, self._opened_at)
 
@@ -169,7 +164,7 @@ class CircuitBreaker:
         # Execute outside the lock to avoid blocking metric readers
         try:
             result = await fn(*args, **kwargs)
-        except Exception as exc:
+        except Exception:
             async with self._lock:
                 await self._record_failure()
             raise
@@ -184,15 +179,10 @@ class CircuitBreaker:
 
     async def _current_state(self) -> CircuitState:
         """Re-evaluate OPEN → HALF_OPEN transition by timeout."""
-        if (
-            self._state == CircuitState.OPEN
-            and (time.monotonic() - self._opened_at) >= self._recovery_timeout
-        ):
+        if self._state == CircuitState.OPEN and (time.monotonic() - self._opened_at) >= self._recovery_timeout:
             self._state = CircuitState.HALF_OPEN
             self._half_open_calls = 0
-            logger.info(
-                "CircuitBreaker[%s] → HALF_OPEN (recovery probe)", self.target
-            )
+            logger.info("CircuitBreaker[%s] → HALF_OPEN (recovery probe)", self.target)
         return self._state
 
     async def _record_success(self) -> None:
@@ -200,9 +190,7 @@ class CircuitBreaker:
         if self._state == CircuitState.HALF_OPEN:
             self._state = CircuitState.CLOSED
             self._half_open_calls = 0
-            logger.info(
-                "CircuitBreaker[%s] → CLOSED (probe succeeded)", self.target
-            )
+            logger.info("CircuitBreaker[%s] → CLOSED (probe succeeded)", self.target)
 
     async def _record_failure(self) -> None:
         self._total_failures += 1
@@ -215,7 +203,9 @@ class CircuitBreaker:
                 self._total_circuit_opens += 1
                 logger.warning(
                     "CircuitBreaker[%s] → OPEN (%d failures in last %d calls)",
-                    self.target, recent_failures, self._window_size,
+                    self.target,
+                    recent_failures,
+                    self._window_size,
                 )
 
     def _push_window(self, value: int) -> None:

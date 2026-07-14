@@ -211,9 +211,7 @@ class TestTakeoverOwnershipConvergence:
         )
         assert outcome.extra.get("effective_accepted") is False
         assert outcome.extra.get("takeover_gate_decision") == "force_revalidate_suspend"
-        assert "authority_boundary_requires_revalidation" in outcome.extra.get(
-            "takeover_gate_reasons", []
-        )
+        assert "authority_boundary_requires_revalidation" in outcome.extra.get("takeover_gate_reasons", [])
         authority = outcome.extra.get("authority_boundary", {})
         assert authority.get("permission_level") == "suggestion_only"
         rec = get_participant_session(session_id)
@@ -270,6 +268,4 @@ class TestTakeoverOwnershipConvergence:
             metadata={"takeover_id": f"conflict-{takeover_id}"},
         )
         assert outcome.extra.get("effective_accepted") is False
-        assert "metadata_takeover_id_conflict" in outcome.extra.get(
-            "takeover_gate_reasons", []
-        )
+        assert "metadata_takeover_id_conflict" in outcome.extra.get("takeover_gate_reasons", [])

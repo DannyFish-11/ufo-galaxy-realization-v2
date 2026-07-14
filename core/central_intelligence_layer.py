@@ -462,7 +462,6 @@ CI_LAYER_SURFACE_REGISTRY: List[CILayerSurface] = [
     # =========================================================================
     # Central intelligence main layer
     # =========================================================================
-
     CILayerSurface(
         surface_id="desktop_presence_runtime",
         module_path="core.desktop_presence_runtime.DesktopPresenceRuntime",
@@ -492,11 +491,9 @@ CI_LAYER_SURFACE_REGISTRY: List[CILayerSurface] = [
             "Subject core of the unified-subject architecture."
         ),
     ),
-
     # =========================================================================
     # Expert capability sub-layers
     # =========================================================================
-
     CILayerSurface(
         surface_id="agent_kernel",
         module_path="core.agent.kernel.AgentKernel",
@@ -568,11 +565,9 @@ CI_LAYER_SURFACE_REGISTRY: List[CILayerSurface] = [
             "Does NOT hold independent governance or dispatch authority."
         ),
     ),
-
     # =========================================================================
     # Sub-domain coordinators
     # =========================================================================
-
     CILayerSurface(
         surface_id="unified_orchestration_spine",
         module_path="core.unified_orchestration_spine",
@@ -617,11 +612,9 @@ CI_LAYER_SURFACE_REGISTRY: List[CILayerSurface] = [
             "an independent orchestration authority alongside OpenClawd."
         ),
     ),
-
     # =========================================================================
     # Facade / compat / helper layers
     # =========================================================================
-
     CILayerSurface(
         surface_id="e2e_orchestrator",
         module_path="core.e2e_orchestrator",
@@ -701,27 +694,11 @@ def get_surfaces_by_ci_role(role: CILayerRole) -> List[CILayerSurface]:
 def build_ci_layer_boundary_report() -> CILayerBoundaryReport:
     """Build and return a :class:`CILayerBoundaryReport` from the current registry."""
     total = len(CI_LAYER_SURFACE_REGISTRY)
-    ci_count = sum(
-        1 for s in CI_LAYER_SURFACE_REGISTRY
-        if s.ci_role == CILayerRole.central_intelligence_main_layer
-    )
-    expert_count = sum(
-        1 for s in CI_LAYER_SURFACE_REGISTRY
-        if s.ci_role == CILayerRole.expert_capability_sub_layer
-    )
-    coordinator_count = sum(
-        1 for s in CI_LAYER_SURFACE_REGISTRY
-        if s.ci_role == CILayerRole.sub_domain_coordinator
-    )
-    facade_count = sum(
-        1 for s in CI_LAYER_SURFACE_REGISTRY
-        if s.ci_role == CILayerRole.facade_compat_helper
-    )
-    constrained = [
-        s.surface_id
-        for s in CI_LAYER_SURFACE_REGISTRY
-        if s.may_not_claim_independent_authority
-    ]
+    ci_count = sum(1 for s in CI_LAYER_SURFACE_REGISTRY if s.ci_role == CILayerRole.central_intelligence_main_layer)
+    expert_count = sum(1 for s in CI_LAYER_SURFACE_REGISTRY if s.ci_role == CILayerRole.expert_capability_sub_layer)
+    coordinator_count = sum(1 for s in CI_LAYER_SURFACE_REGISTRY if s.ci_role == CILayerRole.sub_domain_coordinator)
+    facade_count = sum(1 for s in CI_LAYER_SURFACE_REGISTRY if s.ci_role == CILayerRole.facade_compat_helper)
+    constrained = [s.surface_id for s in CI_LAYER_SURFACE_REGISTRY if s.may_not_claim_independent_authority]
     return CILayerBoundaryReport(
         total_surfaces=total,
         central_intelligence_count=ci_count,

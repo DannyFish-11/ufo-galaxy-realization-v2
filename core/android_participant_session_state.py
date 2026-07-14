@@ -642,9 +642,7 @@ def advance_participant_session(
             metadata=merged_meta,
         )
     except Exception as exc:  # noqa: BLE001
-        logger.debug(
-            "advance_participant_session: transition failed (non-fatal): %s", exc
-        )
+        logger.debug("advance_participant_session: transition failed (non-fatal): %s", exc)
         return record
 
 
@@ -674,9 +672,7 @@ class AndroidParticipantSessionRuntime:
         with self._lock:
             self._ring.appendleft(rec)
 
-    def get_by_session_id(
-        self, session_id: str
-    ) -> Optional[AndroidParticipantSessionRecord]:
+    def get_by_session_id(self, session_id: str) -> Optional[AndroidParticipantSessionRecord]:
         """Return the most recent record for *session_id*, or ``None``."""
         with self._lock:
             for rec in self._ring:

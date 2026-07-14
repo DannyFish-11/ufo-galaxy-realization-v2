@@ -39,7 +39,6 @@ from __future__ import annotations
 import pathlib
 import sys
 
-
 # ---------------------------------------------------------------------------
 # Group A: Canonical authority chain — module-level import checks
 # ---------------------------------------------------------------------------
@@ -52,9 +51,10 @@ class TestGroupA_CanonicalAuthorityChain:
         """DesktopPresenceRuntime can be imported without error."""
         from core.desktop_presence_runtime import (  # noqa: F401
             DesktopPresenceRuntime,
-            get_desktop_presence_runtime,
             TriState,
+            get_desktop_presence_runtime,
         )
+
         assert TriState.SILENT.value == "silent"
         assert TriState.LIMINAL.value == "liminal"
         assert TriState.MANIFEST.value == "manifest"
@@ -62,24 +62,30 @@ class TestGroupA_CanonicalAuthorityChain:
     def test_a2_openclawd_importable(self):
         """OpenClawd can be imported without error."""
         from core.openclawd import get_openclawd  # noqa: F401
+
         assert callable(get_openclawd)
 
     def test_a3_command_router_importable(self):
         """CommandRouter can be imported without error."""
         from core.command_router import CommandRouter  # noqa: F401
+
         assert CommandRouter is not None
 
     def test_a4_tristate_has_exactly_three_values(self):
         """TriState must have exactly SILENT / LIMINAL / MANIFEST — no UI states."""
         from core.desktop_presence_runtime import TriState
+
         values = {s.value for s in TriState}
-        assert values == {"silent", "liminal", "manifest"}, (
-            f"TriState must be exactly silent/liminal/manifest, got: {values}"
-        )
+        assert values == {
+            "silent",
+            "liminal",
+            "manifest",
+        }, f"TriState must be exactly silent/liminal/manifest, got: {values}"
 
     def test_a5_runtime_session_id_type(self):
         """RuntimeSession generates a non-empty string runtime_session_id."""
         from core.desktop_presence_runtime import RuntimeSession, TriState
+
         session = RuntimeSession(source="test")
         assert isinstance(session.runtime_session_id, str)
         assert len(session.runtime_session_id) > 0
@@ -90,20 +96,16 @@ class TestGroupA_CanonicalAuthorityChain:
         root = pathlib.Path(__file__).parent.parent
 
         dpr_src = (root / "core" / "desktop_presence_runtime.py").read_text(encoding="utf-8")
-        assert "runtime shell" in dpr_src, (
-            "core/desktop_presence_runtime.py must identify itself as the runtime shell"
-        )
-        assert "subject core" in dpr_src, (
-            "core/desktop_presence_runtime.py must reference OpenClawd as the subject core"
-        )
+        assert "runtime shell" in dpr_src, "core/desktop_presence_runtime.py must identify itself as the runtime shell"
+        assert (
+            "subject core" in dpr_src
+        ), "core/desktop_presence_runtime.py must reference OpenClawd as the subject core"
 
         oc_src = (root / "core" / "openclawd.py").read_text(encoding="utf-8")
-        assert "subject core" in oc_src.lower() or "Subject Core" in oc_src, (
-            "core/openclawd.py must identify itself as the subject core"
-        )
-        assert "liminal" in oc_src, (
-            "core/openclawd.py must describe operating inside the liminal phase"
-        )
+        assert (
+            "subject core" in oc_src.lower() or "Subject Core" in oc_src
+        ), "core/openclawd.py must identify itself as the subject core"
+        assert "liminal" in oc_src, "core/openclawd.py must describe operating inside the liminal phase"
 
 
 # ---------------------------------------------------------------------------
@@ -126,6 +128,7 @@ class TestGroupB_Proto002Closure:
         from galaxy_gateway.android.handlers.task_lifecycle import (  # noqa: F401
             handle_task_cancel,
         )
+
         assert callable(handle_task_cancel)
 
     def test_b2_handle_task_status_importable(self):
@@ -133,6 +136,7 @@ class TestGroupB_Proto002Closure:
         from galaxy_gateway.android.handlers.task_lifecycle import (  # noqa: F401
             handle_task_status,
         )
+
         assert callable(handle_task_status)
 
     def test_b3_android_bridge_registers_task_cancel_handler(self):
@@ -142,8 +146,7 @@ class TestGroupB_Proto002Closure:
 
         bridge = AndroidBridge()
         assert MessageType.TASK_CANCEL in bridge._message_handlers, (
-            "AndroidBridge must register a handler for TASK_CANCEL — "
-            "it must NOT fall through to _handle_forward_log"
+            "AndroidBridge must register a handler for TASK_CANCEL — " "it must NOT fall through to _handle_forward_log"
         )
 
     def test_b4_android_bridge_registers_task_status_handler(self):
@@ -153,14 +156,13 @@ class TestGroupB_Proto002Closure:
 
         bridge = AndroidBridge()
         assert MessageType.TASK_STATUS in bridge._message_handlers, (
-            "AndroidBridge must register a handler for TASK_STATUS — "
-            "it must NOT fall through to _handle_forward_log"
+            "AndroidBridge must register a handler for TASK_STATUS — " "it must NOT fall through to _handle_forward_log"
         )
 
     def test_b5_task_cancel_handler_returns_ack(self):
         """handle_task_cancel returns a task_cancel_ack message."""
         import asyncio
-        from unittest.mock import MagicMock, AsyncMock, patch
+        from unittest.mock import AsyncMock, MagicMock, patch
 
         from galaxy_gateway.android.handlers.task_lifecycle import handle_task_cancel
 
@@ -177,13 +179,11 @@ class TestGroupB_Proto002Closure:
         }
         ws = MagicMock()
 
-        result = asyncio.new_event_loop().run_until_complete(
-            handle_task_cancel(bridge, ws, message)
-        )
+        result = asyncio.new_event_loop().run_until_complete(handle_task_cancel(bridge, ws, message))
         assert isinstance(result, dict), "handle_task_cancel must return a dict"
-        assert result.get("type") == "task_cancel_ack", (
-            f"handle_task_cancel must return task_cancel_ack, got type={result.get('type')!r}"
-        )
+        assert (
+            result.get("type") == "task_cancel_ack"
+        ), f"handle_task_cancel must return task_cancel_ack, got type={result.get('type')!r}"
         assert result.get("task_id") == "task_abc"
 
     def test_b6_task_status_handler_returns_status_response(self):
@@ -206,13 +206,11 @@ class TestGroupB_Proto002Closure:
         }
         ws = MagicMock()
 
-        result = asyncio.new_event_loop().run_until_complete(
-            handle_task_status(bridge, ws, message)
-        )
+        result = asyncio.new_event_loop().run_until_complete(handle_task_status(bridge, ws, message))
         assert isinstance(result, dict), "handle_task_status must return a dict"
-        assert result.get("type") == "task_status_response", (
-            f"handle_task_status must return task_status_response, got type={result.get('type')!r}"
-        )
+        assert (
+            result.get("type") == "task_status_response"
+        ), f"handle_task_status must return task_status_response, got type={result.get('type')!r}"
         assert result.get("task_id") == "task_xyz"
 
     def test_b7_task_cancel_gap_matrix_marked_resolved(self):
@@ -226,8 +224,7 @@ class TestGroupB_Proto002Closure:
         )
         assert proto_002_line is not None, "PROTO-002 row not found in DUAL_REPO_GAP_MATRIX.md"
         assert "RESOLVED" in proto_002_line, (
-            f"PROTO-002 must be marked RESOLVED in DUAL_REPO_GAP_MATRIX.md; "
-            f"found: {proto_002_line!r}"
+            f"PROTO-002 must be marked RESOLVED in DUAL_REPO_GAP_MATRIX.md; " f"found: {proto_002_line!r}"
         )
 
 
@@ -253,25 +250,21 @@ class TestGroupC_Sched001Closure:
         """core.capability_network_runtime_policy is importable."""
         try:
             from core.capability_network_runtime_policy import (  # noqa: F401
-                query_routable_executors,
                 query_network_path,
+                query_routable_executors,
             )
         except ImportError as exc:
-            assert False, (
-                f"core.capability_network_runtime_policy must be importable: {exc}"
-            )
+            assert False, f"core.capability_network_runtime_policy must be importable: {exc}"
 
     def test_c2_command_router_source_references_capability_query(self):
         """CommandRouter source references query_routable_executors call."""
         root = pathlib.Path(__file__).parent.parent
         src = (root / "core" / "command_router.py").read_text(encoding="utf-8")
         assert "query_routable_executors" in src, (
-            "core/command_router.py must call query_routable_executors() "
-            "in route_envelope() to close SCHED-001"
+            "core/command_router.py must call query_routable_executors() " "in route_envelope() to close SCHED-001"
         )
         assert "query_network_path" in src, (
-            "core/command_router.py must call query_network_path() "
-            "in route_envelope() to close SCHED-001"
+            "core/command_router.py must call query_network_path() " "in route_envelope() to close SCHED-001"
         )
 
     def test_c3_sched001_gap_matrix_marked_resolved(self):
@@ -284,8 +277,7 @@ class TestGroupC_Sched001Closure:
         )
         assert sched_001_line is not None, "SCHED-001 row not found in DUAL_REPO_GAP_MATRIX.md"
         assert "RESOLVED" in sched_001_line, (
-            f"SCHED-001 must be marked RESOLVED in DUAL_REPO_GAP_MATRIX.md; "
-            f"found: {sched_001_line!r}"
+            f"SCHED-001 must be marked RESOLVED in DUAL_REPO_GAP_MATRIX.md; " f"found: {sched_001_line!r}"
         )
 
     def test_c4_command_router_capability_enforcement_in_route_envelope(self):
@@ -295,12 +287,12 @@ class TestGroupC_Sched001Closure:
         """
         root = pathlib.Path(__file__).parent.parent
         src = (root / "core" / "command_router.py").read_text(encoding="utf-8")
-        assert "_query_exec(" in src or "query_routable_executors" in src, (
-            "core/command_router.py must call query_routable_executors() in route_envelope()"
-        )
-        assert "_query_path(" in src or "query_network_path" in src, (
-            "core/command_router.py must call query_network_path() in route_envelope()"
-        )
+        assert (
+            "_query_exec(" in src or "query_routable_executors" in src
+        ), "core/command_router.py must call query_routable_executors() in route_envelope()"
+        assert (
+            "_query_path(" in src or "query_network_path" in src
+        ), "core/command_router.py must call query_network_path() in route_envelope()"
 
 
 # ---------------------------------------------------------------------------
@@ -358,9 +350,7 @@ class TestGroupD_GatewayChatAuthorityChain:
         """chat_endpoint does NOT call openclawd_instance.process() directly."""
         src = self._read_chat_route()
         chat_ep_start = src.find("async def chat_endpoint(")
-        assert chat_ep_start != -1, (
-            "chat_endpoint not found in galaxy_gateway/routes/chat.py"
-        )
+        assert chat_ep_start != -1, "chat_endpoint not found in galaxy_gateway/routes/chat.py"
         # Find end of function body
         candidates = [
             src.find("\n@router.", chat_ep_start + 50),
@@ -377,20 +367,15 @@ class TestGroupD_GatewayChatAuthorityChain:
     def test_d5_gateway_app_describes_internal_substrate(self):
         """galaxy_gateway/app.py describes itself as an internal substrate."""
         src = self._read_gateway_app()
-        assert "internal" in src.lower(), (
-            "galaxy_gateway/app.py must declare itself as an internal substrate"
-        )
+        assert "internal" in src.lower(), "galaxy_gateway/app.py must declare itself as an internal substrate"
 
     def test_d6_chat_route_module_doc_mentions_authority_chain(self):
         """galaxy_gateway/routes/chat.py module docstring documents the authority chain."""
         src = self._read_chat_route()
         assert "DesktopPresenceRuntime" in src, (
-            "galaxy_gateway/routes/chat.py must mention DesktopPresenceRuntime "
-            "to document the authority chain"
+            "galaxy_gateway/routes/chat.py must mention DesktopPresenceRuntime " "to document the authority chain"
         )
-        assert "handle_request" in src, (
-            "galaxy_gateway/routes/chat.py must mention handle_request"
-        )
+        assert "handle_request" in src, "galaxy_gateway/routes/chat.py must mention handle_request"
 
 
 # ---------------------------------------------------------------------------
@@ -412,6 +397,7 @@ class TestGroupE_MeshSessionBaseline:
             MeshSessionCoordinatorState,
             build_mesh_session_coordinator,
         )
+
         state = build_mesh_session_coordinator(session_id="test_session")
         assert state.session_id == "test_session"
 
@@ -420,6 +406,7 @@ class TestGroupE_MeshSessionBaseline:
         from core.mesh.live_mesh_runtime_engine import (  # noqa: F401
             run_live_mesh_session,
         )
+
         assert callable(run_live_mesh_session)
 
     def test_e3_live_mesh_session_coordinator_importable(self):
@@ -427,6 +414,7 @@ class TestGroupE_MeshSessionBaseline:
         from core.mesh.live_mesh_session_coordinator import (  # noqa: F401
             LiveMeshSessionCoordinator,
         )
+
         assert LiveMeshSessionCoordinator is not None
 
     def test_e4_mesh_session_coordinator_convenience_importable(self):
@@ -435,17 +423,20 @@ class TestGroupE_MeshSessionBaseline:
             coordinate_mesh_session,
             run_live_mesh_session,
         )
+
         assert callable(coordinate_mesh_session)
 
     def test_e5_coordinate_mesh_session_returns_state(self):
         """coordinate_mesh_session() returns a coordinator state without error."""
         from core.mesh.mesh_session_coordinator import coordinate_mesh_session
+
         state = coordinate_mesh_session(session_id="baseline_test", mesh_id="mesh_001")
         assert state is not None, "coordinate_mesh_session must return a non-None state"
 
     def test_e6_mesh_session_status_contract_importable(self):
         """contracts.mesh_session.MeshSessionStatus is importable."""
         from contracts.mesh_session import MeshSession, build_mesh_session  # noqa: F401
+
         session = build_mesh_session(
             source_device_id="device_a",
             primary_device_id="device_b",

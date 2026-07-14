@@ -125,7 +125,6 @@ import uuid
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # 1. RuntimeSessionSnapshotStatus — all expected values present
 # ---------------------------------------------------------------------------
@@ -814,8 +813,8 @@ class TestBuildRuntimeSessionSnapshot:
 
     def test_status_inferred_from_recovery_resolved(self):
         from contracts.runtime_session_snapshot import (
-            build_runtime_session_snapshot,
             RuntimeSessionSnapshotStatus,
+            build_runtime_session_snapshot,
         )
 
         snap = build_runtime_session_snapshot(
@@ -825,8 +824,8 @@ class TestBuildRuntimeSessionSnapshot:
 
     def test_status_inferred_from_recovery_in_progress(self):
         from contracts.runtime_session_snapshot import (
-            build_runtime_session_snapshot,
             RuntimeSessionSnapshotStatus,
+            build_runtime_session_snapshot,
         )
 
         snap = build_runtime_session_snapshot(
@@ -836,8 +835,8 @@ class TestBuildRuntimeSessionSnapshot:
 
     def test_status_inferred_from_merged_result_completed(self):
         from contracts.runtime_session_snapshot import (
-            build_runtime_session_snapshot,
             RuntimeSessionSnapshotStatus,
+            build_runtime_session_snapshot,
         )
 
         snap = build_runtime_session_snapshot(
@@ -847,8 +846,8 @@ class TestBuildRuntimeSessionSnapshot:
 
     def test_explicit_status_overrides_inference(self):
         from contracts.runtime_session_snapshot import (
-            build_runtime_session_snapshot,
             RuntimeSessionSnapshotStatus,
+            build_runtime_session_snapshot,
         )
 
         snap = build_runtime_session_snapshot(
@@ -957,13 +956,15 @@ class TestFromMeshSession:
     def test_participants_mapped_to_runtime_devices(self):
         from contracts.runtime_session_snapshot import from_mesh_session
 
-        snap = from_mesh_session({
-            "session_id": "ms_01",
-            "participants": [
-                {"device_id": "dev_a"},
-                {"device_id": "dev_b"},
-            ],
-        })
+        snap = from_mesh_session(
+            {
+                "session_id": "ms_01",
+                "participants": [
+                    {"device_id": "dev_a"},
+                    {"device_id": "dev_b"},
+                ],
+            }
+        )
         assert len(snap.runtime_devices) == 2
 
     def test_never_raises_on_garbage(self):
@@ -1143,77 +1144,95 @@ class TestFromMultiDeviceRuntimeProjection:
     def test_devices_extracted(self):
         from contracts.runtime_session_snapshot import from_multi_device_runtime_projection
 
-        snap = from_multi_device_runtime_projection({
-            "runtime_devices": [{"device_id": "d1"}, {"device_id": "d2"}],
-        })
+        snap = from_multi_device_runtime_projection(
+            {
+                "runtime_devices": [{"device_id": "d1"}, {"device_id": "d2"}],
+            }
+        )
         assert len(snap.runtime_devices) == 2
 
     def test_hosts_extracted(self):
         from contracts.runtime_session_snapshot import from_multi_device_runtime_projection
 
-        snap = from_multi_device_runtime_projection({
-            "runtime_hosts": [{"host_id": "h1"}],
-        })
+        snap = from_multi_device_runtime_projection(
+            {
+                "runtime_hosts": [{"host_id": "h1"}],
+            }
+        )
         assert len(snap.runtime_hosts) == 1
 
     def test_mesh_memberships_extracted(self):
         from contracts.runtime_session_snapshot import from_multi_device_runtime_projection
 
-        snap = from_multi_device_runtime_projection({
-            "mesh_memberships": [{"device_id": "d1"}],
-        })
+        snap = from_multi_device_runtime_projection(
+            {
+                "mesh_memberships": [{"device_id": "d1"}],
+            }
+        )
         assert len(snap.mesh_memberships) == 1
 
     def test_mesh_session_from_first_entry(self):
         from contracts.runtime_session_snapshot import from_multi_device_runtime_projection
 
-        snap = from_multi_device_runtime_projection({
-            "mesh_sessions": [{"session_id": "ms_01"}, {"session_id": "ms_02"}],
-        })
+        snap = from_multi_device_runtime_projection(
+            {
+                "mesh_sessions": [{"session_id": "ms_01"}, {"session_id": "ms_02"}],
+            }
+        )
         assert snap.mesh_session is not None
         assert snap.mesh_session.get("session_id") == "ms_01"
 
     def test_dispatch_from_first_dispatch_entry(self):
         from contracts.runtime_session_snapshot import from_multi_device_runtime_projection
 
-        snap = from_multi_device_runtime_projection({
-            "source_dispatches": [{"mode": "cross_device", "status": "dispatched"}],
-        })
+        snap = from_multi_device_runtime_projection(
+            {
+                "source_dispatches": [{"mode": "cross_device", "status": "dispatched"}],
+            }
+        )
         assert snap.dispatch_state is not None
 
     def test_takeovers_extracted(self):
         from contracts.runtime_session_snapshot import from_multi_device_runtime_projection
 
-        snap = from_multi_device_runtime_projection({
-            "takeover_summaries": [
-                {"target_device_id": "dev_01"},
-                {"target_device_id": "dev_02"},
-            ],
-        })
+        snap = from_multi_device_runtime_projection(
+            {
+                "takeover_summaries": [
+                    {"target_device_id": "dev_01"},
+                    {"target_device_id": "dev_02"},
+                ],
+            }
+        )
         assert len(snap.takeover_states) == 2
 
     def test_coordinator_from_first_entry(self):
         from contracts.runtime_session_snapshot import from_multi_device_runtime_projection
 
-        snap = from_multi_device_runtime_projection({
-            "coordinator_summaries": [{"coordinator_id": "coord_01", "status": "healthy"}],
-        })
+        snap = from_multi_device_runtime_projection(
+            {
+                "coordinator_summaries": [{"coordinator_id": "coord_01", "status": "healthy"}],
+            }
+        )
         assert snap.coordinator_state is not None
 
     def test_merged_result_from_first_entry(self):
         from contracts.runtime_session_snapshot import from_multi_device_runtime_projection
 
-        snap = from_multi_device_runtime_projection({
-            "merged_results": [{"status": "authoritative"}],
-        })
+        snap = from_multi_device_runtime_projection(
+            {
+                "merged_results": [{"status": "authoritative"}],
+            }
+        )
         assert snap.merged_result is not None
 
     def test_recovery_state_extracted(self):
         from contracts.runtime_session_snapshot import from_multi_device_runtime_projection
 
-        snap = from_multi_device_runtime_projection({
-            "runtime_recovery": {"status": "resolved"},
-        })
+        snap = from_multi_device_runtime_projection(
+            {
+                "runtime_recovery": {"status": "resolved"},
+            }
+        )
         assert snap.recovery_state is not None
 
     def test_session_id_kwarg_respected(self):
@@ -1288,6 +1307,7 @@ class TestRuntimeSessionSnapshotRoute:
     def test_route_returns_valid_json(self):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
         from core.routes.projection import create_router as create_projection_router
 
         app = FastAPI()
@@ -1301,6 +1321,7 @@ class TestRuntimeSessionSnapshotRoute:
     def test_route_stable_top_level_keys(self):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
         from core.routes.projection import create_router as create_projection_router
 
         app = FastAPI()
@@ -1320,6 +1341,7 @@ class TestRuntimeSessionSnapshotRoute:
         """Route always returns 200, never 500."""
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
         from core.routes.projection import create_router as create_projection_router
 
         app = FastAPI()

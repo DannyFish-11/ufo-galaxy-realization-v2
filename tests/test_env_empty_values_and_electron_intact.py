@@ -28,8 +28,8 @@ import os
 
 import pytest
 
-from core.routes import config as config_module
 from core.electron_launch_guard import electron_package_intact
+from core.routes import config as config_module
 
 
 class TestWriteEnvFileSkipsEmptyValues:
@@ -42,9 +42,7 @@ class TestWriteEnvFileSkipsEmptyValues:
         # 确保一个默认值为空的 key 未配置。
         monkeypatch.delenv("OLLAMA_URL", raising=False)
         content = self._write_and_read(tmp_path, monkeypatch)
-        assert "OLLAMA_URL=" not in content, (
-            ".env 里不该出现空值行 OLLAMA_URL= ——空字符串会把代码默认值顶掉"
-        )
+        assert "OLLAMA_URL=" not in content, ".env 里不该出现空值行 OLLAMA_URL= ——空字符串会把代码默认值顶掉"
 
     def test_explicit_empty_env_value_also_skipped(self, tmp_path, monkeypatch):
         monkeypatch.setenv("REDIS_URL", "")
@@ -70,15 +68,14 @@ class TestDotenvLoaderSkipsEmptyValues:
 
     def test_empty_values_not_loaded_into_environ(self, tmp_path, monkeypatch):
         env_file = tmp_path / ".env"
-        env_file.write_text(
-            "OLLAMA_URL=\nREDIS_URL=\nDEEPSEEK_API_KEY=sk-real\n", encoding="utf-8"
-        )
+        env_file.write_text("OLLAMA_URL=\nREDIS_URL=\nDEEPSEEK_API_KEY=sk-real\n", encoding="utf-8")
         monkeypatch.delenv("OLLAMA_URL", raising=False)
         monkeypatch.delenv("REDIS_URL", raising=False)
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
 
         # 与 main.py 顶部相同的加载逻辑。
         from dotenv import dotenv_values
+
         for k, v in (dotenv_values(str(env_file)) or {}).items():
             if v and k not in os.environ:
                 os.environ[k] = v
@@ -87,10 +84,7 @@ class TestDotenvLoaderSkipsEmptyValues:
             assert "REDIS_URL" not in os.environ
             assert os.environ.get("DEEPSEEK_API_KEY") == "sk-real"
             # 核心断言:默认值不再被空字符串顶掉。
-            assert (
-                os.environ.get("OLLAMA_URL", "http://localhost:11434")
-                == "http://localhost:11434"
-            )
+            assert os.environ.get("OLLAMA_URL", "http://localhost:11434") == "http://localhost:11434"
         finally:
             os.environ.pop("DEEPSEEK_API_KEY", None)
 

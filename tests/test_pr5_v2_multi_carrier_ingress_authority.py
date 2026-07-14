@@ -69,6 +69,7 @@ def _run_async(coro):
 # Helpers — build a minimal DesktopPresenceRuntime mock result
 # ---------------------------------------------------------------------------
 
+
 def _make_mock_runtime_result(
     source: str = "chat",
     session_id: str = "test_session",
@@ -103,6 +104,7 @@ def _make_mock_runtime_result(
 # A. Source-level inspection — android_vision handler
 # ============================================================================
 
+
 class TestAndroidVisionHandlerSource:
     """Inspect galaxy_gateway/android/handlers/vision.py source."""
 
@@ -132,15 +134,14 @@ class TestAndroidVisionHandlerSource:
 
     def test_4_android_vision_session_id_uses_task_id(self):
         """vision.py must derive session_id from task_id when available."""
-        assert "task_id" in self._SRC and "session_id" in self._SRC, (
-            "vision.py should correlate session_id with the incoming task_id."
-        )
+        assert (
+            "task_id" in self._SRC and "session_id" in self._SRC
+        ), "vision.py should correlate session_id with the incoming task_id."
 
     def test_5_android_vision_session_id_fallback(self):
         """vision.py must fall back to android_vision_{device_id} when no task_id."""
         assert "android_vision_" in self._SRC, (
-            "vision.py must use 'android_vision_{device_id}' as fallback session_id "
-            "when no task_id is available."
+            "vision.py must use 'android_vision_{device_id}' as fallback session_id " "when no task_id is available."
         )
 
     def test_19_android_vision_passes_all_three_canonical_params(self):
@@ -156,6 +157,7 @@ class TestAndroidVisionHandlerSource:
 # B. Source-level inspection — vision_sampler
 # ============================================================================
 
+
 class TestVisionSamplerSource:
     """Inspect core/services/vision_sampler.py source."""
 
@@ -164,15 +166,13 @@ class TestVisionSamplerSource:
     def test_6_vision_sampler_passes_session_id(self):
         """vision_sampler.py must pass session_id= to handle_request."""
         assert "session_id=" in self._SRC, (
-            "core/services/vision_sampler.py must pass session_id= to "
-            "DesktopPresenceRuntime.handle_request()."
+            "core/services/vision_sampler.py must pass session_id= to " "DesktopPresenceRuntime.handle_request()."
         )
 
     def test_7_vision_sampler_passes_user_id(self):
         """vision_sampler.py must pass user_id= to handle_request."""
         assert "user_id=" in self._SRC, (
-            "core/services/vision_sampler.py must pass user_id= to "
-            "DesktopPresenceRuntime.handle_request()."
+            "core/services/vision_sampler.py must pass user_id= to " "DesktopPresenceRuntime.handle_request()."
         )
 
     def test_8_vision_sampler_passes_entry_mode_local(self):
@@ -201,6 +201,7 @@ class TestVisionSamplerSource:
 # ============================================================================
 # C. Source-level inspection — compat WS chat handler
 # ============================================================================
+
 
 class TestCompatWSChatSource:
     """Inspect the compat WS chat handler in core/api_routes.py."""
@@ -235,6 +236,7 @@ class TestCompatWSChatSource:
 # D. handle_request result stamp — ingress_carrier_context
 # ============================================================================
 
+
 class TestDesktopPresenceRuntimeCarrierStamp:
     """DesktopPresenceRuntime.handle_request must stamp ingress_carrier_context."""
 
@@ -249,9 +251,9 @@ class TestDesktopPresenceRuntimeCarrierStamp:
 
     def test_13_carrier_field_uses_source(self):
         """ingress_carrier_context must include a 'carrier' field set from source."""
-        assert '"carrier"' in self._SRC or "'carrier'" in self._SRC, (
-            "ingress_carrier_context must include a 'carrier' key."
-        )
+        assert (
+            '"carrier"' in self._SRC or "'carrier'" in self._SRC
+        ), "ingress_carrier_context must include a 'carrier' key."
 
     def test_14_authority_chain_field_present(self):
         """ingress_carrier_context must include an 'authority_chain' field."""
@@ -272,6 +274,7 @@ class TestDesktopPresenceRuntimeCarrierStamp:
 # E. Source-level stamp verification — desktop_presence_runtime
 # ============================================================================
 
+
 class TestHandleRequestIngressCarrierContextBehavior:
     """Verify that handle_request correctly stamps ingress_carrier_context.
 
@@ -285,23 +288,20 @@ class TestHandleRequestIngressCarrierContextBehavior:
     def test_12_result_contains_ingress_carrier_context(self):
         """handle_request must set ingress_carrier_context on the result."""
         assert "ingress_carrier_context" in self._SRC, (
-            "core/desktop_presence_runtime.py must stamp 'ingress_carrier_context' "
-            "on the result dict."
+            "core/desktop_presence_runtime.py must stamp 'ingress_carrier_context' " "on the result dict."
         )
 
     def test_13_carrier_equals_entrypoint_source(self):
         """ingress_carrier_context.carrier must be derived from source."""
         # The stamp should use the `source` local variable as the carrier value
         assert '"carrier": source' in self._SRC or "'carrier': source" in self._SRC, (
-            "ingress_carrier_context must set carrier=source so it mirrors "
-            "entrypoint_source for all carriers."
+            "ingress_carrier_context must set carrier=source so it mirrors " "entrypoint_source for all carriers."
         )
 
     def test_14_authority_chain_value(self):
         """ingress_carrier_context.authority_chain must name handle_request."""
         assert "DesktopPresenceRuntime.handle_request" in self._SRC, (
-            "ingress_carrier_context.authority_chain must be set to "
-            "'DesktopPresenceRuntime.handle_request'."
+            "ingress_carrier_context.authority_chain must be set to " "'DesktopPresenceRuntime.handle_request'."
         )
 
     def test_15_session_id_in_carrier_context(self):
@@ -315,9 +315,9 @@ class TestHandleRequestIngressCarrierContextBehavior:
 
     def test_16_user_id_in_carrier_context(self):
         """ingress_carrier_context must include user_id."""
-        assert '"user_id"' in self._SRC or "'user_id'" in self._SRC, (
-            "ingress_carrier_context must include a 'user_id' key."
-        )
+        assert (
+            '"user_id"' in self._SRC or "'user_id'" in self._SRC
+        ), "ingress_carrier_context must include a 'user_id' key."
 
     def test_17_authority_metadata_present(self):
         """desktop_presence_runtime.py must define authority_metadata stamp."""
@@ -341,6 +341,7 @@ class TestHandleRequestIngressCarrierContextBehavior:
 # F. Source-level verification — android_vision session_id derivation
 # ============================================================================
 
+
 class TestAndroidVisionRuntimeShellBehavior:
     """Source-level verification of session_id derivation in android_vision."""
 
@@ -350,15 +351,13 @@ class TestAndroidVisionRuntimeShellBehavior:
         """vision.py must set session_id from task_id when task_id is non-empty."""
         # The source must contain logic that picks task_id as the session_id
         assert "task_id or" in self._SRC or "task_id =" in self._SRC, (
-            "vision.py must derive session_id from task_id when available; "
-            "check the _session_id derivation logic."
+            "vision.py must derive session_id from task_id when available; " "check the _session_id derivation logic."
         )
 
     def test_5_session_id_fallback_to_android_vision_prefix(self):
         """vision.py must fall back to 'android_vision_{device_id}' for session_id."""
         assert "android_vision_" in self._SRC, (
-            "vision.py must use 'android_vision_{device_id}' as the fallback "
-            "session_id when task_id is empty."
+            "vision.py must use 'android_vision_{device_id}' as the fallback " "session_id when task_id is empty."
         )
 
     def test_android_vision_passes_source_as_android_vision(self):
@@ -370,6 +369,6 @@ class TestAndroidVisionRuntimeShellBehavior:
 
     def test_android_vision_passes_entry_mode_local(self):
         """vision.py must pass entry_mode='local' to handle_request."""
-        assert 'entry_mode="local"' in self._SRC or "entry_mode='local'" in self._SRC, (
-            "vision.py must pass entry_mode='local' to handle_request."
-        )
+        assert (
+            'entry_mode="local"' in self._SRC or "entry_mode='local'" in self._SRC
+        ), "vision.py must pass entry_mode='local' to handle_request."

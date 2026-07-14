@@ -26,6 +26,7 @@ class VectorBackendProvider(MemoryProvider):
     def _get(self):
         if self._backend is None:
             from core.vector_backend import create_vector_backend, get_shared_backend
+
             pref = os.getenv("KB_VECTOR_BACKEND", "auto").strip().lower()
             if pref == "auto":
                 # 优先 chroma(真嵌入语义检索)；chromadb 未装则内部自动降级到 local
@@ -79,11 +80,13 @@ class VectorBackendProvider(MemoryProvider):
             return []
         hits: List[MemoryHit] = []
         for r in results or []:
-            hits.append(MemoryHit(
-                content=getattr(r, "content", "") or "",
-                score=float(getattr(r, "score", 0.0) or 0.0),
-                source=self.backend_name,
-                modality=str((getattr(r, "metadata", {}) or {}).get("modality", "text")),
-                metadata=getattr(r, "metadata", {}) or {},
-            ))
+            hits.append(
+                MemoryHit(
+                    content=getattr(r, "content", "") or "",
+                    score=float(getattr(r, "score", 0.0) or 0.0),
+                    source=self.backend_name,
+                    modality=str((getattr(r, "metadata", {}) or {}).get("modality", "text")),
+                    metadata=getattr(r, "metadata", {}) or {},
+                )
+            )
         return hits

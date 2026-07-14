@@ -58,14 +58,13 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from core.android_device_state_store import (
-    absorb_device_state_snapshot,
     absorb_device_execution_event,
+    absorb_device_state_snapshot,
     get_device_ecosystem_summary,
     get_device_state_snapshot,
     list_recent_execution_events,
     reset_android_device_state_store,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -83,6 +82,7 @@ def _reset_store():
 def _make_router_app() -> FastAPI:
     """Build a minimal FastAPI app mounting only the operator router."""
     from core.routes.operator import create_router
+
     app = FastAPI()
     app.include_router(create_router())
     return app
@@ -222,8 +222,7 @@ class TestEcosystemModelSubdictPresenceFields:
         for key, expected_value in expected.items():
             assert key in m, f"Missing key in model sub-dict: {key}"
             assert m[key] == expected_value, (
-                f"Value mismatch for model sub-dict key {key!r}: "
-                f"expected {expected_value!r}, got {m[key]!r}"
+                f"Value mismatch for model sub-dict key {key!r}: " f"expected {expected_value!r}, got {m[key]!r}"
             )
 
     def test_C06_none_values_for_unset_presence_fields(self):
@@ -328,16 +327,33 @@ class TestCrossPathSchemaConsistency:
         snap = absorb_device_state_snapshot("cp_dev_01", self._FULL_PAYLOAD)
         d = snap.to_dict()
         for key in (
-            "_source", "device_id", "absorbed_at", "snapshot_ts",
-            "llama_cpp_available", "ncnn_available", "active_runtime_type",
-            "model_ready", "accessibility_ready", "overlay_ready", "local_loop_ready",
-            "model_id", "runtime_type", "checksum_ok", "compatibility_ok",
-            "quantization", "model_version",
-            "mobilevlm_present", "mobilevlm_checksum_ok", "seeclick_present",
+            "_source",
+            "device_id",
+            "absorbed_at",
+            "snapshot_ts",
+            "llama_cpp_available",
+            "ncnn_available",
+            "active_runtime_type",
+            "model_ready",
+            "accessibility_ready",
+            "overlay_ready",
+            "local_loop_ready",
+            "model_id",
+            "runtime_type",
+            "checksum_ok",
+            "compatibility_ok",
+            "quantization",
+            "model_version",
+            "mobilevlm_present",
+            "mobilevlm_checksum_ok",
+            "seeclick_present",
             "pending_first_download",
-            "offline_queue_depth", "current_fallback_tier",
-            "planner_fallback_tier", "grounding_fallback_tier",
-            "warmup_result", "degraded_reasons",
+            "offline_queue_depth",
+            "current_fallback_tier",
+            "planner_fallback_tier",
+            "grounding_fallback_tier",
+            "warmup_result",
+            "degraded_reasons",
             "runtime_health_snapshot",
         ):
             assert key in d, f"to_dict() missing key: {key}"
@@ -357,13 +373,18 @@ class TestCrossPathSchemaConsistency:
 
         d = snap.to_dict()
         m = dev["model"]
-        for key in ("model_id", "runtime_type", "checksum_ok", "compatibility_ok",
-                    "quantization", "model_version",
-                    "mobilevlm_present", "mobilevlm_checksum_ok", "seeclick_present"):
-            assert d[key] == m[key], (
-                f"Model field mismatch for {key}: "
-                f"to_dict={d[key]} ecosystem_model={m[key]}"
-            )
+        for key in (
+            "model_id",
+            "runtime_type",
+            "checksum_ok",
+            "compatibility_ok",
+            "quantization",
+            "model_version",
+            "mobilevlm_present",
+            "mobilevlm_checksum_ok",
+            "seeclick_present",
+        ):
+            assert d[key] == m[key], f"Model field mismatch for {key}: " f"to_dict={d[key]} ecosystem_model={m[key]}"
 
     def test_E04_snapshot_ts_consistent_across_surfaces(self):
         absorb_device_state_snapshot("cp_dev_04", self._FULL_PAYLOAD)
@@ -390,8 +411,7 @@ class TestCrossPathSchemaConsistency:
 
         for key in ("current_fallback_tier", "planner_fallback_tier", "grounding_fallback_tier"):
             assert snap.to_dict()[key] == dev[key], (
-                f"Fallback tier mismatch for {key}: "
-                f"to_dict={snap.to_dict()[key]} ecosystem={dev[key]}"
+                f"Fallback tier mismatch for {key}: " f"to_dict={snap.to_dict()[key]} ecosystem={dev[key]}"
             )
 
 
@@ -436,6 +456,7 @@ class TestListRecentExecutionEventsModuleWrapper:
     def test_F07_wrapper_equivalent_to_store_method(self):
         """Results from module wrapper must equal results from store method."""
         from core.android_device_state_store import get_android_device_state_store
+
         absorb_device_execution_event("fw_dev_05", {"flow_id": "f_equiv", "phase": "completed"})
         store_result = get_android_device_state_store().list_recent_execution_events()
         wrapper_result = list_recent_execution_events()

@@ -387,11 +387,7 @@ class TerminalStateConsistencyRecord:
     @property
     def is_fully_consistent(self) -> bool:
         """Return True iff the state is present in all three authority surfaces."""
-        return (
-            self.present_in_shared_schema
-            and self.present_in_execution_phase
-            and self.present_in_handoff_contract
-        )
+        return self.present_in_shared_schema and self.present_in_execution_phase and self.present_in_handoff_contract
 
 
 @dataclass(frozen=True)
@@ -601,8 +597,7 @@ _PROTOCOL_SURFACE_CATALOGUE: Tuple[ProtocolSurfaceRecord, ...] = (
             "aligned.  Not yet fully unified at wire level."
         ),
         retirement_pathway=(
-            "Android-side adoption of canonical DispatchDecision field "
-            "structure, retiring the mapping shim."
+            "Android-side adoption of canonical DispatchDecision field " "structure, retiring the mapping shim."
         ),
     ),
     ProtocolSurfaceRecord(
@@ -617,8 +612,7 @@ _PROTOCOL_SURFACE_CATALOGUE: Tuple[ProtocolSurfaceRecord, ...] = (
             "aligned.  Not yet fully unified at wire level."
         ),
         retirement_pathway=(
-            "Android-side adoption of canonical HandoffRequest field "
-            "structure, retiring the mapping shim."
+            "Android-side adoption of canonical HandoffRequest field " "structure, retiring the mapping shim."
         ),
     ),
     # ------------------------------------------------------------------
@@ -641,9 +635,7 @@ _PROTOCOL_SURFACE_CATALOGUE: Tuple[ProtocolSurfaceRecord, ...] = (
         surface_id="terminal_state_timed_out_alignment",
         category=ProtocolConsistencyCategory.terminal_state,
         surface_class=ProtocolSurfaceClass.transitional,
-        center_authority=(
-            "core.delegated_runtime_execution_tracker.DelegatedExecutionPhase.timed_out"
-        ),
+        center_authority=("core.delegated_runtime_execution_tracker.DelegatedExecutionPhase.timed_out"),
         android_counterpart="Android timeout variant",
         description=(
             "The execution tracker uses 'timed_out' while "
@@ -692,9 +684,7 @@ _PROTOCOL_SURFACE_CATALOGUE: Tuple[ProtocolSurfaceRecord, ...] = (
         surface_id="runtime_attachment_session_id",
         category=ProtocolConsistencyCategory.session_identifier,
         surface_class=ProtocolSurfaceClass.canonical,
-        center_authority=(
-            "core.canonical_session_axis.SessionFamily.runtime_attachment"
-        ),
+        center_authority=("core.canonical_session_axis.SessionFamily.runtime_attachment"),
         android_counterpart="runtime_session_id / attached_session_id",
         description=(
             "runtime_attachment_session_id is the canonical name for runtime "
@@ -707,9 +697,7 @@ _PROTOCOL_SURFACE_CATALOGUE: Tuple[ProtocolSurfaceRecord, ...] = (
         surface_id="delegation_transfer_session_id",
         category=ProtocolConsistencyCategory.session_identifier,
         surface_class=ProtocolSurfaceClass.canonical,
-        center_authority=(
-            "core.canonical_session_axis.SessionFamily.delegation_transfer"
-        ),
+        center_authority=("core.canonical_session_axis.SessionFamily.delegation_transfer"),
         android_counterpart="transfer_session_id / handoff_session_id",
         description=(
             "delegation_transfer_session_id is the canonical name for "
@@ -736,9 +724,7 @@ _PROTOCOL_SURFACE_CATALOGUE: Tuple[ProtocolSurfaceRecord, ...] = (
         surface_id="delegated_execution_phase",
         category=ProtocolConsistencyCategory.delegated_execution,
         surface_class=ProtocolSurfaceClass.canonical,
-        center_authority=(
-            "core.delegated_runtime_execution_tracker.DelegatedExecutionPhase"
-        ),
+        center_authority=("core.delegated_runtime_execution_tracker.DelegatedExecutionPhase"),
         android_counterpart="Android delegated execution signal kinds",
         description=(
             "DelegatedExecutionPhase is the canonical execution lifecycle "
@@ -750,9 +736,7 @@ _PROTOCOL_SURFACE_CATALOGUE: Tuple[ProtocolSurfaceRecord, ...] = (
         surface_id="handoff_contract_status",
         category=ProtocolConsistencyCategory.delegated_execution,
         surface_class=ProtocolSurfaceClass.canonical,
-        center_authority=(
-            "core.delegated_runtime_handoff_contract.HandoffContractStatus"
-        ),
+        center_authority=("core.delegated_runtime_handoff_contract.HandoffContractStatus"),
         android_counterpart="Android handoff receipt/execution signals",
         description=(
             "HandoffContractStatus governs the lifecycle of a handoff contract "
@@ -765,9 +749,7 @@ _PROTOCOL_SURFACE_CATALOGUE: Tuple[ProtocolSurfaceRecord, ...] = (
         surface_id="delegated_execution_result",
         category=ProtocolConsistencyCategory.delegated_execution,
         surface_class=ProtocolSurfaceClass.canonical,
-        center_authority=(
-            "core.delegated_runtime_execution_tracker.DelegatedExecutionResult"
-        ),
+        center_authority=("core.delegated_runtime_execution_tracker.DelegatedExecutionResult"),
         android_counterpart="Android execution result payload",
         description=(
             "DelegatedExecutionResult is the canonical result structure "
@@ -783,9 +765,7 @@ _PROTOCOL_SURFACE_CATALOGUE: Tuple[ProtocolSurfaceRecord, ...] = (
         surface_id="runtime_capability_profile",
         category=ProtocolConsistencyCategory.runtime_profile,
         surface_class=ProtocolSurfaceClass.canonical,
-        center_authority=(
-            "contracts.registered_runtime_device.RuntimeCapabilityProfile"
-        ),
+        center_authority=("contracts.registered_runtime_device.RuntimeCapabilityProfile"),
         android_counterpart="Android capability_report message",
         description=(
             "RuntimeCapabilityProfile defines the canonical capability surface "
@@ -798,9 +778,7 @@ _PROTOCOL_SURFACE_CATALOGUE: Tuple[ProtocolSurfaceRecord, ...] = (
         surface_id="capability_scheduling_basis",
         category=ProtocolConsistencyCategory.runtime_profile,
         surface_class=ProtocolSurfaceClass.canonical,
-        center_authority=(
-            "core.canonical_capability_scheduling_basis.RuntimeCapabilityProfile"
-        ),
+        center_authority=("core.canonical_capability_scheduling_basis.RuntimeCapabilityProfile"),
         android_counterpart="Android runtime host role and posture",
         description=(
             "The canonical capability scheduling basis (PR-6 post-533) defines "
@@ -813,9 +791,7 @@ _PROTOCOL_SURFACE_CATALOGUE: Tuple[ProtocolSurfaceRecord, ...] = (
         surface_id="source_runtime_posture_field",
         category=ProtocolConsistencyCategory.runtime_profile,
         surface_class=ProtocolSurfaceClass.canonical,
-        center_authority=(
-            "core.canonical_session_truth.CanonicalSessionTruthRecord.source_runtime_posture"
-        ),
+        center_authority=("core.canonical_session_truth.CanonicalSessionTruthRecord.source_runtime_posture"),
         android_counterpart="Android posture field in registration/status",
         description=(
             "source_runtime_posture is a canonical cross-repo field identifying "
@@ -846,9 +822,7 @@ _PROTOCOL_SURFACE_CATALOGUE: Tuple[ProtocolSurfaceRecord, ...] = (
         surface_id="canonical_truth_event_envelope",
         category=ProtocolConsistencyCategory.truth_event,
         surface_class=ProtocolSurfaceClass.canonical,
-        center_authority=(
-            "core.ugcp_truth_event_model.CanonicalTruthEventEnvelope"
-        ),
+        center_authority=("core.ugcp_truth_event_model.CanonicalTruthEventEnvelope"),
         android_counterpart="Android truth event surface (center authority)",
         description=(
             "CanonicalTruthEventEnvelope is the canonical wrapper for all "
@@ -861,9 +835,7 @@ _PROTOCOL_SURFACE_CATALOGUE: Tuple[ProtocolSurfaceRecord, ...] = (
         surface_id="truth_event_type_vocabulary",
         category=ProtocolConsistencyCategory.truth_event,
         surface_class=ProtocolSurfaceClass.canonical,
-        center_authority=(
-            "core.ugcp_truth_event_model.CanonicalTruthEventType"
-        ),
+        center_authority=("core.ugcp_truth_event_model.CanonicalTruthEventType"),
         android_counterpart="Android runtime truth surface",
         description=(
             "The CanonicalTruthEventType vocabulary is frozen (PR-7).  "
@@ -1043,8 +1015,7 @@ _DELEGATED_EXECUTION_STATUS_CATALOGUE: Tuple[DelegatedExecutionStatusRecord, ...
         is_terminal=True,
         android_signal_kind="error",
         notes=(
-            "Android surface reported error or host detected failure.  "
-            "DelegatedExecutionResult has success=False."
+            "Android surface reported error or host detected failure.  " "DelegatedExecutionResult has success=False."
         ),
     ),
     DelegatedExecutionStatusRecord(
@@ -1060,10 +1031,7 @@ _DELEGATED_EXECUTION_STATUS_CATALOGUE: Tuple[DelegatedExecutionStatusRecord, ...
         phase_value="cancelled",
         is_terminal=True,
         android_signal_kind="cancelled",
-        notes=(
-            "Explicitly cancelled by host or Android surface.  "
-            "Both sides use 'cancelled' value."
-        ),
+        notes=("Explicitly cancelled by host or Android surface.  " "Both sides use 'cancelled' value."),
     ),
 )
 
@@ -1083,8 +1051,7 @@ _TRUTH_EVENT_SURFACE_CATALOGUE: Tuple[TruthEventSurfaceRecord, ...] = (
         ),
         android_visible=False,
         notes=(
-            "Session truth recorded event.  Center-side authority only; "
-            "Android does not produce this event type."
+            "Session truth recorded event.  Center-side authority only; " "Android does not produce this event type."
         ),
     ),
     TruthEventSurfaceRecord(
@@ -1124,8 +1091,7 @@ _TRUTH_EVENT_SURFACE_CATALOGUE: Tuple[TruthEventSurfaceRecord, ...] = (
         ),
         android_visible=True,
         notes=(
-            "Runtime lifecycle transition.  Android-visible: Android runtime "
-            "host receives runtime lifecycle events."
+            "Runtime lifecycle transition.  Android-visible: Android runtime " "host receives runtime lifecycle events."
         ),
     ),
     TruthEventSurfaceRecord(
@@ -1167,8 +1133,7 @@ _TRUTH_EVENT_SURFACE_CATALOGUE: Tuple[TruthEventSurfaceRecord, ...] = (
         ),
         android_visible=True,
         notes=(
-            "Coordination transition.  Android-visible: Android mesh "
-            "participants receive coordination state events."
+            "Coordination transition.  Android-visible: Android mesh " "participants receive coordination state events."
         ),
     ),
 )
@@ -1183,12 +1148,9 @@ _TRANSITIONAL_ALLOWANCE_CATALOGUE: Tuple[TransitionalAllowanceRecord, ...] = (
         kind=TransitionalAllowanceKind.field_rename,
         android_side_value="session_id",
         center_canonical_value="control_session_id",
-        normalisation_location=(
-            "core.schemas.ugcp.shared.normalize_conversation_session_id"
-        ),
+        normalisation_location=("core.schemas.ugcp.shared.normalize_conversation_session_id"),
         retirement_condition=(
-            "Android side migrates to explicit control_session_id field, "
-            "retiring bare session_id usage."
+            "Android side migrates to explicit control_session_id field, " "retiring bare session_id usage."
         ),
     ),
     TransitionalAllowanceRecord(
@@ -1196,9 +1158,7 @@ _TRANSITIONAL_ALLOWANCE_CATALOGUE: Tuple[TransitionalAllowanceRecord, ...] = (
         kind=TransitionalAllowanceKind.field_rename,
         android_side_value="runtime_session_id",
         center_canonical_value="runtime_attachment_session_id",
-        normalisation_location=(
-            "core.schemas.ugcp.shared.normalize_runtime_attachment_session_id"
-        ),
+        normalisation_location=("core.schemas.ugcp.shared.normalize_runtime_attachment_session_id"),
         retirement_condition=(
             "Android side migrates to explicit runtime_attachment_session_id "
             "field, retiring runtime_session_id alias."
@@ -1209,9 +1169,7 @@ _TRANSITIONAL_ALLOWANCE_CATALOGUE: Tuple[TransitionalAllowanceRecord, ...] = (
         kind=TransitionalAllowanceKind.field_rename,
         android_side_value="attached_session_id",
         center_canonical_value="runtime_attachment_session_id",
-        normalisation_location=(
-            "core.schemas.ugcp.shared.normalize_runtime_attachment_session_id"
-        ),
+        normalisation_location=("core.schemas.ugcp.shared.normalize_runtime_attachment_session_id"),
         retirement_condition=(
             "Android side migrates to explicit runtime_attachment_session_id "
             "field, retiring attached_session_id alias."
@@ -1222,9 +1180,7 @@ _TRANSITIONAL_ALLOWANCE_CATALOGUE: Tuple[TransitionalAllowanceRecord, ...] = (
         kind=TransitionalAllowanceKind.field_rename,
         android_side_value="transfer_session_id",
         center_canonical_value="delegation_transfer_session_id",
-        normalisation_location=(
-            "core.schemas.ugcp.shared.normalize_delegation_transfer_session_id"
-        ),
+        normalisation_location=("core.schemas.ugcp.shared.normalize_delegation_transfer_session_id"),
         retirement_condition=(
             "Android side migrates to explicit delegation_transfer_session_id "
             "field, retiring transfer_session_id alias."
@@ -1235,9 +1191,7 @@ _TRANSITIONAL_ALLOWANCE_CATALOGUE: Tuple[TransitionalAllowanceRecord, ...] = (
         kind=TransitionalAllowanceKind.field_rename,
         android_side_value="handoff_session_id",
         center_canonical_value="delegation_transfer_session_id",
-        normalisation_location=(
-            "core.schemas.ugcp.shared.normalize_delegation_transfer_session_id"
-        ),
+        normalisation_location=("core.schemas.ugcp.shared.normalize_delegation_transfer_session_id"),
         retirement_condition=(
             "Android side migrates to explicit delegation_transfer_session_id "
             "field, retiring handoff_session_id alias."
@@ -1250,8 +1204,7 @@ _TRANSITIONAL_ALLOWANCE_CATALOGUE: Tuple[TransitionalAllowanceRecord, ...] = (
         center_canonical_value="heartbeat",
         normalisation_location="galaxy_gateway.android.runtime_ws_profile",
         retirement_condition=(
-            "Android side migrates to canonical 'heartbeat' message type, "
-            "retiring device_status alias."
+            "Android side migrates to canonical 'heartbeat' message type, " "retiring device_status alias."
         ),
     ),
     TransitionalAllowanceRecord(
@@ -1261,8 +1214,7 @@ _TRANSITIONAL_ALLOWANCE_CATALOGUE: Tuple[TransitionalAllowanceRecord, ...] = (
         center_canonical_value="heartbeat",
         normalisation_location="galaxy_gateway.android.runtime_ws_profile",
         retirement_condition=(
-            "Android side migrates to canonical 'heartbeat' message type, "
-            "retiring agent_status alias."
+            "Android side migrates to canonical 'heartbeat' message type, " "retiring agent_status alias."
         ),
     ),
     TransitionalAllowanceRecord(
@@ -1282,10 +1234,7 @@ _TRANSITIONAL_ALLOWANCE_CATALOGUE: Tuple[TransitionalAllowanceRecord, ...] = (
         android_side_value="Android participant role (registration metadata)",
         center_canonical_value="core.schemas.ugcp.shared.CoordinationRole",
         normalisation_location="android_bridge.registration_handler",
-        retirement_condition=(
-            "Full enum-level unification of coordination_role between "
-            "repositories."
-        ),
+        retirement_condition=("Full enum-level unification of coordination_role between " "repositories."),
     ),
 )
 
@@ -1300,16 +1249,12 @@ def get_protocol_surface_catalogue() -> Sequence[ProtocolSurfaceRecord]:
     return _PROTOCOL_SURFACE_CATALOGUE
 
 
-def get_terminal_state_consistency_catalogue() -> (
-    Sequence[TerminalStateConsistencyRecord]
-):
+def get_terminal_state_consistency_catalogue() -> Sequence[TerminalStateConsistencyRecord]:
     """Return the terminal state cross-module consistency catalogue."""
     return _TERMINAL_STATE_CONSISTENCY_CATALOGUE
 
 
-def get_delegated_execution_status_catalogue() -> (
-    Sequence[DelegatedExecutionStatusRecord]
-):
+def get_delegated_execution_status_catalogue() -> Sequence[DelegatedExecutionStatusRecord]:
     """Return the delegated execution lifecycle status catalogue."""
     return _DELEGATED_EXECUTION_STATUS_CATALOGUE
 
@@ -1363,18 +1308,10 @@ def build_protocol_consistency_snapshot() -> ProtocolConsistencySnapshot:
     truth_events = _TRUTH_EVENT_SURFACE_CATALOGUE
     allowances = _TRANSITIONAL_ALLOWANCE_CATALOGUE
 
-    canonical_count = sum(
-        1 for s in surfaces if s.surface_class == ProtocolSurfaceClass.canonical
-    )
-    transitional_count = sum(
-        1 for s in surfaces if s.surface_class == ProtocolSurfaceClass.transitional
-    )
-    deprecated_count = sum(
-        1 for s in surfaces if s.surface_class == ProtocolSurfaceClass.deprecated
-    )
-    unresolved_count = sum(
-        1 for s in surfaces if s.surface_class == ProtocolSurfaceClass.unresolved
-    )
+    canonical_count = sum(1 for s in surfaces if s.surface_class == ProtocolSurfaceClass.canonical)
+    transitional_count = sum(1 for s in surfaces if s.surface_class == ProtocolSurfaceClass.transitional)
+    deprecated_count = sum(1 for s in surfaces if s.surface_class == ProtocolSurfaceClass.deprecated)
+    unresolved_count = sum(1 for s in surfaces if s.surface_class == ProtocolSurfaceClass.unresolved)
     fully_consistent = sum(1 for t in terminal_states if t.is_fully_consistent)
     terminal_phases = sum(1 for e in exec_statuses if e.is_terminal)
 

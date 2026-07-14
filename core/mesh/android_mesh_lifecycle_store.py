@@ -515,11 +515,7 @@ class AndroidMeshLifecycleStore:
     def get_all_active_sessions(self) -> List[AndroidMeshSessionRecord]:
         """获取所有非 LEFT 状态的 session records。"""
         with self._lock:
-            return [
-                rec
-                for rec in self._sessions.values()
-                if rec.status != AndroidMeshSessionStatus.LEFT
-            ]
+            return [rec for rec in self._sessions.values() if rec.status != AndroidMeshSessionStatus.LEFT]
 
     def get_all_sessions(self) -> List[AndroidMeshSessionRecord]:
         """获取全部 session records（含已终止）。"""
@@ -658,9 +654,7 @@ def get_sessions_for_device(
 ) -> List[AndroidMeshSessionRecord]:
     """获取某设备的所有 session records（模块级快捷入口）。"""
     try:
-        return get_android_mesh_lifecycle_store().get_sessions_for_device(
-            device_id, include_terminal=include_terminal
-        )
+        return get_android_mesh_lifecycle_store().get_sessions_for_device(device_id, include_terminal=include_terminal)
     except Exception as exc:
         logger.warning("get_sessions_for_device: %s", exc)
         return []

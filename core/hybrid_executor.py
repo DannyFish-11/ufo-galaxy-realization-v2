@@ -76,9 +76,9 @@ import json
 import logging
 import time
 import uuid
-from typing import Dict, Any, Optional, Callable, Awaitable, List
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.HybridExecutor")
 
@@ -111,21 +111,19 @@ HYBRID_EXECUTOR_CONTINUITY_WIRED: str = (
 #: preferences* (A2A / GUI / VLM level order per app_id) — a concern that is
 #: entirely local to :class:`HybridExecutionArbiter` and has no connection to
 #: the capability bus.
-APP_EXECUTION_CAPABILITY_REGISTRY_RENAMED: str = (
-    "CapabilityRegistry → AppExecutionCapabilityRegistry"
-)
+APP_EXECUTION_CAPABILITY_REGISTRY_RENAMED: str = "CapabilityRegistry → AppExecutionCapabilityRegistry"
 
 
 class ExecutionLevel(str, Enum):
-    A2A = "a2a"          # Agent-to-Agent (API/MCP direct call)
-    GUI = "gui"          # GUI Automation (accessibility, ADB)
-    VLM = "vlm"          # Vision-Language Model (screenshot + reasoning)
+    A2A = "a2a"  # Agent-to-Agent (API/MCP direct call)
+    GUI = "gui"  # GUI Automation (accessibility, ADB)
+    VLM = "vlm"  # Vision-Language Model (screenshot + reasoning)
 
 
 class ExecutionStatus(str, Enum):
     SUCCESS = "success"
     FAILED = "failed"
-    DEGRADED = "degraded"    # 低级别成功
+    DEGRADED = "degraded"  # 低级别成功
     SKIPPED = "skipped"
     TIMEOUT = "timeout"
 
@@ -133,6 +131,7 @@ class ExecutionStatus(str, Enum):
 @dataclass
 class ExecutionAttempt:
     """单次执行尝试记录"""
+
     level: ExecutionLevel
     status: ExecutionStatus
     result: Dict[str, Any] = field(default_factory=dict)
@@ -143,6 +142,7 @@ class ExecutionAttempt:
 @dataclass
 class HybridResult:
     """混合执行最终结果"""
+
     request_id: str
     success: bool
     final_level: ExecutionLevel
@@ -165,14 +165,16 @@ class HybridResult:
 # 能力注册表 — 记录每个应用/服务支持的执行级别
 # ============================================================================
 
+
 @dataclass
 class AppCapability:
     """应用能力声明"""
-    app_id: str                          # 包名或服务标识
-    a2a_endpoint: str = ""               # A2A API 端点 (空=不支持)
+
+    app_id: str  # 包名或服务标识
+    a2a_endpoint: str = ""  # A2A API 端点 (空=不支持)
     a2a_actions: List[str] = field(default_factory=list)  # 支持的 A2A 动作
-    gui_supported: bool = True           # 是否支持 GUI 自动化
-    vlm_supported: bool = True           # 是否支持 VLM (几乎所有应用都支持)
+    gui_supported: bool = True  # 是否支持 GUI 自动化
+    vlm_supported: bool = True  # 是否支持 VLM (几乎所有应用都支持)
     preferred_level: Optional[ExecutionLevel] = None  # 强制首选级别
 
 
@@ -200,21 +202,20 @@ class AppExecutionCapabilityRegistry:
     def _register_defaults(self):
         """注册默认应用能力"""
         defaults = [
-            AppCapability("com.tencent.mm", gui_supported=True,
-                          a2a_actions=["send_message"],
-                          a2a_endpoint=""),  # 微信: 暂无公开 A2A
+            AppCapability(
+                "com.tencent.mm", gui_supported=True, a2a_actions=["send_message"], a2a_endpoint=""
+            ),  # 微信: 暂无公开 A2A
             AppCapability("com.android.settings", gui_supported=True),
-            AppCapability("com.android.chrome",
-                          a2a_actions=["open_url", "search"],
-                          a2a_endpoint="intent://"),
-            AppCapability("system_shell",
-                          a2a_endpoint="adb",
-                          a2a_actions=["execute"],
-                          preferred_level=ExecutionLevel.A2A),
-            AppCapability("file_manager",
-                          a2a_endpoint="filesystem",
-                          a2a_actions=["read", "write", "list", "delete"],
-                          preferred_level=ExecutionLevel.A2A),
+            AppCapability("com.android.chrome", a2a_actions=["open_url", "search"], a2a_endpoint="intent://"),
+            AppCapability(
+                "system_shell", a2a_endpoint="adb", a2a_actions=["execute"], preferred_level=ExecutionLevel.A2A
+            ),
+            AppCapability(
+                "file_manager",
+                a2a_endpoint="filesystem",
+                a2a_actions=["read", "write", "list", "delete"],
+                preferred_level=ExecutionLevel.A2A,
+            ),
         ]
         for cap in defaults:
             self._apps[cap.app_id] = cap
@@ -249,8 +250,7 @@ class AppExecutionCapabilityRegistry:
 
     def list_apps(self) -> List[Dict]:
         return [
-            {"app_id": cap.app_id, "a2a": bool(cap.a2a_endpoint),
-             "gui": cap.gui_supported, "vlm": cap.vlm_supported}
+            {"app_id": cap.app_id, "a2a": bool(cap.a2a_endpoint), "gui": cap.gui_supported, "vlm": cap.vlm_supported}
             for cap in self._apps.values()
         ]
 
@@ -330,6 +330,7 @@ class HybridExecutionArbiter:
             return self._continuity_registry
         try:
             from core.hybrid_orchestration_continuity import get_continuity_registry
+
             return get_continuity_registry()
         except Exception as exc:
             logger.warning("Continuity registry unavailable: %s", exc)
@@ -348,6 +349,7 @@ class HybridExecutionArbiter:
         current process is actually running on Win32 (``sys.platform``).
         """
         import sys as _sys
+
         lower = device_id.lower()
         return (
             lower.startswith("windows")
@@ -398,8 +400,7 @@ class HybridExecutionArbiter:
         # maker.  We do NOT re-evaluate intent or re-score the plan here.
         if decision_authority:
             logger.debug(
-                "hybrid_executor | executing decision from authority=%s | "
-                "device=%s app=%s action=%s request_id=%s",
+                "hybrid_executor | executing decision from authority=%s | " "device=%s app=%s action=%s request_id=%s",
                 decision_authority,
                 device_id,
                 app_id,
@@ -417,6 +418,7 @@ class HybridExecutionArbiter:
             from core.hybrid_orchestration_continuity import (
                 HybridOrchestrationLifecycleState,
             )
+
             _registry = self._get_continuity_registry()
             if _registry is not None:
                 continuity_record = _registry.create_and_register(
@@ -429,17 +431,14 @@ class HybridExecutionArbiter:
                     HybridOrchestrationLifecycleState.dispatched,
                 )
                 logger.debug(
-                    "hybrid_executor | continuity_registered | "
-                    "execution_id=%s device=%s app=%s action=%s",
+                    "hybrid_executor | continuity_registered | " "execution_id=%s device=%s app=%s action=%s",
                     continuity_record.execution_id,
                     device_id,
                     app_id,
                     action,
                 )
         except Exception as _creg_exc:
-            logger.debug(
-                "hybrid_executor | continuity_register_skipped | %s", _creg_exc
-            )
+            logger.debug("hybrid_executor | continuity_register_skipped | %s", _creg_exc)
 
         # ------------------------------------------------------------------
         # Windows fast-path: delegate to WindowsExecutionArbiter which
@@ -479,6 +478,7 @@ class HybridExecutionArbiter:
                 from core.hybrid_orchestration_continuity import (
                     HybridOrchestrationLifecycleState,
                 )
+
                 self._get_continuity_registry().transition(
                     continuity_record.execution_id,
                     HybridOrchestrationLifecycleState.running,
@@ -491,9 +491,7 @@ class HybridExecutionArbiter:
 
         try:
             for level in levels:
-                attempt = await self._try_level(
-                    level, device_id, app_id, action, params, instruction
-                )
+                attempt = await self._try_level(level, device_id, app_id, action, params, instruction)
                 attempts.append(attempt)
 
                 if attempt.status == ExecutionStatus.SUCCESS:
@@ -518,6 +516,7 @@ class HybridExecutionArbiter:
                             from core.hybrid_orchestration_continuity import (
                                 HybridOrchestrationLifecycleState,
                             )
+
                             self._get_continuity_registry().transition(
                                 continuity_record.execution_id,
                                 HybridOrchestrationLifecycleState.completed,
@@ -531,8 +530,7 @@ class HybridExecutionArbiter:
                     return result
 
                 logger.info(
-                    f"Level {level.value} failed for {app_id}.{action}: "
-                    f"{attempt.error}. Trying next level..."
+                    f"Level {level.value} failed for {app_id}.{action}: " f"{attempt.error}. Trying next level..."
                 )
 
             # 所有级别都失败
@@ -555,6 +553,7 @@ class HybridExecutionArbiter:
                     from core.hybrid_orchestration_continuity import (
                         HybridOrchestrationLifecycleState,
                     )
+
                     self._get_continuity_registry().transition(
                         continuity_record.execution_id,
                         HybridOrchestrationLifecycleState.failed,
@@ -577,6 +576,7 @@ class HybridExecutionArbiter:
                         HybridOrchestrationLifecycleState,
                         HybridPartialResultDisposition,
                     )
+
                     if last_partial_result is not None:
                         continuity_record.set_partial_result(
                             last_partial_result,
@@ -589,8 +589,7 @@ class HybridExecutionArbiter:
                         reason="asyncio_cancelled",
                     )
                     logger.info(
-                        "hybrid_executor | execution_interrupted | "
-                        "execution_id=%s partial_result=%s",
+                        "hybrid_executor | execution_interrupted | " "execution_id=%s partial_result=%s",
                         continuity_record.execution_id,
                         last_partial_result is not None,
                     )
@@ -610,6 +609,7 @@ class HybridExecutionArbiter:
                         HybridOrchestrationLifecycleState,
                         HybridPartialResultDisposition,
                     )
+
                     if last_partial_result is not None:
                         continuity_record.set_partial_result(
                             last_partial_result,
@@ -661,6 +661,7 @@ class HybridExecutionArbiter:
                 from core.hybrid_orchestration_continuity import (
                     HybridOrchestrationLifecycleState,
                 )
+
                 self._get_continuity_registry().transition(
                     continuity_record.execution_id,
                     HybridOrchestrationLifecycleState.running,
@@ -673,8 +674,8 @@ class HybridExecutionArbiter:
 
         try:
             from core.windows_execution_arbiter import (  # type: ignore[import]
-                get_windows_arbiter,
                 WinExecLevel,
+                get_windows_arbiter,
             )
 
             arbiter = windows_arbiter or get_windows_arbiter()
@@ -724,6 +725,7 @@ class HybridExecutionArbiter:
                     from core.hybrid_orchestration_continuity import (
                         HybridOrchestrationLifecycleState,
                     )
+
                     terminal = (
                         HybridOrchestrationLifecycleState.completed
                         if hybrid.success
@@ -765,6 +767,7 @@ class HybridExecutionArbiter:
                     from core.hybrid_orchestration_continuity import (
                         HybridOrchestrationLifecycleState,
                     )
+
                     self._get_continuity_registry().transition(
                         continuity_record.execution_id,
                         HybridOrchestrationLifecycleState.interrupted,
@@ -810,9 +813,7 @@ class HybridExecutionArbiter:
                 latency_ms=(time.time() - start) * 1000,
             )
 
-    async def _try_a2a(
-        self, device_id: str, app_id: str, action: str, params: Dict, start: float
-    ) -> ExecutionAttempt:
+    async def _try_a2a(self, device_id: str, app_id: str, action: str, params: Dict, start: float) -> ExecutionAttempt:
         """Level 1: A2A 直接调用"""
         if not self._a2a:
             return ExecutionAttempt(
@@ -839,9 +840,7 @@ class HybridExecutionArbiter:
             latency_ms=(time.time() - start) * 1000,
         )
 
-    async def _try_gui(
-        self, device_id: str, action: str, params: Dict, start: float
-    ) -> ExecutionAttempt:
+    async def _try_gui(self, device_id: str, action: str, params: Dict, start: float) -> ExecutionAttempt:
         """Level 2: GUI 自动化"""
         if not self._gui:
             return ExecutionAttempt(
@@ -868,9 +867,7 @@ class HybridExecutionArbiter:
             latency_ms=(time.time() - start) * 1000,
         )
 
-    async def _try_vlm(
-        self, device_id: str, instruction: str, start: float
-    ) -> ExecutionAttempt:
+    async def _try_vlm(self, device_id: str, instruction: str, start: float) -> ExecutionAttempt:
         """Level 3: VLM 视觉理解执行"""
         if not self._vlm:
             return ExecutionAttempt(

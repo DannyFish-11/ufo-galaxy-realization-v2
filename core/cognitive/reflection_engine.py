@@ -105,7 +105,7 @@ class ReflectionRecord:
 
     def decay(self, days: float = 1.0) -> None:
         """Decay activation score. Call periodically (e.g., daily)."""
-        self.activation_score *= _ACTIVATION_DECAY_RATE ** days
+        self.activation_score *= _ACTIVATION_DECAY_RATE**days
         self.activation_score = max(0.0, min(1.0, self.activation_score))
 
 
@@ -150,7 +150,7 @@ class ReflectionEngine:
         if self._subscribed:
             return
         try:
-            from core.state_event_bus import get_state_event_bus, StateEventType
+            from core.state_event_bus import StateEventType, get_state_event_bus
 
             bus = get_state_event_bus()
             bus.subscribe(StateEventType.TASK_STARTED, self._on_task_started)
@@ -219,8 +219,13 @@ class ReflectionEngine:
         """
         try:
             return self._reflect_retrospective_impl(
-                task, strategy, success, duration_ms, result_summary,
-                expected_result, trace_id,
+                task,
+                strategy,
+                success,
+                duration_ms,
+                result_summary,
+                expected_result,
+                trace_id,
             )
         except Exception as exc:
             logger.debug("reflect_retrospective failed (non-fatal): %s", exc)
@@ -238,16 +243,13 @@ class ReflectionEngine:
         Results sorted by activation_score descending.
         """
         with self._lock:
-            candidates = [
-                r for r in self._reflections
-                if r.activation_score >= min_activation
-            ]
+            candidates = [r for r in self._reflections if r.activation_score >= min_activation]
             if task_hint:
                 hint_lower = task_hint.lower()
                 candidates = [
-                    r for r in candidates
-                    if hint_lower in r.task_description.lower()
-                    or hint_lower in r.reflection_text.lower()
+                    r
+                    for r in candidates
+                    if hint_lower in r.task_description.lower() or hint_lower in r.reflection_text.lower()
                 ]
             candidates.sort(key=lambda r: r.activation_score, reverse=True)
             return candidates[:limit]
@@ -259,14 +261,13 @@ class ReflectionEngine:
                 r.decay(days)
             # Remove dead reflections
             before = len(self._reflections)
-            self._reflections = [
-                r for r in self._reflections if r.activation_score > 0.01
-            ]
+            self._reflections = [r for r in self._reflections if r.activation_score > 0.01]
             after = len(self._reflections)
             if before != after:
                 logger.debug(
                     "ReflectionEngine decay: %d → %d reflections",
-                    before, after,
+                    before,
+                    after,
                 )
 
     def to_dict_list(self) -> List[Dict[str, Any]]:
@@ -305,9 +306,7 @@ class ReflectionEngine:
         failures = [h for h in history if not h.get("success", True)]
         success_rate = len(successes) / total if total > 0 else 1.0
 
-        durations = [
-            h.get("duration_ms", 0) for h in history if h.get("duration_ms", 0) > 0
-        ]
+        durations = [h.get("duration_ms", 0) for h in history if h.get("duration_ms", 0) > 0]
         avg_duration = sum(durations) / len(durations) if durations else 0
         std_duration = self._std(durations) if len(durations) > 1 else 0
         duration_variance = std_duration / avg_duration if avg_duration > 0 else 0
@@ -340,14 +339,9 @@ class ReflectionEngine:
 
         # Timing insight
         if avg_duration > 0:
-            parts.append(
-                f"Typical duration: {avg_duration:.0f}ms "
-                f"(variance: {duration_variance:.2f})."
-            )
+            parts.append(f"Typical duration: {avg_duration:.0f}ms " f"(variance: {duration_variance:.2f}).")
             if duration_variance > _DURATION_VARIANCE_THRESHOLD:
-                parts.append(
-                    "Timing is highly variable — consider setting a generous timeout."
-                )
+                parts.append("Timing is highly variable — consider setting a generous timeout.")
 
         # Strategy recommendation (contrastive)
         if strategy and strategy in strategy_stats:
@@ -366,14 +360,9 @@ class ReflectionEngine:
 
         # Failure pattern analysis
         if failures:
-            fail_reasons = Counter(
-                h.get("result_summary", "unknown")[:60] for h in failures
-            )
+            fail_reasons = Counter(h.get("result_summary", "unknown")[:60] for h in failures)
             top_fail = fail_reasons.most_common(1)[0]
-            parts.append(
-                f"Common failure pattern: '{top_fail[0]}' "
-                f"({top_fail[1]} of {len(failures)} failures)."
-            )
+            parts.append(f"Common failure pattern: '{top_fail[0]}' " f"({top_fail[1]} of {len(failures)} failures).")
 
         reflection_text = " ".join(parts)
 
@@ -390,9 +379,11 @@ class ReflectionEngine:
         self._emit_reflection_event(record, trace_id)
 
         logger.debug(
-            "Prospective reflection generated | task=%s strategy=%s "
-            "history=%d confidence=%.2f",
-            task[:60], strategy, total, record.confidence,
+            "Prospective reflection generated | task=%s strategy=%s " "history=%d confidence=%.2f",
+            task[:60],
+            strategy,
+            total,
+            record.confidence,
         )
         return record
 
@@ -410,16 +401,10 @@ class ReflectionEngine:
     ) -> ReflectionRecord:
         """Internal: generate post-execution outcome analysis."""
         history = self._fetch_similar_history(task, n=10)
-        avg_duration = (
-            sum(h.get("duration_ms", 0) for h in history) / len(history)
-            if history else 0
-        )
+        avg_duration = sum(h.get("duration_ms", 0) for h in history) / len(history) if history else 0
 
         parts: List[str] = []
-        parts.append(
-            f"Retrospective for '{task[:80]}': "
-            f"strategy='{strategy}', success={success}."
-        )
+        parts.append(f"Retrospective for '{task[:80]}': " f"strategy='{strategy}', success={success}.")
 
         if success:
             # Success analysis
@@ -449,10 +434,7 @@ class ReflectionEngine:
                 )
         else:
             # Failure analysis
-            parts.append(
-                f"FAILED after {duration_ms:.0f}ms. "
-                f"Result: {result_summary[:120]}."
-            )
+            parts.append(f"FAILED after {duration_ms:.0f}ms. " f"Result: {result_summary[:120]}.")
             if expected_result:
                 parts.append(f"Expected: {expected_result[:120]}.")
 
@@ -494,17 +476,16 @@ class ReflectionEngine:
         self._emit_reflection_event(record, trace_id)
 
         logger.debug(
-            "Retrospective reflection generated | task=%s success=%s "
-            "activation=%.2f",
-            task[:60], success, activation,
+            "Retrospective reflection generated | task=%s success=%s " "activation=%.2f",
+            task[:60],
+            success,
+            activation,
         )
         return record
 
     # ── Internal helpers ────────────────────────────────────────────
 
-    def _fetch_similar_history(
-        self, task: str, n: int = 10
-    ) -> List[Dict[str, Any]]:
+    def _fetch_similar_history(self, task: str, n: int = 10) -> List[Dict[str, Any]]:
         """Fetch similar historical tasks from TaskMemory."""
         try:
             from core.task_memory import get_task_memory
@@ -518,10 +499,7 @@ class ReflectionEngine:
             task_words = set(self._tokenize(task))
             scored = []
             for summary in recent:
-                candidate_words = set(
-                    self._tokenize(summary.task)
-                    + self._tokenize(summary.task_type)
-                )
+                candidate_words = set(self._tokenize(summary.task) + self._tokenize(summary.task_type))
                 overlap = len(task_words & candidate_words)
                 score = overlap / max(len(task_words), 1)
                 scored.append((score, summary))
@@ -558,7 +536,7 @@ class ReflectionEngine:
             return 0.0
         mean = sum(values) / len(values)
         variance = sum((x - mean) ** 2 for x in values) / len(values)
-        return variance ** 0.5
+        return variance**0.5
 
     @staticmethod
     def _success_rate(stats: Dict[str, Any]) -> float:
@@ -576,9 +554,7 @@ class ReflectionEngine:
                 cutoff = self._max_reflections // 10  # remove bottom 10%
                 self._reflections = self._reflections[cutoff:]
 
-    def _emit_reflection_event(
-        self, record: ReflectionRecord, trace_id: Optional[str]
-    ) -> None:
+    def _emit_reflection_event(self, record: ReflectionRecord, trace_id: Optional[str]) -> None:
         """Emit reflection event on state event bus."""
         try:
             from core.state_event_bus import get_state_event_bus
@@ -603,7 +579,7 @@ class ReflectionEngine:
             reflection_type=reflection_type,
             task_description=task[:200],
             reflection_text=f"{reflection_type.capitalize()} reflection unavailable — "
-                           "proceeding with default execution strategy.",
+            "proceeding with default execution strategy.",
             activation_score=0.1,
             confidence=0.0,
             timestamp=time.time(),
@@ -635,8 +611,12 @@ class ReflectionEngine:
             trace_id = getattr(event, "trace_id", "") or ""
             if task:
                 self.reflect_retrospective(
-                    task, strategy, success, duration_ms,
-                    result_summary, trace_id=trace_id,
+                    task,
+                    strategy,
+                    success,
+                    duration_ms,
+                    result_summary,
+                    trace_id=trace_id,
                 )
         except Exception as exc:
             logger.debug("_on_task_done error (non-fatal): %s", exc)

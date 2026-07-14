@@ -130,9 +130,7 @@ OPENCLAWD_CANONICAL_NODE_TOOL_EXPOSURE_IS_AUTHORITY: str = (
     "(default False) and is non-canonical by design."
 )
 
-OPENCLAWD_CANONICAL_NODE_TOOL_EXPOSURE_PR10_SENTINEL: str = (
-    "OPENCLAWD_CANONICAL_NODE_TOOL_EXPOSURE::PR10_SENTINEL_V1"
-)
+OPENCLAWD_CANONICAL_NODE_TOOL_EXPOSURE_PR10_SENTINEL: str = "OPENCLAWD_CANONICAL_NODE_TOOL_EXPOSURE::PR10_SENTINEL_V1"
 
 # ===========================================================================
 # Policy sentinels
@@ -213,6 +211,7 @@ def is_legacy_node_scan_compat_enabled() -> bool:
 # Enum: legacy surface status
 # ===========================================================================
 
+
 class LegacyNodeDiscoveryStatus(str, Enum):
     """Lifecycle status for a legacy Layer 3 node-discovery surface."""
 
@@ -233,6 +232,7 @@ class LegacyNodeDiscoveryStatus(str, Enum):
 # ===========================================================================
 # Dataclass: per-surface descriptor
 # ===========================================================================
+
 
 @dataclass
 class LegacyNodeDiscoverySurface:
@@ -271,6 +271,7 @@ class LegacyNodeDiscoverySurface:
 # Dataclass: snapshot
 # ===========================================================================
 
+
 @dataclass
 class CanonicalNodeToolExposureSnapshot:
     """Point-in-time snapshot of the canonical node tool exposure state."""
@@ -282,17 +283,11 @@ class CanonicalNodeToolExposureSnapshot:
 
     @property
     def removed_surface_count(self) -> int:
-        return sum(
-            1 for s in self.legacy_surfaces
-            if s.status == LegacyNodeDiscoveryStatus.REMOVED_FROM_CANONICAL_PATH
-        )
+        return sum(1 for s in self.legacy_surfaces if s.status == LegacyNodeDiscoveryStatus.REMOVED_FROM_CANONICAL_PATH)
 
     @property
     def compat_surface_count(self) -> int:
-        return sum(
-            1 for s in self.legacy_surfaces
-            if s.status == LegacyNodeDiscoveryStatus.COMPAT_ONLY
-        )
+        return sum(1 for s in self.legacy_surfaces if s.status == LegacyNodeDiscoveryStatus.COMPAT_ONLY)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -323,9 +318,7 @@ _LEGACY_DISCOVERY_SURFACES: List[LegacyNodeDiscoverySurface] = [
             "parallel node-list definition that could diverge from the "
             "canonical NodeFabricRegistry state."
         ),
-        canonical_replacement=(
-            "NodeFabricRegistry.list_nodes() / get_node_fabric_registry()"
-        ),
+        canonical_replacement=("NodeFabricRegistry.list_nodes() / get_node_fabric_registry()"),
         is_compat_flag_gated=True,
     ),
     LegacyNodeDiscoverySurface(
@@ -375,6 +368,7 @@ def build_legacy_discovery_surface_registry() -> List[LegacyNodeDiscoverySurface
 # ===========================================================================
 # Snapshot / summary helpers
 # ===========================================================================
+
 
 def build_canonical_tool_exposure_snapshot() -> CanonicalNodeToolExposureSnapshot:
     """Build a :class:`CanonicalNodeToolExposureSnapshot` reflecting the

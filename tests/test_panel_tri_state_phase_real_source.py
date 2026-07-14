@@ -57,8 +57,9 @@ class TestGetCurrentPhase(unittest.TestCase):
 
 class TestPanelFeedReflectsRealPhase(unittest.IsolatedAsyncioTestCase):
     async def _get_feed(self):
-        from httpx import AsyncClient, ASGITransport
         from fastapi import FastAPI
+        from httpx import ASGITransport, AsyncClient
+
         from core.routes.panel import create_router
 
         app = FastAPI()
@@ -83,9 +84,9 @@ class TestPanelFeedReflectsRealPhase(unittest.IsolatedAsyncioTestCase):
             feed = await self._get_feed()
 
         self.assertEqual(
-            feed["tri_state_phase"], "manifest",
-            "面板 feed 的相位必须反映 GalaxyPresenceBridge 的真实状态，"
-            "不能被聚合层那条恒为 silent 的死路径覆盖",
+            feed["tri_state_phase"],
+            "manifest",
+            "面板 feed 的相位必须反映 GalaxyPresenceBridge 的真实状态，" "不能被聚合层那条恒为 silent 的死路径覆盖",
         )
 
     async def test_feed_reflects_liminal(self):

@@ -65,10 +65,10 @@ class EdgeKind(str, Enum):
 class LocalityHint(str, Enum):
     """Locality preference for a node's execution scope."""
 
-    LOCAL = "local"           # Prefers same-device execution
-    REMOTE = "remote"         # Prefers remote / cloud execution
+    LOCAL = "local"  # Prefers same-device execution
+    REMOTE = "remote"  # Prefers remote / cloud execution
     CROSS_DEVICE = "cross_device"  # Optimised for cross-device fan-out
-    ANY = "any"               # No strong preference
+    ANY = "any"  # No strong preference
 
 
 # ---------------------------------------------------------------------------
@@ -140,10 +140,7 @@ class ModelNode:
 
     @property
     def is_cross_device_capable(self) -> bool:
-        return (
-            TopologyRole.CROSS_DEVICE in self.role_hints
-            or LocalityHint.CROSS_DEVICE in self.locality_hints
-        )
+        return TopologyRole.CROSS_DEVICE in self.role_hints or LocalityHint.CROSS_DEVICE in self.locality_hints
 
     def __repr__(self) -> str:
         avail = "✓" if self.is_available else "✗"
@@ -185,9 +182,7 @@ def _compute_base_weight(entry: NormalizedTopologyEntry) -> float:
             base *= _NATIVE_MULTIMODAL_BASE_MULTIPLIER
     """
     composite = entry.scoring.composite_score / 10.0  # 0.0 – 1.0
-    primary_role = (
-        entry.role_hints[0] if entry.role_hints else TopologyRole.GENERAL
-    )
+    primary_role = entry.role_hints[0] if entry.role_hints else TopologyRole.GENERAL
     role_add = _ROLE_ADDEND.get(primary_role, 0.0)
     base = composite + role_add
     if entry.is_multimodal_native:

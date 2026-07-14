@@ -34,6 +34,7 @@ CONFIG_PATH = PROJECT_ROOT / "config" / "node_registry.json"
 # P2 #8: production_ready 字段
 # ─────────────────────────────────────────────────────────────
 
+
 class TestProductionReadyField:
     """node_registry.json 必须为每个节点标注 production_ready 字段。"""
 
@@ -45,37 +46,36 @@ class TestProductionReadyField:
         nodes = self._data.get("nodes", {})
         assert len(nodes) > 0, "node_registry.json 应包含节点"
         missing = [k for k, v in nodes.items() if "production_ready" not in v]
-        assert missing == [], (
-            f"以下节点缺少 production_ready 字段: {missing[:10]}"
-        )
+        assert missing == [], f"以下节点缺少 production_ready 字段: {missing[:10]}"
 
     def test_stub_nodes_not_production_ready(self):
         nodes = self._data.get("nodes", {})
         stub_nodes = [k for k, v in nodes.items() if v.get("status") == "stub"]
         for node_name in stub_nodes:
-            assert nodes[node_name]["production_ready"] is False, (
-                f"Stub 节点 {node_name} 的 production_ready 应为 false"
-            )
+            assert (
+                nodes[node_name]["production_ready"] is False
+            ), f"Stub 节点 {node_name} 的 production_ready 应为 false"
 
     def test_active_nodes_production_ready(self):
         nodes = self._data.get("nodes", {})
         active_nodes = [k for k, v in nodes.items() if v.get("status") == "active"]
         assert len(active_nodes) > 0, "应存在 active 节点"
         for node_name in active_nodes:
-            assert nodes[node_name]["production_ready"] is True, (
-                f"Active 节点 {node_name} 的 production_ready 应为 true"
-            )
+            assert (
+                nodes[node_name]["production_ready"] is True
+            ), f"Active 节点 {node_name} 的 production_ready 应为 true"
 
 
 # ─────────────────────────────────────────────────────────────
 # P2 #9: 统一节点发现
 # ─────────────────────────────────────────────────────────────
 
+
 class TestNodeDiscoveryIntegration:
     """NodeDiscoveryService 能从注册表预填充节点，实现无硬编码 URL 的服务发现。"""
 
     def test_seed_from_registry_populates_nodes(self):
-        from core.node_discovery import NodeDiscoveryService, NodeRole, DiscoveredNode
+        from core.node_discovery import DiscoveredNode, NodeDiscoveryService, NodeRole
 
         svc = NodeDiscoveryService(node_id="test_master", port=9999)
         count = NodeDiscoveryService.seed_from_registry(svc)
@@ -89,7 +89,7 @@ class TestNodeDiscoveryIntegration:
             assert node.port > 0
 
     def test_discover_by_node_id(self):
-        from core.node_discovery import NodeDiscoveryService, NodeRole, DiscoveredNode, DiscoveryState
+        from core.node_discovery import DiscoveredNode, DiscoveryState, NodeDiscoveryService, NodeRole
 
         svc = NodeDiscoveryService(node_id="test_master_2", port=9998)
         dn = DiscoveredNode(
@@ -107,7 +107,7 @@ class TestNodeDiscoveryIntegration:
         assert node.host == "localhost"
 
     def test_get_node_url(self):
-        from core.node_discovery import NodeDiscoveryService, NodeRole, DiscoveredNode
+        from core.node_discovery import DiscoveredNode, NodeDiscoveryService, NodeRole
 
         svc = NodeDiscoveryService(node_id="test_url", port=9997)
         dn = DiscoveredNode(
@@ -123,7 +123,7 @@ class TestNodeDiscoveryIntegration:
         assert url == "http://localhost:8001"
 
     def test_discover_by_capability(self):
-        from core.node_discovery import NodeDiscoveryService, NodeRole, DiscoveredNode
+        from core.node_discovery import DiscoveredNode, NodeDiscoveryService, NodeRole
 
         svc = NodeDiscoveryService(node_id="test_cap", port=9996)
         for node_id, port, caps in [
@@ -131,8 +131,11 @@ class TestNodeDiscoveryIntegration:
             ("Node_01_OneAPI", 8001, ["llm", "openai"]),
         ]:
             dn = DiscoveredNode(
-                node_id=node_id, host="localhost", port=port,
-                role=NodeRole.WORKER, capabilities=caps,
+                node_id=node_id,
+                host="localhost",
+                port=port,
+                role=NodeRole.WORKER,
+                capabilities=caps,
             )
             svc.register_node(dn)
 
@@ -146,6 +149,7 @@ class TestNodeDiscoveryIntegration:
 # ─────────────────────────────────────────────────────────────
 # P1 #5: CapabilityOrchestrator 统一调度
 # ─────────────────────────────────────────────────────────────
+
 
 class TestCapabilityOrchestratorDispatch:
     """dispatch() 能通过名称/ID 路由到正确能力。"""
@@ -180,7 +184,7 @@ class TestCapabilityOrchestratorDispatch:
     @pytest.mark.asyncio
     async def test_dispatch_node_uses_port_config(self):
         """_execute_node 应使用 port_config 解析端口，而不是 8000+id。"""
-        from core.capability_orchestrator import CapabilityOrchestrator, Capability, CapabilityType
+        from core.capability_orchestrator import Capability, CapabilityOrchestrator, CapabilityType
 
         orch = CapabilityOrchestrator()
 
@@ -217,19 +221,19 @@ class TestCapabilityOrchestratorDispatch:
                     result = await orch._execute_node(cap, {})
 
         assert len(captured_url) == 1
-        assert ":8204/" in captured_url[0], (
-            f"期望端口 8204（来自 port_config），实际 URL: {captured_url[0]}"
-        )
+        assert ":8204/" in captured_url[0], f"期望端口 8204（来自 port_config），实际 URL: {captured_url[0]}"
 
     def test_dispatch_function_exported(self):
         """顶层便捷函数 dispatch() 应可从 capability_orchestrator 导入。"""
         from core.capability_orchestrator import dispatch
+
         assert callable(dispatch)
 
 
 # ─────────────────────────────────────────────────────────────
 # P1 #6: shell=True 安全修复验证
 # ─────────────────────────────────────────────────────────────
+
 
 class TestShellSafetyFixes:
     """验证所有 shell=True / create_subprocess_shell 已被替换。"""
@@ -242,52 +246,41 @@ class TestShellSafetyFixes:
 
     def test_node124_no_create_subprocess_shell(self):
         src = self._read_source("nodes/Node_124_LinuxDesktopAuto/main.py")
-        assert "create_subprocess_shell" not in src, (
-            "Node_124 仍使用 create_subprocess_shell"
-        )
+        assert "create_subprocess_shell" not in src, "Node_124 仍使用 create_subprocess_shell"
 
     def test_node116_main_no_create_subprocess_shell(self):
         src = self._read_source("nodes/Node_116_ExternalToolWrapper/main.py")
-        assert "create_subprocess_shell" not in src, (
-            "Node_116/main.py 仍使用 create_subprocess_shell"
-        )
+        assert "create_subprocess_shell" not in src, "Node_116/main.py 仍使用 create_subprocess_shell"
 
     def test_node116_engine_no_shell_true(self):
-        src = self._read_source(
-            "nodes/Node_116_ExternalToolWrapper/core/tool_wrapper_engine.py"
-        )
+        src = self._read_source("nodes/Node_116_ExternalToolWrapper/core/tool_wrapper_engine.py")
         # shell=True inside subprocess.run is gone
-        assert "shell=True" not in src, (
-            "Node_116/tool_wrapper_engine.py 仍使用 shell=True"
-        )
+        assert "shell=True" not in src, "Node_116/tool_wrapper_engine.py 仍使用 shell=True"
 
     def test_node117_main_no_create_subprocess_shell(self):
         src = self._read_source("nodes/Node_117_OpenCode/main.py")
-        assert "create_subprocess_shell" not in src, (
-            "Node_117/main.py 仍使用 create_subprocess_shell"
-        )
+        assert "create_subprocess_shell" not in src, "Node_117/main.py 仍使用 create_subprocess_shell"
 
     def test_node117_engine_no_shell_true(self):
         src = self._read_source("nodes/Node_117_OpenCode/core/opencode_engine.py")
         # Only the commented-out line may reference shell=True; active code must not
-        uncommented = "\n".join(
-            line for line in src.splitlines() if not line.lstrip().startswith("#")
-        )
-        assert "shell=True" not in uncommented, (
-            "Node_117/opencode_engine.py 的活跃代码仍使用 shell=True"
-        )
+        uncommented = "\n".join(line for line in src.splitlines() if not line.lstrip().startswith("#"))
+        assert "shell=True" not in uncommented, "Node_117/opencode_engine.py 的活跃代码仍使用 shell=True"
 
     def test_windows_bridge_no_shell_true(self):
         # 死代码清理:ufo_ui_automation_bridge.py(UFO 胶水,零调用者)已整体删除,
         # shell=True 卫生问题随之消失;断言其不复活。
         import pathlib as _pl
-        assert not (_pl.Path(__file__).parent.parent
-                    / "enhancements/clients/windows_client/ufo_ui_automation_bridge.py").exists()
+
+        assert not (
+            _pl.Path(__file__).parent.parent / "enhancements/clients/windows_client/ufo_ui_automation_bridge.py"
+        ).exists()
 
 
 # ─────────────────────────────────────────────────────────────
 # P2 #10: chat → intent → capability → node → device 完整链路
 # ─────────────────────────────────────────────────────────────
+
 
 class TestFullChainE2E:
     """
@@ -315,7 +308,7 @@ class TestFullChainE2E:
     @pytest.mark.asyncio
     async def test_intent_to_capability_to_node_dispatch(self):
         """意图 → 能力 → 节点调度的路由逻辑。"""
-        from core.capability_orchestrator import CapabilityOrchestrator, Capability, CapabilityType
+        from core.capability_orchestrator import Capability, CapabilityOrchestrator, CapabilityType
 
         orch = CapabilityOrchestrator()
         # Manually register a node capability
@@ -376,6 +369,7 @@ class TestFullChainE2E:
     def test_capability_orchestrator_has_dispatch_method(self):
         """CapabilityOrchestrator 实例必须提供 dispatch() 方法。"""
         from core.capability_orchestrator import CapabilityOrchestrator
+
         orch = CapabilityOrchestrator()
         assert hasattr(orch, "dispatch")
         assert callable(orch.dispatch)
@@ -391,6 +385,4 @@ class TestFullChainE2E:
         required_fields = {"id", "name", "status", "production_ready"}
         for node_name, node_info in nodes.items():
             missing = required_fields - set(node_info.keys())
-            assert not missing, (
-                f"节点 {node_name} 缺少字段: {missing}"
-            )
+            assert not missing, f"节点 {node_name} 缺少字段: {missing}"

@@ -646,53 +646,23 @@ class MutationConflictEvidence:
         except ValueError:
             concurrency_mode = WriterConcurrencyMode.unknown
         return cls(
-            single_writer_confirmed=bool(
-                data.get("single_writer_confirmed", False)
-            ),
-            no_concurrent_mutations=bool(
-                data.get("no_concurrent_mutations", False)
-            ),
-            write_order_deterministic=bool(
-                data.get("write_order_deterministic", False)
-            ),
+            single_writer_confirmed=bool(data.get("single_writer_confirmed", False)),
+            no_concurrent_mutations=bool(data.get("no_concurrent_mutations", False)),
+            write_order_deterministic=bool(data.get("write_order_deterministic", False)),
             replay_safe=bool(data.get("replay_safe", False)),
-            deterministic_merge_applied=bool(
-                data.get("deterministic_merge_applied", False)
-            ),
-            merge_function_idempotent=bool(
-                data.get("merge_function_idempotent", False)
-            ),
-            all_conflicts_resolved=bool(
-                data.get("all_conflicts_resolved", False)
-            ),
-            last_writer_wins_applied=bool(
-                data.get("last_writer_wins_applied", False)
-            ),
-            concurrent_writers_detected=bool(
-                data.get("concurrent_writers_detected", False)
-            ),
-            duplicate_write_detected=bool(
-                data.get("duplicate_write_detected", False)
-            ),
-            out_of_order_write_detected=bool(
-                data.get("out_of_order_write_detected", False)
-            ),
-            reconciliation_initiated=bool(
-                data.get("reconciliation_initiated", False)
-            ),
-            reconciliation_complete=bool(
-                data.get("reconciliation_complete", False)
-            ),
-            conflict_acknowledged=bool(
-                data.get("conflict_acknowledged", False)
-            ),
-            conflict_resolution_absent=bool(
-                data.get("conflict_resolution_absent", False)
-            ),
+            deterministic_merge_applied=bool(data.get("deterministic_merge_applied", False)),
+            merge_function_idempotent=bool(data.get("merge_function_idempotent", False)),
+            all_conflicts_resolved=bool(data.get("all_conflicts_resolved", False)),
+            last_writer_wins_applied=bool(data.get("last_writer_wins_applied", False)),
+            concurrent_writers_detected=bool(data.get("concurrent_writers_detected", False)),
+            duplicate_write_detected=bool(data.get("duplicate_write_detected", False)),
+            out_of_order_write_detected=bool(data.get("out_of_order_write_detected", False)),
+            reconciliation_initiated=bool(data.get("reconciliation_initiated", False)),
+            reconciliation_complete=bool(data.get("reconciliation_complete", False)),
+            conflict_acknowledged=bool(data.get("conflict_acknowledged", False)),
+            conflict_resolution_absent=bool(data.get("conflict_resolution_absent", False)),
             mutation_uncertainty=bool(data.get("mutation_uncertainty", False)),
-            explicit_conflict_unresolved=bool(
-                data.get("explicit_conflict_unresolved", False)
-            ),
+            explicit_conflict_unresolved=bool(data.get("explicit_conflict_unresolved", False)),
             concurrency_mode=concurrency_mode,
             participant_id=data.get("participant_id"),
             trace_id=data.get("trace_id"),
@@ -793,16 +763,10 @@ class MutationConflictVerdict:
             mutation_class=m_class,
             rationale=data.get("rationale", ""),
             downgrade_reasons=list(data.get("downgrade_reasons", [])),
-            is_conflict_free_authoritative=bool(
-                data.get("is_conflict_free_authoritative", False)
-            ),
-            is_deterministically_merged=bool(
-                data.get("is_deterministically_merged", False)
-            ),
+            is_conflict_free_authoritative=bool(data.get("is_conflict_free_authoritative", False)),
+            is_deterministically_merged=bool(data.get("is_deterministically_merged", False)),
             is_last_writer_won=bool(data.get("is_last_writer_won", False)),
-            is_reconciliation_required=bool(
-                data.get("is_reconciliation_required", False)
-            ),
+            is_reconciliation_required=bool(data.get("is_reconciliation_required", False)),
             is_conflict_unresolved=bool(data.get("is_conflict_unresolved", False)),
             participant_id=data.get("participant_id"),
             evidence_present=bool(data.get("evidence_present", False)),
@@ -938,11 +902,7 @@ def _classify(evidence: MutationConflictEvidence) -> MutationConflictVerdict:
         )
 
     # Rule 5: deterministic merge
-    if (
-        evidence.deterministic_merge_applied
-        and evidence.merge_function_idempotent
-        and evidence.all_conflicts_resolved
-    ):
+    if evidence.deterministic_merge_applied and evidence.merge_function_idempotent and evidence.all_conflicts_resolved:
         return MutationConflictVerdict(
             mutation_class=MutationConflictClass.deterministically_merged,
             rationale=(
@@ -975,17 +935,12 @@ def _classify(evidence: MutationConflictEvidence) -> MutationConflictVerdict:
             "an out-of-order write was detected without deterministic ordering."
         )
     if evidence.mutation_uncertainty:
-        downgrade_reasons.append(
-            "mutation_uncertainty=True: mutation state is uncertain."
-        )
+        downgrade_reasons.append("mutation_uncertainty=True: mutation state is uncertain.")
 
     # Rule 6: all conflict-free conditions met → conflict_free_authoritative
     dup_ok = not evidence.duplicate_write_detected or evidence.replay_safe
     oor_ok = not evidence.out_of_order_write_detected or evidence.write_order_deterministic
-    recon_ok = (
-        not evidence.reconciliation_initiated
-        or evidence.reconciliation_complete
-    )
+    recon_ok = not evidence.reconciliation_initiated or evidence.reconciliation_complete
     all_conflict_free = (
         evidence.single_writer_confirmed
         and evidence.no_concurrent_mutations
@@ -1019,10 +974,7 @@ def _classify(evidence: MutationConflictEvidence) -> MutationConflictVerdict:
 
     # Rule 7: all other cases → conflict_unresolved (fail-conservative)
     if not downgrade_reasons:
-        downgrade_reasons.append(
-            "No positive mutation conflict evidence is present (fail-conservative "
-            "default)."
-        )
+        downgrade_reasons.append("No positive mutation conflict evidence is present (fail-conservative " "default).")
     return MutationConflictVerdict(
         mutation_class=MutationConflictClass.conflict_unresolved,
         rationale=(

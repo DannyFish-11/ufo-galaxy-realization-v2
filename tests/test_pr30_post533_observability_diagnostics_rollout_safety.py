@@ -54,10 +54,10 @@ import pytest
 
 try:
     from core.runtime.source_dispatch_orchestrator import (
-        OBSERVABILITY_DIAGNOSTICS_ROLLOUT_SAFETY_HARDENING_PR30_SENTINEL,
-        DISPATCH_PATH_DECISION_OBSERVABILITY_PR30_POLICY,
-        REGISTRATION_READINESS_CAPABILITY_FALLBACK_DIAGNOSTICS_PR30_POLICY,
         DELEGATED_EXECUTION_OBSERVABILITY_PR30_POLICY,
+        DISPATCH_PATH_DECISION_OBSERVABILITY_PR30_POLICY,
+        OBSERVABILITY_DIAGNOSTICS_ROLLOUT_SAFETY_HARDENING_PR30_SENTINEL,
+        REGISTRATION_READINESS_CAPABILITY_FALLBACK_DIAGNOSTICS_PR30_POLICY,
         ROLLOUT_SAFETY_SIGNALS_CLIENT_RESULT_OBSERVABILITY_PR30_POLICY,
     )
 
@@ -75,13 +75,11 @@ except ImportError:
     _PROJECTION_AVAILABLE = False
 
 try:
-    from core.runtime import (
-        OBSERVABILITY_DIAGNOSTICS_ROLLOUT_SAFETY_HARDENING_PR30_SENTINEL as _rt_sentinel,
-        DISPATCH_PATH_DECISION_OBSERVABILITY_PR30_POLICY as _rt_dispatch,
-        REGISTRATION_READINESS_CAPABILITY_FALLBACK_DIAGNOSTICS_PR30_POLICY as _rt_registration,
-        DELEGATED_EXECUTION_OBSERVABILITY_PR30_POLICY as _rt_delegated,
-        ROLLOUT_SAFETY_SIGNALS_CLIENT_RESULT_OBSERVABILITY_PR30_POLICY as _rt_rollout,
-    )
+    from core.runtime import DELEGATED_EXECUTION_OBSERVABILITY_PR30_POLICY as _rt_delegated
+    from core.runtime import DISPATCH_PATH_DECISION_OBSERVABILITY_PR30_POLICY as _rt_dispatch
+    from core.runtime import OBSERVABILITY_DIAGNOSTICS_ROLLOUT_SAFETY_HARDENING_PR30_SENTINEL as _rt_sentinel
+    from core.runtime import REGISTRATION_READINESS_CAPABILITY_FALLBACK_DIAGNOSTICS_PR30_POLICY as _rt_registration
+    from core.runtime import ROLLOUT_SAFETY_SIGNALS_CLIENT_RESULT_OBSERVABILITY_PR30_POLICY as _rt_rollout
 
     _RUNTIME_EXPORTS_AVAILABLE = True
 except ImportError:
@@ -91,6 +89,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_dispatch_diagnostic(
     trace_id: str = "trace-pr30-001",
@@ -174,7 +173,8 @@ def _make_result_with_observability(
         "status": status,
         "path": path,
         "is_transient": is_transient,
-        "observability_context": observability_context or {
+        "observability_context": observability_context
+        or {
             "dispatch_path": path,
             "selection_reason": "scored_first",
             "fallback_active": False,
@@ -189,6 +189,7 @@ def _make_result_with_observability(
 # ---------------------------------------------------------------------------
 # A — Orchestrator module: all PR-30 sentinels present and non-empty
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(
     not _ORCHESTRATOR_AVAILABLE,
@@ -250,6 +251,7 @@ class TestOrchestratorPR30Sentinels:
 # B — Projection: PR-30 sentinel is importable and not UNAVAILABLE
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(
     not _PROJECTION_AVAILABLE,
     reason="projection module unavailable",
@@ -276,6 +278,7 @@ class TestProjectionPR30Sentinel:
 # ---------------------------------------------------------------------------
 # C — core.runtime re-exports all PR-30 sentinels
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(
     not _RUNTIME_EXPORTS_AVAILABLE,
@@ -314,6 +317,7 @@ class TestCoreRuntimePR30Exports:
 # D — Dispatch-path decision observability: structured diagnostic fields present
 # ---------------------------------------------------------------------------
 
+
 class TestDispatchPathDecisionObservability:
     """Dispatch-path decisions carry structured, actionable diagnostic fields."""
 
@@ -338,6 +342,7 @@ class TestDispatchPathDecisionObservability:
 
     def test_dispatch_diagnostic_is_json_serialisable(self) -> None:
         import json
+
         d = _make_dispatch_diagnostic()
         serialised = json.dumps(d)
         parsed = json.loads(serialised)
@@ -366,17 +371,20 @@ class TestDispatchPathDecisionObservability:
 # E — Selection gate rejection signals are actionable without internal state
 # ---------------------------------------------------------------------------
 
+
 class TestSelectionGateRejectionSignals:
     """Gate rejections produce actionable signals without internal state access."""
 
-    _KNOWN_REJECTION_REASONS = frozenset({
-        "not_active",
-        "bad_posture",
-        "explicit_invalidation",
-        "high_risk_score",
-        "degraded_readiness",
-        "not_participating",
-    })
+    _KNOWN_REJECTION_REASONS = frozenset(
+        {
+            "not_active",
+            "bad_posture",
+            "explicit_invalidation",
+            "high_risk_score",
+            "degraded_readiness",
+            "not_participating",
+        }
+    )
 
     def test_all_rejection_reasons_are_non_empty(self) -> None:
         for reason in self._KNOWN_REJECTION_REASONS:
@@ -416,10 +424,7 @@ class TestSelectionGateRejectionSignals:
 
     def test_multiple_rejections_same_trace_id_preserved(self) -> None:
         trace = "trace-multi-001"
-        rejections = [
-            {"device_id": f"dev-{i}", "rejection_reason": "not_active", "trace_id": trace}
-            for i in range(3)
-        ]
+        rejections = [{"device_id": f"dev-{i}", "rejection_reason": "not_active", "trace_id": trace} for i in range(3)]
         for r in rejections:
             assert r["trace_id"] == trace
 
@@ -427,6 +432,7 @@ class TestSelectionGateRejectionSignals:
 # ---------------------------------------------------------------------------
 # F — Fallback transition diagnostic fields include trigger and path
 # ---------------------------------------------------------------------------
+
 
 class TestFallbackTransitionDiagnostics:
     """Fallback transitions carry trigger condition and selected fallback path."""
@@ -485,23 +491,28 @@ class TestFallbackTransitionDiagnostics:
 # G — Registration failure diagnostic stage field is present and known
 # ---------------------------------------------------------------------------
 
+
 class TestRegistrationFailureDiagnostics:
     """Registration failures carry rejection_stage and failure_kind diagnostics."""
 
-    _KNOWN_REJECTION_STAGES = frozenset({
-        "validation",
-        "deduplication",
-        "capacity",
-        "state_transition",
-        "capability_check",
-    })
+    _KNOWN_REJECTION_STAGES = frozenset(
+        {
+            "validation",
+            "deduplication",
+            "capacity",
+            "state_transition",
+            "capability_check",
+        }
+    )
 
-    _KNOWN_FAILURE_KINDS = frozenset({
-        "registration_failure",
-        "capability_failure",
-        "readiness_failure",
-        "config_error",
-    })
+    _KNOWN_FAILURE_KINDS = frozenset(
+        {
+            "registration_failure",
+            "capability_failure",
+            "readiness_failure",
+            "config_error",
+        }
+    )
 
     def test_registration_failure_has_rejection_stage(self) -> None:
         d = _make_registration_diagnostic(
@@ -546,6 +557,7 @@ class TestRegistrationFailureDiagnostics:
 # ---------------------------------------------------------------------------
 # H — Readiness degradation diagnostic_reason is stable and non-empty
 # ---------------------------------------------------------------------------
+
 
 class TestReadinessDegradationDiagnosticReason:
     """Readiness degradation signals carry stable, non-empty diagnostic_reason."""
@@ -602,6 +614,7 @@ class TestReadinessDegradationDiagnosticReason:
 # I — Capability mismatch diagnostic includes unsatisfied capability identifier
 # ---------------------------------------------------------------------------
 
+
 class TestCapabilityMismatchDiagnostics:
     """Capability mismatch failures include the unsatisfied capability identifier."""
 
@@ -644,28 +657,33 @@ class TestCapabilityMismatchDiagnostics:
 # J — Delegated execution phase transitions carry trace_id/task_id/session_id
 # ---------------------------------------------------------------------------
 
+
 class TestDelegatedExecutionPhaseObservability:
     """Each delegated execution phase carries identity fields for tracing."""
 
-    _KNOWN_PHASES = frozenset({
-        "pending_ack",
-        "acknowledged",
-        "in_progress",
-        "completed",
-        "failed",
-        "timed_out",
-        "cancelled",
-    })
+    _KNOWN_PHASES = frozenset(
+        {
+            "pending_ack",
+            "acknowledged",
+            "in_progress",
+            "completed",
+            "failed",
+            "timed_out",
+            "cancelled",
+        }
+    )
 
-    _KNOWN_SIGNAL_KINDS = frozenset({
-        "ack",
-        "progress",
-        "partial_result",
-        "final_result",
-        "error",
-        "timeout",
-        "cancelled",
-    })
+    _KNOWN_SIGNAL_KINDS = frozenset(
+        {
+            "ack",
+            "progress",
+            "partial_result",
+            "final_result",
+            "error",
+            "timeout",
+            "cancelled",
+        }
+    )
 
     def test_phase_diagnostic_has_trace_id(self) -> None:
         d = _make_delegated_phase_diagnostic(trace_id="trace-del-001")
@@ -711,6 +729,7 @@ class TestDelegatedExecutionPhaseObservability:
 # ---------------------------------------------------------------------------
 # K — Terminal signal processing surfaces structured phase diagnostic
 # ---------------------------------------------------------------------------
+
 
 class TestTerminalSignalPhaseDiagnostics:
     """Terminal signals (timeout/cancelled/error) surface structured phase diagnostics."""
@@ -759,6 +778,7 @@ class TestTerminalSignalPhaseDiagnostics:
 # L — Rollout safety: result envelope observability_context field present
 # ---------------------------------------------------------------------------
 
+
 class TestResultObservabilityContext:
     """Result envelopes carry observability_context for rollout safety."""
 
@@ -806,6 +826,7 @@ class TestResultObservabilityContext:
 
     def test_observability_context_is_json_serialisable(self) -> None:
         import json
+
         r = _make_result_with_observability()
         serialised = json.dumps(r["observability_context"])
         parsed = json.loads(serialised)
@@ -815,6 +836,7 @@ class TestResultObservabilityContext:
 # ---------------------------------------------------------------------------
 # M — Rollout safety: is_transient field distinguishes transient vs persistent
 # ---------------------------------------------------------------------------
+
 
 class TestResultIsTransientField:
     """is_transient distinguishes transient from persistent failure conditions."""
@@ -858,6 +880,7 @@ class TestResultIsTransientField:
 # ---------------------------------------------------------------------------
 # N — Rollout readiness assertions are deterministic over existing diagnostic fields
 # ---------------------------------------------------------------------------
+
 
 class TestRolloutReadinessAssertions:
     """Rollout readiness checks are deterministic over existing diagnostic fields."""
@@ -923,6 +946,7 @@ class TestRolloutReadinessAssertions:
 # O — Sentinel strings contain expected observability/diagnostics keywords
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(
     not _ORCHESTRATOR_AVAILABLE,
     reason="source_dispatch_orchestrator unavailable",
@@ -950,10 +974,7 @@ class TestSentinelKeywords:
 
     def test_dispatch_policy_contains_no_new_authority(self) -> None:
         lower = DISPATCH_PATH_DECISION_OBSERVABILITY_PR30_POLICY.lower()
-        assert any(
-            phrase in lower
-            for phrase in ("no new", "not introduced", "no parallel", "existing")
-        )
+        assert any(phrase in lower for phrase in ("no new", "not introduced", "no parallel", "existing"))
 
     def test_delegated_policy_contains_trace_id(self) -> None:
         lower = DELEGATED_EXECUTION_OBSERVABILITY_PR30_POLICY.lower()
@@ -968,6 +989,7 @@ class TestSentinelKeywords:
 # P — No parallel authority or duplicate diagnostics subsystem
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(
     not _ORCHESTRATOR_AVAILABLE,
     reason="source_dispatch_orchestrator unavailable",
@@ -975,37 +997,22 @@ class TestSentinelKeywords:
 class TestNoParallelDiagnosticsAuthority:
     def test_dispatch_policy_prohibits_new_coordinator(self) -> None:
         lower = DISPATCH_PATH_DECISION_OBSERVABILITY_PR30_POLICY.lower()
-        assert any(
-            phrase in lower
-            for phrase in ("no new", "not introduced", "no parallel", "existing architecture")
-        )
+        assert any(phrase in lower for phrase in ("no new", "not introduced", "no parallel", "existing architecture"))
 
     def test_registration_policy_prohibits_duplicate_subsystem(self) -> None:
         lower = REGISTRATION_READINESS_CAPABILITY_FALLBACK_DIAGNOSTICS_PR30_POLICY.lower()
-        assert any(
-            phrase in lower
-            for phrase in ("no duplicate", "not introduced", "no new", "existing")
-        )
+        assert any(phrase in lower for phrase in ("no duplicate", "not introduced", "no new", "existing"))
 
     def test_delegated_policy_prohibits_separate_subsystem(self) -> None:
         lower = DELEGATED_EXECUTION_OBSERVABILITY_PR30_POLICY.lower()
-        assert any(
-            phrase in lower
-            for phrase in ("no parallel", "not introduced", "no new", "existing")
-        )
+        assert any(phrase in lower for phrase in ("no parallel", "not introduced", "no new", "existing"))
 
     def test_rollout_policy_prohibits_alternate_control_plane(self) -> None:
         lower = ROLLOUT_SAFETY_SIGNALS_CLIENT_RESULT_OBSERVABILITY_PR30_POLICY.lower()
-        assert any(
-            phrase in lower
-            for phrase in ("no alternate", "not introduced", "no new", "existing")
-        )
+        assert any(phrase in lower for phrase in ("no alternate", "not introduced", "no new", "existing"))
 
     def test_projection_sentinel_confirms_no_new_authority(self) -> None:
         if not _PROJECTION_AVAILABLE:
             pytest.skip("projection unavailable")
         lower = OBSERVABILITY_DIAGNOSTICS_ROLLOUT_SAFETY_HARDENING_ALIGNED_PR30.lower()
-        assert any(
-            phrase in lower
-            for phrase in ("no new", "not introduced", "no parallel", "existing")
-        )
+        assert any(phrase in lower for phrase in ("no new", "not introduced", "no parallel", "existing"))

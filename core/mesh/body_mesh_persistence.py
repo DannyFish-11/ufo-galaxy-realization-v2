@@ -401,10 +401,7 @@ def restore_body_mesh_from_snapshot(
         return 0
 
     if not hasattr(registry, "register"):
-        logger.warning(
-            "restore_body_mesh_from_snapshot: registry has no register() method; "
-            "skipping restoration"
-        )
+        logger.warning("restore_body_mesh_from_snapshot: registry has no register() method; " "skipping restoration")
         return 0
 
     restored = 0
@@ -416,6 +413,7 @@ def restore_body_mesh_from_snapshot(
 
             # Reconstruct roles — stored as list of string values
             from core.mesh.body_mesh_registry import DeviceRole
+
             raw_roles = entry_dict.get("roles", [])
             roles = []
             for r in raw_roles:

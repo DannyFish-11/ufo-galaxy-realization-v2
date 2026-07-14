@@ -8,11 +8,11 @@ and does not depend on operator/projection route surfaces.
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
+
 logger = logging.getLogger(__name__)
 
 
 from typing import Any, Dict
-
 
 CONTROL_PLANE_BACKEND_AUTHORITY_INPUT_POLICY: str = (
     "POLICY::CONTROL_PLANE_BACKEND_AUTHORITY_INPUT_V1: "
@@ -32,8 +32,7 @@ def _derive_shared_execution_visibility(truth_payload: Dict[str, Any]) -> Dict[s
         or closure_basis.get("problem_solved")
     )
     result_closure_established = bool(
-        task_visibility.get("result_closure_established")
-        or closure_basis.get("is_fully_closed")
+        task_visibility.get("result_closure_established") or closure_basis.get("is_fully_closed")
     )
     completion_state = "closed" if result_closure_established else ("in_progress" if task_initiated else "not_started")
     acceptance_verdict = closure_basis.get("acceptance_verdict")
@@ -42,10 +41,13 @@ def _derive_shared_execution_visibility(truth_payload: Dict[str, Any]) -> Dict[s
         "task_initiated": task_initiated,
         "result_closure_established": result_closure_established,
         "completion_state": completion_state,
-        "surface_execution_stage": "closed" if completion_state == "closed" else ("executing" if completion_state == "in_progress" else None),
+        "surface_execution_stage": (
+            "closed" if completion_state == "closed" else ("executing" if completion_state == "in_progress" else None)
+        ),
         "acceptance_verdict": acceptance_verdict,
         "is_fully_closed": bool(closure_basis.get("is_fully_closed")),
-        "authority_completion_truth": acceptance_verdict_normalized == "accept" and bool(closure_basis.get("is_fully_closed")),
+        "authority_completion_truth": acceptance_verdict_normalized == "accept"
+        and bool(closure_basis.get("is_fully_closed")),
         "acceptance_completion_truth": acceptance_verdict_normalized == "accept",
         "repo_mutation_completion_truth": closure_basis.get("repo_mutation_completion_truth", "unknown"),
         "operator_visible_done_summary": (

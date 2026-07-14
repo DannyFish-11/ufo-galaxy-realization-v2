@@ -34,7 +34,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from core.routes._shared import connection_manager, registered_devices, node_status_cache
+from core.routes._shared import connection_manager, node_status_cache, registered_devices
 
 logger = logging.getLogger("Galaxy.API")
 
@@ -42,6 +42,7 @@ logger = logging.getLogger("Galaxy.API")
 # ---------------------------------------------------------------------------
 # Request models (kept minimal for backward compatibility)
 # ---------------------------------------------------------------------------
+
 
 class _LegacyRegisterRequest(BaseModel):
     device_id: str
@@ -64,6 +65,7 @@ class _LegacyUnregisterRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Router factory (matches the pattern used by all other route modules)
 # ---------------------------------------------------------------------------
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:
     """Create the legacy device API compatibility shim router.
@@ -91,9 +93,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         legacy Android clients that call this endpoint are reflected in the
         unified device registry.
         """
-        logger.info(
-            "Legacy /api/devices/register called for device %s", req.device_id
-        )
+        logger.info("Legacy /api/devices/register called for device %s", req.device_id)
         device_info = {
             "device_id": req.device_id,
             "device_type": req.device_type,
@@ -109,6 +109,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         # PR5: SSOT write-through — legacy endpoint now delegates to UDM
         try:
             from galaxy_gateway.ssot import udm_write_register
+
             ok = udm_write_register(
                 device_id=req.device_id,
                 device_name=device_info["device_name"],
@@ -119,12 +120,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             )
             if ok:
                 logger.info(
-                    "Legacy 设备已写入 UDM (SSOT): %s (%s)", req.device_id, req.device_type,
+                    "Legacy 设备已写入 UDM (SSOT): %s (%s)",
+                    req.device_id,
+                    req.device_type,
                 )
             else:
-                logger.warning(
-                    "Legacy 设备 UDM 写入失败（注册继续）: %s", req.device_id
-                )
+                logger.warning("Legacy 设备 UDM 写入失败（注册继续）: %s", req.device_id)
         except Exception as _udm_err:
             logger.debug("Legacy UDM write-through 异常（不影响注册）: %s", _udm_err)
 
@@ -134,11 +135,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         synced_caps = 0
         try:
             from core.routes.devices import _sync_device_to_capability_registry
+
             synced_caps = _sync_device_to_capability_registry(device_info)
             if synced_caps:
                 logger.info(
                     "Legacy 设备 %s 已同步 %d 个能力到 CapabilityRegistry",
-                    req.device_id, synced_caps,
+                    req.device_id,
+                    synced_caps,
                 )
         except Exception as _sync_err:
             logger.debug("Legacy 设备能力同步失败（不影响注册）: %s", _sync_err)
@@ -146,30 +149,39 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         # PR4: 广播实时事件（与 /api/v1/devices/register 保持一致）
         try:
             from core.routes._shared import broadcast_event
-            await broadcast_event("device_update", {
-                "action": "register",
-                "device_id": req.device_id,
-                "device_name": device_info["device_name"],
-                "device_type": req.device_type,
-                "capabilities": req.capabilities,
-                "source": "legacy",
-            })
-            if synced_caps:
-                await broadcast_event("capability_update", {
-                    "source": "compat_legacy",
+
+            await broadcast_event(
+                "device_update",
+                {
+                    "action": "register",
                     "device_id": req.device_id,
-                    "synced_count": synced_caps,
-                })
+                    "device_name": device_info["device_name"],
+                    "device_type": req.device_type,
+                    "capabilities": req.capabilities,
+                    "source": "legacy",
+                },
+            )
+            if synced_caps:
+                await broadcast_event(
+                    "capability_update",
+                    {
+                        "source": "compat_legacy",
+                        "device_id": req.device_id,
+                        "synced_count": synced_caps,
+                    },
+                )
         except Exception as _bc_err:
             logger.debug("Legacy 设备注册广播事件失败: %s", _bc_err)
 
-        return JSONResponse({
-            "success": True,
-            "device_id": req.device_id,
-            "message": "设备注册成功",
-            "server_version": "2.0.0",
-            "available_nodes": list(node_status_cache.keys())[:20],
-        })
+        return JSONResponse(
+            {
+                "success": True,
+                "device_id": req.device_id,
+                "message": "设备注册成功",
+                "server_version": "2.0.0",
+                "available_nodes": list(node_status_cache.keys())[:20],
+            }
+        )
 
     @router.get("/api/devices/list")
     async def legacy_list_devices():
@@ -179,10 +191,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         logger.info("Legacy /api/devices/list called")
         devices = []
         for did, info in registered_devices.items():
-            devices.append({
-                **info,
-                "online": connection_manager.is_online(did),
-            })
+            devices.append(
+                {
+                    **info,
+                    "online": connection_manager.is_online(did),
+                }
+            )
         return JSONResponse({"devices": devices, "total": len(devices)})
 
     @router.post("/api/devices/heartbeat")
@@ -194,13 +208,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         cache (registered_devices) is updated only as a read-only mirror AFTER
         the UDM write, and only if the entry already exists there.
         """
-        logger.info(
-            "Legacy /api/devices/heartbeat called for device %s", req.device_id
-        )
+        logger.info("Legacy /api/devices/heartbeat called for device %s", req.device_id)
 
         # PR-E: SSOT — UDM heartbeat write first
         try:
             from galaxy_gateway.ssot import udm_write_heartbeat
+
             udm_write_heartbeat(req.device_id)
         except Exception as _udm_err:
             logger.debug("Legacy UDM heartbeat write-through 失败（不影响响应）: %s", _udm_err)
@@ -210,12 +223,14 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             registered_devices[req.device_id]["last_seen"] = datetime.now().isoformat()  # COMPAT_MIRROR_WRITE
             if req.status:
                 registered_devices[req.device_id]["status_detail"] = req.status  # COMPAT_MIRROR_WRITE
-            await connection_manager.broadcast_status({
-                "type": "device_status_update",
-                "device_id": req.device_id,
-                "status": req.status,
-                "timestamp": datetime.now().isoformat(),
-            })
+            await connection_manager.broadcast_status(
+                {
+                    "type": "device_status_update",
+                    "device_id": req.device_id,
+                    "status": req.status,
+                    "timestamp": datetime.now().isoformat(),
+                }
+            )
 
         return JSONResponse({"success": True, "device_id": req.device_id})
 
@@ -228,13 +243,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         cache (registered_devices) is updated only as a read-only mirror AFTER
         the UDM write.
         """
-        logger.info(
-            "Legacy /api/devices/unregister called for device %s", req.device_id
-        )
+        logger.info("Legacy /api/devices/unregister called for device %s", req.device_id)
 
         # PR-E: SSOT — UDM offline patch first (best-effort)
         try:
             from core.unified.device_manager import get_unified_device_manager as _get_udm
+
             _get_udm().patch_device(req.device_id, {"status": "offline"})
         except Exception as _udm_err:
             logger.debug("Legacy UDM offline patch failed for %s: %s", req.device_id, _udm_err)

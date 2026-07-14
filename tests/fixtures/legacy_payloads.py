@@ -41,7 +41,6 @@ LEGACY_V1 = {
         "type": "registration",
         "device_id": "v1-dev-003",
     },
-
     # --- heartbeat ------------------------------------------------------------
     "heartbeat": {
         "type": "heartbeat",
@@ -51,7 +50,6 @@ LEGACY_V1 = {
         "type": "device_heartbeat",
         "device_id": "v1-dev-011",
     },
-
     # --- capability_report ----------------------------------------------------
     # In AIP/1.0, capability data was sent inside a generic "register" message
     # or as a custom type.  We test both the promoted type *and* normalisation
@@ -65,7 +63,6 @@ LEGACY_V1 = {
             "version": "1.0",
         },
     },
-
     # --- task_assign ----------------------------------------------------------
     "task_assign_via_task_execute": {
         "type": "task_execute",
@@ -75,7 +72,6 @@ LEGACY_V1 = {
             "commands": [{"tool_name": "click", "parameters": {"x": 50, "y": 100}}],
         },
     },
-
     # --- command_result -------------------------------------------------------
     "command_result": {
         "type": "command_result",
@@ -105,14 +101,12 @@ LEGACY_V2 = {
         "device_id": "v2-dev-001",
         "payload": {"model": "Galaxy S23", "os_version": "Android 14"},
     },
-
     # --- heartbeat ------------------------------------------------------------
     "heartbeat": {
         "version": "2.0",
         "type": "heartbeat",
         "device_id": "v2-dev-010",
     },
-
     # --- capability_report ----------------------------------------------------
     "capability_report": {
         "version": "2.0",
@@ -124,7 +118,6 @@ LEGACY_V2 = {
             "version": "2.0",
         },
     },
-
     # --- task_assign ----------------------------------------------------------
     "task_assign": {
         "version": "2.0",
@@ -133,7 +126,6 @@ LEGACY_V2 = {
         "task_id": "t-v2-001",
         "payload": {"action": "screenshot"},
     },
-
     # --- command_result -------------------------------------------------------
     "command_result": {
         "version": "2.0",
@@ -159,14 +151,12 @@ NATIVE_V3 = {
             "platform": "android",
         },
     },
-
     # --- heartbeat ------------------------------------------------------------
     "heartbeat": {
         "version": "3.0",
         "type": "heartbeat",
         "device_id": "v3-dev-010",
     },
-
     # --- capability_report ----------------------------------------------------
     "capability_report": {
         "version": "3.0",
@@ -178,7 +168,6 @@ NATIVE_V3 = {
             "version": "3.0",
         },
     },
-
     # --- task_assign ----------------------------------------------------------
     "task_assign": {
         "version": "3.0",
@@ -187,7 +176,6 @@ NATIVE_V3 = {
         "task_id": "t-v3-001",
         "payload": {"action": "click", "params": {"x": 100, "y": 200}},
     },
-
     # --- command_result -------------------------------------------------------
     "command_result": {
         "version": "3.0",

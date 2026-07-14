@@ -92,47 +92,55 @@ def _make_full_inventory():
 
     bridge = ConfigBridge()
     snapshots = [
-        LegacyLLMProviderSnapshot.from_dict({
-            "provider": "openai",
-            "model": "gpt-5.5",
-            "models": ["gpt-5.5", "gpt-4o"],
-            "speed_score": 8,
-            "quality_score": 9,
-            "available": True,
-            "multimodal": True,
-            "env_keys": ["OPENAI_API_KEY"],
-        }),
-        LegacyLLMProviderSnapshot.from_dict({
-            "provider": "anthropic",
-            "model": "claude-opus-4-8-20250529",
-            "models": ["claude-opus-4-8-20250529"],
-            "speed_score": 6,
-            "quality_score": 10,
-            "available": True,
-            "multimodal": True,
-            "env_keys": ["ANTHROPIC_API_KEY"],
-        }),
-        LegacyLLMProviderSnapshot.from_dict({
-            "provider": "groq",
-            "model": "llama-3.1-70b",
-            "models": ["llama-3.1-70b"],
-            "speed_score": 10,
-            "quality_score": 7,
-            "available": True,
-            "multimodal": False,
-            "env_keys": ["GROQ_API_KEY"],
-        }),
+        LegacyLLMProviderSnapshot.from_dict(
+            {
+                "provider": "openai",
+                "model": "gpt-5.5",
+                "models": ["gpt-5.5", "gpt-4o"],
+                "speed_score": 8,
+                "quality_score": 9,
+                "available": True,
+                "multimodal": True,
+                "env_keys": ["OPENAI_API_KEY"],
+            }
+        ),
+        LegacyLLMProviderSnapshot.from_dict(
+            {
+                "provider": "anthropic",
+                "model": "claude-opus-4-8-20250529",
+                "models": ["claude-opus-4-8-20250529"],
+                "speed_score": 6,
+                "quality_score": 10,
+                "available": True,
+                "multimodal": True,
+                "env_keys": ["ANTHROPIC_API_KEY"],
+            }
+        ),
+        LegacyLLMProviderSnapshot.from_dict(
+            {
+                "provider": "groq",
+                "model": "llama-3.1-70b",
+                "models": ["llama-3.1-70b"],
+                "speed_score": 10,
+                "quality_score": 7,
+                "available": True,
+                "multimodal": False,
+                "env_keys": ["GROQ_API_KEY"],
+            }
+        ),
     ]
     return bridge.build_inventory(snapshots)
 
 
 def _make_full_router():
     from core.model_topology import TopologyRouter
+
     return TopologyRouter(_make_full_inventory())
 
 
 def _make_plan():
     from core.continuum.types import RuntimeDomain, TriStatePhase
+
     router = _make_full_router()
     return router.route(TriStatePhase.LIMINAL, RuntimeDomain.LOCAL)
 
@@ -230,6 +238,7 @@ class TestPrimaryModelFields:
 
     def test_primary_model_vendor_source_is_category_value(self):
         from core.model_topology.topology_types import ProviderCategory
+
         valid_values = {c.value for c in ProviderCategory}
         d = _make_plan_dict()
         assert d["primary_model"]["vendor_source"] in valid_values
@@ -242,9 +251,8 @@ class TestPrimaryModelFields:
         """The multimodal-native primary should report native_multimodal=True."""
         from core.continuum.types import RuntimeDomain, TriStatePhase
         from core.model_topology import TopologyRouter
-        plan = TopologyRouter(_make_full_inventory()).route(
-            TriStatePhase.SILENT, RuntimeDomain.LOCAL
-        )
+
+        plan = TopologyRouter(_make_full_inventory()).route(TriStatePhase.SILENT, RuntimeDomain.LOCAL)
         d = plan.to_dict()
         # The SILENT phase strongly weights multimodal_core nodes first.
         if d["primary_model"] is not None:
@@ -257,6 +265,7 @@ class TestPrimaryModelFields:
 
     def test_primary_model_topology_role_is_known_role(self):
         from core.model_topology.topology_types import TopologyRole
+
         valid_values = {r.value for r in TopologyRole}
         d = _make_plan_dict()
         assert d["primary_model"]["topology_role"] in valid_values
@@ -329,12 +338,14 @@ class TestSupportModelFields:
 
     def test_support_model_vendor_source_values_are_category_values(self):
         from core.model_topology.topology_types import ProviderCategory
+
         valid_values = {c.value for c in ProviderCategory}
         for sm in self._get_support_models():
             assert sm["vendor_source"] in valid_values
 
     def test_support_model_topology_role_values_are_known(self):
         from core.model_topology.topology_types import TopologyRole
+
         valid_values = {r.value for r in TopologyRole}
         for sm in self._get_support_models():
             assert sm["topology_role"] in valid_values
@@ -359,17 +370,15 @@ class TestRouteMetadata:
     def test_phase_value_matches_routing_input(self):
         from core.continuum.types import RuntimeDomain, TriStatePhase
         from core.model_topology import TopologyRouter
-        plan = TopologyRouter(_make_full_inventory()).route(
-            TriStatePhase.MANIFEST, RuntimeDomain.LOCAL
-        )
+
+        plan = TopologyRouter(_make_full_inventory()).route(TriStatePhase.MANIFEST, RuntimeDomain.LOCAL)
         assert plan.to_dict()["phase"] == TriStatePhase.MANIFEST.value
 
     def test_domain_value_matches_routing_input(self):
         from core.continuum.types import RuntimeDomain, TriStatePhase
         from core.model_topology import TopologyRouter
-        plan = TopologyRouter(_make_full_inventory()).route(
-            TriStatePhase.SILENT, RuntimeDomain.CROSS_DEVICE
-        )
+
+        plan = TopologyRouter(_make_full_inventory()).route(TriStatePhase.SILENT, RuntimeDomain.CROSS_DEVICE)
         assert plan.to_dict()["domain"] == RuntimeDomain.CROSS_DEVICE.value
 
     def test_route_reason_is_non_empty_string(self):
@@ -380,13 +389,13 @@ class TestRouteMetadata:
     def test_route_reason_contains_phase(self):
         from core.continuum.types import RuntimeDomain, TriStatePhase
         from core.model_topology import TopologyRouter
-        plan = TopologyRouter(_make_full_inventory()).route(
-            TriStatePhase.MANIFEST, RuntimeDomain.LOCAL
-        )
+
+        plan = TopologyRouter(_make_full_inventory()).route(TriStatePhase.MANIFEST, RuntimeDomain.LOCAL)
         assert "manifest" in plan.to_dict()["route_reason"]
 
     def test_authority_equals_canonical_routing_authority_sentinel(self):
         from core.model_topology.topology_router import CANONICAL_ROUTING_AUTHORITY
+
         d = _make_plan_dict()
         assert d["authority"] == CANONICAL_ROUTING_AUTHORITY
 
@@ -461,6 +470,7 @@ class TestEmptyInventoryContract:
     def _empty_dict(self):
         from core.continuum.types import RuntimeDomain, TriStatePhase
         from core.model_topology import ProviderInventory, TopologyRouter
+
         router = TopologyRouter(ProviderInventory())
         return router.route(TriStatePhase.SILENT, RuntimeDomain.LOCAL).to_dict()
 
@@ -475,6 +485,7 @@ class TestEmptyInventoryContract:
 
     def test_authority_is_canonical(self):
         from core.model_topology.topology_router import CANONICAL_ROUTING_AUTHORITY
+
         assert self._empty_dict()["authority"] == CANONICAL_ROUTING_AUTHORITY
 
     def test_active_weights_is_empty_dict(self):
@@ -503,6 +514,7 @@ class TestJsonSerialisability:
     def test_empty_plan_is_json_serialisable(self):
         from core.continuum.types import RuntimeDomain, TriStatePhase
         from core.model_topology import ProviderInventory, TopologyRouter
+
         router = TopologyRouter(ProviderInventory())
         d = router.route(TriStatePhase.SILENT, RuntimeDomain.LOCAL).to_dict()
         serialised = json.dumps(d)
@@ -510,6 +522,7 @@ class TestJsonSerialisability:
 
     def test_all_phases_are_json_serialisable(self):
         from core.model_topology import TopologyRouter
+
         router = TopologyRouter(_make_full_inventory())
         for _phase, plan in router.route_all_phases().items():
             d = plan.to_dict()
@@ -527,6 +540,7 @@ class TestDeterminism:
     def test_to_dict_deterministic_across_two_routers(self):
         from core.continuum.types import RuntimeDomain, TriStatePhase
         from core.model_topology import TopologyRouter
+
         inv = _make_full_inventory()
         d1 = TopologyRouter(inv).route(TriStatePhase.LIMINAL, RuntimeDomain.LOCAL).to_dict()
         d2 = TopologyRouter(inv).route(TriStatePhase.LIMINAL, RuntimeDomain.LOCAL).to_dict()
@@ -534,10 +548,7 @@ class TestDeterminism:
         assert d1["primary_model"]["model_id"] == d2["primary_model"]["model_id"]
         assert d1["primary_model"]["provider_id"] == d2["primary_model"]["provider_id"]
         assert d1["primary_model"]["combined_weight"] == d2["primary_model"]["combined_weight"]
-        assert (
-            [sm["node_id"] for sm in d1["support_models"]]
-            == [sm["node_id"] for sm in d2["support_models"]]
-        )
+        assert [sm["node_id"] for sm in d1["support_models"]] == [sm["node_id"] for sm in d2["support_models"]]
 
 
 # ---------------------------------------------------------------------------
@@ -591,6 +602,7 @@ class TestDownstreamProjectionCompatibility:
 
     def test_authority_provenance_derivable(self):
         from core.model_topology.topology_router import CANONICAL_ROUTING_AUTHORITY
+
         d = _make_plan_dict()
         assert d["authority"] == CANONICAL_ROUTING_AUTHORITY
 
@@ -610,9 +622,14 @@ class TestDownstreamProjectionCompatibility:
     def test_support_model_fields_satisfy_projection_contract(self):
         """Each support model must carry the same canonical fields as the primary."""
         d = _make_plan_dict()
-        required = {"node_id", "model_id", "provider_id", "vendor_source",
-                    "native_multimodal", "topology_role", "combined_weight"}
+        required = {
+            "node_id",
+            "model_id",
+            "provider_id",
+            "vendor_source",
+            "native_multimodal",
+            "topology_role",
+            "combined_weight",
+        }
         for sm in d["support_models"]:
-            assert required.issubset(sm.keys()), (
-                f"Support model missing fields: {required - sm.keys()}"
-            )
+            assert required.issubset(sm.keys()), f"Support model missing fields: {required - sm.keys()}"

@@ -31,7 +31,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ===========================================================================
 # A) Sentinels
 # ===========================================================================
@@ -206,10 +205,10 @@ class TestLookupDeviceCapabilities:
 class TestEnforceGatewayDefaultCapabilityGate:
     def test_no_capabilities_no_requirements_is_no_op(self):
         """No required_capabilities + unknown command = NO_REQUIREMENTS (no-op)."""
+        from core.capability_enforcement_hardener import HardenedVerdict
         from core.gateway_capability_default_enforcement import (
             enforce_gateway_default_capability_gate,
         )
-        from core.capability_enforcement_hardener import HardenedVerdict
 
         record = enforce_gateway_default_capability_gate(
             device_id="dev_x",
@@ -221,10 +220,10 @@ class TestEnforceGatewayDefaultCapabilityGate:
 
     def test_explicit_capabilities_device_has_them_passes(self):
         """Device has all required caps → PASSED."""
+        from core.capability_enforcement_hardener import HardenedVerdict
         from core.gateway_capability_default_enforcement import (
             enforce_gateway_default_capability_gate,
         )
-        from core.capability_enforcement_hardener import HardenedVerdict
 
         record = enforce_gateway_default_capability_gate(
             device_id="dev_capable",
@@ -236,10 +235,10 @@ class TestEnforceGatewayDefaultCapabilityGate:
 
     def test_explicit_capabilities_device_missing_hard_reject(self):
         """Device missing required cap → CapabilityHardRejectError (STRICT mode)."""
+        from core.capability_enforcement_hardener import CapabilityHardRejectError
         from core.gateway_capability_default_enforcement import (
             enforce_gateway_default_capability_gate,
         )
-        from core.capability_enforcement_hardener import CapabilityHardRejectError
 
         with pytest.raises(CapabilityHardRejectError) as exc_info:
             enforce_gateway_default_capability_gate(
@@ -254,10 +253,10 @@ class TestEnforceGatewayDefaultCapabilityGate:
 
     def test_inferred_capabilities_device_has_them_passes(self):
         """When required_capabilities is None, inferred from command; device has them → PASSED."""
+        from core.capability_enforcement_hardener import HardenedVerdict
         from core.gateway_capability_default_enforcement import (
             enforce_gateway_default_capability_gate,
         )
-        from core.capability_enforcement_hardener import HardenedVerdict
 
         record = enforce_gateway_default_capability_gate(
             device_id="dev_gps",
@@ -269,10 +268,10 @@ class TestEnforceGatewayDefaultCapabilityGate:
 
     def test_inferred_capabilities_device_missing_hard_reject(self):
         """When inferred caps are missing from device → CapabilityHardRejectError."""
+        from core.capability_enforcement_hardener import CapabilityHardRejectError
         from core.gateway_capability_default_enforcement import (
             enforce_gateway_default_capability_gate,
         )
-        from core.capability_enforcement_hardener import CapabilityHardRejectError
 
         with pytest.raises(CapabilityHardRejectError) as exc_info:
             enforce_gateway_default_capability_gate(
@@ -286,10 +285,10 @@ class TestEnforceGatewayDefaultCapabilityGate:
 
     def test_device_capabilities_none_triggers_insufficient_data(self):
         """When device_capabilities is None and registry returns empty → INSUFFICIENT_DATA."""
+        from core.capability_enforcement_hardener import HardenedVerdict
         from core.gateway_capability_default_enforcement import (
             enforce_gateway_default_capability_gate,
         )
-        from core.capability_enforcement_hardener import HardenedVerdict
 
         # Patch lookup to return [] (device unknown)
         with patch(
@@ -307,10 +306,10 @@ class TestEnforceGatewayDefaultCapabilityGate:
 
     def test_error_in_reject_contains_audit_id(self):
         """CapabilityHardRejectError must carry a non-empty audit_id."""
+        from core.capability_enforcement_hardener import CapabilityHardRejectError
         from core.gateway_capability_default_enforcement import (
             enforce_gateway_default_capability_gate,
         )
-        from core.capability_enforcement_hardener import CapabilityHardRejectError
 
         with pytest.raises(CapabilityHardRejectError) as exc_info:
             enforce_gateway_default_capability_gate(
@@ -332,10 +331,10 @@ class TestEnforceGatewayDefaultCapabilityGate:
 class TestExplicitRoutingDoesNotExemptGate:
     def test_explicit_device_id_still_gated(self):
         """Supplying device_id explicitly does not skip the capability gate."""
+        from core.capability_enforcement_hardener import CapabilityHardRejectError
         from core.gateway_capability_default_enforcement import (
             enforce_gateway_default_capability_gate,
         )
-        from core.capability_enforcement_hardener import CapabilityHardRejectError
 
         # Explicit device_id with known missing capability → should still reject
         with pytest.raises(CapabilityHardRejectError):
@@ -348,10 +347,10 @@ class TestExplicitRoutingDoesNotExemptGate:
 
     def test_explicit_device_id_with_matching_caps_passes(self):
         """Explicit device_id with correct caps → PASSED (not rejected)."""
+        from core.capability_enforcement_hardener import HardenedVerdict
         from core.gateway_capability_default_enforcement import (
             enforce_gateway_default_capability_gate,
         )
-        from core.capability_enforcement_hardener import HardenedVerdict
 
         record = enforce_gateway_default_capability_gate(
             device_id="explicit_device_with_camera",
@@ -363,10 +362,10 @@ class TestExplicitRoutingDoesNotExemptGate:
 
     def test_no_caps_no_inference_still_no_op(self):
         """Explicit device_id + no caps + no inference → NO_REQUIREMENTS (backward compat)."""
+        from core.capability_enforcement_hardener import HardenedVerdict
         from core.gateway_capability_default_enforcement import (
             enforce_gateway_default_capability_gate,
         )
-        from core.capability_enforcement_hardener import HardenedVerdict
 
         record = enforce_gateway_default_capability_gate(
             device_id="explicit_device_any",
@@ -384,8 +383,8 @@ class TestExplicitRoutingDoesNotExemptGate:
 
 class TestAuditGatewayOverride:
     def test_override_with_reason_returns_audited_override(self):
-        from core.gateway_capability_default_enforcement import audit_gateway_override
         from core.capability_enforcement_hardener import HardenedVerdict
+        from core.gateway_capability_default_enforcement import audit_gateway_override
 
         record = audit_gateway_override(
             device_id="dev_override",
@@ -423,8 +422,8 @@ class TestAuditGatewayOverride:
         assert record.override_reason == reason
 
     def test_override_infers_capabilities_when_not_supplied(self):
-        from core.gateway_capability_default_enforcement import audit_gateway_override
         from core.capability_enforcement_hardener import HardenedVerdict
+        from core.gateway_capability_default_enforcement import audit_gateway_override
 
         record = audit_gateway_override(
             device_id="dev_infer",
@@ -512,8 +511,7 @@ class TestGapRegistryResolved:
         )
         assert gap is not None, "GAP_CAPABILITY_GATE_DEFAULT_ENFORCEMENT not found in WORKSTREAM_GAP_REGISTRY"
         assert gap.resolved is True, (
-            "GAP_CAPABILITY_GATE_DEFAULT_ENFORCEMENT must be marked resolved=True "
-            "after the closure PR lands."
+            "GAP_CAPABILITY_GATE_DEFAULT_ENFORCEMENT must be marked resolved=True " "after the closure PR lands."
         )
 
     def test_gap_resolution_pr_non_empty(self):
@@ -564,10 +562,10 @@ class TestRegressionGate:
 
     def test_gate_returns_record_type(self):
         """enforce_gateway_default_capability_gate must return HardenedEnforcementRecord."""
+        from core.capability_enforcement_hardener import HardenedEnforcementRecord
         from core.gateway_capability_default_enforcement import (
             enforce_gateway_default_capability_gate,
         )
-        from core.capability_enforcement_hardener import HardenedEnforcementRecord
 
         record = enforce_gateway_default_capability_gate(
             device_id="regression_dev",

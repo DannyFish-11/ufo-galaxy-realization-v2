@@ -39,6 +39,7 @@ def _make_contract(
     available: bool = True,
 ) -> "CapabilityContract":  # noqa: F821  (forward ref resolved at runtime)
     from core.unified.capability_contract import CapabilityContract, CapabilitySource
+
     try:
         src = CapabilitySource(source)
     except ValueError:
@@ -62,6 +63,7 @@ def _make_capability_item(
     available: bool = True,
 ) -> "CapabilityItem":  # noqa: F821
     from core.agent.capability_registry import CapabilityItem
+
     return CapabilityItem(
         name=name,
         description=description,
@@ -82,26 +84,31 @@ class TestCapabilityContractValidation:
 
     def test_mcp_contract_valid(self):
         from core.unified.capability_contract import validate_capability_contract
+
         contract = _make_contract("mcp__srv1__search", source="mcp")
         validate_capability_contract(contract)  # must not raise
 
     def test_skill_contract_valid(self):
         from core.unified.capability_contract import validate_capability_contract
+
         contract = _make_contract("skill__hello", source="skill")
         validate_capability_contract(contract)
 
     def test_device_contract_valid(self):
         from core.unified.capability_contract import validate_capability_contract
+
         contract = _make_contract("gateway__device1__tap", source="device", source_id="device1")
         validate_capability_contract(contract)
 
     def test_gateway_contract_valid(self):
         from core.unified.capability_contract import validate_capability_contract
+
         contract = _make_contract("gateway__gw1__act", source="gateway", source_id="gw1")
         validate_capability_contract(contract)
 
     def test_node_contract_valid(self):
         from core.unified.capability_contract import validate_capability_contract
+
         contract = _make_contract("node__n1__execute", source="node", source_id="n1")
         validate_capability_contract(contract)
 
@@ -110,30 +117,31 @@ class TestCapabilityContractValidation:
             CapabilityContractError,
             validate_capability_contract,
         )
+
         contract = _make_contract("")
         with pytest.raises(CapabilityContractError):
             validate_capability_contract(contract)
 
     def test_empty_description_raises(self):
         from core.unified.capability_contract import (
-            CapabilityContractError,
             CapabilityContract,
+            CapabilityContractError,
             CapabilitySource,
             validate_capability_contract,
         )
-        contract = CapabilityContract(
-            name="some_cap", description="", source=CapabilitySource.MCP
-        )
+
+        contract = CapabilityContract(name="some_cap", description="", source=CapabilitySource.MCP)
         with pytest.raises(CapabilityContractError):
             validate_capability_contract(contract)
 
     def test_invalid_parameters_type_raises(self):
         from core.unified.capability_contract import (
-            CapabilityContractError,
             CapabilityContract,
+            CapabilityContractError,
             CapabilitySource,
             validate_capability_contract,
         )
+
         contract = CapabilityContract(
             name="bad_cap",
             description="bad",
@@ -149,16 +157,19 @@ class TestCapabilityContractValidation:
             CapabilitySource,
             is_valid_capability_contract,
         )
+
         bad = CapabilityContract(name="", description="x", source=CapabilitySource.MCP)
         assert is_valid_capability_contract(bad) is False
 
     def test_is_valid_helper_returns_true_on_valid(self):
         from core.unified.capability_contract import is_valid_capability_contract
+
         good = _make_contract("mcp__ok__tool")
         assert is_valid_capability_contract(good) is True
 
     def test_to_dict_roundtrip(self):
         from core.unified.capability_contract import CapabilityContract
+
         original = _make_contract("mcp__srv__t1", source="mcp", source_id="srv")
         restored = CapabilityContract.from_dict(original.to_dict())
         assert restored.name == original.name
@@ -184,6 +195,7 @@ class TestCapabilityContractValidation:
             CapabilitySource,
             is_valid_capability_contract,
         )
+
         contract = CapabilityContract(
             name="legacy_cap",
             description="legacy capability",
@@ -227,13 +239,12 @@ class TestCapabilityResolverNormalisation:
         """Build a fake registry compatible with CapabilityResolver._get_registry()."""
         mock_reg = MagicMock()
         mock_reg.list_tools.return_value = items
-        mock_reg.get.side_effect = lambda name: next(
-            (i for i in items if getattr(i, "name", None) == name), None
-        )
+        mock_reg.get.side_effect = lambda name: next((i for i in items if getattr(i, "name", None) == name), None)
         return mock_reg
 
     def test_resolve_mcp_contract(self):
         from core.unified.capability_resolver import CapabilityResolver
+
         item = _make_capability_item("mcp__srv1__search", source="mcp")
         registry = self._make_registry_with_items([item])
         resolver = CapabilityResolver(registry=registry, cache_ttl_seconds=0)
@@ -244,6 +255,7 @@ class TestCapabilityResolverNormalisation:
 
     def test_resolve_skill_contract(self):
         from core.unified.capability_resolver import CapabilityResolver
+
         item = _make_capability_item("skill__hello", source="skill", source_id="hello")
         registry = self._make_registry_with_items([item])
         resolver = CapabilityResolver(registry=registry, cache_ttl_seconds=0)
@@ -253,6 +265,7 @@ class TestCapabilityResolverNormalisation:
 
     def test_resolve_node_contract(self):
         from core.unified.capability_resolver import CapabilityResolver
+
         item = _make_capability_item("node__n1__execute", source="node", source_id="n1")
         registry = self._make_registry_with_items([item])
         resolver = CapabilityResolver(registry=registry, cache_ttl_seconds=0)
@@ -262,6 +275,7 @@ class TestCapabilityResolverNormalisation:
 
     def test_resolve_gateway_contract(self):
         from core.unified.capability_resolver import CapabilityResolver
+
         item = _make_capability_item("gateway__gw1__action", source="gateway", source_id="gw1")
         registry = self._make_registry_with_items([item])
         resolver = CapabilityResolver(registry=registry, cache_ttl_seconds=0)
@@ -270,8 +284,9 @@ class TestCapabilityResolverNormalisation:
         assert contract.source.value == "gateway"
 
     def test_resolve_all_returns_only_valid(self):
-        from core.unified.capability_resolver import CapabilityResolver
         from core.agent.capability_registry import CapabilityItem
+        from core.unified.capability_resolver import CapabilityResolver
+
         valid_item = _make_capability_item("mcp__srv__valid", source="mcp")
         invalid_item = CapabilityItem(
             name="",
@@ -288,8 +303,9 @@ class TestCapabilityResolverNormalisation:
         assert "" not in names
 
     def test_resolve_all_filter_by_source(self):
-        from core.unified.capability_resolver import CapabilityResolver
         from core.unified.capability_contract import CapabilitySource
+        from core.unified.capability_resolver import CapabilityResolver
+
         items = [
             _make_capability_item("mcp__srv__t1", source="mcp"),
             _make_capability_item("skill__s1", source="skill"),
@@ -303,13 +319,15 @@ class TestCapabilityResolverNormalisation:
 
     def test_resolve_unknown_name_returns_none(self):
         from core.unified.capability_resolver import CapabilityResolver
+
         registry = self._make_registry_with_items([])
         resolver = CapabilityResolver(registry=registry, cache_ttl_seconds=0)
         assert resolver.resolve("nonexistent") is None
 
     def test_validation_errors_recorded(self):
-        from core.unified.capability_resolver import CapabilityResolver
         from core.agent.capability_registry import CapabilityItem
+        from core.unified.capability_resolver import CapabilityResolver
+
         bad = CapabilityItem(name="", description="bad", source="mcp", source_id="x")
         registry = self._make_registry_with_items([bad])
         resolver = CapabilityResolver(registry=registry, cache_ttl_seconds=0)
@@ -319,6 +337,7 @@ class TestCapabilityResolverNormalisation:
 
     def test_find_by_keyword(self):
         from core.unified.capability_resolver import CapabilityResolver
+
         items = [
             _make_capability_item("mcp__srv__screenshot", description="Capture screenshot"),
             _make_capability_item("mcp__srv__search", description="Search the web"),
@@ -331,6 +350,7 @@ class TestCapabilityResolverNormalisation:
 
     def test_stats_returns_counts(self):
         from core.unified.capability_resolver import CapabilityResolver
+
         items = [
             _make_capability_item("mcp__srv__t1", source="mcp"),
             _make_capability_item("skill__s1", source="skill"),
@@ -353,6 +373,7 @@ class TestCollectToolSchemas:
 
     def _make_resolver_with_items(self, items: List) -> "CapabilityResolver":  # noqa: F821
         from core.unified.capability_resolver import CapabilityResolver
+
         mock_reg = MagicMock()
         mock_reg.list_tools.return_value = items
         return CapabilityResolver(registry=mock_reg, cache_ttl_seconds=0)
@@ -369,15 +390,14 @@ class TestCollectToolSchemas:
 
     def test_filter_by_sources(self):
         from core.unified.capability_contract import CapabilitySource
+
         items = [
             _make_capability_item("mcp__srv__t1", source="mcp"),
             _make_capability_item("skill__s1", source="skill"),
             _make_capability_item("node__n1__a", source="node"),
         ]
         resolver = self._make_resolver_with_items(items)
-        schemas = resolver.collect_tool_schemas(
-            sources=[CapabilitySource.MCP, CapabilitySource.SKILL]
-        )
+        schemas = resolver.collect_tool_schemas(sources=[CapabilitySource.MCP, CapabilitySource.SKILL])
         names = [s["function"]["name"] for s in schemas]
         assert "mcp__srv__t1" in names
         assert "skill__s1" in names
@@ -390,6 +410,7 @@ class TestCollectToolSchemas:
 
     def test_invalid_contracts_excluded(self):
         from core.agent.capability_registry import CapabilityItem
+
         items = [
             _make_capability_item("mcp__srv__valid", source="mcp"),
             CapabilityItem(name="", description="invalid", source="mcp", source_id="x"),
@@ -439,6 +460,7 @@ class TestOpenClawdPrefersCatalog:
             # Import inside patch context
             try:
                 from core.openclawd import OpenClawd
+
                 oc = OpenClawd.__new__(OpenClawd)
                 # Minimally initialise required attributes
                 oc._node_id_to_key = {}
@@ -466,6 +488,7 @@ class TestOpenClawdPrefersCatalog:
             ),
         ):
             from core.unified.capability_resolver import CapabilityResolver
+
             mock_reg = MagicMock()
             mock_reg.list_tools.return_value = [
                 _make_capability_item("mcp__srv__t1", source="mcp"),
@@ -473,9 +496,7 @@ class TestOpenClawdPrefersCatalog:
             ]
             resolver = CapabilityResolver(registry=mock_reg, cache_ttl_seconds=9999)
             with patch.object(resolver, "collect_tool_schemas", return_value=catalog_tools):
-                schemas = resolver.collect_tool_schemas(
-                    sources=None
-                )
+                schemas = resolver.collect_tool_schemas(sources=None)
             names = [s["function"]["name"] for s in schemas]
             assert "mcp__srv__t1" in names
             assert "skill__s1" in names
@@ -491,6 +512,7 @@ class TestFallbackBehaviour:
 
     def test_resolver_returns_empty_list_when_no_registry(self):
         from core.unified.capability_resolver import CapabilityResolver
+
         resolver = CapabilityResolver(registry=None, cache_ttl_seconds=0)
         # Patch _get_registry to return None (simulate unavailable registry)
         with patch.object(resolver, "_get_registry", return_value=None):
@@ -499,6 +521,7 @@ class TestFallbackBehaviour:
 
     def test_resolver_returns_empty_when_registry_raises(self):
         from core.unified.capability_resolver import CapabilityResolver
+
         mock_reg = MagicMock()
         mock_reg.list_tools.side_effect = RuntimeError("registry unavailable")
         resolver = CapabilityResolver(registry=mock_reg, cache_ttl_seconds=0)
@@ -509,6 +532,7 @@ class TestFallbackBehaviour:
     def test_registry_direct_fallback_still_returns_tools(self):
         """When resolver cache is empty, CapabilityRegistry direct read is used."""
         from core.agent.capability_registry import CapabilityItem
+
         item = _make_capability_item("mcp__srv__t1", source="mcp")
         mock_reg = MagicMock()
         mock_reg.list_tools.return_value = [item]
@@ -516,6 +540,7 @@ class TestFallbackBehaviour:
 
         # Resolver with zero TTL so cache is stale, forcing rebuild on next call
         from core.unified.capability_resolver import CapabilityResolver
+
         resolver = CapabilityResolver(registry=mock_reg, cache_ttl_seconds=9999)
 
         # Manually warm the cache
@@ -525,6 +550,7 @@ class TestFallbackBehaviour:
 
     def test_invalidate_cache_forces_rebuild(self):
         from core.unified.capability_resolver import CapabilityResolver
+
         items = [_make_capability_item("mcp__srv__t1", source="mcp")]
         mock_reg = MagicMock()
         mock_reg.list_tools.return_value = items
@@ -541,8 +567,9 @@ class TestFallbackBehaviour:
         assert len(contracts) == 2
 
     def test_resolver_stats_reflect_errors(self):
-        from core.unified.capability_resolver import CapabilityResolver
         from core.agent.capability_registry import CapabilityItem
+        from core.unified.capability_resolver import CapabilityResolver
+
         items = [
             _make_capability_item("mcp__srv__valid", source="mcp"),
             CapabilityItem(name="", description="invalid", source="mcp", source_id="x"),
@@ -595,6 +622,7 @@ class TestMetadataConsistency:
 
     def test_node_contract_metadata(self):
         from core.unified.capability_contract import CapabilityContract, CapabilitySource
+
         contract = CapabilityContract(
             name="node__n1__execute",
             description="Execute node action",
@@ -604,11 +632,13 @@ class TestMetadataConsistency:
             metadata={"node_role": "worker", "node_version": "1.0.0"},
         )
         from core.unified.capability_contract import validate_capability_contract
+
         validate_capability_contract(contract)
         assert contract.metadata["node_role"] == "worker"
 
     def test_gateway_contract_metadata(self):
         from core.unified.capability_contract import CapabilityContract, CapabilitySource
+
         contract = CapabilityContract(
             name="gateway__dev1__tap",
             description="Tap on device screen",
@@ -617,6 +647,7 @@ class TestMetadataConsistency:
             metadata={"device_name": "Pixel 7", "device_type": "android"},
         )
         from core.unified.capability_contract import validate_capability_contract
+
         validate_capability_contract(contract)
         assert contract.metadata["device_name"] == "Pixel 7"
 
@@ -632,6 +663,7 @@ class TestMetadataConsistency:
         contract = _make_contract("mcp__srv__tap", parameters=params)
         d = contract.to_dict()
         from core.unified.capability_contract import CapabilityContract
+
         restored = CapabilityContract.from_dict(d)
         assert restored.parameters == params
 
@@ -649,6 +681,7 @@ class TestMetadataConsistency:
 
     def test_empty_parameters_defaults_to_empty_object_schema(self):
         from core.unified.capability_contract import CapabilityContract, CapabilitySource
+
         contract = CapabilityContract(
             name="mcp__srv__noop",
             description="No-op tool",
@@ -666,6 +699,7 @@ class TestMetadataConsistency:
 
     def test_tags_preserved(self):
         from core.unified.capability_contract import CapabilityContract, CapabilitySource
+
         contract = CapabilityContract(
             name="mcp__srv__screenshot",
             description="Take screenshot",
@@ -680,12 +714,14 @@ class TestMetadataConsistency:
         assert d["tags"] == ["ui", "screen", "vision"]
 
         from core.unified.capability_contract import CapabilityContract
+
         restored = CapabilityContract.from_dict(d)
         assert restored.tags == ["ui", "screen", "vision"]
 
     def test_resolve_by_tag(self):
-        from core.unified.capability_resolver import CapabilityResolver
         from core.unified.capability_contract import CapabilityContract, CapabilitySource
+        from core.unified.capability_resolver import CapabilityResolver
+
         # Manually inject tagged contracts into a custom registry
         tagged = CapabilityContract(
             name="mcp__srv__screenshot",
@@ -714,6 +750,7 @@ class TestCapabilityRegistryCatalogAuthority:
 
     def _fresh_registry(self):
         from core.agent.capability_registry import CapabilityRegistry
+
         CapabilityRegistry._instance = None
         return CapabilityRegistry.get_instance()
 
@@ -745,6 +782,7 @@ class TestCapabilityRegistryCatalogAuthority:
     def test_inject_item_with_node_source(self):
         reg = self._fresh_registry()
         from core.agent.capability_registry import CapabilityItem
+
         item = CapabilityItem(
             name="node__n1__execute",
             description="Execute on node n1",
@@ -760,6 +798,7 @@ class TestCapabilityRegistryCatalogAuthority:
     def test_inject_item_with_invalid_name_rejected(self):
         reg = self._fresh_registry()
         from core.agent.capability_registry import CapabilityItem
+
         bad = CapabilityItem(name="", description="bad", source="mcp", source_id="x")
         reg.inject_item(bad)
         # Empty name item should not appear in list_tools

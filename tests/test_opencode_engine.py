@@ -22,7 +22,6 @@ import pytest
 import core.multi_llm_router as _mlr  # noqa: F401
 from core.multi_llm_router import LLMResponse, ProviderStatus
 
-
 # ---------------------------------------------------------------------------
 # 辅助 fixture
 # ---------------------------------------------------------------------------
@@ -35,6 +34,7 @@ def _make_engine():
     os.environ.pop("OPENCODE_MODEL", None)
     os.environ.pop("OPENCODE_TIMEOUT", None)
     from core.opencode_engine import OpenCodeEngine
+
     return OpenCodeEngine()
 
 
@@ -58,16 +58,19 @@ def _make_llm_response(content: str, provider: str = "openai", model: str = "gpt
 class TestExtractCode:
     def test_extracts_fenced_block(self):
         from core.opencode_engine import _extract_code
+
         raw = "Here is the code:\n```python\nprint('hello')\n```\nDone."
         assert _extract_code(raw, "python") == "print('hello')"
 
     def test_returns_raw_when_no_fence(self):
         from core.opencode_engine import _extract_code
+
         raw = "print('hello')"
         assert _extract_code(raw, "python") == "print('hello')"
 
     def test_extracts_first_block_only(self):
         from core.opencode_engine import _extract_code
+
         raw = "```python\nx = 1\n```\n```python\ny = 2\n```"
         assert _extract_code(raw, "python") == "x = 1"
 
@@ -88,9 +91,7 @@ class TestGenerateCodeAsyncSuccess:
 
         with patch("core.multi_llm_router.get_llm_router") as mock_get_router:
             router = MagicMock()
-            router.providers = {
-                "openai": MagicMock(status=MagicMock(value="healthy"))
-            }
+            router.providers = {"openai": MagicMock(status=MagicMock(value="healthy"))}
             # 让 status != DOWN
             router.providers["openai"].status = ProviderStatus.HEALTHY
             router.chat = AsyncMock(return_value=llm_resp)
@@ -288,9 +289,15 @@ class TestGetStatus:
             status = engine.get_status()
 
         required = {
-            "installed", "generation_count", "configured_provider",
-            "configured_model", "effective_provider", "effective_model",
-            "available_providers", "provider_count", "healthy_provider_count",
+            "installed",
+            "generation_count",
+            "configured_provider",
+            "configured_model",
+            "effective_provider",
+            "effective_model",
+            "available_providers",
+            "provider_count",
+            "healthy_provider_count",
             "timeout_seconds",
         }
         assert required.issubset(status.keys())

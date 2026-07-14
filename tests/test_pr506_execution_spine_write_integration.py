@@ -55,6 +55,7 @@ def _run(coro):
 # Helpers — shared fixture builder
 # ---------------------------------------------------------------------------
 
+
 def _make_router_with_executor(success: bool = True, error_code: str = ""):
     """Build a CommandRouter with a minimal async executor injected."""
     from core.command_router import CommandRouter
@@ -73,6 +74,7 @@ def _make_candidate(device_id: str):
     """Build a minimal DeviceScoreInput-compatible candidate object."""
     try:
         from core.control_plane.smart_scheduler import DeviceScoreInput, SandboxLevel
+
         return DeviceScoreInput(
             device_id=device_id,
             ping_latency_ms=10.0,
@@ -86,13 +88,15 @@ def _make_candidate(device_id: str):
         class _C:
             def __init__(self, d):
                 self.device_id = d
+
         return _C(device_id)
 
 
 def _make_envelope(task_id: str = "", tool_name: str = "test_cmd", targets=None):
     """Build a minimal TaskEnvelope for testing."""
-    from core.schemas.task_envelope import TaskEnvelope
     import uuid
+
+    from core.schemas.task_envelope import TaskEnvelope
 
     return TaskEnvelope(
         task_id=task_id or f"t_{uuid.uuid4().hex[:8]}",
@@ -110,23 +114,32 @@ def _fresh_singletons():
     """Reset all relevant singletons for test isolation."""
     # 派发链要求设备走完整权威注册链(UDM+能力网络+UCM),否则 V3 槽位门拒发。
     from tests.dispatch_device_harness import register_dispatchable_device
+
     for _did in (
-        "device_test", "primary_dev", "fallback_dev",
-        "device_abc", "device_xyz", "device_open", "dev_compat",
+        "device_test",
+        "primary_dev",
+        "fallback_dev",
+        "device_abc",
+        "device_xyz",
+        "device_open",
+        "dev_compat",
     ):
         register_dispatchable_device(_did, capabilities=["screen"])
     try:
         from core.task_graph_runtime import reset_task_graph_runtime
+
         reset_task_graph_runtime()
     except Exception:
         pass
     try:
         from core.replay_foundation import reset_replay_foundation
+
         reset_replay_foundation()
     except Exception:
         pass
     try:
         from core.audit_event_semantics import reset_audit_event_semantics
+
         reset_audit_event_semantics()
     except Exception:
         pass
@@ -135,22 +148,29 @@ def _fresh_singletons():
 def _make_envelope_with_retries(task_id: str = "", targets=None, candidates=None, max_retries: int = 2):
     """Build a TaskEnvelope pre-loaded with retry_candidates in metadata."""
     env = _make_envelope(task_id=task_id, targets=targets)
-    return env.model_copy(update={
-        "metadata": {
-            "retry_candidates": candidates or [_make_candidate("fallback_dev")],
-            "max_retries": max_retries,
+    return env.model_copy(
+        update={
+            "metadata": {
+                "retry_candidates": candidates or [_make_candidate("fallback_dev")],
+                "max_retries": max_retries,
+            }
         }
-    })
+    )
 
 
 def _make_mock_health_registry(open_devices=None):
     """Build a minimal mock health registry that marks specific devices as circuit-open."""
     _open = set(open_devices or [])
-    return type("MockHR", (), {
-        "is_eligible": staticmethod(lambda dev: dev not in _open),
-        "record_success": staticmethod(lambda dev: None),
-        "record_failure": staticmethod(lambda dev, **kw: None),
-    })()
+    return type(
+        "MockHR",
+        (),
+        {
+            "is_eligible": staticmethod(lambda dev: dev not in _open),
+            "record_success": staticmethod(lambda dev: None),
+            "record_failure": staticmethod(lambda dev, **kw: None),
+        },
+    )()
+
 
 # ===========================================================================
 # A) Sentinel
@@ -162,26 +182,32 @@ class TestSentinel(unittest.TestCase):
 
     def test_A01_sentinel_importable(self):
         from core.command_router import EXECUTION_SPINE_WRITE_INTEGRATED
+
         self.assertIsNotNone(EXECUTION_SPINE_WRITE_INTEGRATED)
 
     def test_A02_sentinel_is_string(self):
         from core.command_router import EXECUTION_SPINE_WRITE_INTEGRATED
+
         self.assertIsInstance(EXECUTION_SPINE_WRITE_INTEGRATED, str)
 
     def test_A03_sentinel_mentions_route_envelope(self):
         from core.command_router import EXECUTION_SPINE_WRITE_INTEGRATED
+
         self.assertIn("route_envelope", EXECUTION_SPINE_WRITE_INTEGRATED)
 
     def test_A04_sentinel_mentions_replay(self):
         from core.command_router import EXECUTION_SPINE_WRITE_INTEGRATED
+
         self.assertIn("Replay", EXECUTION_SPINE_WRITE_INTEGRATED)
 
     def test_A05_sentinel_mentions_audit(self):
         from core.command_router import EXECUTION_SPINE_WRITE_INTEGRATED
+
         self.assertIn("Audit", EXECUTION_SPINE_WRITE_INTEGRATED)
 
     def test_A06_sentinel_mentions_task_graph(self):
         from core.command_router import EXECUTION_SPINE_WRITE_INTEGRATED
+
         self.assertIn("TaskGraph", EXECUTION_SPINE_WRITE_INTEGRATED)
 
 
@@ -198,6 +224,7 @@ class TestGraphRegistration(unittest.TestCase):
 
     def test_B01_graph_node_created_after_route_envelope(self):
         from core.task_graph_runtime import get_task_graph_runtime
+
         router = _make_router_with_executor(success=True)
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -206,6 +233,7 @@ class TestGraphRegistration(unittest.TestCase):
 
     def test_B02_graph_node_task_id_matches(self):
         from core.task_graph_runtime import get_task_graph_runtime
+
         router = _make_router_with_executor(success=True)
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -214,6 +242,7 @@ class TestGraphRegistration(unittest.TestCase):
 
     def test_B03_graph_snapshot_contains_registered_task(self):
         from core.task_graph_runtime import get_task_graph_runtime
+
         router = _make_router_with_executor(success=True)
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -235,7 +264,8 @@ class TestGraphCompletionSuccess(unittest.TestCase):
         _fresh_singletons()
 
     def test_C01_node_is_completed_on_success(self):
-        from core.task_graph_runtime import get_task_graph_runtime, GraphNodeState
+        from core.task_graph_runtime import GraphNodeState, get_task_graph_runtime
+
         router = _make_router_with_executor(success=True)
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -245,6 +275,7 @@ class TestGraphCompletionSuccess(unittest.TestCase):
 
     def test_C02_node_completed_at_is_set(self):
         from core.task_graph_runtime import get_task_graph_runtime
+
         router = _make_router_with_executor(success=True)
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -264,7 +295,8 @@ class TestGraphCompletionFailure(unittest.TestCase):
         _fresh_singletons()
 
     def test_D01_node_is_failed_on_failure(self):
-        from core.task_graph_runtime import get_task_graph_runtime, GraphNodeState
+        from core.task_graph_runtime import GraphNodeState, get_task_graph_runtime
+
         router = _make_router_with_executor(success=False)
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -274,6 +306,7 @@ class TestGraphCompletionFailure(unittest.TestCase):
 
     def test_D02_node_error_populated_on_failure(self):
         from core.task_graph_runtime import get_task_graph_runtime
+
         router = _make_router_with_executor(success=False, error_code="EXECUTOR_ERROR")
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -295,6 +328,7 @@ class TestReplayRouteDecision(unittest.TestCase):
 
     def test_E01_route_decision_recorded(self):
         from core.replay_foundation import get_replay_foundation
+
         router = _make_router_with_executor(success=True)
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -303,6 +337,7 @@ class TestReplayRouteDecision(unittest.TestCase):
 
     def test_E02_route_decision_task_id_matches(self):
         from core.replay_foundation import get_replay_foundation
+
         router = _make_router_with_executor(success=True)
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -311,6 +346,7 @@ class TestReplayRouteDecision(unittest.TestCase):
 
     def test_E03_route_decision_has_targets(self):
         from core.replay_foundation import get_replay_foundation
+
         router = _make_router_with_executor(success=True)
         env = _make_envelope(targets=["device_abc"])
         _run(router.route_envelope(env))
@@ -334,6 +370,7 @@ class TestReplayExecutionRecordSuccess(unittest.TestCase):
 
     def test_F01_execution_record_stored(self):
         from core.replay_foundation import get_replay_foundation
+
         router = _make_router_with_executor(success=True)
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -342,6 +379,7 @@ class TestReplayExecutionRecordSuccess(unittest.TestCase):
 
     def test_F02_execution_record_task_id(self):
         from core.replay_foundation import get_replay_foundation
+
         router = _make_router_with_executor(success=True)
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -350,6 +388,7 @@ class TestReplayExecutionRecordSuccess(unittest.TestCase):
 
     def test_F03_execution_record_success_true(self):
         from core.replay_foundation import get_replay_foundation
+
         router = _make_router_with_executor(success=True)
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -358,6 +397,7 @@ class TestReplayExecutionRecordSuccess(unittest.TestCase):
 
     def test_F04_execution_record_lifecycle_completed(self):
         from core.replay_foundation import get_replay_foundation
+
         router = _make_router_with_executor(success=True)
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -378,6 +418,7 @@ class TestReplayExecutionRecordFailure(unittest.TestCase):
 
     def test_G01_execution_record_stored_on_failure(self):
         from core.replay_foundation import get_replay_foundation
+
         router = _make_router_with_executor(success=False)
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -386,6 +427,7 @@ class TestReplayExecutionRecordFailure(unittest.TestCase):
 
     def test_G02_execution_record_success_false(self):
         from core.replay_foundation import get_replay_foundation
+
         router = _make_router_with_executor(success=False)
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -394,6 +436,7 @@ class TestReplayExecutionRecordFailure(unittest.TestCase):
 
     def test_G03_execution_record_lifecycle_failed(self):
         from core.replay_foundation import get_replay_foundation
+
         router = _make_router_with_executor(success=False)
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -414,6 +457,7 @@ class TestReplayTimeline(unittest.TestCase):
 
     def test_H01_timeline_not_empty_on_success(self):
         from core.replay_foundation import get_replay_foundation
+
         router = _make_router_with_executor(success=True)
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -422,6 +466,7 @@ class TestReplayTimeline(unittest.TestCase):
 
     def test_H02_timeline_not_empty_on_failure(self):
         from core.replay_foundation import get_replay_foundation
+
         router = _make_router_with_executor(success=False)
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -430,6 +475,7 @@ class TestReplayTimeline(unittest.TestCase):
 
     def test_H03_timeline_events_have_task_id(self):
         from core.replay_foundation import get_replay_foundation
+
         router = _make_router_with_executor(success=True)
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -450,7 +496,8 @@ class TestAuditTaskAccepted(unittest.TestCase):
         _fresh_singletons()
 
     def test_I01_task_accepted_event_emitted(self):
-        from core.audit_event_semantics import get_audit_event_semantics, AuditEventKind
+        from core.audit_event_semantics import AuditEventKind, get_audit_event_semantics
+
         router = _make_router_with_executor(success=True)
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -459,7 +506,8 @@ class TestAuditTaskAccepted(unittest.TestCase):
         self.assertIn(AuditEventKind.TASK_ACCEPTED, kinds)
 
     def test_I02_task_accepted_task_id_matches(self):
-        from core.audit_event_semantics import get_audit_event_semantics, AuditEventKind
+        from core.audit_event_semantics import AuditEventKind, get_audit_event_semantics
+
         router = _make_router_with_executor(success=True)
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -480,7 +528,8 @@ class TestAuditTaskDispatched(unittest.TestCase):
         _fresh_singletons()
 
     def test_J01_task_dispatched_event_emitted(self):
-        from core.audit_event_semantics import get_audit_event_semantics, AuditEventKind
+        from core.audit_event_semantics import AuditEventKind, get_audit_event_semantics
+
         router = _make_router_with_executor(success=True)
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -489,7 +538,8 @@ class TestAuditTaskDispatched(unittest.TestCase):
         self.assertIn(AuditEventKind.TASK_DISPATCHED, kinds)
 
     def test_J02_dispatched_event_has_targets(self):
-        from core.audit_event_semantics import get_audit_event_semantics, AuditEventKind
+        from core.audit_event_semantics import AuditEventKind, get_audit_event_semantics
+
         router = _make_router_with_executor(success=True)
         env = _make_envelope(targets=["device_xyz"])
         _run(router.route_envelope(env))
@@ -513,7 +563,8 @@ class TestAuditTaskCompleted(unittest.TestCase):
         _fresh_singletons()
 
     def test_K01_task_completed_event_emitted(self):
-        from core.audit_event_semantics import get_audit_event_semantics, AuditEventKind
+        from core.audit_event_semantics import AuditEventKind, get_audit_event_semantics
+
         router = _make_router_with_executor(success=True)
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -522,7 +573,8 @@ class TestAuditTaskCompleted(unittest.TestCase):
         self.assertIn(AuditEventKind.TASK_COMPLETED, kinds)
 
     def test_K02_task_completed_success_flag_true(self):
-        from core.audit_event_semantics import get_audit_event_semantics, AuditEventKind
+        from core.audit_event_semantics import AuditEventKind, get_audit_event_semantics
+
         router = _make_router_with_executor(success=True)
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -543,7 +595,8 @@ class TestAuditTaskFailed(unittest.TestCase):
         _fresh_singletons()
 
     def test_L01_task_failed_event_emitted(self):
-        from core.audit_event_semantics import get_audit_event_semantics, AuditEventKind
+        from core.audit_event_semantics import AuditEventKind, get_audit_event_semantics
+
         router = _make_router_with_executor(success=False)
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -552,7 +605,8 @@ class TestAuditTaskFailed(unittest.TestCase):
         self.assertIn(AuditEventKind.TASK_FAILED, kinds)
 
     def test_L02_task_completed_not_emitted_on_failure(self):
-        from core.audit_event_semantics import get_audit_event_semantics, AuditEventKind
+        from core.audit_event_semantics import AuditEventKind, get_audit_event_semantics
+
         router = _make_router_with_executor(success=False)
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -590,6 +644,7 @@ class TestReplayRetryRecord(unittest.TestCase):
 
     def test_M01_retry_record_written_on_retry(self):
         from core.replay_foundation import get_replay_foundation
+
         router = self._make_router_retrying(n_failures=1)
         env_with_retries = _make_envelope_with_retries(targets=["primary_dev"])
         _run(router.route_envelope(env_with_retries))
@@ -598,6 +653,7 @@ class TestReplayRetryRecord(unittest.TestCase):
 
     def test_M02_retry_record_original_task_id_matches(self):
         from core.replay_foundation import get_replay_foundation
+
         router = self._make_router_retrying(n_failures=1)
         env_with_retries = _make_envelope_with_retries(targets=["primary_dev"])
         _run(router.route_envelope(env_with_retries))
@@ -633,7 +689,8 @@ class TestAuditRetryTriggered(unittest.TestCase):
         return router
 
     def test_N01_retry_triggered_audit_event_emitted(self):
-        from core.audit_event_semantics import get_audit_event_semantics, AuditEventKind
+        from core.audit_event_semantics import AuditEventKind, get_audit_event_semantics
+
         router = self._make_router_retrying()
         env_with_retries = _make_envelope_with_retries(targets=["primary_dev"])
         _run(router.route_envelope(env_with_retries))
@@ -642,7 +699,8 @@ class TestAuditRetryTriggered(unittest.TestCase):
         self.assertIn(AuditEventKind.RETRY_TRIGGERED, kinds)
 
     def test_N02_retry_triggered_has_attempt_number(self):
-        from core.audit_event_semantics import get_audit_event_semantics, AuditEventKind
+        from core.audit_event_semantics import AuditEventKind, get_audit_event_semantics
+
         router = self._make_router_retrying()
         env_with_retries = _make_envelope_with_retries(targets=["primary_dev"])
         _run(router.route_envelope(env_with_retries))
@@ -679,7 +737,8 @@ class TestReplayRetryEvent(unittest.TestCase):
         return router
 
     def test_O01_retry_triggered_replay_event_in_timeline(self):
-        from core.replay_foundation import get_replay_foundation, ReplayEventKind
+        from core.replay_foundation import ReplayEventKind, get_replay_foundation
+
         router = self._make_router_retrying()
         env_with_retries = _make_envelope_with_retries(targets=["primary_dev"])
         _run(router.route_envelope(env_with_retries))
@@ -711,8 +770,9 @@ class TestReplayFallbackRecord(unittest.TestCase):
 
     def test_P01_fallback_record_written_on_circuit_open(self):
         """Verify ReplayFallbackRecord is written when circuit-breaker routes to fallback."""
-        from core.replay_foundation import get_replay_foundation
         from unittest.mock import patch
+
+        from core.replay_foundation import get_replay_foundation
 
         router = self._make_router_for_circuit_test()
         mock_hreg = _make_mock_health_registry(open_devices=["device_open"])
@@ -730,8 +790,9 @@ class TestReplayFallbackRecord(unittest.TestCase):
         self.assertGreater(len(fallbacks), 0, "Fallback record should be written on circuit-open")
 
     def test_P02_fallback_record_primary_task_id_matches(self):
-        from core.replay_foundation import get_replay_foundation
         from unittest.mock import patch
+
+        from core.replay_foundation import get_replay_foundation
 
         router = self._make_router_for_circuit_test()
         mock_hreg = _make_mock_health_registry(open_devices=["device_open"])
@@ -762,8 +823,9 @@ class TestAuditFallbackTriggered(unittest.TestCase):
         _fresh_singletons()
 
     def test_Q01_fallback_triggered_audit_event_emitted(self):
-        from core.audit_event_semantics import get_audit_event_semantics, AuditEventKind
         from unittest.mock import patch
+
+        from core.audit_event_semantics import AuditEventKind, get_audit_event_semantics
         from core.command_router import CommandRouter
 
         async def _executor(device_id, command, params):
@@ -799,9 +861,10 @@ class TestReplayFallbackEvent(unittest.TestCase):
         _fresh_singletons()
 
     def test_R01_fallback_triggered_replay_event(self):
-        from core.replay_foundation import get_replay_foundation, ReplayEventKind
         from unittest.mock import patch
+
         from core.command_router import CommandRouter
+        from core.replay_foundation import ReplayEventKind, get_replay_foundation
 
         async def _executor(device_id, command, params):
             return {"data": "ok"}
@@ -836,8 +899,8 @@ class TestCompatDispatchAudit(unittest.TestCase):
         _fresh_singletons()
 
     def test_S01_compat_dispatch_emits_audit_accepted(self):
-        from core.audit_event_semantics import get_audit_event_semantics, AuditEventKind
-        from core.command_router import CommandRouter, CommandRequest, CommandMode
+        from core.audit_event_semantics import AuditEventKind, get_audit_event_semantics
+        from core.command_router import CommandMode, CommandRequest, CommandRouter
 
         async def _executor(device_id, command, params):
             return {"data": "ok"}
@@ -846,6 +909,7 @@ class TestCompatDispatchAudit(unittest.TestCase):
         router.set_executor(_executor)
 
         import uuid
+
         req_id = f"compat_{uuid.uuid4().hex[:8]}"
         req = CommandRequest(
             request_id=req_id,
@@ -865,8 +929,8 @@ class TestCompatDispatchAudit(unittest.TestCase):
         )
 
     def test_S02_compat_dispatch_source_marks_degraded(self):
-        from core.audit_event_semantics import get_audit_event_semantics, AuditEventKind
-        from core.command_router import CommandRouter, CommandRequest, CommandMode
+        from core.audit_event_semantics import AuditEventKind, get_audit_event_semantics
+        from core.command_router import CommandMode, CommandRequest, CommandRouter
 
         async def _executor(device_id, command, params):
             return {"data": "ok"}
@@ -875,6 +939,7 @@ class TestCompatDispatchAudit(unittest.TestCase):
         router.set_executor(_executor)
 
         import uuid
+
         req_id = f"compat_{uuid.uuid4().hex[:8]}"
         req = CommandRequest(
             request_id=req_id,
@@ -907,9 +972,9 @@ class TestFullRoundTrip(unittest.TestCase):
 
     def test_T01_graph_replay_audit_all_written(self):
         """Single dispatch writes to TaskGraphRuntime, ReplayFoundation, and AuditEventSemantics."""
-        from core.task_graph_runtime import get_task_graph_runtime
-        from core.replay_foundation import get_replay_foundation
         from core.audit_event_semantics import get_audit_event_semantics
+        from core.replay_foundation import get_replay_foundation
+        from core.task_graph_runtime import get_task_graph_runtime
 
         router = _make_router_with_executor(success=True)
         env = _make_envelope()
@@ -930,6 +995,7 @@ class TestFullRoundTrip(unittest.TestCase):
     def test_T02_lineage_non_empty(self):
         """Task lineage is non-empty for a dispatched task."""
         from core.replay_foundation import get_replay_foundation
+
         router = _make_router_with_executor(success=True)
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -939,6 +1005,7 @@ class TestFullRoundTrip(unittest.TestCase):
 
     def test_T03_result_lineage_success_populated(self):
         from core.replay_foundation import get_replay_foundation
+
         router = _make_router_with_executor(success=True)
         env = _make_envelope()
         _run(router.route_envelope(env))
@@ -948,6 +1015,7 @@ class TestFullRoundTrip(unittest.TestCase):
 
     def test_T04_result_lineage_failure_populated(self):
         from core.replay_foundation import get_replay_foundation
+
         router = _make_router_with_executor(success=False)
         env = _make_envelope()
         _run(router.route_envelope(env))

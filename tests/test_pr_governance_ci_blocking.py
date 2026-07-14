@@ -80,16 +80,17 @@ if _PROJECT_ROOT not in sys.path:
 
 try:
     from core.governance_validation_gate import (
-        GOVERNANCE_CI_BLOCKING_AUTHORITY,
-        CI_BLOCKING_DIMENSIONS,
         CI_ADVISORY_DIMENSIONS,
+        CI_BLOCKING_DIMENSIONS,
+        GOVERNANCE_CI_BLOCKING_AUTHORITY,
+        GovernanceValidationError,
+        GovernanceValidationGate,
+        ValidationFailReason,
         ValidationOutcome,
         ValidationResult,
-        ValidationFailReason,
-        GovernanceValidationGate,
-        GovernanceValidationError,
         run_governance_verdict_ci,
     )
+
     _MODULE_AVAILABLE = True
 except ImportError as _e:
     _MODULE_AVAILABLE = False
@@ -183,14 +184,13 @@ class TestGroupA_Sentinels:
 
     def test_A05_run_governance_verdict_ci_in_all(self):
         from core import governance_validation_gate as _gvg
+
         assert "run_governance_verdict_ci" in _gvg.__all__
 
     def test_A06_blocking_dimensions_include_expected_entries(self):
         """Known hard-block conditions must be classified as blocking."""
         for expected in ("governance_blocked", "readiness_blocked"):
-            assert expected in CI_BLOCKING_DIMENSIONS, (
-                f"Expected '{expected}' in CI_BLOCKING_DIMENSIONS"
-            )
+            assert expected in CI_BLOCKING_DIMENSIONS, f"Expected '{expected}' in CI_BLOCKING_DIMENSIONS"
 
     def test_A07_advisory_dimensions_include_expected_entries(self):
         """Known soft conditions must be classified as advisory."""
@@ -277,8 +277,7 @@ class TestGroupB_JsonSchema:
                 data = json.load(fh)
             for r in data["blocking_fail_reasons"]:
                 assert r in CI_BLOCKING_DIMENSIONS, (
-                    f"blocking_fail_reasons contained '{r}' which is not in "
-                    f"CI_BLOCKING_DIMENSIONS"
+                    f"blocking_fail_reasons contained '{r}' which is not in " f"CI_BLOCKING_DIMENSIONS"
                 )
         finally:
             os.unlink(path)
@@ -293,8 +292,7 @@ class TestGroupB_JsonSchema:
                 data = json.load(fh)
             for r in data["advisory_fail_reasons"]:
                 assert r in CI_ADVISORY_DIMENSIONS, (
-                    f"advisory_fail_reasons contained '{r}' which is not in "
-                    f"CI_ADVISORY_DIMENSIONS"
+                    f"advisory_fail_reasons contained '{r}' which is not in " f"CI_ADVISORY_DIMENSIONS"
                 )
         finally:
             os.unlink(path)
@@ -442,14 +440,10 @@ class TestGroupE_CliIntegration:
             cwd=_PROJECT_ROOT,
         )
         # Must not be a crash (import error / syntax error → exit 2)
-        assert result.returncode in (0, 1), (
-            f"Unexpected exit code {result.returncode}: stderr={result.stderr[:300]}"
-        )
+        assert result.returncode in (0, 1), f"Unexpected exit code {result.returncode}: stderr={result.stderr[:300]}"
 
     def test_E02_cli_output_flag_writes_json(self):
-        with tempfile.NamedTemporaryFile(
-            suffix=".json", delete=False, dir=tempfile.gettempdir()
-        ) as f:
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False, dir=tempfile.gettempdir()) as f:
             path = f.name
         os.unlink(path)
         try:
@@ -465,9 +459,10 @@ class TestGroupE_CliIntegration:
                 text=True,
                 cwd=_PROJECT_ROOT,
             )
-            assert result.returncode in (0, 1), (
-                f"Unexpected exit code {result.returncode}: stderr={result.stderr[:300]}"
-            )
+            assert result.returncode in (
+                0,
+                1,
+            ), f"Unexpected exit code {result.returncode}: stderr={result.stderr[:300]}"
             assert os.path.isfile(path), "CLI --output flag did not write a JSON file"
             with open(path) as fh:
                 data = json.load(fh)
@@ -478,9 +473,7 @@ class TestGroupE_CliIntegration:
 
     def test_E03_cli_json_schema_valid(self):
         """CLI output JSON must contain all required schema keys."""
-        with tempfile.NamedTemporaryFile(
-            suffix=".json", delete=False, dir=tempfile.gettempdir()
-        ) as f:
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False, dir=tempfile.gettempdir()) as f:
             path = f.name
         os.unlink(path)
         try:
@@ -576,15 +569,12 @@ class TestGroupF_DelegatedReadinessBlocking:
         # Exit code 0 or 1 are both valid; exit code 2 indicates argparse
         # usage error (unknown flag), which must not happen.
         assert result.returncode in (0, 1), (
-            f"--delegated flag caused unexpected exit code {result.returncode}: "
-            f"stderr={result.stderr[:300]}"
+            f"--delegated flag caused unexpected exit code {result.returncode}: " f"stderr={result.stderr[:300]}"
         )
 
     def test_F05_cli_delegated_with_output_writes_schema(self):
         """CLI --delegated --output must write a valid schema-compliant verdict."""
-        with tempfile.NamedTemporaryFile(
-            suffix=".json", delete=False, dir=tempfile.gettempdir()
-        ) as f:
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False, dir=tempfile.gettempdir()) as f:
             path = f.name
         os.unlink(path)
         try:
@@ -605,9 +595,7 @@ class TestGroupF_DelegatedReadinessBlocking:
             with open(path) as fh:
                 data = json.load(fh)
             missing = [k for k in _REQUIRED_JSON_KEYS if k not in data]
-            assert not missing, (
-                f"CLI --delegated verdict JSON missing required keys: {missing}"
-            )
+            assert not missing, f"CLI --delegated verdict JSON missing required keys: {missing}"
             # The delegated_readiness_verdict field must be present (value may be
             # "unavailable" or an actual verdict string depending on environment).
             assert "delegated_readiness_verdict" in data

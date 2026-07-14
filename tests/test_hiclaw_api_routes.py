@@ -13,14 +13,15 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-
 # ============================================================================
 # Fixture: 共享 TestClient
 # ============================================================================
 
+
 @pytest.fixture(scope="module")
 def client():
     from core.api_routes import create_api_routes
+
     app = FastAPI()
     router = create_api_routes()
     app.include_router(router)
@@ -31,6 +32,7 @@ def client():
 # ============================================================================
 # 1. Vault 凭证管理
 # ============================================================================
+
 
 class TestVaultRoutes:
 
@@ -150,6 +152,7 @@ class TestVaultRoutes:
 # 2. 成本可观测性
 # ============================================================================
 
+
 class TestCostRoutes:
 
     def test_get_records_empty(self, client):
@@ -172,6 +175,7 @@ class TestCostRoutes:
     def test_get_records_after_record(self, client):
         """GET /api/v1/cost/records — 手动记录后应返回数据"""
         from core.cost_tracker import get_cost_tracker
+
         tracker = get_cost_tracker()
         tracker.record(
             provider="openai",
@@ -198,6 +202,7 @@ class TestCostRoutes:
 # ============================================================================
 # 3. 渠道插件
 # ============================================================================
+
 
 class TestChannelRoutes:
 
@@ -264,6 +269,7 @@ class TestChannelRoutes:
 # ============================================================================
 # 4. Galaxy 联邦
 # ============================================================================
+
 
 class TestFederationRoutes:
 

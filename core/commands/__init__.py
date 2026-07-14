@@ -46,6 +46,7 @@ Authority sentinel
 ------------------
 ``COMMAND_ROUTING_PACKAGE_AUTHORITY = "core.commands"``
 """
+
 from __future__ import annotations
 
 # ── package authority sentinel ────────────────────────────────────────────
@@ -58,17 +59,17 @@ package rather than reaching directly into core.command_router internals.
 
 # ── backward-compat re-exports from canonical implementation ─────────────
 from core.command_router import (  # noqa: F401
-    CommandRouter,
+    COMMAND_ROUTER_ORCHESTRATION_AUTHORITY,
+    CommandMode,
     CommandRequest,
     CommandResult,
+    CommandRouter,
     CommandStatus,
-    CommandMode,
-    TargetResult,
     GatewayError,
     GatewayErrorCode,
-    validate_command_envelope,
+    TargetResult,
     get_command_router,
-    COMMAND_ROUTER_ORCHESTRATION_AUTHORITY,
+    validate_command_envelope,
 )
 
 __all__ = [

@@ -48,7 +48,6 @@ from core.android_device_state_store import (
     reset_android_device_state_store,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -65,6 +64,7 @@ def _reset_store():
 def _make_router_app() -> FastAPI:
     """Build a minimal FastAPI app mounting only the operator router."""
     from core.routes.operator import create_router
+
     app = FastAPI()
     app.include_router(create_router())
     return app
@@ -201,9 +201,7 @@ class TestHandlerAckStatusOnException:
             "core.android_device_state_store.absorb_device_state_snapshot",
             side_effect=ImportError("store not available"),
         ):
-            response = asyncio.run(
-                handle_device_state_snapshot(bridge, websocket, message)
-            )
+            response = asyncio.run(handle_device_state_snapshot(bridge, websocket, message))
 
         assert response["type"] == "device_state_snapshot_ack"
         assert response["status"] == "error"
@@ -228,9 +226,7 @@ class TestHandlerAckStatusOnException:
             "core.android_device_state_store.absorb_device_state_snapshot",
             side_effect=RuntimeError("store write failed"),
         ):
-            response = asyncio.run(
-                handle_device_state_snapshot(bridge, websocket, message)
-            )
+            response = asyncio.run(handle_device_state_snapshot(bridge, websocket, message))
 
         assert response["status"] == "error"
 
@@ -252,9 +248,7 @@ class TestHandlerAckStatusOnException:
             "core.android_device_state_store.absorb_device_execution_event",
             side_effect=ImportError("store not available"),
         ):
-            response = asyncio.run(
-                handle_device_execution_event(bridge, websocket, message)
-            )
+            response = asyncio.run(handle_device_execution_event(bridge, websocket, message))
 
         assert response["type"] == "device_execution_event_ack"
         assert response["status"] == "error"
@@ -277,9 +271,7 @@ class TestHandlerAckStatusOnException:
             "core.android_device_state_store.absorb_device_execution_event",
             side_effect=RuntimeError("event write failed"),
         ):
-            response = asyncio.run(
-                handle_device_execution_event(bridge, websocket, message)
-            )
+            response = asyncio.run(handle_device_execution_event(bridge, websocket, message))
 
         assert response["status"] == "error"
 
@@ -311,40 +303,43 @@ class TestEcosystemPerDeviceHighValueFields:
     """N-series: per-device entry in ecosystem summary exposes enriched fields."""
 
     def test_N01_snapshot_ts_in_per_device_entry(self):
-        absorb_device_state_snapshot("n_dev_01", {
-            "model_ready": True,
-            "snapshot_ts": 1700000001.0,
-        })
-        summary = get_device_ecosystem_summary()
-        device = next(
-            (d for d in summary["devices"] if d["device_id"] == "n_dev_01"), None
+        absorb_device_state_snapshot(
+            "n_dev_01",
+            {
+                "model_ready": True,
+                "snapshot_ts": 1700000001.0,
+            },
         )
+        summary = get_device_ecosystem_summary()
+        device = next((d for d in summary["devices"] if d["device_id"] == "n_dev_01"), None)
         assert device is not None, "device n_dev_01 not found in ecosystem devices"
         assert "snapshot_ts" in device
         assert device["snapshot_ts"] == 1700000001.0
 
     def test_N02_planner_fallback_tier_in_per_device_entry(self):
-        absorb_device_state_snapshot("n_dev_02", {
-            "planner_fallback_tier": "local",
-            "grounding_fallback_tier": "center",
-        })
-        summary = get_device_ecosystem_summary()
-        device = next(
-            (d for d in summary["devices"] if d["device_id"] == "n_dev_02"), None
+        absorb_device_state_snapshot(
+            "n_dev_02",
+            {
+                "planner_fallback_tier": "local",
+                "grounding_fallback_tier": "center",
+            },
         )
+        summary = get_device_ecosystem_summary()
+        device = next((d for d in summary["devices"] if d["device_id"] == "n_dev_02"), None)
         assert device is not None, "device n_dev_02 not found in ecosystem devices"
         assert "planner_fallback_tier" in device
         assert device["planner_fallback_tier"] == "local"
 
     def test_N03_grounding_fallback_tier_in_per_device_entry(self):
-        absorb_device_state_snapshot("n_dev_03", {
-            "planner_fallback_tier": "local",
-            "grounding_fallback_tier": "center_delegated",
-        })
-        summary = get_device_ecosystem_summary()
-        device = next(
-            (d for d in summary["devices"] if d["device_id"] == "n_dev_03"), None
+        absorb_device_state_snapshot(
+            "n_dev_03",
+            {
+                "planner_fallback_tier": "local",
+                "grounding_fallback_tier": "center_delegated",
+            },
         )
+        summary = get_device_ecosystem_summary()
+        device = next((d for d in summary["devices"] if d["device_id"] == "n_dev_03"), None)
         assert device is not None, "device n_dev_03 not found in ecosystem devices"
         assert "grounding_fallback_tier" in device
         assert device["grounding_fallback_tier"] == "center_delegated"
@@ -352,23 +347,22 @@ class TestEcosystemPerDeviceHighValueFields:
     def test_N04_snapshot_ts_none_when_not_provided(self):
         absorb_device_state_snapshot("n_dev_04", {"model_ready": True})
         summary = get_device_ecosystem_summary()
-        device = next(
-            (d for d in summary["devices"] if d["device_id"] == "n_dev_04"), None
-        )
+        device = next((d for d in summary["devices"] if d["device_id"] == "n_dev_04"), None)
         assert device is not None, "device n_dev_04 not found in ecosystem devices"
         assert "snapshot_ts" in device
         assert device["snapshot_ts"] is None
 
     def test_N05_camelcase_fallback_tiers_in_per_device_entry(self):
-        absorb_device_state_snapshot("n_dev_05", {
-            "snapshot_ts": 1700000002.0,
-            "plannerFallbackTier": "local",
-            "groundingFallbackTier": "center",
-        })
-        summary = get_device_ecosystem_summary()
-        device = next(
-            (d for d in summary["devices"] if d["device_id"] == "n_dev_05"), None
+        absorb_device_state_snapshot(
+            "n_dev_05",
+            {
+                "snapshot_ts": 1700000002.0,
+                "plannerFallbackTier": "local",
+                "groundingFallbackTier": "center",
+            },
         )
+        summary = get_device_ecosystem_summary()
+        device = next((d for d in summary["devices"] if d["device_id"] == "n_dev_05"), None)
         assert device is not None, "device n_dev_05 not found in ecosystem devices"
         assert device["snapshot_ts"] == 1700000002.0
         assert device["planner_fallback_tier"] == "local"
@@ -405,15 +399,21 @@ class TestEcosystemAggregateLocalLoopReadyCount:
 
     def test_O04_local_loop_ready_count_independent_of_model_ready(self):
         # Device with model_ready=True but local_loop_ready=False
-        absorb_device_state_snapshot("o_dev_07", {
-            "model_ready": True,
-            "local_loop_ready": False,
-        })
+        absorb_device_state_snapshot(
+            "o_dev_07",
+            {
+                "model_ready": True,
+                "local_loop_ready": False,
+            },
+        )
         # Device with model_ready=False but local_loop_ready=True
-        absorb_device_state_snapshot("o_dev_08", {
-            "model_ready": False,
-            "local_loop_ready": True,
-        })
+        absorb_device_state_snapshot(
+            "o_dev_08",
+            {
+                "model_ready": False,
+                "local_loop_ready": True,
+            },
+        )
         summary = get_device_ecosystem_summary()
         assert summary["model_ready_count"] == 1
         assert summary["local_loop_ready_count"] == 1
@@ -452,23 +452,24 @@ class TestEcosystemHTTPRouteStructure:
             assert key in data, f"Missing key: {key}"
 
     def test_P03_ecosystem_route_returns_device_with_new_fields_after_absorb(self):
-        absorb_device_state_snapshot("p_dev_01", {
-            "model_ready": True,
-            "llamaCppAvailable": True,
-            "localLoopReady": True,
-            "plannerFallbackTier": "local",
-            "groundingFallbackTier": "center",
-            "snapshot_ts": 1700000003.0,
-        })
+        absorb_device_state_snapshot(
+            "p_dev_01",
+            {
+                "model_ready": True,
+                "llamaCppAvailable": True,
+                "localLoopReady": True,
+                "plannerFallbackTier": "local",
+                "groundingFallbackTier": "center",
+                "snapshot_ts": 1700000003.0,
+            },
+        )
         app = _make_router_app()
         with TestClient(app) as client:
             resp = client.get("/api/v1/operator/devices/ecosystem")
         data = resp.json()
         assert data["total_devices_with_snapshot"] >= 1
         assert data["local_loop_ready_count"] >= 1
-        device = next(
-            (d for d in data["devices"] if d["device_id"] == "p_dev_01"), None
-        )
+        device = next((d for d in data["devices"] if d["device_id"] == "p_dev_01"), None)
         assert device is not None, "device p_dev_01 not found in ecosystem devices"
         assert device["snapshot_ts"] == 1700000003.0
         assert device["planner_fallback_tier"] == "local"
@@ -497,14 +498,17 @@ class TestPerDeviceSnapshotHTTPRoute:
         assert resp.status_code == 404
 
     def test_Q02_returns_200_with_full_snapshot_for_known_device(self):
-        absorb_device_state_snapshot("q_dev_01", {
-            "modelReady": True,
-            "llamaCppAvailable": True,
-            "localLoopReady": True,
-            "offlineQueueDepth": 3,
-            "plannerFallbackTier": "local",
-            "groundingFallbackTier": "center",
-        })
+        absorb_device_state_snapshot(
+            "q_dev_01",
+            {
+                "modelReady": True,
+                "llamaCppAvailable": True,
+                "localLoopReady": True,
+                "offlineQueueDepth": 3,
+                "plannerFallbackTier": "local",
+                "groundingFallbackTier": "center",
+            },
+        )
         app = _make_router_app()
         with TestClient(app) as client:
             resp = client.get("/api/v1/operator/devices/ecosystem/q_dev_01")
@@ -519,10 +523,13 @@ class TestPerDeviceSnapshotHTTPRoute:
         assert data["grounding_fallback_tier"] == "center"
 
     def test_Q03_per_device_route_snapshot_ts_is_exposed(self):
-        absorb_device_state_snapshot("q_dev_02", {
-            "snapshot_ts": 1700000004.0,
-            "model_ready": True,
-        })
+        absorb_device_state_snapshot(
+            "q_dev_02",
+            {
+                "snapshot_ts": 1700000004.0,
+                "model_ready": True,
+            },
+        )
         app = _make_router_app()
         with TestClient(app) as client:
             resp = client.get("/api/v1/operator/devices/ecosystem/q_dev_02")
@@ -582,9 +589,7 @@ class TestEndToEndBridgeToHTTP:
         data = resp.json()
         assert data["total_devices_with_snapshot"] >= 1
         assert data["local_loop_ready_count"] >= 1
-        device = next(
-            (d for d in data["devices"] if d["device_id"] == "e2e_device_01"), None
-        )
+        device = next((d for d in data["devices"] if d["device_id"] == "e2e_device_01"), None)
         assert device is not None, "device e2e_device_01 not found in ecosystem devices"
         assert device["snapshot_ts"] == 1700000005.0
         assert device["planner_fallback_tier"] == "local"
@@ -602,14 +607,17 @@ class TestEndToEndBridgeToHTTP:
         """operator_snapshot() android_ecosystem must reflect absorbed snapshot data."""
         from core.operator_surface import get_operator_surface
 
-        absorb_device_state_snapshot("r_dev_02", {
-            "model_ready": True,
-            "llama_cpp_available": True,
-            "local_loop_ready": True,
-            "planner_fallback_tier": "local",
-            "grounding_fallback_tier": "center",
-            "offline_queue_depth": 2,
-        })
+        absorb_device_state_snapshot(
+            "r_dev_02",
+            {
+                "model_ready": True,
+                "llama_cpp_available": True,
+                "local_loop_ready": True,
+                "planner_fallback_tier": "local",
+                "grounding_fallback_tier": "center",
+                "offline_queue_depth": 2,
+            },
+        )
 
         surface = get_operator_surface()
         op_snap = surface.operator_snapshot()
@@ -622,6 +630,7 @@ class TestEndToEndBridgeToHTTP:
         # per-device 明细的权威出口是 ecosystem summary / 专用 HTTP 路由(R01 已覆盖)。
         assert "devices" not in eco, "per-device list must stay out of operator_snapshot"
         from core.android_device_state_store import get_device_ecosystem_summary
+
         summary = get_device_ecosystem_summary()
         device = next(
             (d for d in summary.get("devices", []) if d["device_id"] == "r_dev_02"),

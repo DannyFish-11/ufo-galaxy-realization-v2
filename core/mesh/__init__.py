@@ -1,66 +1,66 @@
 """core/mesh — Body Mesh model for device role allocation."""
 
+from .body_mesh_persistence import (
+    BODY_MESH_PERSISTENCE_CLOSES_VOLATILE_REGISTRY_GAP_SENTINEL,
+    BODY_MESH_PERSISTENCE_IS_AUTHORITY,
+    RESTORE_DOES_NOT_REPLACE_LIVE_REGISTRY_POLICY,
+    BodyMeshPersistenceStore,
+    BodyMeshSnapshotRecord,
+    get_body_mesh_persistence_store,
+    reset_body_mesh_persistence_store,
+    restore_body_mesh_from_snapshot,
+    save_body_mesh_snapshot,
+)
 from .body_mesh_registry import (
-    BodyMeshRegistry,
-    BodyEntry,
-    DeviceRole,
     BodyAssignment,
+    BodyEntry,
+    BodyMeshRegistry,
+    DeviceRole,
     get_body_mesh_registry,
     reset_body_mesh_registry,
 )
 from .device_role_allocator import (
-    DeviceRoleAllocator,
     AllocationResult,
+    DeviceRoleAllocator,
     get_device_role_allocator,
     reset_device_role_allocator,
 )
-from .mesh_session_persistence import (
-    SnapshotRecord,
-    MeshSessionPersistenceStore,
-    save_mesh_session_snapshot,
-    load_mesh_session_snapshot,
-    recover_mesh_sessions,
-    list_recoverable_sessions,
-    get_persistence_store,
-    reset_persistence_store,
-    MESH_SESSION_PERSISTENCE_IS_AUTHORITY,
-    MESH_SESSION_PERSISTENCE_GAP_CLOSURE_SENTINEL,
-    RECOVERY_RESTORES_NON_TERMINAL_SESSIONS_POLICY,
-    PERSISTENCE_DOES_NOT_OWN_RUNTIME_TRUTH_POLICY,
-)
-from .mesh_session_lifecycle import (
-    MeshSessionLifecycleRecord,
-    MeshSessionLifecycleCoordinator,
-    get_lifecycle_coordinator,
-    reset_lifecycle_coordinator,
-    create_durable_session,
-    activate_durable_session,
-    suspend_durable_session,
-    restore_durable_session,
-    terminate_durable_session,
-    MESH_SESSION_LIFECYCLE_COORDINATOR_IS_AUTHORITY,
-    LIFECYCLE_MUTATIONS_ARE_PERSISTED_POLICY,
-    RESTORE_REQUIRES_DURABLE_STATE_POLICY,
-)
 from .live_mesh_session_coordinator import (
-    LiveMeshSessionCoordinator,
-    create_live_mesh_session_coordinator,
-    LIVE_MESH_SESSION_COORDINATOR_PR_J_SENTINEL,
-    INCREMENTAL_PARTICIPANT_EVENTS_PR_J_POLICY,
     BARRIER_TRACKS_ACROSS_EVENTS_PR_J_POLICY,
     COORDINATOR_FINALIZE_PRODUCES_STABLE_RESULT_PR_J_POLICY,
+    INCREMENTAL_PARTICIPANT_EVENTS_PR_J_POLICY,
+    LIVE_MESH_SESSION_COORDINATOR_PR_J_SENTINEL,
     PARTICIPANT_DROPOUT_AFFECTS_OUTCOME_PR_J_POLICY,
+    LiveMeshSessionCoordinator,
+    create_live_mesh_session_coordinator,
 )
-from .body_mesh_persistence import (
-    BodyMeshSnapshotRecord,
-    BodyMeshPersistenceStore,
-    save_body_mesh_snapshot,
-    restore_body_mesh_from_snapshot,
-    get_body_mesh_persistence_store,
-    reset_body_mesh_persistence_store,
-    BODY_MESH_PERSISTENCE_IS_AUTHORITY,
-    BODY_MESH_PERSISTENCE_CLOSES_VOLATILE_REGISTRY_GAP_SENTINEL,
-    RESTORE_DOES_NOT_REPLACE_LIVE_REGISTRY_POLICY,
+from .mesh_session_lifecycle import (
+    LIFECYCLE_MUTATIONS_ARE_PERSISTED_POLICY,
+    MESH_SESSION_LIFECYCLE_COORDINATOR_IS_AUTHORITY,
+    RESTORE_REQUIRES_DURABLE_STATE_POLICY,
+    MeshSessionLifecycleCoordinator,
+    MeshSessionLifecycleRecord,
+    activate_durable_session,
+    create_durable_session,
+    get_lifecycle_coordinator,
+    reset_lifecycle_coordinator,
+    restore_durable_session,
+    suspend_durable_session,
+    terminate_durable_session,
+)
+from .mesh_session_persistence import (
+    MESH_SESSION_PERSISTENCE_GAP_CLOSURE_SENTINEL,
+    MESH_SESSION_PERSISTENCE_IS_AUTHORITY,
+    PERSISTENCE_DOES_NOT_OWN_RUNTIME_TRUTH_POLICY,
+    RECOVERY_RESTORES_NON_TERMINAL_SESSIONS_POLICY,
+    MeshSessionPersistenceStore,
+    SnapshotRecord,
+    get_persistence_store,
+    list_recoverable_sessions,
+    load_mesh_session_snapshot,
+    recover_mesh_sessions,
+    reset_persistence_store,
+    save_mesh_session_snapshot,
 )
 
 __all__ = [

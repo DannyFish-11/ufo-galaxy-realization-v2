@@ -82,15 +82,12 @@ __all__ = [
 # Authority sentinel
 # ---------------------------------------------------------------------------
 
-TRUTH_INTEGRATION_LAYER_AUTHORITY: str = (
-    "TRUTH_INTEGRATION_LAYER::CANONICAL_RUNTIME_TRUTH_V1"
-)
+TRUTH_INTEGRATION_LAYER_AUTHORITY: str = "TRUTH_INTEGRATION_LAYER::CANONICAL_RUNTIME_TRUTH_V1"
 
 # Human-readable description of the conflict-resolution policy used by this
 # module.  Importable by external conformance tests.
 TRUTH_CONFLICT_RESOLUTION_POLICY: str = (
-    "UCM/UDM=primary-authority; compat-cache=read-only-supplement; "
-    "compat verdict never overrides authority verdict"
+    "UCM/UDM=primary-authority; compat-cache=read-only-supplement; " "compat verdict never overrides authority verdict"
 )
 
 # ---------------------------------------------------------------------------
@@ -169,6 +166,7 @@ def _get_udm():
     """Return the UnifiedDeviceManager singleton (best-effort)."""
     try:
         from core.unified.device_manager import get_unified_device_manager  # type: ignore
+
         return get_unified_device_manager()
     except Exception:
         return None
@@ -178,6 +176,7 @@ def _get_ucm():
     """Return the UnifiedConnectionManager singleton (best-effort)."""
     try:
         from core.unified.connection_manager import get_unified_connection_manager  # type: ignore
+
         return get_unified_connection_manager()
     except Exception:
         return None
@@ -187,6 +186,7 @@ def _get_compat_cache() -> Dict[str, Dict[str, Any]]:
     """Return the compat registered_devices dict (best-effort, empty on failure)."""
     try:
         from core.routes._shared import registered_devices  # type: ignore
+
         return registered_devices
     except Exception:
         return {}
@@ -199,9 +199,7 @@ def _get_compat_cache() -> Dict[str, Dict[str, Any]]:
 # Canonical set of status strings that represent an "online/active" device.
 # Applied consistently for both UDM and compat-cache status interpretation.
 # "registered" is included because legacy compat cache uses it to mean active.
-_ONLINE_STATUS_VALUES: frozenset = frozenset(
-    ("online", "connected", "active", "registered")
-)
+_ONLINE_STATUS_VALUES: frozenset = frozenset(("online", "connected", "active", "registered"))
 
 
 def _status_is_online(status_str: str) -> bool:
@@ -300,16 +298,12 @@ def _detect_conflicts(
     if compat_entry is None:
         return conflicts
 
-    compat_online = bool(
-        compat_entry.get("online", False)
-        or _status_is_online(str(compat_entry.get("status", "")))
-    )
+    compat_online = bool(compat_entry.get("online", False) or _status_is_online(str(compat_entry.get("status", ""))))
 
     if is_registered and not compat_online and compat_entry:
         # Authority says registered/online, compat says offline — compat is stale
         conflicts.append(
-            f"compat-cache marks device '{device_id}' offline/unregistered "
-            "but authority (UDM) confirms registration"
+            f"compat-cache marks device '{device_id}' offline/unregistered " "but authority (UDM) confirms registration"
         )
     elif not is_registered and compat_online:
         # Compat says online, authority says not registered — compat is stale
@@ -359,8 +353,13 @@ def resolve_device_truth(device_id: str) -> CanonicalDeviceTruth:
     truth.authority_available = authority_available
 
     (
-        is_registered, is_online, is_connected, is_routable,
-        capabilities, raw_udm, raw_ucm,
+        is_registered,
+        is_online,
+        is_connected,
+        is_routable,
+        capabilities,
+        raw_udm,
+        raw_ucm,
     ) = _resolve_from_authority(device_id, udm, ucm)
 
     if authority_available and (is_registered or is_connected):
@@ -377,9 +376,12 @@ def resolve_device_truth(device_id: str) -> CanonicalDeviceTruth:
         truth.conflicts = _detect_conflicts(device_id, is_registered, is_online, compat_entry)
 
         logger.debug(
-            "TIL resolved '%s' from authority: registered=%s online=%s "
-            "connected=%s routable=%s conflicts=%d",
-            device_id, is_registered, is_online, is_connected, is_routable,
+            "TIL resolved '%s' from authority: registered=%s online=%s " "connected=%s routable=%s conflicts=%d",
+            device_id,
+            is_registered,
+            is_online,
+            is_connected,
+            is_routable,
             len(truth.conflicts),
             extra={"event": "til_resolved_authority", "device_id": device_id},
         )
@@ -388,10 +390,7 @@ def resolve_device_truth(device_id: str) -> CanonicalDeviceTruth:
     # ── Fallback: UCM/UDM had no record — check compat cache as supplement ──
     if compat_entry is not None:
         compat_status = str(compat_entry.get("status", "offline"))
-        compat_online_flag = bool(
-            compat_entry.get("online", False)
-            or _status_is_online(compat_status)
-        )
+        compat_online_flag = bool(compat_entry.get("online", False) or _status_is_online(compat_status))
         truth.is_registered = True  # compat has an entry → assume registered
         truth.is_online = compat_online_flag
         truth.is_connected = compat_online_flag
@@ -399,12 +398,12 @@ def resolve_device_truth(device_id: str) -> CanonicalDeviceTruth:
         truth.capabilities = list(compat_entry.get("capabilities", []))
         truth.raw_compat = dict(compat_entry)
         # Distinguish: authorities reachable but had no record vs authorities down
-        truth.resolution_source = (
-            "compat_supplement" if authority_available else "compat_only"
-        )
+        truth.resolution_source = "compat_supplement" if authority_available else "compat_only"
         logger.debug(
             "TIL resolved '%s' from compat cache (source=%s): online=%s",
-            device_id, truth.resolution_source, compat_online_flag,
+            device_id,
+            truth.resolution_source,
+            compat_online_flag,
             extra={"event": "til_resolved_compat", "device_id": device_id},
         )
         return truth
@@ -453,11 +452,7 @@ def resolve_all_device_truth() -> List[CanonicalDeviceTruth]:
     if ucm is not None:
         try:
             for entry in ucm.get_all_devices():
-                did = (
-                    entry.get("device_id")
-                    if isinstance(entry, dict)
-                    else getattr(entry, "device_id", None)
-                )
+                did = entry.get("device_id") if isinstance(entry, dict) else getattr(entry, "device_id", None)
                 if did and did not in device_ids:
                     device_ids.append(did)
         except Exception as exc:

@@ -85,7 +85,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
@@ -104,6 +103,7 @@ def _make_memory_bias(
 ) -> Any:
     """Build a MemoryBias object directly."""
     from core.cognitive.memory_bias_layer import MemoryBias
+
     return MemoryBias(
         posture=posture,
         continuity_score=continuity_score,
@@ -127,6 +127,7 @@ def _make_memory_guidance(
 ) -> Any:
     """Build a MemoryPlannerGuidance object directly."""
     from core.cognitive.memory_bias_layer import MemoryPlannerGuidance
+
     return MemoryPlannerGuidance(
         posture=posture,
         decomposition_hint=decomp_hint,
@@ -140,6 +141,7 @@ def _make_memory_guidance(
 def _make_planner():
     """Return an ExecutionPlanner instance."""
     from core.agent.execution_planner import ExecutionPlanner
+
     return ExecutionPlanner()
 
 
@@ -151,44 +153,53 @@ def _make_planner():
 class TestGroupA_Sentinels:
     def test_A01_authority_sentinel_exists(self):
         from core.cognitive.memory_bias_layer import MEMORY_BIAS_LAYER_IS_AUTHORITY
+
         assert "CANONICAL_AUTHORITY" in MEMORY_BIAS_LAYER_IS_AUTHORITY
         assert "PR-19" in MEMORY_BIAS_LAYER_IS_AUTHORITY
 
     def test_A02_pr19_sentinel_exists(self):
         from core.cognitive.memory_bias_layer import MEMORY_BIAS_LAYER_PR19_SENTINEL
+
         assert "PR19_SENTINEL" in MEMORY_BIAS_LAYER_PR19_SENTINEL
         assert "PR-19" in MEMORY_BIAS_LAYER_PR19_SENTINEL
 
     def test_A03_hard_gates_policy_exists(self):
         from core.cognitive.memory_bias_layer import HARD_GATES_OVERRIDE_MEMORY_BIAS_POLICY
+
         assert "POLICY_1" in HARD_GATES_OVERRIDE_MEMORY_BIAS_POLICY
         assert "Hard gates" in HARD_GATES_OVERRIDE_MEMORY_BIAS_POLICY
 
     def test_A04_advisory_policy_exists(self):
         from core.cognitive.memory_bias_layer import MEMORY_BIAS_IS_ADVISORY_NOT_AUTHORITATIVE_POLICY
+
         assert "POLICY_2" in MEMORY_BIAS_IS_ADVISORY_NOT_AUTHORITATIVE_POLICY
         assert "advisory" in MEMORY_BIAS_IS_ADVISORY_NOT_AUTHORITATIVE_POLICY.lower()
 
     def test_A05_consumes_existing_signals_policy_exists(self):
         from core.cognitive.memory_bias_layer import MEMORY_BIAS_CONSUMES_EXISTING_SIGNALS_POLICY
+
         assert "POLICY_3" in MEMORY_BIAS_CONSUMES_EXISTING_SIGNALS_POLICY
 
     def test_A06_subordinate_to_task_semantics_policy_exists(self):
         from core.cognitive.memory_bias_layer import MEMORY_BIAS_SUBORDINATE_TO_TASK_SEMANTICS_POLICY
+
         assert "POLICY_4" in MEMORY_BIAS_SUBORDINATE_TO_TASK_SEMANTICS_POLICY
 
     def test_A07_kernel_sentinel_exists(self):
         from core.agent.kernel import MEMORY_BIAS_WIRED_INTO_KERNEL_PR19
+
         assert "MEMORY_BIAS_WIRED_INTO_KERNEL_PR19" in MEMORY_BIAS_WIRED_INTO_KERNEL_PR19
         assert "PR19" in MEMORY_BIAS_WIRED_INTO_KERNEL_PR19
 
     def test_A08_planner_sentinel_exists(self):
         from core.agent.execution_planner import MEMORY_BIAS_PLANNER_GUIDANCE_WIRED_PR19
+
         assert "MEMORY_BIAS_PLANNER_GUIDANCE_WIRED_PR19" in MEMORY_BIAS_PLANNER_GUIDANCE_WIRED_PR19
         assert "PR19" in MEMORY_BIAS_PLANNER_GUIDANCE_WIRED_PR19
 
     def test_A09_projection_alignment_sentinel_exists(self):
         from core.routes.projection import MEMORY_BIAS_LAYER_ALIGNED_PR19
+
         assert "PR19" in MEMORY_BIAS_LAYER_ALIGNED_PR19
         assert "UNAVAILABLE" not in MEMORY_BIAS_LAYER_ALIGNED_PR19
 
@@ -200,15 +211,19 @@ class TestGroupA_Sentinels:
 
 class TestGroupB_MemoryBiasDeriivation:
     def test_B01_derive_with_no_session_returns_valid_bias(self):
-        from core.cognitive.memory_bias_layer import derive_memory_bias, POSTURE_NOVELTY
+        from core.cognitive.memory_bias_layer import POSTURE_NOVELTY, derive_memory_bias
+
         bias = derive_memory_bias()
         assert bias is not None
         assert bias.posture in ("continuity", "retrieval", "novelty")
 
     def test_B02_no_memory_produces_novelty_posture(self):
         from core.cognitive.memory_bias_layer import (
-            derive_memory_bias, POSTURE_NOVELTY, FALLBACK_MEMORY_BIAS,
+            FALLBACK_MEMORY_BIAS,
+            POSTURE_NOVELTY,
+            derive_memory_bias,
         )
+
         # Mock the memory singletons inside the target modules directly
         with (
             patch("core.cognitive.working_memory.WorkingMemory.get", return_value=[]),
@@ -222,8 +237,11 @@ class TestGroupB_MemoryBiasDeriivation:
     def test_B03_high_wm_depth_produces_continuity_posture(self):
         """wm_depth >= 5 → continuity_score >= 0.6 → CONTINUITY."""
         from core.cognitive.memory_bias_layer import (
-            _compute_continuity_score, _classify_posture, POSTURE_CONTINUITY,
+            POSTURE_CONTINUITY,
+            _classify_posture,
+            _compute_continuity_score,
         )
+
         score = _compute_continuity_score(wm_depth=5, recent_task_count=0)
         posture = _classify_posture(score, 0.0)
         assert score >= 0.6
@@ -232,8 +250,11 @@ class TestGroupB_MemoryBiasDeriivation:
     def test_B04_medium_wm_plus_tasks_produces_continuity(self):
         """wm_depth=2 + recent_tasks=3 → continuity_score >= 0.6 → CONTINUITY."""
         from core.cognitive.memory_bias_layer import (
-            _compute_continuity_score, _classify_posture, POSTURE_CONTINUITY,
+            POSTURE_CONTINUITY,
+            _classify_posture,
+            _compute_continuity_score,
         )
+
         score = _compute_continuity_score(wm_depth=2, recent_task_count=3)
         posture = _classify_posture(score, 0.0)
         assert score >= 0.6
@@ -242,9 +263,12 @@ class TestGroupB_MemoryBiasDeriivation:
     def test_B05_high_ltm_with_zero_wm_produces_retrieval(self):
         """wm_depth=0 + ltm_depth>=3 → RETRIEVAL posture."""
         from core.cognitive.memory_bias_layer import (
-            _compute_continuity_score, _compute_retrieval_relevance,
-            _classify_posture, POSTURE_RETRIEVAL,
+            POSTURE_RETRIEVAL,
+            _classify_posture,
+            _compute_continuity_score,
+            _compute_retrieval_relevance,
         )
+
         c_score = _compute_continuity_score(wm_depth=0, recent_task_count=0)
         r_score = _compute_retrieval_relevance(ltm_depth=3)
         posture = _classify_posture(c_score, r_score)
@@ -253,9 +277,12 @@ class TestGroupB_MemoryBiasDeriivation:
     def test_B06_low_wm_low_ltm_produces_novelty(self):
         """wm_depth=1 + ltm_depth=0 → NOVELTY posture."""
         from core.cognitive.memory_bias_layer import (
-            _compute_continuity_score, _compute_retrieval_relevance,
-            _classify_posture, POSTURE_NOVELTY,
+            POSTURE_NOVELTY,
+            _classify_posture,
+            _compute_continuity_score,
+            _compute_retrieval_relevance,
         )
+
         c_score = _compute_continuity_score(wm_depth=1, recent_task_count=0)
         r_score = _compute_retrieval_relevance(ltm_depth=0)
         posture = _classify_posture(c_score, r_score)
@@ -267,6 +294,7 @@ class TestGroupB_MemoryBiasDeriivation:
 
     def test_B08_influenced_false_for_fallback(self):
         from core.cognitive.memory_bias_layer import FALLBACK_MEMORY_BIAS
+
         assert FALLBACK_MEMORY_BIAS.influenced_by_memory is False
         assert FALLBACK_MEMORY_BIAS.source == "fallback"
 
@@ -294,6 +322,7 @@ class TestGroupB_MemoryBiasDeriivation:
 
     def test_B11_continuity_score_in_range(self):
         from core.cognitive.memory_bias_layer import _compute_continuity_score
+
         for wm in range(0, 10):
             for tasks in range(0, 5):
                 s = _compute_continuity_score(wm, tasks)
@@ -301,6 +330,7 @@ class TestGroupB_MemoryBiasDeriivation:
 
     def test_B12_retrieval_relevance_in_range(self):
         from core.cognitive.memory_bias_layer import _compute_retrieval_relevance
+
         for ltm in range(0, 10):
             r = _compute_retrieval_relevance(ltm)
             assert 0.0 <= r <= 1.0
@@ -326,20 +356,24 @@ class TestGroupB_MemoryBiasDeriivation:
 class TestGroupC_MemoryPlannerGuidance:
     def test_C01_none_bias_returns_non_influenced_guidance(self):
         from core.cognitive.memory_bias_layer import get_memory_planner_guidance
+
         guidance = get_memory_planner_guidance(None)
         assert guidance.influenced_by_memory is False
         assert guidance.decomposition_hint == "fresh"
 
     def test_C02_fallback_bias_returns_non_influenced_guidance(self):
         from core.cognitive.memory_bias_layer import (
-            get_memory_planner_guidance, FALLBACK_MEMORY_BIAS,
+            FALLBACK_MEMORY_BIAS,
+            get_memory_planner_guidance,
         )
+
         guidance = get_memory_planner_guidance(FALLBACK_MEMORY_BIAS)
         assert guidance.influenced_by_memory is False
         assert guidance.decomposition_hint == "fresh"
 
     def test_C03_continuity_bias_produces_resume_guidance(self):
         from core.cognitive.memory_bias_layer import get_memory_planner_guidance
+
         bias = _make_memory_bias(posture="continuity", continuity_score=0.75, influenced=True)
         guidance = get_memory_planner_guidance(bias)
         assert guidance.decomposition_hint == "resume"
@@ -348,6 +382,7 @@ class TestGroupC_MemoryPlannerGuidance:
 
     def test_C04_retrieval_bias_produces_recall_guidance(self):
         from core.cognitive.memory_bias_layer import get_memory_planner_guidance
+
         bias = _make_memory_bias(posture="retrieval", retrieval_relevance=0.7, influenced=True)
         guidance = get_memory_planner_guidance(bias)
         assert guidance.decomposition_hint == "recall"
@@ -356,13 +391,15 @@ class TestGroupC_MemoryPlannerGuidance:
 
     def test_C05_novelty_bias_produces_fresh_guidance(self):
         from core.cognitive.memory_bias_layer import get_memory_planner_guidance
+
         bias = _make_memory_bias(posture="novelty", wm_depth=1, influenced=True)
         guidance = get_memory_planner_guidance(bias)
         assert guidance.decomposition_hint == "fresh"
         assert guidance.prefer_single_agent is False
 
     def test_C06_influenced_true_for_live_false_for_fallback(self):
-        from core.cognitive.memory_bias_layer import get_memory_planner_guidance, FALLBACK_MEMORY_BIAS
+        from core.cognitive.memory_bias_layer import FALLBACK_MEMORY_BIAS, get_memory_planner_guidance
+
         live_bias = _make_memory_bias(posture="continuity", influenced=True)
         live_guidance = get_memory_planner_guidance(live_bias)
         fallback_guidance = get_memory_planner_guidance(FALLBACK_MEMORY_BIAS)
@@ -371,6 +408,7 @@ class TestGroupC_MemoryPlannerGuidance:
 
     def test_C07_diagnostic_note_is_non_empty(self):
         from core.cognitive.memory_bias_layer import get_memory_planner_guidance
+
         for posture in ("continuity", "retrieval", "novelty"):
             bias = _make_memory_bias(posture=posture, wm_depth=3, influenced=True)
             guidance = get_memory_planner_guidance(bias)
@@ -395,11 +433,13 @@ class TestGroupC_MemoryPlannerGuidance:
 class TestGroupD_Diagnostics:
     def test_D01_none_bias_returns_minimal_dict(self):
         from core.cognitive.memory_bias_layer import build_memory_bias_diagnostics
+
         d = build_memory_bias_diagnostics(None)
         assert "posture" in d
 
     def test_D02_live_bias_returns_full_dict(self):
         from core.cognitive.memory_bias_layer import build_memory_bias_diagnostics
+
         bias = _make_memory_bias(posture="continuity", continuity_score=0.8)
         d = build_memory_bias_diagnostics(bias)
         assert d["posture"] == "continuity"
@@ -408,6 +448,7 @@ class TestGroupD_Diagnostics:
 
     def test_D03_influenced_runtime_decision_field(self):
         from core.cognitive.memory_bias_layer import build_memory_bias_diagnostics
+
         bias = _make_memory_bias()
         d_influenced = build_memory_bias_diagnostics(bias, influenced=True)
         d_not = build_memory_bias_diagnostics(bias, influenced=False)
@@ -416,12 +457,14 @@ class TestGroupD_Diagnostics:
 
     def test_D04_influence_source_field(self):
         from core.cognitive.memory_bias_layer import build_memory_bias_diagnostics
+
         bias = _make_memory_bias()
         d = build_memory_bias_diagnostics(bias, influence_source="planner_strategy")
         assert d["influence_source"] == "planner_strategy"
 
     def test_D05_diagnostics_never_raises(self):
         from core.cognitive.memory_bias_layer import build_memory_bias_diagnostics
+
         # Should not raise on any input
         _ = build_memory_bias_diagnostics(None)
         _ = build_memory_bias_diagnostics(None, influenced=True, influence_source="x")
@@ -449,9 +492,7 @@ class TestGroupE_PlannerStrategyWithMemoryGuidance:
 
     def test_E02_continuity_guidance_raises_fractal_threshold(self):
         planner = _make_planner()
-        guidance = _make_memory_guidance(
-            posture="continuity", prefer_single=True, adj=0.10, influenced=True
-        )
+        guidance = _make_memory_guidance(posture="continuity", prefer_single=True, adj=0.10, influenced=True)
         # complexity=0.76 would normally be fractal; with +0.10 adj → threshold=0.85 → single
         strategy = planner._pick_strategy("do task", 0.76, memory_guidance=guidance)
         # fractal threshold is now 0.85; 0.76 < 0.85 → not fractal
@@ -459,44 +500,34 @@ class TestGroupE_PlannerStrategyWithMemoryGuidance:
 
     def test_E03_continuity_guidance_prefer_single_returns_single(self):
         planner = _make_planner()
-        guidance = _make_memory_guidance(
-            posture="continuity", prefer_single=True, adj=0.10, influenced=True
-        )
+        guidance = _make_memory_guidance(posture="continuity", prefer_single=True, adj=0.10, influenced=True)
         strategy = planner._pick_strategy("simple task", 0.3, memory_guidance=guidance)
         assert strategy == "single"
 
     def test_E04_retrieval_guidance_no_threshold_change(self):
         planner = _make_planner()
-        guidance = _make_memory_guidance(
-            posture="retrieval", prefer_single=False, adj=0.0, influenced=True
-        )
+        guidance = _make_memory_guidance(posture="retrieval", prefer_single=False, adj=0.0, influenced=True)
         # complexity=0.76 → fractal (threshold 0.75 unchanged)
         strategy = planner._pick_strategy("do task", 0.76, memory_guidance=guidance)
         assert strategy == "fractal"
 
     def test_E05_novelty_guidance_no_influence(self):
         planner = _make_planner()
-        guidance = _make_memory_guidance(
-            posture="novelty", prefer_single=False, adj=0.0, influenced=True
-        )
+        guidance = _make_memory_guidance(posture="novelty", prefer_single=False, adj=0.0, influenced=True)
         strategy_no_guidance = planner._pick_strategy("do task", 0.74)
         strategy_with_guidance = planner._pick_strategy("do task", 0.74, memory_guidance=guidance)
         assert strategy_no_guidance == strategy_with_guidance
 
     def test_E06_task_type_mapping_takes_highest_priority(self):
         planner = _make_planner()
-        guidance = _make_memory_guidance(
-            posture="continuity", prefer_single=True, adj=0.10, influenced=True
-        )
+        guidance = _make_memory_guidance(posture="continuity", prefer_single=True, adj=0.10, influenced=True)
         # 'chat' task type maps to 'single' regardless of memory guidance
         strategy = planner._pick_strategy("do task", 0.9, task_type="chat", memory_guidance=guidance)
         assert strategy == "single"
 
     def test_E07_swarm_keyword_not_overridden_by_continuity(self):
         planner = _make_planner()
-        guidance = _make_memory_guidance(
-            posture="continuity", prefer_single=True, adj=0.10, influenced=True
-        )
+        guidance = _make_memory_guidance(posture="continuity", prefer_single=True, adj=0.10, influenced=True)
         strategy = planner._pick_strategy("批量处理大量任务", 0.5, memory_guidance=guidance)
         assert strategy == "swarm"
 
@@ -511,14 +542,13 @@ class TestGroupE_PlannerStrategyWithMemoryGuidance:
             strategy_preference = "single"
             influenced_by_budget = True
 
-        guidance = _make_memory_guidance(
-            posture="continuity", prefer_single=True, adj=0.10, influenced=True
-        )
+        guidance = _make_memory_guidance(posture="continuity", prefer_single=True, adj=0.10, influenced=True)
         # With narrow breadth (PR-18 adj=0.15): fractal_threshold=0.90, specialized=0.80
         # Use complexity=0.70: 0.70 < 0.80 → not specialized, not fractal
         # strategy_pref='single' (from PR-18) → returns 'single'
         strategy = planner._pick_strategy(
-            "do task", 0.70,
+            "do task",
+            0.70,
             breadth_guidance=_NarrowBreadthGuidance(),
             memory_guidance=guidance,
         )
@@ -526,9 +556,7 @@ class TestGroupE_PlannerStrategyWithMemoryGuidance:
 
     def test_E09_fractal_keyword_returns_fractal_with_continuity_guidance(self):
         planner = _make_planner()
-        guidance = _make_memory_guidance(
-            posture="continuity", prefer_single=True, adj=0.10, influenced=True
-        )
+        guidance = _make_memory_guidance(posture="continuity", prefer_single=True, adj=0.10, influenced=True)
         strategy = planner._pick_strategy("递归深度拆解任务", 0.3, memory_guidance=guidance)
         assert strategy == "fractal"
 
@@ -541,12 +569,14 @@ class TestGroupE_PlannerStrategyWithMemoryGuidance:
 class TestGroupF_KernelWiring:
     def test_F01_kernel_response_has_memory_bias_hint_field(self):
         from core.agent.kernel import KernelResponse
+
         resp = KernelResponse()
         assert hasattr(resp, "memory_bias_hint")
         assert resp.memory_bias_hint is None  # default
 
     def test_F02_to_api_dict_includes_memory_bias_hint(self):
         from core.agent.kernel import KernelResponse
+
         resp = KernelResponse(memory_bias_hint={"posture": "novelty"})
         d = resp.to_api_dict()
         assert "memory_bias_hint" in d
@@ -554,7 +584,7 @@ class TestGroupF_KernelWiring:
 
     def test_F03_execute_called_with_memory_bias_kwarg(self):
         """execute() must accept and not crash with memory_bias=something."""
-        from core.agent.execution_planner import ExecutionPlanner, ExecutionPlan
+        from core.agent.execution_planner import ExecutionPlan, ExecutionPlanner
         from core.agent.intent_router import IntentResult
 
         planner = ExecutionPlanner()
@@ -566,6 +596,7 @@ class TestGroupF_KernelWiring:
 
         # Should not raise TypeError about unexpected kwarg
         import inspect
+
         sig = inspect.signature(planner.execute)
         assert "memory_bias" in sig.parameters
 
@@ -579,7 +610,7 @@ class TestGroupG_BackwardCompatibility:
     @pytest.mark.asyncio
     async def test_G01_execute_without_memory_bias_still_works(self):
         """Calling execute(plan) without memory_bias must not crash."""
-        from core.agent.execution_planner import ExecutionPlanner, ExecutionPlan
+        from core.agent.execution_planner import ExecutionPlan, ExecutionPlanner
         from core.agent.intent_router import IntentResult
 
         planner = ExecutionPlanner()
@@ -587,6 +618,7 @@ class TestGroupG_BackwardCompatibility:
 
         with patch.object(planner, "_dispatch", new_callable=AsyncMock) as mock_dispatch:
             from core.agent.execution_planner import ExecutionResult
+
             mock_dispatch.return_value = ExecutionResult(success=True, reply="ok")
             # Calling without memory_bias
             result = await planner.execute(plan)
@@ -595,7 +627,7 @@ class TestGroupG_BackwardCompatibility:
     @pytest.mark.asyncio
     async def test_G02_execute_with_activation_budget_only_still_works(self):
         """Calling execute(plan, activation_budget=x) without memory_bias must work."""
-        from core.agent.execution_planner import ExecutionPlanner, ExecutionPlan
+        from core.agent.execution_planner import ExecutionPlan, ExecutionPlanner
         from core.agent.intent_router import IntentResult
 
         planner = ExecutionPlanner()
@@ -603,12 +635,14 @@ class TestGroupG_BackwardCompatibility:
 
         with patch.object(planner, "_dispatch", new_callable=AsyncMock) as mock_dispatch:
             from core.agent.execution_planner import ExecutionResult
+
             mock_dispatch.return_value = ExecutionResult(success=True, reply="ok")
             result = await planner.execute(plan, activation_budget=None)
             assert result is not None
 
     def test_G03_derive_memory_bias_never_raises(self):
         from core.cognitive.memory_bias_layer import derive_memory_bias
+
         # Must not raise on any input
         _ = derive_memory_bias()
         _ = derive_memory_bias(session_id="")
@@ -616,11 +650,13 @@ class TestGroupG_BackwardCompatibility:
 
     def test_G04_get_memory_planner_guidance_never_raises(self):
         from core.cognitive.memory_bias_layer import get_memory_planner_guidance
+
         _ = get_memory_planner_guidance(None)
         _ = get_memory_planner_guidance("not_a_bias")  # type: ignore
 
     def test_G05_build_memory_bias_diagnostics_never_raises_on_none(self):
         from core.cognitive.memory_bias_layer import build_memory_bias_diagnostics
+
         d = build_memory_bias_diagnostics(None)
         assert isinstance(d, dict)
 

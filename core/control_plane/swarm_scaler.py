@@ -46,6 +46,7 @@ logger = logging.getLogger("Galaxy.SwarmScaler")
 # Policy model
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ScalingPolicy:
     """Configuration for the Swarm auto-scaler.
@@ -82,14 +83,13 @@ class ScalingPolicy:
         if self.max_workers < self.min_workers:
             raise ValueError("max_workers must be >= min_workers")
         if not (0.0 <= self.scale_down_complexity < self.scale_up_complexity <= 1.0):
-            raise ValueError(
-                "Need 0 <= scale_down_complexity < scale_up_complexity <= 1"
-            )
+            raise ValueError("Need 0 <= scale_down_complexity < scale_up_complexity <= 1")
 
 
 # ---------------------------------------------------------------------------
 # Scaling decision enum
 # ---------------------------------------------------------------------------
+
 
 class ScalingAction(str):
     SCALE_UP = "scale_up"
@@ -100,6 +100,7 @@ class ScalingAction(str):
 # ---------------------------------------------------------------------------
 # SwarmScaler
 # ---------------------------------------------------------------------------
+
 
 class SwarmScaler:
     """Dynamic worker scaler for Swarm-mode Agent teams.
@@ -134,6 +135,7 @@ class SwarmScaler:
             return self._ledger
         try:
             from core.control_plane._globals import get_audit_ledger
+
             return get_audit_ledger()
         except Exception:
             return None
@@ -152,6 +154,7 @@ class SwarmScaler:
             return
         try:
             from core.control_plane.audit_ledger import EventType, Severity
+
             # Map string → enum, fallback to SCHEDULER_DECISION
             try:
                 et = EventType(event_type_str)
@@ -198,12 +201,15 @@ class SwarmScaler:
         str
             One of ``"scale_up"``, ``"scale_down"``, or ``"no_change"``.
         """
-        if (complexity > self.policy.scale_up_complexity or load > self.policy.scale_up_load) \
-                and current_worker_count < self.policy.max_workers:
+        if (
+            complexity > self.policy.scale_up_complexity or load > self.policy.scale_up_load
+        ) and current_worker_count < self.policy.max_workers:
             return ScalingAction.SCALE_UP
-        if complexity < self.policy.scale_down_complexity \
-                and load < self.policy.scale_up_load \
-                and current_worker_count > self.policy.min_workers:
+        if (
+            complexity < self.policy.scale_down_complexity
+            and load < self.policy.scale_up_load
+            and current_worker_count > self.policy.min_workers
+        ):
             return ScalingAction.SCALE_DOWN
         return ScalingAction.NO_CHANGE
 
@@ -265,10 +271,7 @@ class SwarmScaler:
         tracked = self._managed_workers.setdefault(team_id, [])
         tracked.extend(new_workers)
 
-        msg = (
-            f"scale_up: +{add_count} workers for team {team_id} "
-            f"(complexity={complexity:.2f}, load={load:.2f})"
-        )
+        msg = f"scale_up: +{add_count} workers for team {team_id} " f"(complexity={complexity:.2f}, load={load:.2f})"
         logger.info(msg)
         self._emit(
             "scheduler_decision",
@@ -343,8 +346,7 @@ class SwarmScaler:
                 tracked.remove(aid)
 
         msg = (
-            f"scale_down: -{remove_count} workers for team {team_id} "
-            f"(complexity={complexity:.2f}, load={load:.2f})"
+            f"scale_down: -{remove_count} workers for team {team_id} " f"(complexity={complexity:.2f}, load={load:.2f})"
         )
         logger.info(msg)
         self._emit(
@@ -375,19 +377,25 @@ class SwarmScaler:
 
         Returns a dict with keys ``action``, ``added``, and ``retired``.
         """
-        action = self.evaluate(
-            team_id, len(current_workers), complexity, load
-        )
+        action = self.evaluate(team_id, len(current_workers), complexity, load)
         if action == ScalingAction.SCALE_UP:
             added = self.scale_up(
-                team_id, current_workers, agent_factory,
-                trace_id=trace_id, complexity=complexity, load=load,
+                team_id,
+                current_workers,
+                agent_factory,
+                trace_id=trace_id,
+                complexity=complexity,
+                load=load,
             )
             return {"action": action, "added": added, "retired": []}
         if action == ScalingAction.SCALE_DOWN:
             retired = self.scale_down(
-                team_id, current_workers, agent_factory,
-                trace_id=trace_id, complexity=complexity, load=load,
+                team_id,
+                current_workers,
+                agent_factory,
+                trace_id=trace_id,
+                complexity=complexity,
+                load=load,
             )
             return {"action": action, "added": [], "retired": retired}
         return {"action": action, "added": [], "retired": []}

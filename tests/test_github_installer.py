@@ -31,6 +31,7 @@ import pytest
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _run(coro):
     """Run a coroutine synchronously."""
     loop = asyncio.new_event_loop()
@@ -44,9 +45,11 @@ def _run(coro):
 # 1. URL Validation
 # ===========================================================================
 
+
 class TestParseGitHubUrl:
     def test_simple_url(self):
         from core.github_installer import parse_github_url
+
         r = parse_github_url("https://github.com/owner/repo")
         assert r is not None
         assert r["owner"] == "owner"
@@ -55,30 +58,36 @@ class TestParseGitHubUrl:
 
     def test_url_with_git_suffix(self):
         from core.github_installer import parse_github_url
+
         r = parse_github_url("https://github.com/owner/repo.git")
         assert r is not None
         assert r["repo"] == "repo"
 
     def test_url_with_tree_ref(self):
         from core.github_installer import parse_github_url
+
         r = parse_github_url("https://github.com/owner/repo/tree/feature-branch")
         assert r is not None
         assert r["ref"] == "feature-branch"
 
     def test_invalid_url_ssh(self):
         from core.github_installer import parse_github_url
+
         assert parse_github_url("git@github.com:owner/repo.git") is None
 
     def test_invalid_url_http(self):
         from core.github_installer import parse_github_url
+
         assert parse_github_url("http://github.com/owner/repo") is None
 
     def test_invalid_url_random(self):
         from core.github_installer import parse_github_url
+
         assert parse_github_url("not-a-url") is None
 
     def test_url_with_trailing_slash(self):
         from core.github_installer import parse_github_url
+
         r = parse_github_url("https://github.com/owner/repo/")
         assert r is not None
         assert r["owner"] == "owner"
@@ -87,18 +96,21 @@ class TestParseGitHubUrl:
 class TestValidateRepoUrl:
     def test_valid_no_lists(self):
         from core.github_installer import validate_repo_url
+
         with patch.dict(os.environ, {"GITHUB_ALLOWLIST": "", "GITHUB_BLOCKLIST": ""}):
             r = validate_repo_url("https://github.com/owner/repo")
         assert r["valid"] is True
 
     def test_allowlist_pass(self):
         from core.github_installer import validate_repo_url
+
         with patch.dict(os.environ, {"GITHUB_ALLOWLIST": "owner/*", "GITHUB_BLOCKLIST": ""}):
             r = validate_repo_url("https://github.com/owner/repo")
         assert r["valid"] is True
 
     def test_allowlist_fail(self):
         from core.github_installer import validate_repo_url
+
         with patch.dict(os.environ, {"GITHUB_ALLOWLIST": "other-org/*", "GITHUB_BLOCKLIST": ""}):
             r = validate_repo_url("https://github.com/owner/repo")
         assert r["valid"] is False
@@ -106,6 +118,7 @@ class TestValidateRepoUrl:
 
     def test_blocklist_blocks(self):
         from core.github_installer import validate_repo_url
+
         with patch.dict(os.environ, {"GITHUB_ALLOWLIST": "", "GITHUB_BLOCKLIST": "owner/repo"}):
             r = validate_repo_url("https://github.com/owner/repo")
         assert r["valid"] is False
@@ -113,12 +126,14 @@ class TestValidateRepoUrl:
 
     def test_blocklist_with_wildcard(self):
         from core.github_installer import validate_repo_url
+
         with patch.dict(os.environ, {"GITHUB_ALLOWLIST": "", "GITHUB_BLOCKLIST": "bad-actor/*"}):
             r = validate_repo_url("https://github.com/bad-actor/evil-tool")
         assert r["valid"] is False
 
     def test_invalid_url_returns_valid_false(self):
         from core.github_installer import validate_repo_url
+
         r = validate_repo_url("not-a-url")
         assert r["valid"] is False
 
@@ -127,9 +142,11 @@ class TestValidateRepoUrl:
 # 2. Manifest Store
 # ===========================================================================
 
+
 class TestManifestStore:
     def _make_store(self, tmp_dir: Path):
         from core.github_installer import _ManifestStore
+
         return _ManifestStore(tmp_dir)
 
     def test_put_and_get(self, tmp_path):
@@ -167,21 +184,26 @@ class TestManifestStore:
 # 3. GitHubInstaller — dry-run
 # ===========================================================================
 
+
 class TestGitHubInstallerDryRun:
     def _make_installer(self, tmp_path):
         from core.github_installer import GitHubInstaller
+
         inst = GitHubInstaller.__new__(GitHubInstaller)
         from core.github_installer import _ManifestStore
+
         inst._install_dir = tmp_path
         inst._manifest = _ManifestStore(tmp_path)
         return inst
 
     def test_dry_run_valid_url(self, tmp_path):
         inst = self._make_installer(tmp_path)
-        result = _run(inst.install(
-            url="https://github.com/owner/repo",
-            dry_run=True,
-        ))
+        result = _run(
+            inst.install(
+                url="https://github.com/owner/repo",
+                dry_run=True,
+            )
+        )
         assert result["success"] is True
         assert result["dry_run"] is True
         assert result["owner"] == "owner"
@@ -189,29 +211,35 @@ class TestGitHubInstallerDryRun:
 
     def test_dry_run_invalid_url(self, tmp_path):
         inst = self._make_installer(tmp_path)
-        result = _run(inst.install(
-            url="not-a-url",
-            dry_run=True,
-        ))
+        result = _run(
+            inst.install(
+                url="not-a-url",
+                dry_run=True,
+            )
+        )
         assert result["success"] is False
         assert "error" in result
 
     def test_dry_run_blocklisted(self, tmp_path):
         inst = self._make_installer(tmp_path)
         with patch.dict(os.environ, {"GITHUB_ALLOWLIST": "", "GITHUB_BLOCKLIST": "owner/*"}):
-            result = _run(inst.install(
-                url="https://github.com/owner/repo",
-                dry_run=True,
-            ))
+            result = _run(
+                inst.install(
+                    url="https://github.com/owner/repo",
+                    dry_run=True,
+                )
+            )
         assert result["success"] is False
 
     def test_dry_run_ref_override(self, tmp_path):
         inst = self._make_installer(tmp_path)
-        result = _run(inst.install(
-            url="https://github.com/owner/repo",
-            ref="v2.0.0",
-            dry_run=True,
-        ))
+        result = _run(
+            inst.install(
+                url="https://github.com/owner/repo",
+                ref="v2.0.0",
+                dry_run=True,
+            )
+        )
         assert result["success"] is True
         assert result["ref"] == "v2.0.0"
 
@@ -219,6 +247,7 @@ class TestGitHubInstallerDryRun:
 # ===========================================================================
 # 4. GitHubInstaller — install (mocked fetch)
 # ===========================================================================
+
 
 class TestGitHubInstallerInstall:
     def _make_installer(self, tmp_path, mcp_manifest=None, skill_manifest=None):
@@ -232,17 +261,15 @@ class TestGitHubInstallerInstall:
 
     def _patch_fetch(self, dest_path, mcp_manifest=None, skill_manifest=None):
         """Create a side-effect function that writes manifest files to dest."""
+
         def _fake_fetch(owner, repo, ref, dest):
             dest.mkdir(parents=True, exist_ok=True)
             if mcp_manifest:
-                (dest / "mcp_tool.json").write_text(
-                    json.dumps(mcp_manifest), encoding="utf-8"
-                )
+                (dest / "mcp_tool.json").write_text(json.dumps(mcp_manifest), encoding="utf-8")
             if skill_manifest:
-                (dest / "skill.json").write_text(
-                    json.dumps(skill_manifest), encoding="utf-8"
-                )
+                (dest / "skill.json").write_text(json.dumps(skill_manifest), encoding="utf-8")
             return "abc123deadbeef"
+
         return _fake_fetch
 
     @patch("core.github_installer._verify_mcp_install")
@@ -428,9 +455,11 @@ class TestGitHubInstallerInstall:
 # 5. GitHubInstaller — uninstall
 # ===========================================================================
 
+
 class TestGitHubInstallerUninstall:
     def _make_installer(self, tmp_path):
         from core.github_installer import GitHubInstaller, _ManifestStore
+
         inst = GitHubInstaller.__new__(GitHubInstaller)
         inst._install_dir = tmp_path
         inst._manifest = _ManifestStore(tmp_path)
@@ -443,11 +472,14 @@ class TestGitHubInstallerUninstall:
         (addon_dir / "server.py").write_text("# test")
 
         inst = self._make_installer(tmp_path)
-        inst._manifest.put("my-tool", {
-            "name": "my-tool",
-            "type": "mcp",
-            "install_path": str(addon_dir),
-        })
+        inst._manifest.put(
+            "my-tool",
+            {
+                "name": "my-tool",
+                "type": "mcp",
+                "install_path": str(addon_dir),
+            },
+        )
 
         result = _run(inst.uninstall("my-tool"))
         assert result["success"] is True
@@ -466,9 +498,11 @@ class TestGitHubInstallerUninstall:
 # 6. list_installed / get_status
 # ===========================================================================
 
+
 class TestGitHubInstallerStatus:
     def _make_installer(self, tmp_path):
         from core.github_installer import GitHubInstaller, _ManifestStore
+
         inst = GitHubInstaller.__new__(GitHubInstaller)
         inst._install_dir = tmp_path
         inst._manifest = _ManifestStore(tmp_path)
@@ -493,12 +527,15 @@ class TestGitHubInstallerStatus:
         inst._manifest.put("tool-a", {"name": "tool-a", "type": "mcp"})
         inst._manifest.put("skill-b", {"name": "skill-b", "type": "skill"})
 
-        with patch.dict(os.environ, {
-            "GITHUB_TOKEN": "fake-token",
-            "GITHUB_INSTALL_DIR": str(tmp_path),
-            "GITHUB_ALLOWLIST": "myorg/*",
-            "GITHUB_BLOCKLIST": "",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "GITHUB_TOKEN": "fake-token",
+                "GITHUB_INSTALL_DIR": str(tmp_path),
+                "GITHUB_ALLOWLIST": "myorg/*",
+                "GITHUB_BLOCKLIST": "",
+            },
+        ):
             result = inst.get_status()
 
         assert result["success"] is True
@@ -518,11 +555,13 @@ class TestGitHubInstallerStatus:
 # 7. OpenClawd github__ tool dispatch
 # ===========================================================================
 
+
 class TestOpenClawdGitHubDispatch:
     """Test the _dispatch_github_tool method of OpenClawd."""
 
     def _make_clawd(self):
         from core.openclawd import OpenClawd
+
         clawd = OpenClawd.__new__(OpenClawd)
         return clawd
 
@@ -554,10 +593,12 @@ class TestOpenClawdGitHubDispatch:
         mock_get_inst.return_value = mock_inst
 
         clawd = self._make_clawd()
-        result = _run(clawd._dispatch_github_tool(
-            "install",
-            {"url": "https://github.com/owner/repo"},
-        ))
+        result = _run(
+            clawd._dispatch_github_tool(
+                "install",
+                {"url": "https://github.com/owner/repo"},
+            )
+        )
         assert result["success"] is True
         mock_inst.install.assert_awaited_once()
 
@@ -596,10 +637,12 @@ class TestOpenClawdGitHubDispatch:
 # 8. OpenClawd built-in tool schema presence
 # ===========================================================================
 
+
 class TestOpenClawdToolSchema:
     def test_github_tools_in_collect(self):
         """Verify _GITHUB_BUILTIN_TOOLS are defined and correctly structured."""
         from core.openclawd import _GITHUB_BUILTIN_TOOLS
+
         names = {t["function"]["name"] for t in _GITHUB_BUILTIN_TOOLS}
         assert "github__install" in names
         assert "github__uninstall" in names
@@ -608,9 +651,8 @@ class TestOpenClawdToolSchema:
 
     def test_github_install_schema_has_required_url(self):
         from core.openclawd import _GITHUB_BUILTIN_TOOLS
-        install_tool = next(
-            t for t in _GITHUB_BUILTIN_TOOLS if t["function"]["name"] == "github__install"
-        )
+
+        install_tool = next(t for t in _GITHUB_BUILTIN_TOOLS if t["function"]["name"] == "github__install")
         params = install_tool["function"]["parameters"]
         assert "url" in params["properties"]
         assert "url" in params.get("required", [])
@@ -620,12 +662,15 @@ class TestOpenClawdToolSchema:
 # 9. REST Routes (minimal smoke tests using starlette TestClient)
 # ===========================================================================
 
+
 class TestGitHubRoutes:
     def _make_app(self):
         try:
             from fastapi import FastAPI
             from fastapi.testclient import TestClient
+
             from core.routes.github import create_router
+
             app = FastAPI()
             app.include_router(create_router())
             return TestClient(app)
@@ -677,20 +722,25 @@ class TestGitHubRoutes:
             pytest.skip("fastapi[testclient] not installed")
 
         mock_inst = MagicMock()
-        mock_inst.install = AsyncMock(return_value={
-            "success": True,
-            "dry_run": True,
-            "owner": "owner",
-            "repo": "repo",
-            "ref": "HEAD",
-            "message": "Dry-run: URL is valid and would be installed.",
-        })
+        mock_inst.install = AsyncMock(
+            return_value={
+                "success": True,
+                "dry_run": True,
+                "owner": "owner",
+                "repo": "repo",
+                "ref": "HEAD",
+                "message": "Dry-run: URL is valid and would be installed.",
+            }
+        )
         mock_get_inst.return_value = mock_inst
 
-        resp = client.post("/api/v1/github/install", json={
-            "url": "https://github.com/owner/repo",
-            "dry_run": True,
-        })
+        resp = client.post(
+            "/api/v1/github/install",
+            json={
+                "url": "https://github.com/owner/repo",
+                "dry_run": True,
+            },
+        )
         assert resp.status_code == 200
         assert resp.json()["dry_run"] is True
 
@@ -701,15 +751,20 @@ class TestGitHubRoutes:
             pytest.skip("fastapi[testclient] not installed")
 
         mock_inst = MagicMock()
-        mock_inst.install = AsyncMock(return_value={
-            "success": False,
-            "error": "Invalid GitHub HTTPS URL",
-        })
+        mock_inst.install = AsyncMock(
+            return_value={
+                "success": False,
+                "error": "Invalid GitHub HTTPS URL",
+            }
+        )
         mock_get_inst.return_value = mock_inst
 
-        resp = client.post("/api/v1/github/install", json={
-            "url": "not-a-url",
-        })
+        resp = client.post(
+            "/api/v1/github/install",
+            json={
+                "url": "not-a-url",
+            },
+        )
         assert resp.status_code == 400
 
     @patch("core.github_installer.get_github_installer")
@@ -719,10 +774,12 @@ class TestGitHubRoutes:
             pytest.skip("fastapi[testclient] not installed")
 
         mock_inst = MagicMock()
-        mock_inst.uninstall = AsyncMock(return_value={
-            "success": False,
-            "error": "Addon 'unknown' not found in manifest.",
-        })
+        mock_inst.uninstall = AsyncMock(
+            return_value={
+                "success": False,
+                "error": "Addon 'unknown' not found in manifest.",
+            }
+        )
         mock_get_inst.return_value = mock_inst
 
         resp = client.post("/api/v1/github/uninstall", json={"name": "unknown"})
@@ -733,9 +790,11 @@ class TestGitHubRoutes:
 # 10. SHA256 checksum helper
 # ===========================================================================
 
+
 class TestSha256Dir:
     def test_deterministic(self, tmp_path):
         from core.github_installer import _sha256_dir
+
         (tmp_path / "a.txt").write_text("hello")
         (tmp_path / "b.txt").write_text("world")
         h1 = _sha256_dir(tmp_path)
@@ -745,6 +804,7 @@ class TestSha256Dir:
 
     def test_different_content_different_hash(self, tmp_path):
         from core.github_installer import _sha256_dir
+
         (tmp_path / "a.txt").write_text("hello")
         h1 = _sha256_dir(tmp_path)
         (tmp_path / "a.txt").write_text("world")
@@ -753,6 +813,7 @@ class TestSha256Dir:
 
     def test_empty_dir(self, tmp_path):
         from core.github_installer import _sha256_dir
+
         h = _sha256_dir(tmp_path)
         assert isinstance(h, str)
         assert len(h) == 64

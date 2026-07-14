@@ -19,8 +19,8 @@ from typing import Dict, List
 
 @dataclass
 class MemoryEvalCase:
-    memory: str      # 要写入的一条记忆
-    query: str       # 检索用查询(与记忆低词面重合)
+    memory: str  # 要写入的一条记忆
+    query: str  # 检索用查询(与记忆低词面重合)
     mem_id: str = field(default_factory=lambda: uuid.uuid4().hex[:10])
 
 

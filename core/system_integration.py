@@ -25,12 +25,10 @@ Galaxy - 系统集成层
 
 import inspect
 import logging
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any, Callable, Dict, List, Optional
 
-from core.unified.capability_contract import (
-    CapabilityContract as Capability,
-    CapabilitySource as CapabilityType,
-)
+from core.unified.capability_contract import CapabilityContract as Capability
+from core.unified.capability_contract import CapabilitySource as CapabilityType
 
 logger = logging.getLogger("Galaxy.SystemIntegration")
 
@@ -227,6 +225,7 @@ class SystemIntegration:
         if cap.type == CapabilityType.DEVICE:
             try:
                 from core.device_registry import device_registry
+
                 device = device_registry.get(cap.source_id)
                 return device and device.is_online()
             except (ImportError, AttributeError):
@@ -235,6 +234,7 @@ class SystemIntegration:
         elif cap.type == CapabilityType.MCP:
             try:
                 from core.mcp_loader import mcp_loader
+
                 server = mcp_loader.servers.get(cap.source_id)
                 return server and server.status.value == "running"
             except (ImportError, AttributeError):
@@ -385,6 +385,7 @@ class SystemIntegration:
         # Primary path: invoke via unified node executor (fusion_entry)
         try:
             from core.node_invocation import InvocationSource, invoke_node
+
             inv_result = await invoke_node(
                 node_name,
                 params.get("action", "execute"),
@@ -399,6 +400,7 @@ class SystemIntegration:
         # HTTP fallback: call node's HTTP /execute endpoint
         try:
             import httpx
+
             node_id = node_name.replace("Node_", "").split("_")[0]
             port = 8000 + int(node_id)
             url = f"http://localhost:{port}/execute"
@@ -426,12 +428,14 @@ class SystemIntegration:
         if cap.id == "builtin_chat":
             # 对话
             from core.llm.route_authority import get_llm_route_authority
+
             router = get_llm_route_authority().execution_router
             return await router.chat([{"role": "user", "content": params.get("message", "")}])
 
         elif cap.id == "builtin_device_control":
             # 设备控制
             from core.device_control_service import device_control
+
             device_id = params.get("device_id")
             action = params.get("action")
             return await device_control.execute_action(device_id, action)

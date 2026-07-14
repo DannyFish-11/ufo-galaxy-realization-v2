@@ -627,28 +627,16 @@ class VerificationClosureEvidence:
     def from_dict(cls, data: Dict[str, Any]) -> "VerificationClosureEvidence":
         """Construct from a dict (round-trip complement of ``to_dict``)."""
         return cls(
-            evidence_sources_confirmed=bool(
-                data.get("evidence_sources_confirmed", False)
-            ),
-            all_evidence_sources_present=bool(
-                data.get("all_evidence_sources_present", False)
-            ),
-            verification_checks_executed=bool(
-                data.get("verification_checks_executed", False)
-            ),
-            verification_checks_passed=bool(
-                data.get("verification_checks_passed", False)
-            ),
+            evidence_sources_confirmed=bool(data.get("evidence_sources_confirmed", False)),
+            all_evidence_sources_present=bool(data.get("all_evidence_sources_present", False)),
+            verification_checks_executed=bool(data.get("verification_checks_executed", False)),
+            verification_checks_passed=bool(data.get("verification_checks_passed", False)),
             review_completed=bool(data.get("review_completed", False)),
             review_accepted=bool(data.get("review_accepted", False)),
             conditions_documented=bool(data.get("conditions_documented", False)),
             conditions_bounded=bool(data.get("conditions_bounded", False)),
-            no_open_verification_items=bool(
-                data.get("no_open_verification_items", False)
-            ),
-            multiple_source_convergence=bool(
-                data.get("multiple_source_convergence", False)
-            ),
+            no_open_verification_items=bool(data.get("no_open_verification_items", False)),
+            multiple_source_convergence=bool(data.get("multiple_source_convergence", False)),
             participant_id=data.get("participant_id"),
             trace_id=data.get("trace_id"),
             extra_context=dict(data.get("extra_context", {})),
@@ -781,9 +769,7 @@ def _classify(evidence: VerificationClosureEvidence) -> VerificationClosureVerdi
     # ------------------------------------------------------------------
     if not evidence.verification_checks_executed:
         return VerificationClosureVerdict(
-            closure_class=(
-                VerificationClosureClass.evidence_present_verification_pending
-            ),
+            closure_class=(VerificationClosureClass.evidence_present_verification_pending),
             rationale=(
                 "Evidence artifacts are present but verification checks have "
                 "not been executed.  EVIDENCE_PRESENCE_IS_NOT_VERIFICATION_"
@@ -836,9 +822,7 @@ def _classify(evidence: VerificationClosureEvidence) -> VerificationClosureVerdi
             )
         # Checks executed but not passed, no accepted review — pending
         return VerificationClosureVerdict(
-            closure_class=(
-                VerificationClosureClass.evidence_present_verification_pending
-            ),
+            closure_class=(VerificationClosureClass.evidence_present_verification_pending),
             rationale=(
                 "Verification checks have been executed but have not all passed.  "
                 "PARTIAL_VERIFICATION_IS_NOT_CONDITIONAL_CLOSURE_POLICY requires "
@@ -903,9 +887,7 @@ def _classify(evidence: VerificationClosureEvidence) -> VerificationClosureVerdi
     # Rule 5: Determine fully_closed vs conditionally_closed
     # ------------------------------------------------------------------
     can_be_fully_closed = (
-        evidence.all_evidence_sources_present
-        and evidence.multiple_source_convergence
-        and not downgrade_reasons
+        evidence.all_evidence_sources_present and evidence.multiple_source_convergence and not downgrade_reasons
     )
 
     if can_be_fully_closed:
@@ -934,8 +916,7 @@ def _classify(evidence: VerificationClosureEvidence) -> VerificationClosureVerdi
                 "closure holds subject to explicitly documented, formally bounded "
                 "conditions.  "
                 + (
-                    "Not all evidence sources are present or multiple-source "
-                    "convergence was not established.  "
+                    "Not all evidence sources are present or multiple-source " "convergence was not established.  "
                     if downgrade_reasons
                     else ""
                 )
@@ -1031,14 +1012,11 @@ def classify_verification_closure(
     try:
         return _classify(evidence)
     except Exception as exc:  # noqa: BLE001
-        logger.exception(
-            "classify_verification_closure: unexpected error: %s", exc
-        )
+        logger.exception("classify_verification_closure: unexpected error: %s", exc)
         return VerificationClosureVerdict(
             closure_class=VerificationClosureClass.unverified,
             rationale=(
-                f"Classification raised an unexpected error: {exc!r}.  "
-                "Returning unverified (fail-conservative)."
+                f"Classification raised an unexpected error: {exc!r}.  " "Returning unverified (fail-conservative)."
             ),
             downgrade_reasons=[f"classification_error: {exc!r}"],
             is_fully_closed=False,

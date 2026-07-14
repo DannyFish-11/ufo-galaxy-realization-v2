@@ -47,6 +47,7 @@ Usage
         instruction="Click the OK button",
     )
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -73,9 +74,11 @@ def _get_policy_enforcement():
             enforce_execution_intent,
             enforce_executor_levels,
         )
+
         return enforce_execution_intent, enforce_executor_levels
     except Exception:
         return None, None
+
 
 # ---------------------------------------------------------------------------
 # Public enumerations
@@ -86,17 +89,17 @@ class WinExecLevel(str, Enum):
     """Ordered execution levels used by the arbiter."""
 
     SYSTEM_API = "system_api"  # Win32 / OS-level API calls
-    UIA = "uia"                # UIAutomation COM accessibility
-    GUI = "gui"                # Coordinate-based GUI automation
-    VLM = "vlm"                # Vision-Language Model fallback
+    UIA = "uia"  # UIAutomation COM accessibility
+    GUI = "gui"  # Coordinate-based GUI automation
+    VLM = "vlm"  # Vision-Language Model fallback
 
 
 class WinExecStatus(str, Enum):
     SUCCESS = "success"
     FAILED = "failed"
-    SKIPPED = "skipped"   # executor not configured / not applicable
+    SKIPPED = "skipped"  # executor not configured / not applicable
     TIMEOUT = "timeout"
-    BLOCKED_BY_POLICY = "blocked_by_policy"          # PR-12: policy enforcement
+    BLOCKED_BY_POLICY = "blocked_by_policy"  # PR-12: policy enforcement
     CONFIRMATION_REQUIRED = "confirmation_required"  # PR-12: policy enforcement
 
 
@@ -211,9 +214,7 @@ def _make_default_system_api_executor() -> Optional[SystemAPIExecutor]:
         if not facade.is_available:
             return None
 
-        async def _system_api_exec(
-            action: str, params: Dict[str, Any], device_id: str
-        ) -> Dict[str, Any]:
+        async def _system_api_exec(action: str, params: Dict[str, Any], device_id: str) -> Dict[str, Any]:
             resp = facade.dispatch(action, params, device_id=device_id)
             if not resp.handled:
                 # Facade explicitly says it cannot handle this action.
@@ -247,9 +248,7 @@ def _make_default_uia_executor() -> Optional[UIAExecutor]:
 
         manager = WindowsAutonomyManager()
 
-        async def _uia_exec(
-            action: str, params: Dict[str, Any], device_id: str
-        ) -> Dict[str, Any]:
+        async def _uia_exec(action: str, params: Dict[str, Any], device_id: str) -> Dict[str, Any]:
             try:
                 uia_action = {"type": action, "params": params}
                 result = manager.execute_action(uia_action)
@@ -268,9 +267,7 @@ def _make_default_gui_executor() -> Optional[GUIExecutor]:
     try:
         from core.device_control_service import device_control  # type: ignore[import]
 
-        async def _gui_exec(
-            action: str, params: Dict[str, Any], device_id: str
-        ) -> Dict[str, Any]:
+        async def _gui_exec(action: str, params: Dict[str, Any], device_id: str) -> Dict[str, Any]:
             try:
                 result = await device_control.execute_action(
                     device_id=device_id,
@@ -477,8 +474,7 @@ class WindowsExecutionArbiter:
                     policy_reason="all candidate levels removed by policy allowed_executor_levels",
                 )
                 logger.info(
-                    "windows_arbiter | executor_level_capped | all levels blocked | "
-                    "action=%s device=%s",
+                    "windows_arbiter | executor_level_capped | all levels blocked | " "action=%s device=%s",
                     action_summary,
                     device_id,
                 )
@@ -525,9 +521,7 @@ class WindowsExecutionArbiter:
 
             # Propagate failure reason to next level
             if attempt.status != WinExecStatus.SKIPPED:
-                last_failure_reason = (
-                    attempt.error or f"{level.value} returned non-success"
-                )
+                last_failure_reason = attempt.error or f"{level.value} returned non-success"
             else:
                 last_failure_reason = attempt.error  # e.g. "No UIA executor configured"
 
@@ -606,7 +600,7 @@ class WindowsExecutionArbiter:
             context=context,
         )
         try:
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
             # Already inside a running event loop — cannot call run_until_complete.
             # Dispatch to a separate thread with its own event loop via asyncio.run().
             # Note: this approach spawns a new thread and loop, so thread-local state
@@ -614,6 +608,7 @@ class WindowsExecutionArbiter:
             # automation actions this is acceptable; callers that need tighter loop
             # coupling should use `await execute(...)` directly.
             import concurrent.futures
+
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                 future = pool.submit(asyncio.run, coro)
                 win_result = future.result(timeout=30)
@@ -656,9 +651,7 @@ class WindowsExecutionArbiter:
 
             # Blocked or confirmation required
             outcome_val = decision.outcome.value
-            policy_band_val = (
-                policy.policy_band.value if hasattr(policy, "policy_band") else None
-            )
+            policy_band_val = policy.policy_band.value if hasattr(policy, "policy_band") else None
 
             logger.info(
                 "windows_arbiter | policy_%s | %s | device=%s | reason=%s",
@@ -682,9 +675,7 @@ class WindowsExecutionArbiter:
                 policy_reason=decision.reason,
             )
         except Exception as exc:
-            logger.debug(
-                "windows_arbiter: policy guardrail check failed (non-fatal): %s", exc
-            )
+            logger.debug("windows_arbiter: policy guardrail check failed (non-fatal): %s", exc)
             return None
 
     def _filter_levels_by_policy(
@@ -714,9 +705,7 @@ class WindowsExecutionArbiter:
             permitted_set = set(permitted_strings)
             return [lv for lv in levels if lv.value in permitted_set]
         except Exception as exc:
-            logger.debug(
-                "windows_arbiter: level filter failed (non-fatal, using all levels): %s", exc
-            )
+            logger.debug("windows_arbiter: level filter failed (non-fatal, using all levels): %s", exc)
             return levels
 
     async def _try_level(
@@ -885,15 +874,9 @@ class WindowsExecutionArbiter:
 # ---------------------------------------------------------------------------
 
 
-def _build_action_summary(
-    action: str, params: Dict[str, Any], device_id: str
-) -> str:
+def _build_action_summary(action: str, params: Dict[str, Any], device_id: str) -> str:
     """Build a concise human-readable summary of the action."""
-    key_params = {
-        k: v
-        for k, v in params.items()
-        if k in ("x", "y", "target", "app", "title", "text", "key")
-    }
+    key_params = {k: v for k, v in params.items() if k in ("x", "y", "target", "app", "title", "text", "key")}
     if key_params:
         param_str = " ".join(f"{k}={v}" for k, v in key_params.items())
         return f"{action}({param_str}) on {device_id}"
@@ -926,8 +909,7 @@ def _emit_attempt_log(
         )
     else:
         msg = (
-            "windows_arbiter | executor_level=%s | status=%s | fallback_reason=%s"
-            " | error=%s | action=%s | device=%s"
+            "windows_arbiter | executor_level=%s | status=%s | fallback_reason=%s" " | error=%s | action=%s | device=%s"
         )
         logger.warning(
             msg,

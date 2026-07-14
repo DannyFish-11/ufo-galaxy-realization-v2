@@ -35,9 +35,9 @@ from __future__ import annotations
 import pytest
 
 from core.canonical_task import (
+    CANONICAL_EXECUTION_SPINE_POLICY,
     CANONICAL_TASK_AUTHORITY,
     CANONICAL_TASK_LAYER_POSITION,
-    CANONICAL_EXECUTION_SPINE_POLICY,
     CanonicalTask,
     TaskLifecycle,
     TaskOrigin,
@@ -59,13 +59,16 @@ def reset():
 # 1. CANONICAL_TASK_SPINE_INTEGRATED in command_router
 # ---------------------------------------------------------------------------
 
+
 def test_01_CANONICAL_TASK_SPINE_INTEGRATED_importable():
     from core.command_router import CANONICAL_TASK_SPINE_INTEGRATED
+
     assert CANONICAL_TASK_SPINE_INTEGRATED is not None
 
 
 def test_02_CANONICAL_TASK_SPINE_INTEGRATED_mentions_route_envelope():
     from core.command_router import CANONICAL_TASK_SPINE_INTEGRATED
+
     assert "route_envelope" in CANONICAL_TASK_SPINE_INTEGRATED
 
 
@@ -73,15 +76,19 @@ def test_02_CANONICAL_TASK_SPINE_INTEGRATED_mentions_route_envelope():
 # 3. CommandRouter.route_envelope exists
 # ---------------------------------------------------------------------------
 
+
 def test_03_command_router_has_route_envelope():
     from core.command_router import CommandRouter
-    assert hasattr(CommandRouter, "route_envelope"), \
-        "CommandRouter must expose route_envelope as the sole dispatch spine"
+
+    assert hasattr(
+        CommandRouter, "route_envelope"
+    ), "CommandRouter must expose route_envelope as the sole dispatch spine"
 
 
 # ---------------------------------------------------------------------------
 # 4. CANONICAL_EXECUTION_SPINE_POLICY enforces route_envelope
 # ---------------------------------------------------------------------------
+
 
 def test_04_spine_policy_mentions_route_envelope():
     assert "route_envelope" in CANONICAL_EXECUTION_SPINE_POLICY
@@ -90,6 +97,7 @@ def test_04_spine_policy_mentions_route_envelope():
 # ---------------------------------------------------------------------------
 # 5. project_to_task_envelope contract
 # ---------------------------------------------------------------------------
+
 
 def test_05_envelope_has_task_id():
     task = build_canonical_task(tool="ping", register=False)
@@ -121,6 +129,7 @@ def test_05d_envelope_has_targets():
 # 6. CanonicalTask.project_to_task_envelope() delegates
 # ---------------------------------------------------------------------------
 
+
 def test_06_method_delegates_to_module_helper():
     task = build_canonical_task(tool="foo", register=False)
     env_method = task.project_to_task_envelope()
@@ -133,6 +142,7 @@ def test_06_method_delegates_to_module_helper():
 # 7. Spine traceability
 # ---------------------------------------------------------------------------
 
+
 def test_07_spine_trace_task_id_preserved():
     task = build_canonical_task(tool="trace_test")
     env = task.project_to_task_envelope()
@@ -143,8 +153,10 @@ def test_07_spine_trace_task_id_preserved():
 # 8. UNIFIED_ORCHESTRATOR_CANONICAL_TASK_FACADE
 # ---------------------------------------------------------------------------
 
+
 def test_08_unified_orchestrator_canonical_task_facade_importable():
     import warnings
+
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
@@ -156,6 +168,7 @@ def test_08_unified_orchestrator_canonical_task_facade_importable():
 
 def test_08b_unified_orchestrator_facade_mentions_command_router():
     import warnings
+
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
@@ -168,6 +181,7 @@ def test_08b_unified_orchestrator_facade_mentions_command_router():
 # ---------------------------------------------------------------------------
 # 9. GALAXY_ORCHESTRATOR_CANONICAL_TASK_FACADE
 # ---------------------------------------------------------------------------
+
 
 def test_09_galaxy_orchestrator_canonical_task_facade_importable():
     try:
@@ -189,8 +203,10 @@ def test_09b_galaxy_orchestrator_facade_mentions_command_router():
 # 10. UNIFIED_ORCHESTRATOR_FACADE_AUTHORITY no regression
 # ---------------------------------------------------------------------------
 
+
 def test_10_unified_orchestrator_facade_authority_no_regression():
     import warnings
+
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
@@ -204,6 +220,7 @@ def test_10_unified_orchestrator_facade_authority_no_regression():
 # 11. GALAXY_ORCHESTRATOR_FACADE_AUTHORITY no regression
 # ---------------------------------------------------------------------------
 
+
 def test_11_galaxy_orchestrator_facade_authority_no_regression():
     try:
         from galaxy_gateway.orchestrator.galaxy_orchestrator import GALAXY_ORCHESTRATOR_FACADE_AUTHORITY
@@ -215,6 +232,7 @@ def test_11_galaxy_orchestrator_facade_authority_no_regression():
 # ---------------------------------------------------------------------------
 # 12–13. Round-trip preserves ids
 # ---------------------------------------------------------------------------
+
 
 def test_12_round_trip_preserves_task_id():
     task = build_canonical_task()
@@ -232,6 +250,7 @@ def test_13_round_trip_preserves_trace_id():
 # 14. Envelope metadata has canonical_task_authority
 # ---------------------------------------------------------------------------
 
+
 def test_14_envelope_metadata_has_canonical_task_authority():
     task = build_canonical_task()
     env = task.project_to_task_envelope()
@@ -244,6 +263,7 @@ def test_14_envelope_metadata_has_canonical_task_authority():
 # 15. apply_result_envelope returns CanonicalTask
 # ---------------------------------------------------------------------------
 
+
 def test_15_apply_result_returns_canonical_task():
     task = build_canonical_task()
     result = apply_result_envelope(task, {"success": True})
@@ -253,6 +273,7 @@ def test_15_apply_result_returns_canonical_task():
 # ---------------------------------------------------------------------------
 # 16. Lifecycle advances to DISPATCHED
 # ---------------------------------------------------------------------------
+
 
 def test_16_lifecycle_advances_to_dispatched():
     task = build_canonical_task()
@@ -264,6 +285,7 @@ def test_16_lifecycle_advances_to_dispatched():
 # ---------------------------------------------------------------------------
 # 17. Full round-trip
 # ---------------------------------------------------------------------------
+
 
 def test_17_full_round_trip():
     task = build_canonical_task(
@@ -285,6 +307,7 @@ def test_17_full_round_trip():
 # ---------------------------------------------------------------------------
 # 18–20. Remaining sentinel checks
 # ---------------------------------------------------------------------------
+
 
 def test_18_canonical_task_authority_importable():
     assert CANONICAL_TASK_AUTHORITY is not None

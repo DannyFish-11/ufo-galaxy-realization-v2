@@ -43,6 +43,7 @@ Usage
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
+
 logger = logging.getLogger(__name__)
 
 
@@ -52,13 +53,14 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Callable, Dict, List, Optional
 
-
 # ---------------------------------------------------------------------------
 # Enumerations
 # ---------------------------------------------------------------------------
 
+
 class CircuitState(str, Enum):
     """Possible states of the per-device circuit breaker."""
+
     CLOSED = "closed"
     HALF_OPEN = "half_open"
     OPEN = "open"
@@ -67,6 +69,7 @@ class CircuitState(str, Enum):
 # ---------------------------------------------------------------------------
 # Per-device state
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class DeviceHealthState:
@@ -84,9 +87,9 @@ class DeviceHealthState:
     last_success_time: float = 0.0
 
     # --- Health score components ---------------------------------------
-    health_score: float = 100.0          # 0–100, higher is healthier
+    health_score: float = 100.0  # 0–100, higher is healthier
     heartbeat_latency_ms: float = 0.0
-    recent_error_rate: float = 0.0       # EWMA in [0, 1]
+    recent_error_rate: float = 0.0  # EWMA in [0, 1]
 
     # --- Window-based failure tracking (for quarantine) ----------------
     recent_failures: List[float] = field(default_factory=list)  # monotonic timestamps
@@ -99,6 +102,7 @@ class DeviceHealthState:
 # ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
+
 
 class DeviceHealthRegistry:
     """Thread-safe registry of per-device health and circuit-breaker state.
@@ -194,8 +198,7 @@ class DeviceHealthRegistry:
         if len(state.recent_failures) >= self.quarantine_threshold:
             state.quarantined = True
             state.quarantine_reason = (
-                f"{len(state.recent_failures)} failures in "
-                f"{self.quarantine_window_seconds:.0f}s window"
+                f"{len(state.recent_failures)} failures in " f"{self.quarantine_window_seconds:.0f}s window"
             )
             self._emit("DEVICE_QUARANTINED", state.device_id, reason=state.quarantine_reason)
 
@@ -265,14 +268,14 @@ class DeviceHealthRegistry:
             # EWMA error-rate update
             state.recent_error_rate = min(1.0, state.recent_error_rate * 0.8 + 0.2)
 
-            prev_circuit = state.circuit_state
-
             if state.circuit_state == CircuitState.HALF_OPEN:
                 state.circuit_state = CircuitState.OPEN
                 self._recalculate_health_score(state)
                 self._emit(
-                    "DEVICE_CIRCUIT_OPEN", device_id,
-                    error=error, consecutive_failures=state.consecutive_failures,
+                    "DEVICE_CIRCUIT_OPEN",
+                    device_id,
+                    error=error,
+                    consecutive_failures=state.consecutive_failures,
                 )
             elif (
                 state.circuit_state == CircuitState.CLOSED
@@ -281,8 +284,10 @@ class DeviceHealthRegistry:
                 state.circuit_state = CircuitState.OPEN
                 self._recalculate_health_score(state)
                 self._emit(
-                    "DEVICE_CIRCUIT_OPEN", device_id,
-                    error=error, consecutive_failures=state.consecutive_failures,
+                    "DEVICE_CIRCUIT_OPEN",
+                    device_id,
+                    error=error,
+                    consecutive_failures=state.consecutive_failures,
                 )
             else:
                 self._recalculate_health_score(state)
@@ -319,12 +324,14 @@ class DeviceHealthRegistry:
                 return None
             # Return a shallow copy so callers can't mutate registry state
             import dataclasses
+
             return dataclasses.replace(state)
 
     def get_all_states(self) -> Dict[str, DeviceHealthState]:
         """Return a dict of shallow-copied device states."""
         with self._lock:
             import dataclasses
+
             return {did: dataclasses.replace(s) for did, s in self._states.items()}
 
     # ------------------------------------------------------------------

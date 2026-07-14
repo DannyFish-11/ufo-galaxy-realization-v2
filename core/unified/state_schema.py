@@ -37,10 +37,9 @@ from __future__ import annotations
 
 import time
 import uuid
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any, Dict, List
-
 
 # ---------------------------------------------------------------------------
 # Shared enums
@@ -189,14 +188,14 @@ class TaskState:
     session_id: str = ""
 
     # ── JudgeLoop core (NEW) ──
-    goal: str = ""                           # 用户原始意图
-    constraints: List[str] = field(default_factory=list)   # 已确认约束
-    phase: str = "interpret"                 # JudgeLoop阶段
+    goal: str = ""  # 用户原始意图
+    constraints: List[str] = field(default_factory=list)  # 已确认约束
+    phase: str = "interpret"  # JudgeLoop阶段
     sub_tasks: List[Dict[str, Any]] = field(default_factory=list)  # 子任务
     judge_history: List[Dict[str, Any]] = field(default_factory=list)  # 裁决历史
-    failure_points: List[str] = field(default_factory=list)   # 失败点
-    verified_items: List[str] = field(default_factory=list)   # 已验证项
-    user_preferences: Dict[str, Any] = field(default_factory=dict)   # 用户偏好
+    failure_points: List[str] = field(default_factory=list)  # 失败点
+    verified_items: List[str] = field(default_factory=list)  # 已验证项
+    user_preferences: Dict[str, Any] = field(default_factory=dict)  # 用户偏好
 
     # ── legacy (kept for backward compat) ──
     tool_name: str = ""
@@ -221,11 +220,13 @@ class TaskState:
     # ── JudgeLoop helpers (NEW) ──
     def add_judge_record(self, decision: str, reason: str) -> None:
         """Append a Judge decision to the history."""
-        self.judge_history.append({
-            "decision": decision,
-            "reason": reason,
-            "timestamp": time.time(),
-        })
+        self.judge_history.append(
+            {
+                "decision": decision,
+                "reason": reason,
+                "timestamp": time.time(),
+            }
+        )
         self.updated_at = time.time()
 
     def mark_verified(self, item: str) -> None:

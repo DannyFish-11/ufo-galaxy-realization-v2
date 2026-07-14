@@ -114,34 +114,36 @@ Coverage
 """
 
 import json
+
 import pytest
+
+from core.operator_override import (
+    OperatorOverrideSet,
+    OperatorOverrideSnapshot,
+    OperatorOverrideState,
+    OverrideExecutionLocality,
+    OverrideMultimodalMode,
+    OverrideRemoteMode,
+    PolicyOverrideRecord,
+    _collect_applied_domains,
+    apply_execution_policy_override,
+    apply_route_override,
+    apply_source_override,
+    build_operator_override_snapshot,
+    build_override_summary,
+    get_operator_override_state,
+    reset_operator_override_state,
+)
 
 # ---------------------------------------------------------------------------
 # Imports from the module under test
 # ---------------------------------------------------------------------------
 
-from core.operator_override import (
-    OverrideMultimodalMode,
-    OverrideExecutionLocality,
-    OverrideRemoteMode,
-    OperatorOverrideSet,
-    PolicyOverrideRecord,
-    OperatorOverrideSnapshot,
-    OperatorOverrideState,
-    get_operator_override_state,
-    reset_operator_override_state,
-    apply_route_override,
-    apply_execution_policy_override,
-    apply_source_override,
-    build_override_summary,
-    build_operator_override_snapshot,
-    _collect_applied_domains,
-)
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def _reset_singleton():
@@ -169,6 +171,7 @@ def _make_route_dict(**kwargs):
 # 1. OverrideMultimodalMode enum
 # ===========================================================================
 
+
 class TestOverrideMultimodalMode:
     def test_values_present(self):
         assert OverrideMultimodalMode.FORCE_ON.value == "force_on"
@@ -186,6 +189,7 @@ class TestOverrideMultimodalMode:
 # ===========================================================================
 # 2. OverrideExecutionLocality enum
 # ===========================================================================
+
 
 class TestOverrideExecutionLocality:
     def test_values_present(self):
@@ -205,6 +209,7 @@ class TestOverrideExecutionLocality:
 # 3. OverrideRemoteMode enum
 # ===========================================================================
 
+
 class TestOverrideRemoteMode:
     def test_values_present(self):
         assert OverrideRemoteMode.COMMAND_ONLY.value == "command_only"
@@ -222,6 +227,7 @@ class TestOverrideRemoteMode:
 # ===========================================================================
 # 4. OperatorOverrideSet
 # ===========================================================================
+
 
 class TestOperatorOverrideSet:
     def test_to_dict_from_dict_roundtrip(self):
@@ -299,6 +305,7 @@ class TestOperatorOverrideSet:
 # 5. PolicyOverrideRecord
 # ===========================================================================
 
+
 class TestPolicyOverrideRecord:
     def test_to_dict_from_dict_roundtrip(self):
         override = OperatorOverrideSet(preferred_provider="openai", override_reason="r1")
@@ -337,6 +344,7 @@ class TestPolicyOverrideRecord:
 # ===========================================================================
 # 6. OperatorOverrideSnapshot
 # ===========================================================================
+
 
 class TestOperatorOverrideSnapshot:
     def test_to_dict_from_dict_roundtrip_no_override(self):
@@ -377,6 +385,7 @@ class TestOperatorOverrideSnapshot:
 # ===========================================================================
 # 7. OperatorOverrideState singleton
 # ===========================================================================
+
 
 class TestOperatorOverrideState:
     def test_singleton_identity(self):
@@ -449,6 +458,7 @@ class TestOperatorOverrideState:
 # ===========================================================================
 # 8. apply_route_override
 # ===========================================================================
+
 
 class TestApplyRouteOverride:
     def test_noop_override_leaves_route_unchanged(self):
@@ -524,6 +534,7 @@ class TestApplyRouteOverride:
 # 9. apply_execution_policy_override
 # ===========================================================================
 
+
 class TestApplyExecutionPolicyOverride:
     def test_noop_leaves_values_unchanged(self):
         result = apply_execution_policy_override(
@@ -555,9 +566,7 @@ class TestApplyExecutionPolicyOverride:
         assert result["override_applied"] is True
 
     def test_remote_disabled_blocks_cross_device(self):
-        override = OperatorOverrideSet(
-            execution_locality=OverrideExecutionLocality.REMOTE_DISABLED
-        )
+        override = OperatorOverrideSet(execution_locality=OverrideExecutionLocality.REMOTE_DISABLED)
         result = apply_execution_policy_override(
             cross_device_allowed=True,
             remote_mode="full_agent",
@@ -602,6 +611,7 @@ class TestApplyExecutionPolicyOverride:
 # ===========================================================================
 # 10. apply_source_override
 # ===========================================================================
+
 
 class TestApplySourceOverride:
     def test_noop_leaves_sources_unchanged(self):
@@ -669,6 +679,7 @@ class TestApplySourceOverride:
 # 11. build_override_summary
 # ===========================================================================
 
+
 class TestBuildOverrideSummary:
     def test_no_override_summary(self):
         snap = OperatorOverrideSnapshot(has_active_override=False)
@@ -704,6 +715,7 @@ class TestBuildOverrideSummary:
 # 12. Primary source override (acceptance)
 # ===========================================================================
 
+
 class TestPrimarySourceOverrideAcceptance:
     def test_audio_source_override_is_deterministic(self):
         override = OperatorOverrideSet(primary_audio_source_id="mic:external_usb")
@@ -736,6 +748,7 @@ class TestPrimarySourceOverrideAcceptance:
 # 13. Model/provider override (acceptance)
 # ===========================================================================
 
+
 class TestModelProviderOverrideAcceptance:
     def test_provider_lock_reflected_in_route(self):
         route = _make_route_dict(provider="openai", model="gpt-4o")
@@ -765,6 +778,7 @@ class TestModelProviderOverrideAcceptance:
 # ===========================================================================
 # 14. Execution-policy override (acceptance)
 # ===========================================================================
+
 
 class TestExecutionPolicyOverrideAcceptance:
     def test_local_only_blocks_cross_device(self):
@@ -799,6 +813,7 @@ class TestExecutionPolicyOverrideAcceptance:
 # ===========================================================================
 # 15. Override visibility (acceptance)
 # ===========================================================================
+
 
 class TestOverrideVisibilityAcceptance:
     def test_override_state_in_openclawd_response(self):
@@ -844,6 +859,7 @@ class TestOverrideVisibilityAcceptance:
 # 16. Overrides do not bypass canonical authority (acceptance)
 # ===========================================================================
 
+
 class TestOverrideDoesNotBypassAuthority:
     def test_override_is_input_not_bypass(self):
         """Verify the override is applied as an input layer, not a bypass."""
@@ -859,9 +875,7 @@ class TestOverrideDoesNotBypassAuthority:
 
     def test_clearing_override_restores_automation_default(self):
         state = get_operator_override_state()
-        override = OperatorOverrideSet(
-            execution_locality=OverrideExecutionLocality.LOCAL_ONLY
-        )
+        override = OperatorOverrideSet(execution_locality=OverrideExecutionLocality.LOCAL_ONLY)
         state.commit(override)
 
         # While committed, cross-device is blocked
@@ -888,6 +902,7 @@ class TestOverrideDoesNotBypassAuthority:
 # ===========================================================================
 # 17. Override interaction with degraded/safety-constrained states (acceptance)
 # ===========================================================================
+
 
 class TestOverrideWithDegradedState:
     def test_force_on_override_with_degraded_route_surfaces_intent(self):
@@ -926,6 +941,7 @@ class TestOverrideWithDegradedState:
 # ===========================================================================
 # 18. OpenClawd integration (_apply_operator_overrides)
 # ===========================================================================
+
 
 class TestOpenClawdIntegration:
     def test_apply_operator_overrides_returns_dict(self):
@@ -999,13 +1015,16 @@ class TestOpenClawdIntegration:
 # 19. DesktopPresenceRuntime integration
 # ===========================================================================
 
+
 class TestDesktopPresenceRuntimeIntegration:
     def _make_runtime(self):
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         rt = DesktopPresenceRuntime.__new__(DesktopPresenceRuntime)
         # Inject minimal required attributes
         try:
             from core.multimodal.perception_source_registry import PerceptionSourceRegistry
+
             rt._source_registry = PerceptionSourceRegistry()
         except Exception:
             rt._source_registry = None

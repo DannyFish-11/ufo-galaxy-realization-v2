@@ -5,6 +5,7 @@ All platform-specific adapters (e.g. WindowsAdapter) must subclass
 returns safe defaults for every method so the rest of the codebase can
 call the API unconditionally.
 """
+
 from __future__ import annotations
 
 import logging
@@ -31,6 +32,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class AppLaunchResult:
@@ -111,6 +113,7 @@ class NotificationResult:
 # Abstract interface
 # ---------------------------------------------------------------------------
 
+
 class SystemAPI(ABC):
     """Minimal OS control interface consumed by the Galaxy runtime.
 
@@ -157,9 +160,7 @@ class SystemAPI(ABC):
     # ------------------------------------------------------------------
 
     @abstractmethod
-    def enumerate_windows(
-        self, filter_title: Optional[str] = None
-    ) -> List[WindowInfo]:
+    def enumerate_windows(self, filter_title: Optional[str] = None) -> List[WindowInfo]:
         """Return a list of visible top-level windows.
 
         Parameters
@@ -347,6 +348,7 @@ class SystemAPI(ABC):
 # No-op fallback for non-Windows platforms
 # ---------------------------------------------------------------------------
 
+
 class NoOpSystemAPI(SystemAPI):
     """Silent no-op implementation for non-Windows hosts.
 
@@ -367,9 +369,7 @@ class NoOpSystemAPI(SystemAPI):
         logger.debug("NoOpSystemAPI.launch_app(%r) — no-op on this platform", target)
         return AppLaunchResult(success=False, error="platform not supported")
 
-    def enumerate_windows(
-        self, filter_title: Optional[str] = None
-    ) -> List[WindowInfo]:
+    def enumerate_windows(self, filter_title: Optional[str] = None) -> List[WindowInfo]:
         return []
 
     def focus_window(self, title_or_hwnd: "str | int") -> bool:

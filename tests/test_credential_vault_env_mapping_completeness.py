@@ -18,7 +18,7 @@ import os
 
 import pytest
 
-from core.credential_vault import CredentialVault, _ENV_MAPPING
+from core.credential_vault import _ENV_MAPPING, CredentialVault
 from core.multi_llm_router import _PROVIDER_ENV_KEY_MAP
 
 
@@ -28,8 +28,7 @@ def test_env_mapping_matches_router_provider_map():
     vault_keys = set(_ENV_MAPPING.keys())
     missing_in_vault = router_keys - vault_keys
     assert not missing_in_vault, (
-        f"credential_vault._ENV_MAPPING 缺少这些 provider(router 里有、vault 里没有): "
-        f"{missing_in_vault}"
+        f"credential_vault._ENV_MAPPING 缺少这些 provider(router 里有、vault 里没有): " f"{missing_in_vault}"
     )
     for short_name in router_keys & vault_keys:
         assert _ENV_MAPPING[short_name] == _PROVIDER_ENV_KEY_MAP[short_name], (

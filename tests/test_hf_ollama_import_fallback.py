@@ -43,7 +43,9 @@ class TestFindGgufFile:
             "some/repo",
             prefer_quant="q4",
             list_repo_files=lambda repo_id: [
-                "model-q8_0.gguf", "model-q4_k_m.gguf", "model-f16.gguf",
+                "model-q8_0.gguf",
+                "model-q4_k_m.gguf",
+                "model-f16.gguf",
             ],
             get_file_sizes=lambda repo_id, files: {},
         )
@@ -132,6 +134,7 @@ class TestDownloadAndImportToOllama:
 
     def test_exception_in_one_candidate_does_not_abort_remaining(self):
         """单个候选抛异常不能中断整个流程——必须继续试下一个。"""
+
         def _find_gguf(repo_id, **kw):
             if repo_id == "flaky-candidate":
                 raise RuntimeError("network blip")

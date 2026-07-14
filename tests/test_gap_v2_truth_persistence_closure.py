@@ -48,7 +48,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -82,12 +81,14 @@ def _make_truth_record_dict(
 
 def _make_snapshot_store(tmp_dir: str, max_records: int = 100):
     from core.session_truth_snapshot import SessionTruthSnapshotStore
+
     path = os.path.join(tmp_dir, "stt_snap.json")
     return SessionTruthSnapshotStore(store_path=path, max_records=max_records)
 
 
 def _make_task_lifecycle_store(tmp_dir: str):
     from core.task_lifecycle_persistence import TaskLifecyclePersistenceStore
+
     path = os.path.join(tmp_dir, "tlc_snap.json")
     return TaskLifecyclePersistenceStore(store_path=path)
 
@@ -95,6 +96,7 @@ def _make_task_lifecycle_store(tmp_dir: str):
 def _write_lifecycle_record(store, task_id: str, owner: str = "device_dispatch") -> None:
     """Persist a minimal lifecycle record to *store*."""
     from core.task_lifecycle_persistence import TaskLifecycleSnapshotRecord
+
     record = {
         "task_id": task_id,
         "trace_id": None,
@@ -120,24 +122,29 @@ class TestGroupA_NewPolicySentinels:
 
     def test_A01_session_truth_recovery_policy_importable(self):
         from core.runtime_restart_recovery import SESSION_TRUTH_RECOVERY_POLICY
+
         assert isinstance(SESSION_TRUTH_RECOVERY_POLICY, str)
         assert SESSION_TRUTH_RECOVERY_POLICY
 
     def test_A02_continuation_waiter_reconciliation_policy_importable(self):
         from core.runtime_restart_recovery import CONTINUATION_WAITER_RECONCILIATION_POLICY
+
         assert isinstance(CONTINUATION_WAITER_RECONCILIATION_POLICY, str)
         assert CONTINUATION_WAITER_RECONCILIATION_POLICY
 
     def test_A03_session_truth_recovery_mentions_gap(self):
         from core.runtime_restart_recovery import SESSION_TRUTH_RECOVERY_POLICY
+
         assert "GAP_V2_TRUTH_PERSISTENCE" in SESSION_TRUTH_RECOVERY_POLICY
 
     def test_A04_continuation_policy_mentions_gap(self):
         from core.runtime_restart_recovery import CONTINUATION_WAITER_RECONCILIATION_POLICY
+
         assert "GAP_V2_TRUTH_PERSISTENCE" in CONTINUATION_WAITER_RECONCILIATION_POLICY
 
     def test_A05_sentinels_in_all(self):
         import core.runtime_restart_recovery as m
+
         assert "SESSION_TRUTH_RECOVERY_POLICY" in m.__all__
         assert "CONTINUATION_WAITER_RECONCILIATION_POLICY" in m.__all__
 
@@ -152,6 +159,7 @@ class TestGroupB_GapResolved:
 
     def test_B01_gap_entry_resolved(self):
         from core.dual_repo_system_map import WORKSTREAM_GAP_REGISTRY
+
         gap = next(
             (e for e in WORKSTREAM_GAP_REGISTRY if e.gap_id == "GAP_V2_TRUTH_PERSISTENCE"),
             None,
@@ -161,6 +169,7 @@ class TestGroupB_GapResolved:
 
     def test_B02_gap_has_pr_reference(self):
         from core.dual_repo_system_map import WORKSTREAM_GAP_REGISTRY
+
         gap = next(
             (e for e in WORKSTREAM_GAP_REGISTRY if e.gap_id == "GAP_V2_TRUTH_PERSISTENCE"),
             None,
@@ -170,10 +179,8 @@ class TestGroupB_GapResolved:
 
     def test_B03_gap_not_in_open_p0_list(self):
         from core.dual_repo_system_map import WORKSTREAM_GAP_REGISTRY, GapSeverity
-        open_p0 = [
-            e for e in WORKSTREAM_GAP_REGISTRY
-            if e.severity == GapSeverity.P0 and not e.resolved
-        ]
+
+        open_p0 = [e for e in WORKSTREAM_GAP_REGISTRY if e.severity == GapSeverity.P0 and not e.resolved]
         gap_ids = [e.gap_id for e in open_p0]
         assert "GAP_V2_TRUTH_PERSISTENCE" not in gap_ids
 
@@ -189,32 +196,36 @@ class TestGroupC_DefaultOnSnapshotWiring:
     def setup_method(self):
         from core.canonical_session_truth import reset_canonical_session_truth_runtime
         from core.session_truth_snapshot import reset_session_truth_snapshot_store
+
         reset_canonical_session_truth_runtime()
         reset_session_truth_snapshot_store()
 
     def teardown_method(self):
         from core.canonical_session_truth import reset_canonical_session_truth_runtime
         from core.session_truth_snapshot import reset_session_truth_snapshot_store
+
         reset_canonical_session_truth_runtime()
         reset_session_truth_snapshot_store()
 
     def test_C01_runtime_singleton_has_snapshot_store_attached(self):
         from core.canonical_session_truth import get_canonical_session_truth_runtime
+
         runtime = get_canonical_session_truth_runtime()
         assert runtime._snapshot_store is not None, (
-            "CanonicalSessionTruthRuntime singleton must auto-wire a "
-            "SessionTruthSnapshotStore on first creation."
+            "CanonicalSessionTruthRuntime singleton must auto-wire a " "SessionTruthSnapshotStore on first creation."
         )
 
     def test_C02_snapshot_store_is_session_truth_snapshot_store(self):
         from core.canonical_session_truth import get_canonical_session_truth_runtime
         from core.session_truth_snapshot import SessionTruthSnapshotStore
+
         runtime = get_canonical_session_truth_runtime()
         assert isinstance(runtime._snapshot_store, SessionTruthSnapshotStore)
 
     def test_C03_auto_wired_store_is_process_level_singleton(self):
         from core.canonical_session_truth import get_canonical_session_truth_runtime
         from core.session_truth_snapshot import get_session_truth_snapshot_store
+
         runtime = get_canonical_session_truth_runtime()
         singleton_store = get_session_truth_snapshot_store()
         assert runtime._snapshot_store is singleton_store
@@ -230,13 +241,13 @@ class TestGroupD_TruthSurvivesRestart:
 
     def test_D01_records_restored_from_snapshot_after_reset(self):
         from core.canonical_session_truth import (
-            reset_canonical_session_truth_runtime,
-            get_canonical_session_truth_runtime,
             CanonicalSessionTruthRecord,
+            get_canonical_session_truth_runtime,
+            reset_canonical_session_truth_runtime,
         )
         from core.session_truth_snapshot import (
-            reset_session_truth_snapshot_store,
             SessionTruthSnapshotStore,
+            reset_session_truth_snapshot_store,
             restore_session_truth_from_snapshot,
         )
 
@@ -251,9 +262,7 @@ class TestGroupD_TruthSurvivesRestart:
             rt1.set_snapshot_store(store)
 
             session_id = str(uuid.uuid4())
-            rec = CanonicalSessionTruthRecord.from_dict(
-                _make_truth_record_dict(session_id=session_id)
-            )
+            rec = CanonicalSessionTruthRecord.from_dict(_make_truth_record_dict(session_id=session_id))
             rt1.record(rec)
             assert rt1.snapshot().total_records == 1
 
@@ -271,13 +280,13 @@ class TestGroupD_TruthSurvivesRestart:
 
     def test_D02_multiple_records_all_restored(self):
         from core.canonical_session_truth import (
-            reset_canonical_session_truth_runtime,
-            get_canonical_session_truth_runtime,
             CanonicalSessionTruthRecord,
+            get_canonical_session_truth_runtime,
+            reset_canonical_session_truth_runtime,
         )
         from core.session_truth_snapshot import (
-            reset_session_truth_snapshot_store,
             SessionTruthSnapshotStore,
+            reset_session_truth_snapshot_store,
             restore_session_truth_from_snapshot,
         )
 
@@ -318,16 +327,19 @@ class TestGroupE_ReportNewFields:
 
     def test_E01_session_truth_records_restored_default_zero(self):
         from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         report = RuntimeRecoveryReport()
         assert report.session_truth_records_restored == 0
 
     def test_E02_continuation_waiters_reconciled_default_zero(self):
         from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         report = RuntimeRecoveryReport()
         assert report.continuation_waiters_reconciled == 0
 
     def test_E03_fields_settable(self):
         from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         report = RuntimeRecoveryReport()
         report.session_truth_records_restored = 7
         report.continuation_waiters_reconciled = 3
@@ -345,16 +357,19 @@ class TestGroupF_ReportToDict:
 
     def test_F01_to_dict_has_session_truth_records_restored(self):
         from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         d = RuntimeRecoveryReport().to_dict()
         assert "session_truth_records_restored" in d
 
     def test_F02_to_dict_has_continuation_waiters_reconciled(self):
         from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         d = RuntimeRecoveryReport().to_dict()
         assert "continuation_waiters_reconciled" in d
 
     def test_F03_to_dict_values_match_attributes(self):
         from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         report = RuntimeRecoveryReport()
         report.session_truth_records_restored = 4
         report.continuation_waiters_reconciled = 2
@@ -381,9 +396,7 @@ class TestGroupG_RecoverSessionTruthEmpty:
         with tempfile.TemporaryDirectory() as tmp:
             # Use an explicit empty store so the test is isolated from the global
             # singleton which may contain records from other tests.
-            empty_store = SessionTruthSnapshotStore(
-                store_path=os.path.join(tmp, "empty_stt.json")
-            )
+            empty_store = SessionTruthSnapshotStore(store_path=os.path.join(tmp, "empty_stt.json"))
 
             coord = RuntimeRestartRecoveryCoordinator()
             report = RuntimeRecoveryReport()
@@ -391,43 +404,48 @@ class TestGroupG_RecoverSessionTruthEmpty:
             # Patch both get_session_truth_snapshot_store and
             # get_canonical_session_truth_runtime to use isolated instances.
             from core.canonical_session_truth import CanonicalSessionTruthRuntime
+
             isolated_runtime = CanonicalSessionTruthRuntime()
             isolated_runtime.set_snapshot_store(empty_store)
 
-            with patch(
-                "core.session_truth_snapshot.get_session_truth_snapshot_store",
-                return_value=empty_store,
-            ), patch(
-                "core.canonical_session_truth.get_canonical_session_truth_runtime",
-                return_value=isolated_runtime,
+            with (
+                patch(
+                    "core.session_truth_snapshot.get_session_truth_snapshot_store",
+                    return_value=empty_store,
+                ),
+                patch(
+                    "core.canonical_session_truth.get_canonical_session_truth_runtime",
+                    return_value=isolated_runtime,
+                ),
             ):
                 coord._recover_session_truth(report)
 
         assert report.session_truth_records_restored == 0
 
     def test_G02_no_exception_raised_from_empty_snapshot(self):
+        from core.canonical_session_truth import CanonicalSessionTruthRuntime
         from core.runtime_restart_recovery import (
             RuntimeRecoveryReport,
             RuntimeRestartRecoveryCoordinator,
         )
         from core.session_truth_snapshot import SessionTruthSnapshotStore
-        from core.canonical_session_truth import CanonicalSessionTruthRuntime
 
         with tempfile.TemporaryDirectory() as tmp:
-            empty_store = SessionTruthSnapshotStore(
-                store_path=os.path.join(tmp, "empty_stt2.json")
-            )
+            empty_store = SessionTruthSnapshotStore(store_path=os.path.join(tmp, "empty_stt2.json"))
             isolated_runtime = CanonicalSessionTruthRuntime()
             isolated_runtime.set_snapshot_store(empty_store)
 
             coord = RuntimeRestartRecoveryCoordinator()
             report = RuntimeRecoveryReport()
-            with patch(
-                "core.session_truth_snapshot.get_session_truth_snapshot_store",
-                return_value=empty_store,
-            ), patch(
-                "core.canonical_session_truth.get_canonical_session_truth_runtime",
-                return_value=isolated_runtime,
+            with (
+                patch(
+                    "core.session_truth_snapshot.get_session_truth_snapshot_store",
+                    return_value=empty_store,
+                ),
+                patch(
+                    "core.canonical_session_truth.get_canonical_session_truth_runtime",
+                    return_value=isolated_runtime,
+                ),
             ):
                 # Must not raise
                 coord._recover_session_truth(report)
@@ -442,18 +460,18 @@ class TestGroupH_RecoverSessionTruthPopulated:
     """_recover_session_truth restores records when the snapshot contains data."""
 
     def test_H01_records_from_snapshot_loaded_into_runtime(self):
+        from core.canonical_session_truth import (
+            get_canonical_session_truth_runtime,
+            reset_canonical_session_truth_runtime,
+        )
         from core.runtime_restart_recovery import (
             RuntimeRecoveryReport,
             RuntimeRestartRecoveryCoordinator,
         )
-        from core.canonical_session_truth import (
-            reset_canonical_session_truth_runtime,
-            get_canonical_session_truth_runtime,
-        )
         from core.session_truth_snapshot import (
-            reset_session_truth_snapshot_store,
             SessionTruthSnapshotStore,
             get_session_truth_snapshot_store,
+            reset_session_truth_snapshot_store,
         )
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -469,12 +487,15 @@ class TestGroupH_RecoverSessionTruthPopulated:
             reset_session_truth_snapshot_store()
 
             # Wire the store as the singleton.
-            with patch(
-                "core.session_truth_snapshot.get_session_truth_snapshot_store",
-                return_value=store,
-            ), patch(
-                "core.canonical_session_truth.get_canonical_session_truth_runtime",
-                side_effect=lambda: get_canonical_session_truth_runtime(),
+            with (
+                patch(
+                    "core.session_truth_snapshot.get_session_truth_snapshot_store",
+                    return_value=store,
+                ),
+                patch(
+                    "core.canonical_session_truth.get_canonical_session_truth_runtime",
+                    side_effect=lambda: get_canonical_session_truth_runtime(),
+                ),
             ):
                 # Reset again so get_canonical_session_truth_runtime picks up the
                 # patched store.
@@ -522,15 +543,14 @@ class TestGroupI_InflightResumable:
             report = RuntimeRecoveryReport()
             coord._recover_inflight_tasks(report)
             from core.task_lifecycle_persistence import restore_inflight_tasks_from_snapshot
+
             coord._dispatch_recovered_tasks(
                 restore_inflight_tasks_from_snapshot(store=store),
                 report,
             )
 
         registry = get_lifecycle_registry()
-        assert registry.is_pending(task_id), (
-            f"RESUMABLE task {task_id!r} must be registered after recovery"
-        )
+        assert registry.is_pending(task_id), f"RESUMABLE task {task_id!r} must be registered after recovery"
         reset_lifecycle_registry()
 
 
@@ -610,9 +630,7 @@ class TestGroupK_InflightTerminal:
             )
 
         registry = get_lifecycle_registry()
-        assert not registry.is_pending(task_id), (
-            f"TERMINAL task {task_id!r} must NOT be registered after recovery"
-        )
+        assert not registry.is_pending(task_id), f"TERMINAL task {task_id!r} must NOT be registered after recovery"
         reset_lifecycle_registry()
 
 
@@ -654,6 +672,7 @@ class TestGroupL_FailPendingDispatch:
 
     def test_L03_fail_pending_dispatch_no_match_returns_false(self):
         from core.canonical_completion_ingress import CanonicalCompletionIngress
+
         ingress = CanonicalCompletionIngress()
         exc = RuntimeError("no such future")
         assert ingress.fail_pending_dispatch("nonexistent_key", exc) is False
@@ -674,6 +693,7 @@ class TestGroupL_FailPendingDispatch:
 
     def test_L05_fail_pending_dispatch_module_level_shortcut_importable(self):
         from core.canonical_completion_ingress import fail_pending_dispatch
+
         assert callable(fail_pending_dispatch)
 
 
@@ -686,11 +706,11 @@ class TestGroupM_ReconcileContinuationWaiters:
     """_reconcile_continuation_waiters resolves futures for RESUMABLE tasks."""
 
     def test_M01_future_resolved_with_exception_for_resumable_task(self):
+        from core.canonical_completion_ingress import CanonicalCompletionIngress
         from core.runtime_restart_recovery import (
             RuntimeRecoveryReport,
             RuntimeRestartRecoveryCoordinator,
         )
-        from core.canonical_completion_ingress import CanonicalCompletionIngress
 
         async def _run():
             with tempfile.TemporaryDirectory() as tmp:
@@ -700,9 +720,7 @@ class TestGroupM_ReconcileContinuationWaiters:
                 _write_lifecycle_record(store, task_id, owner="device_dispatch")
 
                 ingress = CanonicalCompletionIngress()
-                fut = ingress.register_pending_dispatch(
-                    f"hid_{task_id}", task_id=task_id
-                )
+                fut = ingress.register_pending_dispatch(f"hid_{task_id}", task_id=task_id)
 
                 coord = RuntimeRestartRecoveryCoordinator(task_lifecycle_store=store)
                 report = RuntimeRecoveryReport()
@@ -749,11 +767,11 @@ class TestGroupN_ReconcileNoFutures:
     """When no futures are registered, reconciliation increments nothing."""
 
     def test_N01_no_futures_registered_zero_reconciled(self):
+        from core.canonical_completion_ingress import CanonicalCompletionIngress
         from core.runtime_restart_recovery import (
             RuntimeRecoveryReport,
             RuntimeRestartRecoveryCoordinator,
         )
-        from core.canonical_completion_ingress import CanonicalCompletionIngress
 
         with tempfile.TemporaryDirectory() as tmp:
             store = _make_task_lifecycle_store(tmp)
@@ -799,9 +817,7 @@ class TestGroupO_DuplicateResultIdempotency:
             store2 = DurableResultIdSet(store_path=store_path)
             # Same result_id must already be present.
             added2 = store2.add(result_id)
-            assert added2 is False, (
-                "Re-submitting the same result_id after restart must be idempotent"
-            )
+            assert added2 is False, "Re-submitting the same result_id after restart must be idempotent"
             assert store2.contains(result_id) is True
 
 
@@ -815,13 +831,13 @@ class TestGroupP_CanonicalTruthContinuity:
 
     def test_P01_record_written_to_snapshot_store_immediately(self):
         from core.canonical_session_truth import (
-            reset_canonical_session_truth_runtime,
-            get_canonical_session_truth_runtime,
             CanonicalSessionTruthRecord,
+            get_canonical_session_truth_runtime,
+            reset_canonical_session_truth_runtime,
         )
         from core.session_truth_snapshot import (
-            reset_session_truth_snapshot_store,
             SessionTruthSnapshotStore,
+            reset_session_truth_snapshot_store,
         )
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -848,13 +864,13 @@ class TestGroupP_CanonicalTruthContinuity:
 
     def test_P02_default_singleton_writes_to_snapshot_store(self):
         from core.canonical_session_truth import (
-            reset_canonical_session_truth_runtime,
-            get_canonical_session_truth_runtime,
             CanonicalSessionTruthRecord,
+            get_canonical_session_truth_runtime,
+            reset_canonical_session_truth_runtime,
         )
         from core.session_truth_snapshot import (
-            reset_session_truth_snapshot_store,
             get_session_truth_snapshot_store,
+            reset_session_truth_snapshot_store,
         )
 
         reset_canonical_session_truth_runtime()
@@ -884,8 +900,8 @@ class TestGroupQ_RunRecoveryReport:
     """run_recovery report includes the new fields."""
 
     def test_Q01_run_recovery_report_has_session_truth_records_restored(self):
-        from core.runtime_restart_recovery import run_startup_recovery
         from core.canonical_session_truth import reset_canonical_session_truth_runtime
+        from core.runtime_restart_recovery import run_startup_recovery
         from core.session_truth_snapshot import reset_session_truth_snapshot_store
 
         reset_canonical_session_truth_runtime()
@@ -900,8 +916,8 @@ class TestGroupQ_RunRecoveryReport:
         reset_session_truth_snapshot_store()
 
     def test_Q02_run_recovery_report_has_continuation_waiters_reconciled(self):
-        from core.runtime_restart_recovery import run_startup_recovery
         from core.canonical_session_truth import reset_canonical_session_truth_runtime
+        from core.runtime_restart_recovery import run_startup_recovery
         from core.session_truth_snapshot import reset_session_truth_snapshot_store
 
         reset_canonical_session_truth_runtime()
@@ -916,8 +932,8 @@ class TestGroupQ_RunRecoveryReport:
         reset_session_truth_snapshot_store()
 
     def test_Q03_run_recovery_to_dict_has_new_keys(self):
-        from core.runtime_restart_recovery import run_startup_recovery
         from core.canonical_session_truth import reset_canonical_session_truth_runtime
+        from core.runtime_restart_recovery import run_startup_recovery
         from core.session_truth_snapshot import reset_session_truth_snapshot_store
 
         reset_canonical_session_truth_runtime()
@@ -943,14 +959,17 @@ class TestGroupR_ContinuationSentinel:
 
     def test_R01_sentinel_is_str(self):
         from core.runtime_restart_recovery import CONTINUATION_WAITER_RECONCILIATION_POLICY
+
         assert isinstance(CONTINUATION_WAITER_RECONCILIATION_POLICY, str)
 
     def test_R02_sentinel_is_not_empty(self):
         from core.runtime_restart_recovery import CONTINUATION_WAITER_RECONCILIATION_POLICY
+
         assert len(CONTINUATION_WAITER_RECONCILIATION_POLICY) > 0
 
     def test_R03_sentinel_contains_policy_prefix(self):
         from core.runtime_restart_recovery import CONTINUATION_WAITER_RECONCILIATION_POLICY
+
         assert "POLICY::" in CONTINUATION_WAITER_RECONCILIATION_POLICY
 
 
@@ -964,12 +983,15 @@ class TestGroupS_SessionTruthRecoverySentinel:
 
     def test_S01_sentinel_is_str(self):
         from core.runtime_restart_recovery import SESSION_TRUTH_RECOVERY_POLICY
+
         assert isinstance(SESSION_TRUTH_RECOVERY_POLICY, str)
 
     def test_S02_sentinel_is_not_empty(self):
         from core.runtime_restart_recovery import SESSION_TRUTH_RECOVERY_POLICY
+
         assert len(SESSION_TRUTH_RECOVERY_POLICY) > 0
 
     def test_S03_sentinel_contains_policy_prefix(self):
         from core.runtime_restart_recovery import SESSION_TRUTH_RECOVERY_POLICY
+
         assert "POLICY::" in SESSION_TRUTH_RECOVERY_POLICY

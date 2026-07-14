@@ -583,22 +583,14 @@ class FullCurrentStateReport:
             "methodology": self.methodology,
             "verdict_zh": self.verdict_zh,
             "system_characterization": (
-                self.system_characterization.to_dict()
-                if self.system_characterization
-                else None
+                self.system_characterization.to_dict() if self.system_characterization else None
             ),
             "claim_matrix": [c.to_dict() for c in self.claim_matrix],
             "path_closure_map": [p.to_dict() for p in self.path_closure_map],
             "completion_stage_judgment": (
-                self.completion_stage_judgment.to_dict()
-                if self.completion_stage_judgment
-                else None
+                self.completion_stage_judgment.to_dict() if self.completion_stage_judgment else None
             ),
-            "post_next_pr_judgment": (
-                self.post_next_pr_judgment.to_dict()
-                if self.post_next_pr_judgment
-                else None
-            ),
+            "post_next_pr_judgment": (self.post_next_pr_judgment.to_dict() if self.post_next_pr_judgment else None),
             "roadmap": [r.to_dict() for r in self.roadmap],
             "strongly_established_count": self.strongly_established_count,
             "runtime_evidenced_closed_count": self.runtime_evidenced_closed_count,
@@ -1039,8 +1031,7 @@ def _build_claim_beyond_poc() -> ClaimMatrixEntry:
         changed=True,
         code_anchors=anchors,
         android_evidence=(
-            "All 4 chain termini confirmed in Android. "
-            "Android PR #335 added 27 tests proving continuity stability."
+            "All 4 chain termini confirmed in Android. " "Android PR #335 added 27 tests proving continuity stability."
         ),
         remaining_gap=(
             "HandoffV2 uplink chain: the handler exists and is used by PR-B tests "
@@ -1073,9 +1064,8 @@ def _build_claim_remaining_work() -> ClaimMatrixEntry:
             anchors.append(f"{mod} [{label}]")
 
     # Check if orchestration consumption is actually closed
-    orch_closed = (
-        _try_import("tests.test_orchestration_consumes_android_truth")
-        and _try_import("core.runtime.source_dispatch_orchestrator")
+    orch_closed = _try_import("tests.test_orchestration_consumes_android_truth") and _try_import(
+        "core.runtime.source_dispatch_orchestrator"
     )
 
     return ClaimMatrixEntry(
@@ -1088,16 +1078,13 @@ def _build_claim_remaining_work() -> ClaimMatrixEntry:
             "All P0 axes are now closed."
         ),
         current_label=(
-            CurrentEvidenceLabel.STRONGLY_ESTABLISHED
-            if orch_closed
-            else CurrentEvidenceLabel.PARTIALLY_ESTABLISHED
+            CurrentEvidenceLabel.STRONGLY_ESTABLISHED if orch_closed else CurrentEvidenceLabel.PARTIALLY_ESTABLISHED
         ),
         prior_label="PARTIALLY_ESTABLISHED",
         changed=orch_closed,
         code_anchors=anchors,
         android_evidence=(
-            "Android emits all required truth fields. "
-            "The orchestration consumption gap is closed on the V2 side."
+            "Android emits all required truth fields. " "The orchestration consumption gap is closed on the V2 side."
         ),
         remaining_gap=(
             "P1: continuity e2e WS roundtrip test not yet in CI. "
@@ -1128,8 +1115,7 @@ def _build_claim_direction() -> ClaimMatrixEntry:
     return ClaimMatrixEntry(
         claim_id="direction_toward_unified_ai_body",
         claim_summary=(
-            "Future evolution toward unified AI-body network enforced by CI gates "
-            "and authority boundary contracts."
+            "Future evolution toward unified AI-body network enforced by CI gates " "and authority boundary contracts."
         ),
         current_label=CurrentEvidenceLabel.STRONGLY_ESTABLISHED,
         prior_label="PARTIALLY_ESTABLISHED",
@@ -1219,11 +1205,7 @@ def _build_path_runtime_snapshot() -> CanonicalPathEntry:
         runtime_closed=runtime_closed,
         closure_prs=["V2#1011"],
         v2_evidence_modules=mods,
-        gap_description=(
-            ""
-            if runtime_closed
-            else "CI test modules not found — check PR-A is merged."
-        ),
+        gap_description=("" if runtime_closed else "CI test modules not found — check PR-A is merged."),
     )
 
 
@@ -1239,14 +1221,10 @@ def _build_path_execution_event() -> CanonicalPathEntry:
     pr_a_ok = _try_import("tests.integration.test_android_runtime_state_snapshot_e2e")
     pr_b_ok = _try_import("tests.test_delegated_execution_runtime_closure")
     if pr_a_ok:
-        mods.append(
-            "tests.integration.test_android_runtime_state_snapshot_e2e "
-            "[CI F03: execution events stored]"
-        )
+        mods.append("tests.integration.test_android_runtime_state_snapshot_e2e " "[CI F03: execution events stored]")
     if pr_b_ok:
         mods.append(
-            "tests.test_delegated_execution_runtime_closure "
-            "[CI G02: device_execution_event handler routed + ACK]"
+            "tests.test_delegated_execution_runtime_closure " "[CI G02: device_execution_event handler routed + ACK]"
         )
     runtime_closed = pr_a_ok and pr_b_ok
     return CanonicalPathEntry(
@@ -1284,8 +1262,7 @@ def _build_path_task_dispatch_result() -> CanonicalPathEntry:
     pr_b_ok = _try_import("tests.test_delegated_execution_runtime_closure")
     if pr_b_ok:
         mods.append(
-            "tests.test_delegated_execution_runtime_closure "
-            "[CI: 31 tests dispatch→signal→truth_chain roundtrip]"
+            "tests.test_delegated_execution_runtime_closure " "[CI: 31 tests dispatch→signal→truth_chain roundtrip]"
         )
 
     # Check runtime_closure_established field
@@ -1307,9 +1284,7 @@ def _build_path_task_dispatch_result() -> CanonicalPathEntry:
             "Android emits result uplink → V2 ingests → truth chain complete."
         ),
         current_label=(
-            CurrentEvidenceLabel.RUNTIME_EVIDENCED_CLOSED
-            if pr_b_ok
-            else CurrentEvidenceLabel.PARTIALLY_ESTABLISHED
+            CurrentEvidenceLabel.RUNTIME_EVIDENCED_CLOSED if pr_b_ok else CurrentEvidenceLabel.PARTIALLY_ESTABLISHED
         ),
         runtime_closed=pr_b_ok,
         closure_prs=["V2#1013"],
@@ -1330,12 +1305,10 @@ def _build_path_continuity() -> CanonicalPathEntry:
             mods.append(f"{mod} [{label}]")
 
     # Check durable fields in registry entry
-    durable_ok = (
-        _get_source_attr(
-            "core.attached_runtime_session_registry",
-            "AttachedSessionRegistryEntry",
-            "durable_session_id",
-        )
+    durable_ok = _get_source_attr(
+        "core.attached_runtime_session_registry",
+        "AttachedSessionRegistryEntry",
+        "durable_session_id",
     )
     if durable_ok:
         mods.append(
@@ -1345,10 +1318,7 @@ def _build_path_continuity() -> CanonicalPathEntry:
 
     pr_c_ok = _try_import("tests.test_prc_android_durable_continuity_bridge")
     if pr_c_ok:
-        mods.append(
-            "tests.test_prc_android_durable_continuity_bridge "
-            "[CI: 37 tests for durable continuity bridge]"
-        )
+        mods.append("tests.test_prc_android_durable_continuity_bridge " "[CI: 37 tests for durable continuity bridge]")
 
     return CanonicalPathEntry(
         path_id="continuity_reconnect_resume",
@@ -1480,11 +1450,7 @@ def _build_completion_stage(
     }
     all_claims_strong = all(c.current_label in strong_labels for c in claims)
     paths_closed = sum(1 for p in paths if p.runtime_closed)
-    paths_partial = sum(
-        1
-        for p in paths
-        if p.current_label == CurrentEvidenceLabel.PARTIALLY_ESTABLISHED
-    )
+    paths_partial = sum(1 for p in paths if p.current_label == CurrentEvidenceLabel.PARTIALLY_ESTABLISHED)
     p0_open = sum(1 for r in roadmap if r.priority == RoadmapPriority.P0_BLOCKING)
 
     # Determine stage
@@ -1506,10 +1472,7 @@ def _build_completion_stage(
         )
     else:
         stage = CompletionStage.RUNTIME_EVIDENCE_PHASE
-        rationale = (
-            f"{p0_open} P0 gap(s) still open. "
-            f"{paths_closed} of {len(paths)} paths runtime-closed."
-        )
+        rationale = f"{p0_open} P0 gap(s) still open. " f"{paths_closed} of {len(paths)} paths runtime-closed."
 
     return CompletionStageJudgment(
         current_stage=stage,
@@ -1570,7 +1533,6 @@ def _build_roadmap() -> List[RoadmapEntry]:
         # --- P0: NONE ---
         # All P0 gaps (snapshot CI evidence, delegated execution closure,
         # continuity bridge, orchestration consumption) have been closed.
-
         # --- P1 ---
         RoadmapEntry(
             item_id="P1-CONTINUITY-E2E-ROUNDTRIP",
@@ -1588,10 +1550,7 @@ def _build_roadmap() -> List[RoadmapEntry]:
                 "system into NON_P0_REFINEMENT_ONLY phase."
             ),
             target_repos=["DannyFish-11/ufo-galaxy-realization-v2"],
-            status_note=(
-                "Canonical P1 gap. Not blocking any P0 work. "
-                "Next most valuable CI closure work."
-            ),
+            status_note=("Canonical P1 gap. Not blocking any P0 work. " "Next most valuable CI closure work."),
         ),
         RoadmapEntry(
             item_id="P1-LEGALITY-GATE-PROMOTION",
@@ -1673,19 +1632,13 @@ def build_full_current_state_rereading() -> FullCurrentStateReport:
         CurrentEvidenceLabel.STRONGLY_ESTABLISHED,
         CurrentEvidenceLabel.RUNTIME_EVIDENCED_CLOSED,
     }
-    se_count = sum(
-        1 for c in claims if c.current_label == CurrentEvidenceLabel.STRONGLY_ESTABLISHED
-    )
-    rec_count = sum(
-        1 for c in claims if c.current_label == CurrentEvidenceLabel.RUNTIME_EVIDENCED_CLOSED
-    )
-    pe_count = sum(
-        1 for c in claims if c.current_label == CurrentEvidenceLabel.PARTIALLY_ESTABLISHED
-    )
+    se_count = sum(1 for c in claims if c.current_label == CurrentEvidenceLabel.STRONGLY_ESTABLISHED)
+    rec_count = sum(1 for c in claims if c.current_label == CurrentEvidenceLabel.RUNTIME_EVIDENCED_CLOSED)
+    pe_count = sum(1 for c in claims if c.current_label == CurrentEvidenceLabel.PARTIALLY_ESTABLISHED)
     paths_closed = sum(1 for p in paths if p.runtime_closed)
     p0_count = sum(1 for r in roadmap if r.priority == RoadmapPriority.P0_BLOCKING)
 
-    all_claims_strong = all(c.current_label in strong_labels for c in claims)
+    all(c.current_label in strong_labels for c in claims)
 
     # Compose system verdict
     system_verdict = (
@@ -1796,9 +1749,7 @@ def assert_full_current_state_invariants() -> None:
         "direction_toward_unified_ai_body",
     }
     actual_claim_ids = {c.claim_id for c in report.claim_matrix}
-    assert actual_claim_ids == expected_claim_ids, (
-        f"Claim IDs mismatch: {actual_claim_ids} vs {expected_claim_ids}"
-    )
+    assert actual_claim_ids == expected_claim_ids, f"Claim IDs mismatch: {actual_claim_ids} vs {expected_claim_ids}"
 
     # 5. Canonical path map covers all 6 paths
     expected_path_ids = {
@@ -1810,9 +1761,7 @@ def assert_full_current_state_invariants() -> None:
         "orchestration_consumes_android_truth",
     }
     actual_path_ids = {p.path_id for p in report.path_closure_map}
-    assert actual_path_ids == expected_path_ids, (
-        f"Path IDs mismatch: {actual_path_ids} vs {expected_path_ids}"
-    )
+    assert actual_path_ids == expected_path_ids, f"Path IDs mismatch: {actual_path_ids} vs {expected_path_ids}"
 
     # 6. Completion stage judgment exists and is LATE_STAGE_CLOSURE
     assert report.completion_stage_judgment is not None
@@ -1825,9 +1774,7 @@ def assert_full_current_state_invariants() -> None:
     )
 
     # 7. Zero P0 gaps
-    assert report.p0_items_count == 0, (
-        f"Expected 0 P0 items; got {report.p0_items_count}"
-    )
+    assert report.p0_items_count == 0, f"Expected 0 P0 items; got {report.p0_items_count}"
 
     # 8. Post-next-PR judgment exists and targets NON_P0_REFINEMENT_ONLY
     assert report.post_next_pr_judgment is not None
@@ -1838,9 +1785,7 @@ def assert_full_current_state_invariants() -> None:
 
     # 10. Roadmap: no P0 items; has P1 and P3
     roadmap_priorities = [r.priority for r in report.roadmap]
-    assert RoadmapPriority.P0_BLOCKING not in roadmap_priorities, (
-        "Roadmap must have no P0 items in the current state"
-    )
+    assert RoadmapPriority.P0_BLOCKING not in roadmap_priorities, "Roadmap must have no P0 items in the current state"
     assert RoadmapPriority.P1_CANONICAL_CLOSURE in roadmap_priorities
     assert RoadmapPriority.P3_DEPLOYMENT in roadmap_priorities
 

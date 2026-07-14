@@ -84,10 +84,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Helper: reset singleton between tests
 # ---------------------------------------------------------------------------
 
+
 def _reset():
     from core.authority_conflict_elimination import (
         reset_authority_conflict_elimination_runtime,
     )
+
     reset_authority_conflict_elimination_runtime()
 
 
@@ -101,6 +103,7 @@ class TestA_ModuleStructure(unittest.TestCase):
 
     def test_all_symbols_importable(self):
         import core.authority_conflict_elimination as ace
+
         for name in ace.__all__:
             self.assertTrue(
                 hasattr(ace, name),
@@ -115,6 +118,7 @@ class TestB_AuthoritySentinels(unittest.TestCase):
         from core.authority_conflict_elimination import (
             AUTHORITY_CONFLICT_ELIMINATION_AUTHORITY,
         )
+
         self.assertIsInstance(AUTHORITY_CONFLICT_ELIMINATION_AUTHORITY, str)
         self.assertIn("AUTHORITY_CONFLICT_ELIMINATION", AUTHORITY_CONFLICT_ELIMINATION_AUTHORITY)
 
@@ -122,6 +126,7 @@ class TestB_AuthoritySentinels(unittest.TestCase):
         from core.authority_conflict_elimination import (
             AUTHORITY_CONFLICT_ELIMINATION_LAYER_POSITION,
         )
+
         self.assertIsInstance(AUTHORITY_CONFLICT_ELIMINATION_LAYER_POSITION, int)
         self.assertEqual(AUTHORITY_CONFLICT_ELIMINATION_LAYER_POSITION, 14)
 
@@ -129,6 +134,7 @@ class TestB_AuthoritySentinels(unittest.TestCase):
         from core.authority_conflict_elimination import (
             AUTHORITY_CONFLICT_ELIMINATION_INTEGRATED,
         )
+
         self.assertIsInstance(AUTHORITY_CONFLICT_ELIMINATION_INTEGRATED, str)
         self.assertIn("INTEGRATED", AUTHORITY_CONFLICT_ELIMINATION_INTEGRATED)
         self.assertIn("GAP-512-003", AUTHORITY_CONFLICT_ELIMINATION_INTEGRATED)
@@ -140,6 +146,7 @@ class TestC_SemanticBoundarySentinels(unittest.TestCase):
 
     def test_runtime_truth_ends(self):
         from core.authority_conflict_elimination import RUNTIME_TRUTH_ENDS_AT_BOUNDARY
+
         self.assertIsInstance(RUNTIME_TRUTH_ENDS_AT_BOUNDARY, str)
         self.assertIn("RUNTIME_TRUTH_ENDS_AT_BOUNDARY", RUNTIME_TRUTH_ENDS_AT_BOUNDARY)
         self.assertIn("OperatorSurface", RUNTIME_TRUTH_ENDS_AT_BOUNDARY)
@@ -148,6 +155,7 @@ class TestC_SemanticBoundarySentinels(unittest.TestCase):
         from core.authority_conflict_elimination import (
             OPERATOR_INSPECTION_BEGINS_AT_BOUNDARY,
         )
+
         self.assertIsInstance(OPERATOR_INSPECTION_BEGINS_AT_BOUNDARY, str)
         self.assertIn("OPERATOR_INSPECTION_BEGINS", OPERATOR_INSPECTION_BEGINS_AT_BOUNDARY)
         self.assertIn("OperatorSurface", OPERATOR_INSPECTION_BEGINS_AT_BOUNDARY)
@@ -156,6 +164,7 @@ class TestC_SemanticBoundarySentinels(unittest.TestCase):
         from core.authority_conflict_elimination import (
             PROJECTION_ADAPTS_BUT_DOES_NOT_REDEFINE_BOUNDARY,
         )
+
         self.assertIsInstance(PROJECTION_ADAPTS_BUT_DOES_NOT_REDEFINE_BOUNDARY, str)
         self.assertIn("PROJECTION_ADAPTS", PROJECTION_ADAPTS_BUT_DOES_NOT_REDEFINE_BOUNDARY)
         self.assertIn("enrich_runtime_projection", PROJECTION_ADAPTS_BUT_DOES_NOT_REDEFINE_BOUNDARY)
@@ -164,6 +173,7 @@ class TestC_SemanticBoundarySentinels(unittest.TestCase):
         from core.authority_conflict_elimination import (
             STATUS_SURFACE_DISPLAYS_BUT_DOES_NOT_INVENT_BOUNDARY,
         )
+
         self.assertIsInstance(STATUS_SURFACE_DISPLAYS_BUT_DOES_NOT_INVENT_BOUNDARY, str)
         self.assertIn("STATUS_SURFACE_DISPLAYS", STATUS_SURFACE_DISPLAYS_BUT_DOES_NOT_INVENT_BOUNDARY)
         self.assertIn("GAP-512-003", STATUS_SURFACE_DISPLAYS_BUT_DOES_NOT_INVENT_BOUNDARY)
@@ -177,6 +187,7 @@ class TestD_DriftPreventionPolicySentinels(unittest.TestCase):
         from core.authority_conflict_elimination import (
             NO_COMPETING_TOPOLOGY_TRUTH_POLICY,
         )
+
         self.assertIsInstance(NO_COMPETING_TOPOLOGY_TRUTH_POLICY, str)
         self.assertIn("NO_COMPETING_TOPOLOGY", NO_COMPETING_TOPOLOGY_TRUTH_POLICY)
         self.assertIn("NetworkTopologyRuntime", NO_COMPETING_TOPOLOGY_TRUTH_POLICY)
@@ -186,6 +197,7 @@ class TestD_DriftPreventionPolicySentinels(unittest.TestCase):
         from core.authority_conflict_elimination import (
             NO_COMPETING_OPERATOR_INSPECTION_POLICY,
         )
+
         self.assertIsInstance(NO_COMPETING_OPERATOR_INSPECTION_POLICY, str)
         self.assertIn("NO_COMPETING_OPERATOR", NO_COMPETING_OPERATOR_INSPECTION_POLICY)
         self.assertIn("OperatorSurface", NO_COMPETING_OPERATOR_INSPECTION_POLICY)
@@ -195,6 +207,7 @@ class TestD_DriftPreventionPolicySentinels(unittest.TestCase):
         from core.authority_conflict_elimination import (
             NO_COMPETING_STATUS_ASSEMBLY_POLICY,
         )
+
         self.assertIsInstance(NO_COMPETING_STATUS_ASSEMBLY_POLICY, str)
         self.assertIn("NO_COMPETING_STATUS", NO_COMPETING_STATUS_ASSEMBLY_POLICY)
         self.assertIn("enrich_runtime_projection", NO_COMPETING_STATUS_ASSEMBLY_POLICY)
@@ -206,6 +219,7 @@ class TestE_ConflictResolutionKind(unittest.TestCase):
 
     def test_all_required_values(self):
         from core.authority_conflict_elimination import ConflictResolutionKind
+
         required = {"narrowed", "eliminated", "bridged", "annotated", "deferred"}
         values = {e.value for e in ConflictResolutionKind}
         self.assertTrue(
@@ -215,6 +229,7 @@ class TestE_ConflictResolutionKind(unittest.TestCase):
 
     def test_is_string_enum(self):
         from core.authority_conflict_elimination import ConflictResolutionKind
+
         self.assertIsInstance(ConflictResolutionKind.BRIDGED.value, str)
 
 
@@ -223,15 +238,17 @@ class TestF_ConflictResolutionRecord(unittest.TestCase):
 
     def test_instantiation_minimal(self):
         from core.authority_conflict_elimination import ConflictResolutionRecord
+
         rec = ConflictResolutionRecord(conflict_id="TEST-001")
         self.assertEqual(rec.conflict_id, "TEST-001")
         self.assertEqual(rec.resolved_in_pr, "PR-514")
 
     def test_to_dict_keys(self):
         from core.authority_conflict_elimination import (
-            ConflictResolutionRecord,
             ConflictResolutionKind,
+            ConflictResolutionRecord,
         )
+
         rec = ConflictResolutionRecord(
             conflict_id="TEST-002",
             gap_id="GAP-512-003",
@@ -243,17 +260,24 @@ class TestF_ConflictResolutionRecord(unittest.TestCase):
         )
         d = rec.to_dict()
         for key in [
-            "conflict_id", "gap_id", "runtime_fact", "canonical_layer",
-            "competing_layer", "resolution_kind", "resolution_note",
-            "resolved_in_pr", "resolved_at",
+            "conflict_id",
+            "gap_id",
+            "runtime_fact",
+            "canonical_layer",
+            "competing_layer",
+            "resolution_kind",
+            "resolution_note",
+            "resolved_in_pr",
+            "resolved_at",
         ]:
             self.assertIn(key, d, f"Key {key!r} missing from to_dict()")
 
     def test_to_dict_resolution_kind_is_string(self):
         from core.authority_conflict_elimination import (
-            ConflictResolutionRecord,
             ConflictResolutionKind,
+            ConflictResolutionRecord,
         )
+
         rec = ConflictResolutionRecord(
             conflict_id="TEST-003",
             resolution_kind=ConflictResolutionKind.ANNOTATED,
@@ -268,6 +292,7 @@ class TestG_AuthorityEliminationSnapshot(unittest.TestCase):
 
     def test_instantiation_defaults(self):
         from core.authority_conflict_elimination import AuthorityEliminationSnapshot
+
         snap = AuthorityEliminationSnapshot()
         self.assertIsInstance(snap.resolution_records, list)
         self.assertIsInstance(snap.assertion_violations, list)
@@ -277,6 +302,7 @@ class TestG_AuthorityEliminationSnapshot(unittest.TestCase):
 
     def test_summary_keys(self):
         from core.authority_conflict_elimination import AuthorityEliminationSnapshot
+
         snap = AuthorityEliminationSnapshot(
             total_conflicts_resolved=3,
             total_assertion_violations=0,
@@ -293,6 +319,7 @@ class TestG_AuthorityEliminationSnapshot(unittest.TestCase):
 
     def test_summary_values(self):
         from core.authority_conflict_elimination import AuthorityEliminationSnapshot
+
         snap = AuthorityEliminationSnapshot(
             total_conflicts_resolved=3,
             total_assertion_violations=1,
@@ -315,6 +342,7 @@ class TestH_SingletonManagement(unittest.TestCase):
         from core.authority_conflict_elimination import (
             get_authority_conflict_elimination_runtime,
         )
+
         r1 = get_authority_conflict_elimination_runtime()
         r2 = get_authority_conflict_elimination_runtime()
         self.assertIs(r1, r2)
@@ -324,6 +352,7 @@ class TestH_SingletonManagement(unittest.TestCase):
             get_authority_conflict_elimination_runtime,
             reset_authority_conflict_elimination_runtime,
         )
+
         r1 = get_authority_conflict_elimination_runtime()
         reset_authority_conflict_elimination_runtime()
         r2 = get_authority_conflict_elimination_runtime()
@@ -343,6 +372,7 @@ class TestI_ResolutionCatalog(unittest.TestCase):
         from core.authority_conflict_elimination import (
             get_authority_conflict_elimination_runtime,
         )
+
         rt = get_authority_conflict_elimination_runtime()
         records = rt.get_resolution_records()
         self.assertIsInstance(records, list)
@@ -351,6 +381,7 @@ class TestI_ResolutionCatalog(unittest.TestCase):
         from core.authority_conflict_elimination import (
             get_authority_conflict_elimination_runtime,
         )
+
         rt = get_authority_conflict_elimination_runtime()
         records = rt.get_resolution_records()
         self.assertGreaterEqual(len(records), 3)
@@ -359,6 +390,7 @@ class TestI_ResolutionCatalog(unittest.TestCase):
         from core.authority_conflict_elimination import (
             get_authority_conflict_elimination_runtime,
         )
+
         rt = get_authority_conflict_elimination_runtime()
         conflict_ids = {r.conflict_id for r in rt.get_resolution_records()}
         self.assertIn("CONFLICT-002", conflict_ids)
@@ -367,6 +399,7 @@ class TestI_ResolutionCatalog(unittest.TestCase):
         from core.authority_conflict_elimination import (
             get_authority_conflict_elimination_runtime,
         )
+
         rt = get_authority_conflict_elimination_runtime()
         conflict_ids = {r.conflict_id for r in rt.get_resolution_records()}
         self.assertIn("CONFLICT-005-STATUS", conflict_ids)
@@ -375,6 +408,7 @@ class TestI_ResolutionCatalog(unittest.TestCase):
         from core.authority_conflict_elimination import (
             get_authority_conflict_elimination_runtime,
         )
+
         rt = get_authority_conflict_elimination_runtime()
         conflict_ids = {r.conflict_id for r in rt.get_resolution_records()}
         self.assertIn("CONFLICT-008-TOPOLOGY", conflict_ids)
@@ -383,6 +417,7 @@ class TestI_ResolutionCatalog(unittest.TestCase):
         from core.authority_conflict_elimination import (
             get_authority_conflict_elimination_runtime,
         )
+
         rt = get_authority_conflict_elimination_runtime()
         records = {r.conflict_id: r for r in rt.get_resolution_records()}
         self.assertEqual(records["CONFLICT-002"].gap_id, "GAP-512-003")
@@ -391,6 +426,7 @@ class TestI_ResolutionCatalog(unittest.TestCase):
         from core.authority_conflict_elimination import (
             get_authority_conflict_elimination_runtime,
         )
+
         rt = get_authority_conflict_elimination_runtime()
         records = {r.conflict_id: r for r in rt.get_resolution_records()}
         self.assertEqual(records["CONFLICT-005-STATUS"].gap_id, "GAP-512-005")
@@ -399,6 +435,7 @@ class TestI_ResolutionCatalog(unittest.TestCase):
         from core.authority_conflict_elimination import (
             get_authority_conflict_elimination_runtime,
         )
+
         rt = get_authority_conflict_elimination_runtime()
         records = {r.conflict_id: r for r in rt.get_resolution_records()}
         self.assertEqual(records["CONFLICT-008-TOPOLOGY"].gap_id, "GAP-512-008")
@@ -407,6 +444,7 @@ class TestI_ResolutionCatalog(unittest.TestCase):
         from core.authority_conflict_elimination import (
             get_authority_conflict_elimination_runtime,
         )
+
         rt = get_authority_conflict_elimination_runtime()
         for rec in rt.get_resolution_records():
             self.assertEqual(
@@ -419,6 +457,7 @@ class TestI_ResolutionCatalog(unittest.TestCase):
         from core.authority_conflict_elimination import (
             get_authority_conflict_elimination_runtime,
         )
+
         rt = get_authority_conflict_elimination_runtime()
         for rec in rt.get_resolution_records():
             self.assertTrue(
@@ -440,6 +479,7 @@ class TestJ_ViolationTracking(unittest.TestCase):
         from core.authority_conflict_elimination import (
             get_authority_conflict_elimination_runtime,
         )
+
         rt = get_authority_conflict_elimination_runtime()
         self.assertEqual(rt.get_violation_log(), [])
 
@@ -447,6 +487,7 @@ class TestJ_ViolationTracking(unittest.TestCase):
         from core.authority_conflict_elimination import (
             get_authority_conflict_elimination_runtime,
         )
+
         rt = get_authority_conflict_elimination_runtime()
         rt.record_assertion_violation(
             layer_name="SomeLayer",
@@ -463,6 +504,7 @@ class TestJ_ViolationTracking(unittest.TestCase):
         from core.authority_conflict_elimination import (
             get_authority_conflict_elimination_runtime,
         )
+
         rt = get_authority_conflict_elimination_runtime()
         rt.record_assertion_violation("A", "fact", "B")
         rt.record_assertion_violation("A", "fact2", "C")
@@ -484,6 +526,7 @@ class TestK_AssertNoCompetingViolation(unittest.TestCase):
             assert_no_competing_authority,
             get_authority_conflict_elimination_runtime,
         )
+
         assert_no_competing_authority(
             layer_name="SomeProjectionLayer",
             fact_name="device_reachability",
@@ -509,6 +552,7 @@ class TestL_AssertNoCompetingNoViolation(unittest.TestCase):
             assert_no_competing_authority,
             get_authority_conflict_elimination_runtime,
         )
+
         assert_no_competing_authority(
             layer_name="NetworkTopologyRuntime",
             fact_name="device_reachability",
@@ -526,6 +570,7 @@ class TestM_EnrichProjectionWithRuntimeAuthority(unittest.TestCase):
         from core.authority_conflict_elimination import (
             enrich_projection_with_runtime_authority,
         )
+
         original = {"tri_state_phase": "ACTIVE", "runtime_domain": "LOCAL"}
         result = enrich_projection_with_runtime_authority(original)
         self.assertIsInstance(result, dict)
@@ -534,6 +579,7 @@ class TestM_EnrichProjectionWithRuntimeAuthority(unittest.TestCase):
         from core.authority_conflict_elimination import (
             enrich_projection_with_runtime_authority,
         )
+
         original = {"tri_state_phase": "ACTIVE", "runtime_domain": "LOCAL"}
         result = enrich_projection_with_runtime_authority(original)
         self.assertEqual(result["tri_state_phase"], "ACTIVE")
@@ -543,6 +589,7 @@ class TestM_EnrichProjectionWithRuntimeAuthority(unittest.TestCase):
         from core.authority_conflict_elimination import (
             enrich_projection_with_runtime_authority,
         )
+
         original = {"tri_state_phase": "ACTIVE"}
         result = enrich_projection_with_runtime_authority(original)
         # Bridge enrichment adds _bridge_authority if bridge is available
@@ -557,6 +604,7 @@ class TestN_EnrichDoesNotMutateInput(unittest.TestCase):
         from core.authority_conflict_elimination import (
             enrich_projection_with_runtime_authority,
         )
+
         original = {"tri_state_phase": "DORMANT", "sentinel": "unchanged"}
         original_copy = dict(original)
         enrich_projection_with_runtime_authority(original)
@@ -568,9 +616,11 @@ class TestO_EnrichGracefulFallback(unittest.TestCase):
 
     def test_fallback_returns_original_content(self):
         import unittest.mock
+
         from core.authority_conflict_elimination import (
             enrich_projection_with_runtime_authority,
         )
+
         original = {"key": "value", "sentinel": "unchanged"}
         # Simulate bridge unavailability by raising on import
         with unittest.mock.patch(
@@ -596,9 +646,10 @@ class TestP_BuildSnapshot(unittest.TestCase):
 
     def test_returns_snapshot(self):
         from core.authority_conflict_elimination import (
-            build_authority_elimination_snapshot,
             AuthorityEliminationSnapshot,
+            build_authority_elimination_snapshot,
         )
+
         snap = build_authority_elimination_snapshot()
         self.assertIsInstance(snap, AuthorityEliminationSnapshot)
 
@@ -606,6 +657,7 @@ class TestP_BuildSnapshot(unittest.TestCase):
         from core.authority_conflict_elimination import (
             build_authority_elimination_snapshot,
         )
+
         snap = build_authority_elimination_snapshot()
         s = snap.summary()
         for key in [
@@ -621,6 +673,7 @@ class TestP_BuildSnapshot(unittest.TestCase):
         from core.authority_conflict_elimination import (
             build_authority_elimination_snapshot,
         )
+
         snap = build_authority_elimination_snapshot()
         self.assertGreaterEqual(snap.total_conflicts_resolved, 3)
 
@@ -632,6 +685,7 @@ class TestQ_Gap512003Closure(unittest.TestCase):
         from core.routes.projection import (  # type: ignore[import]
             AUTHORITY_CONFLICT_ELIMINATION_INTEGRATED,
         )
+
         self.assertIsInstance(AUTHORITY_CONFLICT_ELIMINATION_INTEGRATED, str)
         self.assertIn("INTEGRATED", AUTHORITY_CONFLICT_ELIMINATION_INTEGRATED)
 
@@ -639,6 +693,7 @@ class TestQ_Gap512003Closure(unittest.TestCase):
         from core.routes.projection import (  # type: ignore[import]
             AUTHORITY_CONFLICT_ELIMINATION_INTEGRATED,
         )
+
         # Must not be the unavailable fallback
         self.assertNotIn(
             "UNAVAILABLE",
@@ -654,6 +709,7 @@ class TestR_Gap512005Closure(unittest.TestCase):
         from core.authority_conflict_elimination import (
             enrich_projection_with_runtime_authority,
         )
+
         # operator_snapshot_dict should be added (even if None) when bridge is available
         original = {"tri_state_phase": "ACTIVE"}
         result = enrich_projection_with_runtime_authority(original)
@@ -671,18 +727,21 @@ class TestS_Gap512008Closure(unittest.TestCase):
         from core.authority_conflict_elimination import (
             NO_COMPETING_TOPOLOGY_TRUTH_POLICY,
         )
+
         self.assertIn("NetworkTopologyRuntime", NO_COMPETING_TOPOLOGY_TRUTH_POLICY)
 
     def test_policy_references_gap_512_008(self):
         from core.authority_conflict_elimination import (
             NO_COMPETING_TOPOLOGY_TRUTH_POLICY,
         )
+
         self.assertIn("GAP-512-008", NO_COMPETING_TOPOLOGY_TRUTH_POLICY)
 
     def test_policy_mentions_continuumstate(self):
         from core.authority_conflict_elimination import (
             NO_COMPETING_TOPOLOGY_TRUTH_POLICY,
         )
+
         self.assertIn("ContinuumState", NO_COMPETING_TOPOLOGY_TRUTH_POLICY)
 
 
@@ -691,9 +750,10 @@ class TestT_ClosureAuditConflict002Resolved(unittest.TestCase):
 
     def test_conflict_002_resolved(self):
         from core.runtime_closure_audit import (
-            reset_runtime_closure_audit,
             detect_parallel_truth_paths,
+            reset_runtime_closure_audit,
         )
+
         reset_runtime_closure_audit()
         conflicts = detect_parallel_truth_paths()
         by_id = {c.conflict_id: c for c in conflicts}
@@ -705,9 +765,10 @@ class TestT_ClosureAuditConflict002Resolved(unittest.TestCase):
 
     def test_conflict_002_resolution_note_mentions_pr514(self):
         from core.runtime_closure_audit import (
-            reset_runtime_closure_audit,
             detect_parallel_truth_paths,
+            reset_runtime_closure_audit,
         )
+
         reset_runtime_closure_audit()
         conflicts = detect_parallel_truth_paths()
         by_id = {c.conflict_id: c for c in conflicts}
@@ -719,9 +780,10 @@ class TestU_ClosureAuditConflict006Resolved(unittest.TestCase):
 
     def test_conflict_006_present(self):
         from core.runtime_closure_audit import (
-            reset_runtime_closure_audit,
             detect_parallel_truth_paths,
+            reset_runtime_closure_audit,
         )
+
         reset_runtime_closure_audit()
         conflicts = detect_parallel_truth_paths()
         conflict_ids = {c.conflict_id for c in conflicts}
@@ -729,9 +791,10 @@ class TestU_ClosureAuditConflict006Resolved(unittest.TestCase):
 
     def test_conflict_006_resolved(self):
         from core.runtime_closure_audit import (
-            reset_runtime_closure_audit,
             detect_parallel_truth_paths,
+            reset_runtime_closure_audit,
         )
+
         reset_runtime_closure_audit()
         conflicts = detect_parallel_truth_paths()
         by_id = {c.conflict_id: c for c in conflicts}
@@ -746,9 +809,10 @@ class TestV_ClosureAuditConflict007Resolved(unittest.TestCase):
 
     def test_conflict_007_present(self):
         from core.runtime_closure_audit import (
-            reset_runtime_closure_audit,
             detect_parallel_truth_paths,
+            reset_runtime_closure_audit,
         )
+
         reset_runtime_closure_audit()
         conflicts = detect_parallel_truth_paths()
         conflict_ids = {c.conflict_id for c in conflicts}
@@ -756,9 +820,10 @@ class TestV_ClosureAuditConflict007Resolved(unittest.TestCase):
 
     def test_conflict_007_resolved(self):
         from core.runtime_closure_audit import (
-            reset_runtime_closure_audit,
             detect_parallel_truth_paths,
+            reset_runtime_closure_audit,
         )
+
         reset_runtime_closure_audit()
         conflicts = detect_parallel_truth_paths()
         by_id = {c.conflict_id: c for c in conflicts}
@@ -773,16 +838,14 @@ class TestW_PR514LayerSpecsVerified(unittest.TestCase):
 
     def test_pr514_layer_present(self):
         from core.runtime_closure_audit import (
-            reset_runtime_closure_audit,
             get_runtime_closure_audit,
+            reset_runtime_closure_audit,
         )
+
         reset_runtime_closure_audit()
         audit = get_runtime_closure_audit()
         # Check that _LAYER_SPECS contains PR-514 entries
-        pr514_specs = [
-            spec for spec in audit._LAYER_SPECS
-            if spec[0] == "PR-514"
-        ]
+        pr514_specs = [spec for spec in audit._LAYER_SPECS if spec[0] == "PR-514"]
         self.assertGreaterEqual(
             len(pr514_specs),
             2,
@@ -791,9 +854,10 @@ class TestW_PR514LayerSpecsVerified(unittest.TestCase):
 
     def test_authority_conflict_elimination_layer_spec(self):
         from core.runtime_closure_audit import (
-            reset_runtime_closure_audit,
             get_runtime_closure_audit,
+            reset_runtime_closure_audit,
         )
+
         reset_runtime_closure_audit()
         audit = get_runtime_closure_audit()
         sentinel_names = [spec[2] for spec in audit._LAYER_SPECS]
@@ -801,9 +865,10 @@ class TestW_PR514LayerSpecsVerified(unittest.TestCase):
 
     def test_projection_routes_ace_integrated_spec(self):
         from core.runtime_closure_audit import (
-            reset_runtime_closure_audit,
             get_runtime_closure_audit,
+            reset_runtime_closure_audit,
         )
+
         reset_runtime_closure_audit()
         audit = get_runtime_closure_audit()
         sentinel_names = [spec[2] for spec in audit._LAYER_SPECS]
@@ -815,9 +880,10 @@ class TestX_Gap512003ResidualFalse(unittest.TestCase):
 
     def test_gap_512_003_not_residual(self):
         from core.runtime_closure_audit import (
-            reset_runtime_closure_audit,
             get_residual_gap_map,
+            reset_runtime_closure_audit,
         )
+
         reset_runtime_closure_audit()
         gaps = get_residual_gap_map()
         gap_by_id = {g.gap_id: g for g in gaps}
@@ -833,9 +899,10 @@ class TestY_Gap512005ResidualFalse(unittest.TestCase):
 
     def test_gap_512_005_not_residual(self):
         from core.runtime_closure_audit import (
-            reset_runtime_closure_audit,
             get_residual_gap_map,
+            reset_runtime_closure_audit,
         )
+
         reset_runtime_closure_audit()
         gaps = get_residual_gap_map()
         gap_by_id = {g.gap_id: g for g in gaps}
@@ -851,9 +918,10 @@ class TestZ_Gap512008ResidualFalse(unittest.TestCase):
 
     def test_gap_512_008_not_residual(self):
         from core.runtime_closure_audit import (
-            reset_runtime_closure_audit,
             get_residual_gap_map,
+            reset_runtime_closure_audit,
         )
+
         reset_runtime_closure_audit()
         gaps = get_residual_gap_map()
         gap_by_id = {g.gap_id: g for g in gaps}
@@ -875,9 +943,10 @@ class TestAA_ViolationLogInSnapshot(unittest.TestCase):
 
     def test_violation_appears_in_snapshot(self):
         from core.authority_conflict_elimination import (
-            get_authority_conflict_elimination_runtime,
             build_authority_elimination_snapshot,
+            get_authority_conflict_elimination_runtime,
         )
+
         rt = get_authority_conflict_elimination_runtime()
         rt.record_assertion_violation("TestLayer", "some_fact", "CanonicalSource")
         snap = build_authority_elimination_snapshot()
@@ -900,6 +969,7 @@ class TestBB_ResetCallable(unittest.TestCase):
             get_authority_conflict_elimination_runtime,
             reset_authority_conflict_elimination_runtime,
         )
+
         rt = get_authority_conflict_elimination_runtime()
         rt.record_assertion_violation("A", "b", "C")
         reset_authority_conflict_elimination_runtime()
@@ -911,6 +981,7 @@ class TestBB_ResetCallable(unittest.TestCase):
         from core.authority_conflict_elimination import (
             reset_authority_conflict_elimination_runtime,
         )
+
         # Should not raise
         reset_authority_conflict_elimination_runtime()
         reset_authority_conflict_elimination_runtime()

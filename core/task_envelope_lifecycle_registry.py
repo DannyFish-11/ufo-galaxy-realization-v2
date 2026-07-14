@@ -132,6 +132,7 @@ class LifecycleOwner(str, Enum):
 # PendingEnvelopeRecord
 # ---------------------------------------------------------------------------
 
+
 @dataclasses.dataclass
 class PendingEnvelopeRecord:
     """A point-in-time snapshot of a single pending task envelope.
@@ -168,9 +169,7 @@ class PendingEnvelopeRecord:
     owner: LifecycleOwner
     timeout: float
     registered_at: float
-    future: Optional[asyncio.Future] = dataclasses.field(
-        default=None, repr=False, compare=False
-    )
+    future: Optional[asyncio.Future] = dataclasses.field(default=None, repr=False, compare=False)
     metadata: Dict[str, Any] = dataclasses.field(default_factory=dict)
 
     def is_timed_out(self, now: Optional[float] = None) -> bool:
@@ -216,6 +215,7 @@ class PendingEnvelopeRecord:
 # ---------------------------------------------------------------------------
 # LifecycleRegistrySnapshot
 # ---------------------------------------------------------------------------
+
 
 @dataclasses.dataclass
 class LifecycleRegistrySnapshot:
@@ -273,6 +273,7 @@ class LifecycleRegistrySnapshot:
 # ---------------------------------------------------------------------------
 # TaskEnvelopeLifecycleRegistry
 # ---------------------------------------------------------------------------
+
 
 class TaskEnvelopeLifecycleRegistry:
     """Canonical in-memory registry for in-flight task envelopes.
@@ -354,9 +355,13 @@ class TaskEnvelopeLifecycleRegistry:
         )
         self._pending[task_id] = record
         logger.debug(
-            "lifecycle_registry.register | task_id=%s trace_id=%s owner=%s "
-            "tool=%s target=%s timeout=%.1fs",
-            task_id, trace_id, owner.value, tool_name, target_device_id, _timeout,
+            "lifecycle_registry.register | task_id=%s trace_id=%s owner=%s " "tool=%s target=%s timeout=%.1fs",
+            task_id,
+            trace_id,
+            owner.value,
+            tool_name,
+            target_device_id,
+            _timeout,
         )
         return record
 
@@ -389,7 +394,8 @@ class TaskEnvelopeLifecycleRegistry:
         self._pending[task_id] = updated
         logger.debug(
             "lifecycle_registry.transfer | task_id=%s owner=%s",
-            task_id, new_owner.value,
+            task_id,
+            new_owner.value,
         )
         return True
 
@@ -444,15 +450,15 @@ class TaskEnvelopeLifecycleRegistry:
         """
         record = self._pending.pop(task_id, None)
         if record is None:
-            logger.debug(
-                "lifecycle_registry.complete: no pending record for task_id=%s", task_id
-            )
+            logger.debug("lifecycle_registry.complete: no pending record for task_id=%s", task_id)
             return False
 
         self._completed += 1
         logger.info(
             "lifecycle_registry.complete | task_id=%s trace_id=%s elapsed=%.2fs",
-            task_id, record.trace_id, record.elapsed(),
+            task_id,
+            record.trace_id,
+            record.elapsed(),
         )
 
         fut = record.future
@@ -485,15 +491,16 @@ class TaskEnvelopeLifecycleRegistry:
         """
         record = self._pending.pop(task_id, None)
         if record is None:
-            logger.debug(
-                "lifecycle_registry.fail: no pending record for task_id=%s", task_id
-            )
+            logger.debug("lifecycle_registry.fail: no pending record for task_id=%s", task_id)
             return False
 
         self._failed += 1
         logger.warning(
             "lifecycle_registry.fail | task_id=%s trace_id=%s error=%r elapsed=%.2fs",
-            task_id, record.trace_id, error[:200], record.elapsed(),
+            task_id,
+            record.trace_id,
+            error[:200],
+            record.elapsed(),
         )
 
         fut = record.future
@@ -527,9 +534,13 @@ class TaskEnvelopeLifecycleRegistry:
                 logger.warning(
                     "lifecycle_registry.timeout | task_id=%s trace_id=%s "
                     "tool=%s target=%s elapsed=%.2fs timeout=%.1fs owner=%s",
-                    task_id, record.trace_id, record.tool_name,
-                    record.target_device_id, record.elapsed(now),
-                    record.timeout, record.owner.value,
+                    task_id,
+                    record.trace_id,
+                    record.tool_name,
+                    record.target_device_id,
+                    record.elapsed(now),
+                    record.timeout,
+                    record.owner.value,
                 )
                 fut = record.future
                 if fut is not None and not fut.done():
@@ -559,11 +570,7 @@ class TaskEnvelopeLifecycleRegistry:
         -------
         list of PendingEnvelopeRecord
         """
-        return [
-            record
-            for record in self._pending.values()
-            if record.target_device_id == device_id
-        ]
+        return [record for record in self._pending.values() if record.target_device_id == device_id]
 
     def resume_for_device(
         self,
@@ -595,7 +602,9 @@ class TaskEnvelopeLifecycleRegistry:
             surfaced.append(record.task_id)
             logger.info(
                 "lifecycle_registry.resume | task_id=%s trace_id=%s device_id=%s",
-                record.task_id, record.trace_id, device_id,
+                record.task_id,
+                record.trace_id,
+                device_id,
             )
             if resend_callback is not None:
                 try:
@@ -603,7 +612,8 @@ class TaskEnvelopeLifecycleRegistry:
                 except Exception as _cb_exc:
                     logger.warning(
                         "lifecycle_registry.resume: callback error for task_id=%s — %s",
-                        record.task_id, _cb_exc,
+                        record.task_id,
+                        _cb_exc,
                     )
         return surfaced
 
@@ -631,9 +641,7 @@ class TaskEnvelopeLifecycleRegistry:
         """Return a point-in-time snapshot of the registry state."""
         now = time.time()
         pending_records = [r.to_dict() for r in self._pending.values()]
-        timed_out_count = sum(
-            1 for r in self._pending.values() if r.is_timed_out(now)
-        )
+        timed_out_count = sum(1 for r in self._pending.values() if r.is_timed_out(now))
         return LifecycleRegistrySnapshot(
             pending_count=len(self._pending),
             timed_out_count=timed_out_count,
@@ -670,6 +678,7 @@ class TaskEnvelopeLifecycleRegistry:
         """
         try:
             from core.task_lifecycle_persistence import save_task_lifecycle_snapshot
+
             records = [r.to_dict() for r in self._pending.values()]
             save_task_lifecycle_snapshot(records, store=store)
             logger.debug(
@@ -678,9 +687,7 @@ class TaskEnvelopeLifecycleRegistry:
             )
             return True
         except Exception as exc:
-            logger.warning(
-                "lifecycle_registry.persist_snapshot: failed — %s", exc
-            )
+            logger.warning("lifecycle_registry.persist_snapshot: failed — %s", exc)
             return False
 
     def restore_from_snapshot(
@@ -795,9 +802,7 @@ class TaskEnvelopeLifecycleRegistry:
             )
             return added
         except Exception as exc:
-            logger.warning(
-                "lifecycle_registry.restore_from_snapshot: failed — %s", exc
-            )
+            logger.warning("lifecycle_registry.restore_from_snapshot: failed — %s", exc)
             return 0
 
     # ── Cancellation ──────────────────────────────────────────────────────────

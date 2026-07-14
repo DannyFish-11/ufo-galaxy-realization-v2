@@ -42,13 +42,14 @@ logger = logging.getLogger("Galaxy.ACLEnforcer")
 
 _POLICY_PATH = os.path.join(
     os.path.dirname(os.path.dirname(__file__)),
-    "config", "acl_policy.json",
+    "config",
+    "acl_policy.json",
 )
 
 # Default policy: levels 0 and 1 require no special handling; levels 2+ need
 # an explicit caller_level grant ≥ the task's permission_level.
 _DEFAULT_POLICY: Dict[str, Any] = {
-    "strict_above_level": 1,   # levels > this require explicit grant
+    "strict_above_level": 1,  # levels > this require explicit grant
     "default_agent_capabilities": [],
     "audit_all": True,
 }
@@ -57,6 +58,7 @@ _DEFAULT_POLICY: Dict[str, Any] = {
 # ---------------------------------------------------------------------------
 # Result model
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class ACLCheckResult:
@@ -72,6 +74,7 @@ class ACLCheckResult:
 # ---------------------------------------------------------------------------
 # ACLEnforcer
 # ---------------------------------------------------------------------------
+
 
 class ACLEnforcer:
     """Pre-execution ACL check for TaskEnvelope objects.
@@ -104,9 +107,7 @@ class ACLEnforcer:
             policy ``default_agent_capabilities``.
         """
         agent_caps: List[str] = list(
-            agent_capabilities
-            if agent_capabilities is not None
-            else self._policy.get("default_agent_capabilities", [])
+            agent_capabilities if agent_capabilities is not None else self._policy.get("default_agent_capabilities", [])
         )
 
         # ── Permission level check ───────────────────────────────────────────
@@ -119,10 +120,7 @@ class ACLEnforcer:
 
         if task_level > strict_above and caller_level < task_level:
             allowed = False
-            reason = (
-                f"permission_level {task_level} requires caller_level ≥ {task_level}, "
-                f"got {caller_level}"
-            )
+            reason = f"permission_level {task_level} requires caller_level ≥ {task_level}, " f"got {caller_level}"
 
         # ── Capability check ─────────────────────────────────────────────────
         missing = [c for c in req_caps if c not in agent_caps]
@@ -149,8 +147,7 @@ class ACLEnforcer:
         """Emit an M2 audit event regardless of ACL outcome."""
         outcome = "allowed" if result.allowed else "denied"
         logger.info(
-            "acl.audit | task_id=%s permission_level=%d caller_level=%d "
-            "required_caps=%s outcome=%s reason=%r",
+            "acl.audit | task_id=%s permission_level=%d caller_level=%d " "required_caps=%s outcome=%s reason=%r",
             result.task_id,
             result.permission_level,
             result.caller_level,
@@ -159,23 +156,28 @@ class ACLEnforcer:
             result.reason or "ok",
         )
         try:
-            from integration.event_bus import event_bus, EventType
+            from integration.event_bus import EventType, event_bus
+
             et = getattr(EventType, "SKILL_INVOKE", None)
             if et is None:
                 return
-            event_bus.publish_sync(et, "acl_enforcer", {
-                "task_id": result.task_id,
-                "trace_id": getattr(envelope, "trace_id", ""),
-                "session_id": getattr(envelope, "session_id", None),
-                "tool_name": getattr(envelope, "tool_name", ""),
-                "permission_level": result.permission_level,
-                "caller_level": result.caller_level,
-                "required_capabilities": result.required_capabilities,
-                "missing_capabilities": result.missing_capabilities,
-                "outcome": outcome,
-                "reason": result.reason,
-                "ts": time.time(),
-            })
+            event_bus.publish_sync(
+                et,
+                "acl_enforcer",
+                {
+                    "task_id": result.task_id,
+                    "trace_id": getattr(envelope, "trace_id", ""),
+                    "session_id": getattr(envelope, "session_id", None),
+                    "tool_name": getattr(envelope, "tool_name", ""),
+                    "permission_level": result.permission_level,
+                    "caller_level": result.caller_level,
+                    "required_capabilities": result.required_capabilities,
+                    "missing_capabilities": result.missing_capabilities,
+                    "outcome": outcome,
+                    "reason": result.reason,
+                    "ts": time.time(),
+                },
+            )
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
 

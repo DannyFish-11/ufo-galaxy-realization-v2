@@ -43,8 +43,8 @@ All tests are self-contained (no live servers, no real devices).
 from __future__ import annotations
 
 import asyncio
-import sys
 import os
+import sys
 from typing import Any, Dict, List, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -60,6 +60,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def _import_command_router():
     from core.command_router import CommandRouter
+
     return CommandRouter
 
 
@@ -105,9 +106,10 @@ def _dispatchable_devices():
     dev-unready / dev-unknown 故意不注册——若干用例断言它们被排除。
     """
     from tests.dispatch_device_harness import (
-        register_dispatchable_device,
         cleanup_dispatchable_devices,
+        register_dispatchable_device,
     )
+
     for did in ("dev-ready-001", "dev-ready", "dev-001"):
         register_dispatchable_device(did, capabilities=["screen"])
     yield
@@ -177,34 +179,42 @@ class TestSentinels:
 
     def test_dispatch_constraint_chain_uniform_enforcement_importable(self):
         from core.command_router import DISPATCH_CONSTRAINT_CHAIN_UNIFORM_ENFORCEMENT
+
         assert isinstance(DISPATCH_CONSTRAINT_CHAIN_UNIFORM_ENFORCEMENT, str)
 
     def test_dispatch_constraint_chain_uniform_enforcement_nonempty(self):
         from core.command_router import DISPATCH_CONSTRAINT_CHAIN_UNIFORM_ENFORCEMENT
+
         assert len(DISPATCH_CONSTRAINT_CHAIN_UNIFORM_ENFORCEMENT) > 20
 
     def test_dispatch_constraint_chain_mentions_admissibility(self):
         from core.command_router import DISPATCH_CONSTRAINT_CHAIN_UNIFORM_ENFORCEMENT
+
         assert "admissibility" in DISPATCH_CONSTRAINT_CHAIN_UNIFORM_ENFORCEMENT.lower()
 
     def test_dispatch_constraint_chain_mentions_posture(self):
         from core.command_router import DISPATCH_CONSTRAINT_CHAIN_UNIFORM_ENFORCEMENT
+
         assert "posture" in DISPATCH_CONSTRAINT_CHAIN_UNIFORM_ENFORCEMENT.lower()
 
     def test_session_truth_posture_dispatch_filter_importable(self):
         from core.command_router import SESSION_TRUTH_POSTURE_DISPATCH_FILTER_APPLIED
+
         assert isinstance(SESSION_TRUTH_POSTURE_DISPATCH_FILTER_APPLIED, str)
 
     def test_session_truth_posture_dispatch_filter_nonempty(self):
         from core.command_router import SESSION_TRUTH_POSTURE_DISPATCH_FILTER_APPLIED
+
         assert len(SESSION_TRUTH_POSTURE_DISPATCH_FILTER_APPLIED) > 20
 
     def test_session_truth_posture_dispatch_filter_mentions_control_only(self):
         from core.command_router import SESSION_TRUTH_POSTURE_DISPATCH_FILTER_APPLIED
+
         assert "control_only" in SESSION_TRUTH_POSTURE_DISPATCH_FILTER_APPLIED.lower()
 
     def test_session_truth_posture_dispatch_filter_mentions_join_runtime(self):
         from core.command_router import SESSION_TRUTH_POSTURE_DISPATCH_FILTER_APPLIED
+
         assert "join_runtime" in SESSION_TRUTH_POSTURE_DISPATCH_FILTER_APPLIED.lower()
 
 
@@ -224,12 +234,15 @@ class TestAdmissibilityGateReady:
 
         ready_vr = _make_validation_result(registered=True, ready=True)
 
-        with patch(
-            "core.command_router.CommandRouter._execute_command",
-            new=AsyncMock(return_value=success_result),
-        ), patch(
-            "core.target_device_validator.validate_target_device",
-            return_value=ready_vr,
+        with (
+            patch(
+                "core.command_router.CommandRouter._execute_command",
+                new=AsyncMock(return_value=success_result),
+            ),
+            patch(
+                "core.target_device_validator.validate_target_device",
+                return_value=ready_vr,
+            ),
         ):
             result = _run(router.route_envelope(env))
 
@@ -245,12 +258,15 @@ class TestAdmissibilityGateReady:
         success_result = _default_success_result()
         ready_vr = _make_validation_result(registered=True, ready=True)
 
-        with patch(
-            "core.command_router.CommandRouter._execute_command",
-            new=AsyncMock(return_value=success_result),
-        ), patch(
-            "core.target_device_validator.validate_target_device",
-            return_value=ready_vr,
+        with (
+            patch(
+                "core.command_router.CommandRouter._execute_command",
+                new=AsyncMock(return_value=success_result),
+            ),
+            patch(
+                "core.target_device_validator.validate_target_device",
+                return_value=ready_vr,
+            ),
         ):
             result = _run(router.route_envelope(env))
 
@@ -275,17 +291,18 @@ class TestAdmissibilityGateExcluded:
 
         def _fake_vtd(device_id, required_capabilities=None):
             if device_id == "dev-unready":
-                return _make_validation_result(
-                    registered=True, ready=False, reasons=["not-ready"]
-                )
+                return _make_validation_result(registered=True, ready=False, reasons=["not-ready"])
             return _make_validation_result(registered=True, ready=True)
 
-        with patch(
-            "core.command_router.CommandRouter._execute_command",
-            new=AsyncMock(return_value=success_result),
-        ), patch(
-            "core.target_device_validator.validate_target_device",
-            side_effect=_fake_vtd,
+        with (
+            patch(
+                "core.command_router.CommandRouter._execute_command",
+                new=AsyncMock(return_value=success_result),
+            ),
+            patch(
+                "core.target_device_validator.validate_target_device",
+                side_effect=_fake_vtd,
+            ),
         ):
             result = _run(router.route_envelope(env))
 
@@ -299,16 +316,17 @@ class TestAdmissibilityGateExcluded:
         env = _make_envelope(targets=["dev-unknown"])
         success_result = _default_success_result()
 
-        unregistered_vr = _make_validation_result(
-            registered=False, ready=False, reasons=["not-registered"]
-        )
+        unregistered_vr = _make_validation_result(registered=False, ready=False, reasons=["not-registered"])
 
-        with patch(
-            "core.command_router.CommandRouter._execute_command",
-            new=AsyncMock(return_value=success_result),
-        ), patch(
-            "core.target_device_validator.validate_target_device",
-            return_value=unregistered_vr,
+        with (
+            patch(
+                "core.command_router.CommandRouter._execute_command",
+                new=AsyncMock(return_value=success_result),
+            ),
+            patch(
+                "core.target_device_validator.validate_target_device",
+                return_value=unregistered_vr,
+            ),
         ):
             result = _run(router.route_envelope(env))
 
@@ -330,12 +348,15 @@ class TestAdmissibilityGateDegrades:
         env = _make_envelope(targets=["dev-001"])
         success_result = _default_success_result()
 
-        with patch(
-            "core.command_router.CommandRouter._execute_command",
-            new=AsyncMock(return_value=success_result),
-        ), patch(
-            "core.target_device_validator.validate_target_device",
-            side_effect=ImportError("module not found"),
+        with (
+            patch(
+                "core.command_router.CommandRouter._execute_command",
+                new=AsyncMock(return_value=success_result),
+            ),
+            patch(
+                "core.target_device_validator.validate_target_device",
+                side_effect=ImportError("module not found"),
+            ),
         ):
             result = _run(router.route_envelope(env))
 
@@ -356,12 +377,15 @@ class TestAdmissibilityGateDegrades:
             reasons=["readiness-unavailable:module-missing"],
         )
 
-        with patch(
-            "core.command_router.CommandRouter._execute_command",
-            new=AsyncMock(return_value=success_result),
-        ), patch(
-            "core.target_device_validator.validate_target_device",
-            return_value=unavail_vr,
+        with (
+            patch(
+                "core.command_router.CommandRouter._execute_command",
+                new=AsyncMock(return_value=success_result),
+            ),
+            patch(
+                "core.target_device_validator.validate_target_device",
+                return_value=unavail_vr,
+            ),
         ):
             result = _run(router.route_envelope(env))
 
@@ -388,12 +412,15 @@ class TestPostureFilterJoinRuntime:
         success_result = _default_success_result()
         join_posture = _make_posture_result(eligible=True, posture="join_runtime")
 
-        with patch(
-            "core.command_router.CommandRouter._execute_command",
-            new=AsyncMock(return_value=success_result),
-        ), patch(
-            "core.source_execution_eligibility.check_source_execution_eligibility",
-            return_value=join_posture,
+        with (
+            patch(
+                "core.command_router.CommandRouter._execute_command",
+                new=AsyncMock(return_value=success_result),
+            ),
+            patch(
+                "core.source_execution_eligibility.check_source_execution_eligibility",
+                return_value=join_posture,
+            ),
         ):
             result = _run(router.route_envelope(env))
 
@@ -412,12 +439,15 @@ class TestPostureFilterJoinRuntime:
         success_result = _default_success_result()
         join_posture = _make_posture_result(eligible=True, posture="join_runtime")
 
-        with patch(
-            "core.command_router.CommandRouter._execute_command",
-            new=AsyncMock(return_value=success_result),
-        ), patch(
-            "core.source_execution_eligibility.check_source_execution_eligibility",
-            return_value=join_posture,
+        with (
+            patch(
+                "core.command_router.CommandRouter._execute_command",
+                new=AsyncMock(return_value=success_result),
+            ),
+            patch(
+                "core.source_execution_eligibility.check_source_execution_eligibility",
+                return_value=join_posture,
+            ),
         ):
             result = _run(router.route_envelope(env))
 
@@ -440,16 +470,17 @@ class TestPostureFilterControlOnly:
             metadata={"source_runtime_posture": "control_only"},
         )
         success_result = _default_success_result()
-        control_posture = _make_posture_result(
-            eligible=False, posture="control_only"
-        )
+        control_posture = _make_posture_result(eligible=False, posture="control_only")
 
-        with patch(
-            "core.command_router.CommandRouter._execute_command",
-            new=AsyncMock(return_value=success_result),
-        ), patch(
-            "core.source_execution_eligibility.check_source_execution_eligibility",
-            return_value=control_posture,
+        with (
+            patch(
+                "core.command_router.CommandRouter._execute_command",
+                new=AsyncMock(return_value=success_result),
+            ),
+            patch(
+                "core.source_execution_eligibility.check_source_execution_eligibility",
+                return_value=control_posture,
+            ),
         ):
             result = _run(router.route_envelope(env))
 
@@ -466,16 +497,17 @@ class TestPostureFilterControlOnly:
             metadata={"source_runtime_posture": "control_only"},
         )
         success_result = _default_success_result()
-        control_posture = _make_posture_result(
-            eligible=False, posture="control_only"
-        )
+        control_posture = _make_posture_result(eligible=False, posture="control_only")
 
-        with patch(
-            "core.command_router.CommandRouter._execute_command",
-            new=AsyncMock(return_value=success_result),
-        ), patch(
-            "core.source_execution_eligibility.check_source_execution_eligibility",
-            return_value=control_posture,
+        with (
+            patch(
+                "core.command_router.CommandRouter._execute_command",
+                new=AsyncMock(return_value=success_result),
+            ),
+            patch(
+                "core.source_execution_eligibility.check_source_execution_eligibility",
+                return_value=control_posture,
+            ),
         ):
             result = _run(router.route_envelope(env))
 
@@ -498,12 +530,15 @@ class TestPostureFilterNoHint:
         success_result = _default_success_result()
         mock_check = MagicMock()
 
-        with patch(
-            "core.command_router.CommandRouter._execute_command",
-            new=AsyncMock(return_value=success_result),
-        ), patch(
-            "core.source_execution_eligibility.check_source_execution_eligibility",
-            mock_check,
+        with (
+            patch(
+                "core.command_router.CommandRouter._execute_command",
+                new=AsyncMock(return_value=success_result),
+            ),
+            patch(
+                "core.source_execution_eligibility.check_source_execution_eligibility",
+                mock_check,
+            ),
         ):
             _run(router.route_envelope(env))
 
@@ -517,12 +552,15 @@ class TestPostureFilterNoHint:
         success_result = _default_success_result()
         ready_vr = _make_validation_result(registered=True, ready=True)
 
-        with patch(
-            "core.command_router.CommandRouter._execute_command",
-            new=AsyncMock(return_value=success_result),
-        ), patch(
-            "core.target_device_validator.validate_target_device",
-            return_value=ready_vr,
+        with (
+            patch(
+                "core.command_router.CommandRouter._execute_command",
+                new=AsyncMock(return_value=success_result),
+            ),
+            patch(
+                "core.target_device_validator.validate_target_device",
+                return_value=ready_vr,
+            ),
         ):
             result = _run(router.route_envelope(env))
 
@@ -547,12 +585,15 @@ class TestPostureFilterDegrades:
         )
         success_result = _default_success_result()
 
-        with patch(
-            "core.command_router.CommandRouter._execute_command",
-            new=AsyncMock(return_value=success_result),
-        ), patch(
-            "core.source_execution_eligibility.check_source_execution_eligibility",
-            side_effect=ImportError("not available"),
+        with (
+            patch(
+                "core.command_router.CommandRouter._execute_command",
+                new=AsyncMock(return_value=success_result),
+            ),
+            patch(
+                "core.source_execution_eligibility.check_source_execution_eligibility",
+                side_effect=ImportError("not available"),
+            ),
         ):
             result = _run(router.route_envelope(env))
 
@@ -574,12 +615,15 @@ class TestConstraintChainTraceAttached:
         success_result = _default_success_result()
         ready_vr = _make_validation_result(registered=True, ready=True)
 
-        with patch(
-            "core.command_router.CommandRouter._execute_command",
-            new=AsyncMock(return_value=success_result),
-        ), patch(
-            "core.target_device_validator.validate_target_device",
-            return_value=ready_vr,
+        with (
+            patch(
+                "core.command_router.CommandRouter._execute_command",
+                new=AsyncMock(return_value=success_result),
+            ),
+            patch(
+                "core.target_device_validator.validate_target_device",
+                return_value=ready_vr,
+            ),
         ):
             result = _run(router.route_envelope(env))
 
@@ -595,12 +639,15 @@ class TestConstraintChainTraceAttached:
         success_result = _default_success_result()
         join_posture = _make_posture_result(eligible=True, posture="join_runtime")
 
-        with patch(
-            "core.command_router.CommandRouter._execute_command",
-            new=AsyncMock(return_value=success_result),
-        ), patch(
-            "core.source_execution_eligibility.check_source_execution_eligibility",
-            return_value=join_posture,
+        with (
+            patch(
+                "core.command_router.CommandRouter._execute_command",
+                new=AsyncMock(return_value=success_result),
+            ),
+            patch(
+                "core.source_execution_eligibility.check_source_execution_eligibility",
+                return_value=join_posture,
+            ),
         ):
             result = _run(router.route_envelope(env))
 
@@ -617,15 +664,19 @@ class TestConstraintChainTraceAttached:
         ready_vr = _make_validation_result(registered=True, ready=True)
         join_posture = _make_posture_result(eligible=True, posture="join_runtime")
 
-        with patch(
-            "core.command_router.CommandRouter._execute_command",
-            new=AsyncMock(return_value=success_result),
-        ), patch(
-            "core.target_device_validator.validate_target_device",
-            return_value=ready_vr,
-        ), patch(
-            "core.source_execution_eligibility.check_source_execution_eligibility",
-            return_value=join_posture,
+        with (
+            patch(
+                "core.command_router.CommandRouter._execute_command",
+                new=AsyncMock(return_value=success_result),
+            ),
+            patch(
+                "core.target_device_validator.validate_target_device",
+                return_value=ready_vr,
+            ),
+            patch(
+                "core.source_execution_eligibility.check_source_execution_eligibility",
+                return_value=join_posture,
+            ),
         ):
             result = _run(router.route_envelope(env))
 
@@ -707,15 +758,19 @@ class TestCapabilityEnforcement:
         mock_path.is_reachable = True
         mock_path.path_state = "direct"
 
-        with patch(
-            "core.command_router.CommandRouter._execute_command",
-            new=AsyncMock(return_value=success_result),
-        ), patch(
-            "core.capability_network_runtime_policy.query_routable_executors",
-            return_value=[mock_executor],
-        ), patch(
-            "core.capability_network_runtime_policy.query_network_path",
-            return_value=mock_path,
+        with (
+            patch(
+                "core.command_router.CommandRouter._execute_command",
+                new=AsyncMock(return_value=success_result),
+            ),
+            patch(
+                "core.capability_network_runtime_policy.query_routable_executors",
+                return_value=[mock_executor],
+            ),
+            patch(
+                "core.capability_network_runtime_policy.query_network_path",
+                return_value=mock_path,
+            ),
         ):
             result = _run(router.route_envelope(env))
 
@@ -728,12 +783,15 @@ class TestCapabilityEnforcement:
         env = _make_envelope(targets=["dev-001"])
         success_result = _default_success_result()
 
-        with patch(
-            "core.command_router.CommandRouter._execute_command",
-            new=AsyncMock(return_value=success_result),
-        ), patch(
-            "core.capability_network_runtime_policy.query_routable_executors",
-            side_effect=ImportError("module not available"),
+        with (
+            patch(
+                "core.command_router.CommandRouter._execute_command",
+                new=AsyncMock(return_value=success_result),
+            ),
+            patch(
+                "core.capability_network_runtime_policy.query_routable_executors",
+                side_effect=ImportError("module not available"),
+            ),
         ):
             result = _run(router.route_envelope(env))
 
@@ -798,18 +856,22 @@ class TestUniformEnforcementSentinel:
 
     def test_sentinel_importable_from_command_router(self):
         from core.command_router import DISPATCH_CONSTRAINT_CHAIN_UNIFORM_ENFORCEMENT
+
         assert DISPATCH_CONSTRAINT_CHAIN_UNIFORM_ENFORCEMENT
 
     def test_sentinel_mentions_constraint_chain_trace(self):
         from core.command_router import DISPATCH_CONSTRAINT_CHAIN_UNIFORM_ENFORCEMENT
+
         assert "_constraint_chain_trace" in DISPATCH_CONSTRAINT_CHAIN_UNIFORM_ENFORCEMENT
 
     def test_sentinel_mentions_target_device_validator(self):
         from core.command_router import DISPATCH_CONSTRAINT_CHAIN_UNIFORM_ENFORCEMENT
+
         assert "target_device_validator" in DISPATCH_CONSTRAINT_CHAIN_UNIFORM_ENFORCEMENT
 
     def test_sentinel_mentions_source_execution_eligibility(self):
         from core.command_router import DISPATCH_CONSTRAINT_CHAIN_UNIFORM_ENFORCEMENT
+
         assert "source_execution_eligibility" in DISPATCH_CONSTRAINT_CHAIN_UNIFORM_ENFORCEMENT
 
 
@@ -823,16 +885,20 @@ class TestSessionTruthPostureFilterSentinel:
 
     def test_sentinel_importable_from_command_router(self):
         from core.command_router import SESSION_TRUTH_POSTURE_DISPATCH_FILTER_APPLIED
+
         assert SESSION_TRUTH_POSTURE_DISPATCH_FILTER_APPLIED
 
     def test_sentinel_mentions_source_runtime_posture_field(self):
         from core.command_router import SESSION_TRUTH_POSTURE_DISPATCH_FILTER_APPLIED
+
         assert "source_runtime_posture" in SESSION_TRUTH_POSTURE_DISPATCH_FILTER_APPLIED
 
     def test_sentinel_mentions_constraint_chain_trace(self):
         from core.command_router import SESSION_TRUTH_POSTURE_DISPATCH_FILTER_APPLIED
+
         assert "_constraint_chain_trace" in SESSION_TRUTH_POSTURE_DISPATCH_FILTER_APPLIED
 
     def test_sentinel_mentions_check_source_execution_eligibility(self):
         from core.command_router import SESSION_TRUTH_POSTURE_DISPATCH_FILTER_APPLIED
+
         assert "check_source_execution_eligibility" in SESSION_TRUTH_POSTURE_DISPATCH_FILTER_APPLIED

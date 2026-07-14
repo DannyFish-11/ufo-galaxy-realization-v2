@@ -341,78 +341,110 @@ SYSTEM_PLANE_REGISTRY: List[PlaneEntry] = [
     # -----------------------------------------------------------------------
     # CONTROL_PLANE — V2 orchestration and agent execution
     # -----------------------------------------------------------------------
-    PlaneEntry("core.openclawd", SystemPlane.CONTROL_PLANE,
-               "Primary orchestration hub; owns task lifecycle on V2 side"),
-    PlaneEntry("core.command_router", SystemPlane.CONTROL_PLANE,
-               "Routes commands from OpenClawd to device/execution layer"),
-    PlaneEntry("core.agent_factory", SystemPlane.CONTROL_PLANE,
-               "Agent instantiation and capability assignment"),
-    PlaneEntry("core.task_graph", SystemPlane.CONTROL_PLANE,
-               "Task dependency graph management"),
-    PlaneEntry("core.canonical_task", SystemPlane.CONTROL_PLANE,
-               "Canonical task data contract"),
-    PlaneEntry("core.canonical_task_dispatch_chain", SystemPlane.CONTROL_PLANE,
-               "Task dispatch chain in control plane"),
-    PlaneEntry("core.api_routes", SystemPlane.CONTROL_PLANE,
-               "REST API aggregation entry point"),
-    PlaneEntry("main", SystemPlane.CONTROL_PLANE,
-               "System startup and FastAPI app"),
-
+    PlaneEntry(
+        "core.openclawd", SystemPlane.CONTROL_PLANE, "Primary orchestration hub; owns task lifecycle on V2 side"
+    ),
+    PlaneEntry(
+        "core.command_router", SystemPlane.CONTROL_PLANE, "Routes commands from OpenClawd to device/execution layer"
+    ),
+    PlaneEntry("core.agent_factory", SystemPlane.CONTROL_PLANE, "Agent instantiation and capability assignment"),
+    PlaneEntry("core.task_graph", SystemPlane.CONTROL_PLANE, "Task dependency graph management"),
+    PlaneEntry("core.canonical_task", SystemPlane.CONTROL_PLANE, "Canonical task data contract"),
+    PlaneEntry("core.canonical_task_dispatch_chain", SystemPlane.CONTROL_PLANE, "Task dispatch chain in control plane"),
+    PlaneEntry("core.api_routes", SystemPlane.CONTROL_PLANE, "REST API aggregation entry point"),
+    PlaneEntry("main", SystemPlane.CONTROL_PLANE, "System startup and FastAPI app"),
     # -----------------------------------------------------------------------
     # EXECUTION_PLANE — Android-side execution (other repo)
     # -----------------------------------------------------------------------
-    PlaneEntry("android:GalaxyAndroidService", SystemPlane.EXECUTION_PLANE,
-               "Persistent background service; receives and executes commands"),
-    PlaneEntry("android:WebSocketClient", SystemPlane.EXECUTION_PLANE,
-               "Maintains persistent connection to V2 gateway"),
-    PlaneEntry("android:CommandDispatcher", SystemPlane.EXECUTION_PLANE,
-               "Dispatches commands to local capability handlers"),
-    PlaneEntry("android:AccessibilityService", SystemPlane.EXECUTION_PLANE,
-               "Provides screen/touch/keyboard capabilities"),
-    PlaneEntry("android:OfflineQueue", SystemPlane.EXECUTION_PLANE,
-               "Queues commands during disconnection for replay on reconnect"),
-
+    PlaneEntry(
+        "android:GalaxyAndroidService",
+        SystemPlane.EXECUTION_PLANE,
+        "Persistent background service; receives and executes commands",
+    ),
+    PlaneEntry("android:WebSocketClient", SystemPlane.EXECUTION_PLANE, "Maintains persistent connection to V2 gateway"),
+    PlaneEntry(
+        "android:CommandDispatcher", SystemPlane.EXECUTION_PLANE, "Dispatches commands to local capability handlers"
+    ),
+    PlaneEntry(
+        "android:AccessibilityService", SystemPlane.EXECUTION_PLANE, "Provides screen/touch/keyboard capabilities"
+    ),
+    PlaneEntry(
+        "android:OfflineQueue",
+        SystemPlane.EXECUTION_PLANE,
+        "Queues commands during disconnection for replay on reconnect",
+    ),
     # -----------------------------------------------------------------------
     # GATEWAY_TRANSPORT — V2/Android boundary layer
     # -----------------------------------------------------------------------
-    PlaneEntry("galaxy_gateway.routes.websocket", SystemPlane.GATEWAY_TRANSPORT,
-               "CANONICAL device ingress /ws/device/{device_id}"),
-    PlaneEntry("galaxy_gateway.routing.device_router", SystemPlane.GATEWAY_TRANSPORT,
-               "Device selection and WebSocket dispatch"),
-    PlaneEntry("galaxy_gateway.websocket_handler", SystemPlane.GATEWAY_TRANSPORT,
-               "WebSocket lifecycle management and dispatch_to_websocket"),
-    PlaneEntry("galaxy_gateway.protocol.aip_v3", SystemPlane.GATEWAY_TRANSPORT,
-               "AIP v3 message protocol (canonical cross-repo envelope)"),
-    PlaneEntry("core.android_bridge", SystemPlane.GATEWAY_TRANSPORT,
-               "Android device registration/heartbeat/disconnect handler (UDM write)"),
-    PlaneEntry("core.android_runtime_dispatch_binding", SystemPlane.GATEWAY_TRANSPORT,
-               "Binds Android runtime state updates to device dispatch"),
-
+    PlaneEntry(
+        "galaxy_gateway.routes.websocket",
+        SystemPlane.GATEWAY_TRANSPORT,
+        "CANONICAL device ingress /ws/device/{device_id}",
+    ),
+    PlaneEntry(
+        "galaxy_gateway.routing.device_router", SystemPlane.GATEWAY_TRANSPORT, "Device selection and WebSocket dispatch"
+    ),
+    PlaneEntry(
+        "galaxy_gateway.websocket_handler",
+        SystemPlane.GATEWAY_TRANSPORT,
+        "WebSocket lifecycle management and dispatch_to_websocket",
+    ),
+    PlaneEntry(
+        "galaxy_gateway.protocol.aip_v3",
+        SystemPlane.GATEWAY_TRANSPORT,
+        "AIP v3 message protocol (canonical cross-repo envelope)",
+    ),
+    PlaneEntry(
+        "core.android_bridge",
+        SystemPlane.GATEWAY_TRANSPORT,
+        "Android device registration/heartbeat/disconnect handler (UDM write)",
+    ),
+    PlaneEntry(
+        "core.android_runtime_dispatch_binding",
+        SystemPlane.GATEWAY_TRANSPORT,
+        "Binds Android runtime state updates to device dispatch",
+    ),
     # -----------------------------------------------------------------------
     # PROVIDER_PLANE — LLM and model routing
     # -----------------------------------------------------------------------
-    PlaneEntry("core.unified.llm_router", SystemPlane.PROVIDER_PLANE,
-               "UnifiedLLMRouter: sole legitimate model-access entry for orchestration"),
-    PlaneEntry("core.multi_llm_router", SystemPlane.PROVIDER_PLANE,
-               "MultiLLMRouter: execution backend for provider selection/failover"),
-    PlaneEntry("core.unified.config_manager", SystemPlane.PROVIDER_PLANE,
-               "Unified configuration management for provider layer"),
-
+    PlaneEntry(
+        "core.unified.llm_router",
+        SystemPlane.PROVIDER_PLANE,
+        "UnifiedLLMRouter: sole legitimate model-access entry for orchestration",
+    ),
+    PlaneEntry(
+        "core.multi_llm_router",
+        SystemPlane.PROVIDER_PLANE,
+        "MultiLLMRouter: execution backend for provider selection/failover",
+    ),
+    PlaneEntry(
+        "core.unified.config_manager", SystemPlane.PROVIDER_PLANE, "Unified configuration management for provider layer"
+    ),
     # -----------------------------------------------------------------------
     # TRUTH_CONTINUITY_PLANE — session, UDM, task truth, reconnect/replay
     # -----------------------------------------------------------------------
-    PlaneEntry("core.unified_runtime_truth_ingress", SystemPlane.TRUTH_CONTINUITY_PLANE,
-               "Ingest Android runtime state updates into UDM (NEAR_MAINLINE: additive, not hard-enforced)"),
-    PlaneEntry("core.canonical_completion_ingress", SystemPlane.TRUTH_CONTINUITY_PLANE,
-               "Canonical task result ingress; writes completion to session truth"),
-    PlaneEntry("core.canonical_session_truth", SystemPlane.TRUTH_CONTINUITY_PLANE,
-               "Session truth data contract"),
-    PlaneEntry("core.canonical_session_axis", SystemPlane.TRUTH_CONTINUITY_PLANE,
-               "Session identifier axis definition"),
-    PlaneEntry("core.device_registry", SystemPlane.TRUTH_CONTINUITY_PLANE,
-               "UDM — Unified Device Model: SSOT for device identity and state"),
-    PlaneEntry("core.attached_runtime_session_registry", SystemPlane.TRUTH_CONTINUITY_PLANE,
-               "Registry of active runtime sessions"),
+    PlaneEntry(
+        "core.unified_runtime_truth_ingress",
+        SystemPlane.TRUTH_CONTINUITY_PLANE,
+        "Ingest Android runtime state updates into UDM (NEAR_MAINLINE: additive, not hard-enforced)",
+    ),
+    PlaneEntry(
+        "core.canonical_completion_ingress",
+        SystemPlane.TRUTH_CONTINUITY_PLANE,
+        "Canonical task result ingress; writes completion to session truth",
+    ),
+    PlaneEntry("core.canonical_session_truth", SystemPlane.TRUTH_CONTINUITY_PLANE, "Session truth data contract"),
+    PlaneEntry("core.canonical_session_axis", SystemPlane.TRUTH_CONTINUITY_PLANE, "Session identifier axis definition"),
+    PlaneEntry(
+        "core.device_registry",
+        SystemPlane.TRUTH_CONTINUITY_PLANE,
+        "UDM — Unified Device Model: SSOT for device identity and state",
+    ),
+    PlaneEntry(
+        "core.attached_runtime_session_registry",
+        SystemPlane.TRUTH_CONTINUITY_PLANE,
+        "Registry of active runtime sessions",
+    ),
 ]
 
 
@@ -471,7 +503,6 @@ MODULE_SEMANTIC_TYPE_REGISTRY: List[ModuleSemanticEntry] = [
         ModuleSemanticType.RUNTIME_CRITICAL,
         notes="REST API aggregation; loaded at startup",
     ),
-
     # -----------------------------------------------------------------------
     # SEMI_EXECUTABLE — callable guards/gates, only invoked explicitly
     # -----------------------------------------------------------------------
@@ -548,7 +579,6 @@ MODULE_SEMANTIC_TYPE_REGISTRY: List[ModuleSemanticEntry] = [
         naming_pattern="INVARIANT",
         notes="Contains callable invariant checkers; invoked in tests/CI only.",
     ),
-
     # -----------------------------------------------------------------------
     # DECLARATIVE — sentinel strings, policy labels, snapshots
     # -----------------------------------------------------------------------
@@ -747,7 +777,8 @@ WORKSTREAM_GAP_REGISTRY: List[WorkstreamGapEntry] = [
     ),
     WorkstreamGapEntry(
         gap_id="GAP_DURABLE_TRUTH_AUTHORITY_CONVERGENCE",
-        title="Session truth, task lifecycle, and result continuity form parallel persistence fragments rather than a unified authority chain",
+        title="Session truth, task lifecycle, and result continuity form parallel "
+        "persistence fragments rather than a unified authority chain",
         severity=GapSeverity.P1,
         description=(
             "After PR-1 (GAP_V2_TRUTH_PERSISTENCE closure), V2 gained "
@@ -781,7 +812,8 @@ WORKSTREAM_GAP_REGISTRY: List[WorkstreamGapEntry] = [
     ),
     WorkstreamGapEntry(
         gap_id="GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION",
-        title="Multi-device, delegated takeover, and failure/recovery paths lack automated network-level integration assurance",
+        title="Multi-device, delegated takeover, and failure/recovery paths lack "
+        "automated network-level integration assurance",
         severity=GapSeverity.P0,
         description=(
             "Existing separated-process E2E covers the single-participant "
@@ -851,19 +883,12 @@ def list_modules_by_plane(plane: SystemPlane) -> List[str]:
 
 def list_modules_by_semantic_type(semantic_type: ModuleSemanticType) -> List[str]:
     """Return sorted list of module paths with *semantic_type*."""
-    return sorted(
-        e.module_path
-        for e in MODULE_SEMANTIC_TYPE_REGISTRY
-        if e.semantic_type == semantic_type
-    )
+    return sorted(e.module_path for e in MODULE_SEMANTIC_TYPE_REGISTRY if e.semantic_type == semantic_type)
 
 
 def list_open_gaps_by_severity(severity: GapSeverity) -> List[WorkstreamGapEntry]:
     """Return all open (unresolved) gaps with *severity*."""
-    return [
-        e for e in WORKSTREAM_GAP_REGISTRY
-        if e.severity == severity and not e.resolved
-    ]
+    return [e for e in WORKSTREAM_GAP_REGISTRY if e.severity == severity and not e.resolved]
 
 
 def build_system_map_snapshot() -> dict:

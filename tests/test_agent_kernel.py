@@ -22,18 +22,21 @@ import pytest
 
 # ─────────────────────────── PolicyLoader ───────────────────────────
 
+
 class TestPolicyLoader:
     """策略文件加载器测试。"""
 
     def setup_method(self):
         """每个测试前重置单例缓存。"""
         from core.agent.policy_loader import PolicyLoader
+
         # 重置单例以确保测试隔离
         PolicyLoader._instance = None
 
     def test_get_soul_returns_string(self):
         """get_soul() 返回字符串（文件存在时非空）。"""
         from core.agent.policy_loader import get_soul
+
         content = get_soul()
         assert isinstance(content, str)
         assert len(content) > 0, "SOUL.md 应当有内容"
@@ -41,6 +44,7 @@ class TestPolicyLoader:
     def test_get_agents_returns_string(self):
         """get_agents() 返回字符串（文件存在时非空）。"""
         from core.agent.policy_loader import get_agents
+
         content = get_agents()
         assert isinstance(content, str)
         assert len(content) > 0, "AGENTS.md 应当有内容"
@@ -48,6 +52,7 @@ class TestPolicyLoader:
     def test_get_user_returns_string(self):
         """get_user() 返回字符串（文件存在时非空）。"""
         from core.agent.policy_loader import get_user
+
         content = get_user()
         assert isinstance(content, str)
         assert len(content) > 0, "USER.md 应当有内容"
@@ -55,6 +60,7 @@ class TestPolicyLoader:
     def test_missing_policy_returns_empty(self, tmp_path, monkeypatch):
         """策略文件不存在时返回空字符串，不抛出异常。"""
         from core.agent import policy_loader
+
         monkeypatch.setattr(policy_loader, "_POLICIES_DIR", tmp_path)
         # 重置单例
         policy_loader._loader = policy_loader.PolicyLoader.__new__(policy_loader.PolicyLoader)
@@ -68,6 +74,7 @@ class TestPolicyLoader:
     def test_reload_clears_cache(self):
         """reload() 清除缓存，下次访问重新读取。"""
         from core.agent import policy_loader as pl
+
         # 使用模块级 _loader（唯一真正的单例）
         loader = pl._loader
         # 先加载一次填充缓存
@@ -79,6 +86,7 @@ class TestPolicyLoader:
     def test_caching_returns_same_content(self):
         """连续两次调用返回相同内容（缓存命中）。"""
         from core.agent.policy_loader import get_soul
+
         first = get_soul()
         second = get_soul()
         assert first == second
@@ -86,23 +94,27 @@ class TestPolicyLoader:
     def test_soul_content_contains_key_sections(self):
         """SOUL.md 内容应包含角色定义和能力边界章节。"""
         from core.agent.policy_loader import get_soul
+
         content = get_soul()
         assert "角色定义" in content or "role" in content.lower()
 
     def test_agents_content_contains_workflow(self):
         """AGENTS.md 应包含工作流程相关内容。"""
         from core.agent.policy_loader import get_agents
+
         content = get_agents()
         assert "工作流程" in content or "workflow" in content.lower()
 
     def test_user_content_contains_preferences(self):
         """USER.md 应包含偏好相关内容。"""
         from core.agent.policy_loader import get_user
+
         content = get_user()
         assert "偏好" in content or "preference" in content.lower()
 
 
 # ─────────────────────────── IntentRouter ───────────────────────────
+
 
 class TestIntentRouter:
     """意图路由器测试。"""
@@ -110,6 +122,7 @@ class TestIntentRouter:
     @pytest.fixture
     def router(self):
         from core.agent.intent_router import IntentRouter
+
         return IntentRouter(llm_router=None)
 
     @pytest.mark.asyncio
@@ -184,23 +197,27 @@ class TestIntentRouter:
 
 # ─────────────────────────── CapabilityRegistry ───────────────────────────
 
+
 class TestCapabilityRegistry:
     """能力注册表测试。"""
 
     def setup_method(self):
         from core.agent.capability_registry import CapabilityRegistry
+
         CapabilityRegistry._instance = None
 
     def test_singleton(self):
         """CapabilityRegistry 应为单例。"""
         from core.agent.capability_registry import CapabilityRegistry
+
         a = CapabilityRegistry()
         b = CapabilityRegistry()
         assert a is b
 
     def test_register_and_get(self):
         """手动注册能力后可通过 get() 获取。"""
-        from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
+        from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
+
         reg = CapabilityRegistry()
         item = CapabilityItem(
             name="test_tool",
@@ -214,7 +231,8 @@ class TestCapabilityRegistry:
 
     def test_find_by_keyword(self):
         """find() 应按关键词搜索名称和描述。"""
-        from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
+        from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
+
         reg = CapabilityRegistry()
         reg.register(CapabilityItem(name="file_writer", description="写入文件", source="test"))
         results = reg.find("文件")
@@ -222,7 +240,8 @@ class TestCapabilityRegistry:
 
     def test_list_tools_returns_available_only(self):
         """list_tools() 只返回 available=True 的条目。"""
-        from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
+        from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
+
         reg = CapabilityRegistry()
         reg.register(CapabilityItem(name="online_tool", description="在线工具", source="test", available=True))
         reg.register(CapabilityItem(name="offline_tool", description="离线工具", source="test", available=False))
@@ -233,7 +252,8 @@ class TestCapabilityRegistry:
 
     def test_to_tool_schemas(self):
         """to_tool_schemas() 返回正确的 OpenAI function calling 格式。"""
-        from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
+        from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
+
         reg = CapabilityRegistry()
         reg.register(CapabilityItem(name="my_func", description="测试函数", source="test"))
         schemas = reg.to_tool_schemas()
@@ -244,7 +264,8 @@ class TestCapabilityRegistry:
 
     def test_stats(self):
         """stats() 返回正确的统计信息。"""
-        from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
+        from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
+
         reg = CapabilityRegistry()
         # 清空
         reg._items.clear()
@@ -259,29 +280,35 @@ class TestCapabilityRegistry:
     async def test_refresh_with_mocked_loaders(self):
         """refresh() 在 MCP/Skill/Gateway 均不可用时不崩溃。"""
         from core.agent.capability_registry import CapabilityRegistry
+
         reg = CapabilityRegistry()
         reg._items.clear()
         reg._last_refresh = 0.0
         # 所有依赖均 mock 失败
-        with patch("core.agent.capability_registry.CapabilityRegistry._load_mcp", new_callable=AsyncMock) as m_mcp, \
-             patch("core.agent.capability_registry.CapabilityRegistry._load_skills", new_callable=AsyncMock) as m_skill, \
-             patch("core.agent.capability_registry.CapabilityRegistry._load_gateway", new_callable=AsyncMock) as m_gw:
+        with (
+            patch("core.agent.capability_registry.CapabilityRegistry._load_mcp", new_callable=AsyncMock) as m_mcp,
+            patch("core.agent.capability_registry.CapabilityRegistry._load_skills", new_callable=AsyncMock) as m_skill,
+            patch("core.agent.capability_registry.CapabilityRegistry._load_gateway", new_callable=AsyncMock) as m_gw,
+        ):
             await reg.refresh(force=True)
         # 不抛出异常即通过
 
 
 # ─────────────────────────── AgentKernel ───────────────────────────
 
+
 class TestAgentKernel:
     """统一智能体内核测试。"""
 
     def setup_method(self):
         from core.agent.kernel import AgentKernel
+
         AgentKernel._instance = None
 
     def test_singleton(self):
         """AgentKernel 应为单例。"""
         from core.agent.kernel import AgentKernel, get_kernel
+
         a = get_kernel()
         b = get_kernel()
         assert a is b
@@ -307,14 +334,15 @@ class TestAgentKernel:
 
         # Mock _handle_chat 以避免需要真实 LLM
         async def fake_handle_chat(message, session_id, context, user_policy, task_hint="", **kwargs):
-            from core.agent.kernel import KernelResponse
             from core.agent.intent_router import IntentMode
-            return KernelResponse(
-                success=True, mode=IntentMode.CHAT_ONLY, reply="你好！"
-            )
+            from core.agent.kernel import KernelResponse
 
-        with patch.object(kernel, "_handle_chat", side_effect=fake_handle_chat), \
-             patch.object(PolicyLoader, "get_soul", tracking_soul):
+            return KernelResponse(success=True, mode=IntentMode.CHAT_ONLY, reply="你好！")
+
+        with (
+            patch.object(kernel, "_handle_chat", side_effect=fake_handle_chat),
+            patch.object(PolicyLoader, "get_soul", tracking_soul),
+        ):
             result = await kernel.handle_message("你好，今天天气怎么样？")
 
         # 聊天路径不应调用 get_soul
@@ -341,18 +369,21 @@ class TestAgentKernel:
         kernel = kernel_mod.get_kernel()
 
         # Mock execution planner to avoid real agent calls
-        from core.agent.execution_planner import ExecutionResult, ExecutionPlanner
+        from core.agent.execution_planner import ExecutionPlanner, ExecutionResult
 
         async def fake_execute(plan, **kwargs):
             from core.agent.intent_router import IntentMode
+
             return ExecutionResult(
                 success=True,
                 mode="single_agent",
                 reply="截图已完成",
             )
 
-        with patch.object(ExecutionPlanner, "execute", side_effect=fake_execute), \
-             patch.object(PolicyLoader, "get_soul", tracking_soul):
+        with (
+            patch.object(ExecutionPlanner, "execute", side_effect=fake_execute),
+            patch.object(PolicyLoader, "get_soul", tracking_soul),
+        ):
             result = await kernel.handle_message("帮我截图")
 
         # 执行路径必须调用 get_soul
@@ -363,17 +394,15 @@ class TestAgentKernel:
     async def test_kernel_response_has_required_fields(self):
         """KernelResponse 必须包含所有规定字段。"""
         from core.agent import kernel as kernel_mod
-        from core.agent.kernel import KernelResponse
         from core.agent.intent_router import IntentMode
+        from core.agent.kernel import KernelResponse
 
         kernel_mod._kernel = None
         kernel_mod.AgentKernel._instance = None
         kernel = kernel_mod.get_kernel()
 
         async def fake_handle_chat(message, session_id, context, user_policy, task_hint="", **kwargs):
-            return KernelResponse(
-                success=True, mode=IntentMode.CHAT_ONLY, reply="测试回复"
-            )
+            return KernelResponse(success=True, mode=IntentMode.CHAT_ONLY, reply="测试回复")
 
         with patch.object(kernel, "_handle_chat", side_effect=fake_handle_chat):
             result = await kernel.handle_message("你好")
@@ -407,8 +436,8 @@ class TestAgentKernel:
     @pytest.mark.asyncio
     async def test_to_api_dict_compatibility(self):
         """to_api_dict() 必须包含向后兼容的 'response' 字段。"""
-        from core.agent.kernel import KernelResponse
         from core.agent.intent_router import IntentResult
+        from core.agent.kernel import KernelResponse
 
         resp = KernelResponse(
             success=True,
@@ -426,6 +455,7 @@ class TestAgentKernel:
     def test_get_status_returns_dict(self):
         """get_status() 返回包含内核关键信息的 dict。"""
         from core.agent import kernel as kernel_mod
+
         kernel_mod._kernel = None
         kernel_mod.AgentKernel._instance = None
         kernel = kernel_mod.get_kernel()
@@ -438,14 +468,15 @@ class TestAgentKernel:
 
 # ─────────────────────────── SOUL 注入约束 ───────────────────────────
 
+
 class TestSoulInjectionConstraint:
     """验证 SOUL 仅在执行链路注入的核心约束。"""
 
     @pytest.mark.asyncio
     async def test_soul_not_in_chat_plan(self):
         """chat_only 意图构建的执行计划不应包含 SOUL 内容。"""
+        from core.agent.intent_router import IntentMode, IntentResult
         from core.agent.kernel import AgentKernel
-        from core.agent.intent_router import IntentResult, IntentMode
 
         AgentKernel._instance = None
         kernel = AgentKernel()
@@ -467,14 +498,16 @@ class TestSoulInjectionConstraint:
 
         async def fake_chat(message, session_id, context, user_policy, task_hint="", **kwargs):
             from core.agent.kernel import KernelResponse
+
             return KernelResponse(success=True, mode="chat_only", reply="ok")
 
-        with patch("core.agent.kernel.get_soul", spy_soul), \
-             patch.object(kernel, "_handle_chat", side_effect=fake_chat), \
-             patch("core.agent.kernel.get_agents", return_value="agents"), \
-             patch("core.agent.kernel.get_user", return_value="user"), \
-             patch.object(kernel._intent_router, "route",
-                          new_callable=AsyncMock, return_value=chat_intent):
+        with (
+            patch("core.agent.kernel.get_soul", spy_soul),
+            patch.object(kernel, "_handle_chat", side_effect=fake_chat),
+            patch("core.agent.kernel.get_agents", return_value="agents"),
+            patch("core.agent.kernel.get_user", return_value="user"),
+            patch.object(kernel._intent_router, "route", new_callable=AsyncMock, return_value=chat_intent),
+        ):
             await kernel._process("你好", "s1", "", "", "", [])
 
         assert len(soul_loaded) == 0, "chat_only 路径中 get_soul 不应被调用"
@@ -482,9 +515,9 @@ class TestSoulInjectionConstraint:
     @pytest.mark.asyncio
     async def test_soul_in_task_execution_plan(self):
         """task_execute 意图应将 SOUL 内容注入执行计划。"""
-        from core.agent.kernel import AgentKernel
-        from core.agent.intent_router import IntentResult, IntentMode
         from core.agent.execution_planner import ExecutionPlanner, ExecutionResult
+        from core.agent.intent_router import IntentMode, IntentResult
+        from core.agent.kernel import AgentKernel
 
         AgentKernel._instance = None
         kernel = AgentKernel()
@@ -502,14 +535,14 @@ class TestSoulInjectionConstraint:
             received_plans.append(plan)
             return ExecutionResult(success=True, mode="single_agent", reply="ok")
 
-        with patch.object(kernel._intent_router, "route",
-                          new_callable=AsyncMock, return_value=task_intent), \
-             patch.object(kernel._planner, "execute", side_effect=capture_plan), \
-             patch("core.agent.kernel.get_soul", return_value="SOUL_CONTENT"), \
-             patch("core.agent.kernel.get_agents", return_value="agents"), \
-             patch("core.agent.kernel.get_user", return_value="user"):
+        with (
+            patch.object(kernel._intent_router, "route", new_callable=AsyncMock, return_value=task_intent),
+            patch.object(kernel._planner, "execute", side_effect=capture_plan),
+            patch("core.agent.kernel.get_soul", return_value="SOUL_CONTENT"),
+            patch("core.agent.kernel.get_agents", return_value="agents"),
+            patch("core.agent.kernel.get_user", return_value="user"),
+        ):
             await kernel._process("帮我截图", "s1", "", "", "", [])
 
         assert len(received_plans) == 1
-        assert received_plans[0].soul_policy == "SOUL_CONTENT", \
-            "task_execute 计划必须包含 SOUL 内容"
+        assert received_plans[0].soul_policy == "SOUL_CONTENT", "task_execute 计划必须包含 SOUL 内容"

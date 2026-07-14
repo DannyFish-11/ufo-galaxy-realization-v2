@@ -39,8 +39,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from core.routes._shared import connection_manager, task_queue
 from core.routes._models import TaskRequest
+from core.routes._shared import connection_manager, task_queue
 
 logger = logging.getLogger("Galaxy.API")
 
@@ -134,16 +134,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 "session_id": req.session_id,
             },
         )
-        _effective_control_session_id = (
-            req.control_session_id or _session_identity.control_session_id
-        )
+        _effective_control_session_id = req.control_session_id or _session_identity.control_session_id
         # PR-507: Front-load canonical task creation — CanonicalTask is the
         # primary ontology object; task_id/trace_id flow from its identity.
         task_id: Optional[str] = None
         trace_id: Optional[str] = None
         try:
-            from core.task_adapter import adapt_to_canonical_task
             from core.canonical_task import TaskOrigin
+            from core.task_adapter import adapt_to_canonical_task
+
             _canonical = adapt_to_canonical_task(
                 {
                     "task_type": req.task_type,
@@ -158,12 +157,14 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             trace_id = _canonical.identity.trace_id
             logger.debug(
                 "create_task: CanonicalTask front-loaded task_id=%s trace_id=%s",
-                task_id, trace_id,
+                task_id,
+                trace_id,
             )
             # PR-513 / GAP-512-001: Record TaskExecutionRecord in ReplayFoundation
             # so API-ingressed tasks have complete audit lineage.
             try:
                 from core.replay_foundation import record_task_execution
+
                 record_task_execution(_canonical)
             except Exception as _rep_err:
                 logger.debug(
@@ -202,6 +203,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             try:
                 from core.command_router import get_command_router
                 from core.schemas.task_envelope import TaskEnvelope
+
                 cmd_router = get_command_router()
                 envelope = TaskEnvelope(
                     task_id=task_id,
@@ -221,16 +223,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 # non-None, non-error result.  An explicit error result (a dict
                 # with status="error" or similar) is treated as a failure so
                 # the compat fallback can still run.
-                if result is not None and (
-                    not isinstance(result, dict)
-                    or result.get("status") != "error"
-                ):
+                if result is not None and (not isinstance(result, dict) or result.get("status") != "error"):
                     task["status"] = "sent"
                     task["dispatch_authority"] = "canonical_command_router"
                     canonical_dispatched = True
-                    logger.debug(
-                        "create_task: routed via CommandRouter.route_envelope task_id=%s", task_id
-                    )
+                    logger.debug("create_task: routed via CommandRouter.route_envelope task_id=%s", task_id)
             except Exception as _router_err:
                 logger.debug(
                     "create_task: CommandRouter.route_envelope unavailable (%s), "
@@ -255,25 +252,23 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 except Exception as _guardrail_exc:
                     logger.debug("create_task: legacy guardrail emission skipped - %s", _guardrail_exc)
 
-                await connection_manager.send_to_device(req.device_id, {
-                    "type": "task",
-                    "task_id": task_id,
-                    "trace_id": trace_id,
-                    "task_type": req.task_type,
-                    "payload": req.payload,
-                    "conversation_session_id": _session_identity.conversation_session_id,
-                    "control_session_id": _effective_control_session_id,
-                    "runtime_attachment_session_id": _session_identity.runtime_attachment_session_id,
-                })
+                await connection_manager.send_to_device(
+                    req.device_id,
+                    {
+                        "type": "task",
+                        "task_id": task_id,
+                        "trace_id": trace_id,
+                        "task_type": req.task_type,
+                        "payload": req.payload,
+                        "conversation_session_id": _session_identity.conversation_session_id,
+                        "control_session_id": _effective_control_session_id,
+                        "runtime_attachment_session_id": _session_identity.runtime_attachment_session_id,
+                    },
+                )
                 task["status"] = "sent"
                 task["dispatch_authority"] = "compat_route_adapter"
 
-        return JSONResponse({
-            "success": True,
-            "task_id": task_id,
-            "trace_id": trace_id,
-            "status": task["status"]
-        })
+        return JSONResponse({"success": True, "task_id": task_id, "trace_id": trace_id, "status": task["status"]})
 
     @router.get("/api/v1/tasks/{task_id}")
     async def get_task(task_id: str):
@@ -289,10 +284,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         if status:
             tasks = [t for t in tasks if t.get("status") == status]
         tasks.sort(key=lambda t: t.get("created_at", ""), reverse=True)
-        return JSONResponse({
-            "tasks": tasks[:limit],
-            "total": len(tasks)
-        })
+        return JSONResponse({"tasks": tasks[:limit], "total": len(tasks)})
 
     @router.post("/api/v1/tasks/{task_id}/result")
     async def submit_task_result(task_id: str, payload: Optional[TaskResultPayload] = None):
@@ -319,7 +311,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         if task_id not in task_queue:
             raise HTTPException(status_code=404, detail="任务未找到")
 
-        raw_status = (payload.status if payload else None)
+        raw_status = payload.status if payload else None
         canonical_status = _map_result_status(raw_status)
 
         task_queue[task_id]["status"] = canonical_status
@@ -338,6 +330,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 ResultSourceChannel,
                 ingest_result_async,
             )
+
             _raw_msg: Dict[str, Any] = {
                 "task_id": task_id,
                 "status": canonical_status,
@@ -381,10 +374,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             logger.warning(
                 "submit_task_result: unified ingress unavailable, "
                 "falling back to CanonicalTaskRuntime sync: task_id=%s error=%s",
-                task_id, _ingress_err,
+                task_id,
+                _ingress_err,
             )
             try:
-                from core.canonical_task import get_canonical_task_runtime, TaskLifecycle
+                from core.canonical_task import TaskLifecycle, get_canonical_task_runtime
+
                 _runtime = get_canonical_task_runtime()
                 _status_lower = canonical_status.lower()
                 if _status_lower == "failed":
@@ -398,24 +393,18 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 _runtime.update_lifecycle(task_id, _target)
             except Exception as _sync_err:
                 logger.warning(
-                    "submit_task_result: CanonicalTaskRuntime sync also failed "
-                    "task_id=%s error=%s",
-                    task_id, _sync_err,
+                    "submit_task_result: CanonicalTaskRuntime sync also failed " "task_id=%s error=%s",
+                    task_id,
+                    _sync_err,
                 )
 
         return {
             "success": True,
             "status": canonical_status,
-            "completion_notified": bool(
-                getattr(_ingress_outcome, "completion_notified", False)
-            ),
+            "completion_notified": bool(getattr(_ingress_outcome, "completion_notified", False)),
             "fully_closed": bool(getattr(_ingress_outcome, "is_fully_closed", False)),
-            "evidence_acceptance_verdict": str(
-                getattr(_ingress_outcome, "evidence_acceptance_verdict", "") or ""
-            ),
-            "closure_pending_reason": str(
-                getattr(_ingress_outcome, "incomplete_reason", "") or ""
-            ),
+            "evidence_acceptance_verdict": str(getattr(_ingress_outcome, "evidence_acceptance_verdict", "") or ""),
+            "closure_pending_reason": str(getattr(_ingress_outcome, "incomplete_reason", "") or ""),
         }
 
     @router.delete("/api/v1/tasks/{task_id}/cancel")
@@ -440,6 +429,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         # Register cancellation in OpenClawd (idempotent)
         try:
             from core.openclawd import get_openclawd
+
             clawd = get_openclawd()
             clawd.cancel_task(task_id)
         except Exception as _e:
@@ -451,19 +441,23 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             )
 
         if already_terminal:
-            return JSONResponse({
+            return JSONResponse(
+                {
+                    "success": True,
+                    "task_id": task_id,
+                    "message": f"任务 {task_id} 已处于终态，取消为幂等操作",
+                    "idempotent": True,
+                }
+            )
+
+        return JSONResponse(
+            {
                 "success": True,
                 "task_id": task_id,
-                "message": f"任务 {task_id} 已处于终态，取消为幂等操作",
-                "idempotent": True,
-            })
-
-        return JSONResponse({
-            "success": True,
-            "task_id": task_id,
-            "message": f"任务 {task_id} 已标记为取消",
-            "idempotent": False,
-        })
+                "message": f"任务 {task_id} 已标记为取消",
+                "idempotent": False,
+            }
+        )
 
     @router.delete("/api/v1/tasks/groups/{group_id}/cancel")
     @router.post("/api/v1/tasks/groups/{group_id}/cancel")
@@ -475,17 +469,20 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """
         try:
             from core.openclawd import get_openclawd
+
             clawd = get_openclawd()
             newly_cancelled = clawd.cancel_group(group_id)
         except Exception as _e:
             logger.warning("cancel_group: OpenClawd cancel_registry update failed: %s", _e)
             newly_cancelled = False
 
-        return JSONResponse({
-            "success": True,
-            "group_id": group_id,
-            "message": f"任务组 {group_id} 已标记为取消",
-            "idempotent": not newly_cancelled,
-        })
+        return JSONResponse(
+            {
+                "success": True,
+                "group_id": group_id,
+                "message": f"任务组 {group_id} 已标记为取消",
+                "idempotent": not newly_cancelled,
+            }
+        )
 
     return router

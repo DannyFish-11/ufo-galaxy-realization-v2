@@ -41,11 +41,10 @@ from datetime import datetime
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-
 from core.routes._shared import (
     connection_manager,
-    registered_devices,
     node_status_cache,
+    registered_devices,
     task_queue,
 )
 
@@ -56,9 +55,12 @@ logger = logging.getLogger("Galaxy.API")
 # rather than the legacy node_status_cache compat store.
 try:
     from core.node_final_boundary_enforcement import (  # noqa: F401
-        get_node_count_from_canonical_source as _get_node_count_from_canonical_source,
         SYSTEM_STATUS_NODES_COUNT_MUST_PREFER_CANONICAL_REGISTRY_POLICY as _NODE_COUNT_POLICY,
     )
+    from core.node_final_boundary_enforcement import (  # noqa: F401
+        get_node_count_from_canonical_source as _get_node_count_from_canonical_source,
+    )
+
     _CANONICAL_NODE_COUNT_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _CANONICAL_NODE_COUNT_AVAILABLE = False
@@ -88,37 +90,39 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 "node_count_source": "compat_fallback:node_status_cache",
             }
 
-        return JSONResponse({
-            "status": "running",
-            "version": "2.0.0",
-            "timestamp": datetime.now().isoformat(),
-            "services": services,
-            "devices": {
-                "registered": len(registered_devices),
-                "online": len(connection_manager.online_device_ids()),
-                "list": [
-                    {
-                        "device_id": did,
-                        "device_name": info.get("device_name", ""),
-                        "device_type": info.get("device_type", ""),
-                        "online": connection_manager.is_online(did),
-                        "last_seen": info.get("last_seen", "")
-                    }
-                    for did, info in registered_devices.items()
-                ]
-            },
-            "nodes": {
-                "total": _node_counts["total"],
-                "active": _node_counts["active"],
-                "node_count_source": _node_counts.get("node_count_source", "unknown"),
-            },
-            "tasks": {
-                "total": len(task_queue),
-                "pending": sum(1 for t in task_queue.values() if t.get("status") == "pending"),
-                "running": sum(1 for t in task_queue.values() if t.get("status") == "running"),
-                "completed": sum(1 for t in task_queue.values() if t.get("status") == "completed")
+        return JSONResponse(
+            {
+                "status": "running",
+                "version": "2.0.0",
+                "timestamp": datetime.now().isoformat(),
+                "services": services,
+                "devices": {
+                    "registered": len(registered_devices),
+                    "online": len(connection_manager.online_device_ids()),
+                    "list": [
+                        {
+                            "device_id": did,
+                            "device_name": info.get("device_name", ""),
+                            "device_type": info.get("device_type", ""),
+                            "online": connection_manager.is_online(did),
+                            "last_seen": info.get("last_seen", ""),
+                        }
+                        for did, info in registered_devices.items()
+                    ],
+                },
+                "nodes": {
+                    "total": _node_counts["total"],
+                    "active": _node_counts["active"],
+                    "node_count_source": _node_counts.get("node_count_source", "unknown"),
+                },
+                "tasks": {
+                    "total": len(task_queue),
+                    "pending": sum(1 for t in task_queue.values() if t.get("status") == "pending"),
+                    "running": sum(1 for t in task_queue.values() if t.get("status") == "running"),
+                    "completed": sum(1 for t in task_queue.values() if t.get("status") == "completed"),
+                },
             }
-        })
+        )
 
     @router.get("/api/v1/system/subsystems")
     async def system_subsystems():
@@ -128,12 +132,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         # Agent Factory
         try:
             from core.agent_factory import get_agent_factory
+
             factory = get_agent_factory()
-            agents = factory.list_agents() if hasattr(factory, 'list_agents') else {}
+            agents = factory.list_agents() if hasattr(factory, "list_agents") else {}
             subsystems["agent_factory"] = {
                 "status": "running",
                 "agent_count": len(agents),
-                "max_agents": getattr(factory, 'MAX_AGENTS', None),
+                "max_agents": getattr(factory, "MAX_AGENTS", None),
             }
         except Exception as e:
             logger.debug("Fallback triggered: %s", e)
@@ -142,8 +147,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         # LLM Router
         try:
             from core.llm.route_authority import get_llm_route_authority
+
             router_inst = get_llm_route_authority().execution_router
-            router_status = router_inst.get_status() if hasattr(router_inst, 'get_status') else {}
+            router_status = router_inst.get_status() if hasattr(router_inst, "get_status") else {}
             subsystems["llm_router"] = {
                 "status": "running",
                 "details": router_status,
@@ -155,6 +161,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         # Node Registry — canonical runtime authority only.
         try:
             from core.nodes.node_fabric_registry import get_node_fabric_registry
+
             fab = get_node_fabric_registry()
             canonical_count = fab.count()
             subsystems["node_registry"] = {
@@ -169,10 +176,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         # Monitoring
         try:
             from core.monitoring import get_monitoring_manager
+
             mon = get_monitoring_manager()
             subsystems["monitoring"] = {
                 "status": "running",
-                "details": mon.get_status() if hasattr(mon, 'get_status') else {},
+                "details": mon.get_status() if hasattr(mon, "get_status") else {},
             }
         except Exception as e:
             logger.debug("Fallback triggered: %s", e)
@@ -181,7 +189,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         # Cache
         try:
             import core.cache as _cache_mod
-            instance = getattr(_cache_mod, '_cache_instance', None)
+
+            instance = getattr(_cache_mod, "_cache_instance", None)
             subsystems["cache"] = {
                 "status": "running" if instance else "not_initialized",
             }
@@ -189,10 +198,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             logger.debug("Fallback triggered: %s", e)
             subsystems["cache"] = {"status": "error", "error": str(e)}
 
-        return JSONResponse({
-            "timestamp": datetime.now().isoformat(),
-            "subsystems": subsystems,
-        })
+        return JSONResponse(
+            {
+                "timestamp": datetime.now().isoformat(),
+                "subsystems": subsystems,
+            }
+        )
 
     @router.get("/api/v1/system/completion-status")
     async def system_completion_status():
@@ -238,34 +249,39 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """获取所有活跃 Agent 状态"""
         try:
             from core.agent_factory import get_agent_factory
+
             factory = get_agent_factory()
-            agents = factory.list_agents() if hasattr(factory, 'list_agents') else {}
+            agents = factory.list_agents() if hasattr(factory, "list_agents") else {}
             agent_list = []
             for agent_id, agent in agents.items():
                 agent_info = {
                     "agent_id": agent_id,
-                    "state": agent.state.value if hasattr(agent.state, 'value') else str(agent.state),
-                    "role": getattr(agent, 'role', None),
-                    "parent_id": getattr(agent, 'parent_id', None),
-                    "created_at": getattr(agent, 'created_at', None),
+                    "state": agent.state.value if hasattr(agent.state, "value") else str(agent.state),
+                    "role": getattr(agent, "role", None),
+                    "parent_id": getattr(agent, "parent_id", None),
+                    "created_at": getattr(agent, "created_at", None),
                 }
-                if hasattr(agent, 'metrics') and agent.metrics:
+                if hasattr(agent, "metrics") and agent.metrics:
                     agent_info["metrics"] = {
-                        k: v for k, v in agent.metrics.items()
-                        if isinstance(v, (int, float, str, bool))
+                        k: v for k, v in agent.metrics.items() if isinstance(v, (int, float, str, bool))
                     }
                 agent_list.append(agent_info)
-            return JSONResponse({
-                "timestamp": datetime.now().isoformat(),
-                "total": len(agent_list),
-                "agents": agent_list,
-            })
+            return JSONResponse(
+                {
+                    "timestamp": datetime.now().isoformat(),
+                    "total": len(agent_list),
+                    "agents": agent_list,
+                }
+            )
         except Exception as e:
-            return JSONResponse({
-                "timestamp": datetime.now().isoformat(),
-                "error": str(e),
-                "agents": [],
-            }, status_code=500)
+            return JSONResponse(
+                {
+                    "timestamp": datetime.now().isoformat(),
+                    "error": str(e),
+                    "agents": [],
+                },
+                status_code=500,
+            )
 
     @router.get("/api/v1/nodes/status")
     async def nodes_status():
@@ -276,36 +292,44 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             # Primary: read from canonical NodeFabricRegistry
             try:
                 from core.nodes.node_fabric_registry import get_node_fabric_registry
+
                 fab = get_node_fabric_registry()
                 for n in fab.list_nodes():
-                    node_list.append({
-                        "node_id": n.node_id,
-                        "name": n.metadata.get("name", n.node_id) if isinstance(n.metadata, dict) else n.node_id,
-                        "status": n.status.value if hasattr(n.status, "value") else str(n.status),
-                        "error_message": None,
-                        "version": n.metadata.get("version") if isinstance(n.metadata, dict) else None,
-                        "role": n.role.value if hasattr(n.role, "value") else str(n.role),
-                        "health_score": round(n.health_score(), 4),
-                        "source": "canonical",
-                    })
+                    node_list.append(
+                        {
+                            "node_id": n.node_id,
+                            "name": n.metadata.get("name", n.node_id) if isinstance(n.metadata, dict) else n.node_id,
+                            "status": n.status.value if hasattr(n.status, "value") else str(n.status),
+                            "error_message": None,
+                            "version": n.metadata.get("version") if isinstance(n.metadata, dict) else None,
+                            "role": n.role.value if hasattr(n.role, "value") else str(n.role),
+                            "health_score": round(n.health_score(), 4),
+                            "source": "canonical",
+                        }
+                    )
             except Exception as exc:
                 logger.warning("Exception suppressed: %s", exc)
 
             # Sort: ERROR nodes first, then by node_id
             node_list.sort(key=lambda n: (0 if str(n["status"]).lower() == "error" else 1, n["node_id"]))
-            return JSONResponse({
-                "timestamp": datetime.now().isoformat(),
-                "total": len(node_list),
-                "by_status": _count_by_status(node_list),
-                "nodes": node_list,
-                "registry_authority": "canonical:NodeFabricRegistry",
-            })
+            return JSONResponse(
+                {
+                    "timestamp": datetime.now().isoformat(),
+                    "total": len(node_list),
+                    "by_status": _count_by_status(node_list),
+                    "nodes": node_list,
+                    "registry_authority": "canonical:NodeFabricRegistry",
+                }
+            )
         except Exception as e:
-            return JSONResponse({
-                "timestamp": datetime.now().isoformat(),
-                "error": str(e),
-                "nodes": [],
-            }, status_code=500)
+            return JSONResponse(
+                {
+                    "timestamp": datetime.now().isoformat(),
+                    "error": str(e),
+                    "nodes": [],
+                },
+                status_code=500,
+            )
 
     def _count_by_status(node_list):
         counts = {}
@@ -348,17 +372,35 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         # 模型名等非敏感项回填明文。以下均为对既有响应的"增量"字段,不改动
         # api_base_url / ws_url / status(test_routes_import.test_api_config 依赖之)。
         _SECRET_MODEL_KEYS = [
-            "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY",
-            "GEMINI_API_KEY", "GOOGLE_API_KEY", "GROQ_API_KEY",
-            "OPENROUTER_API_KEY", "PERPLEXITY_API_KEY", "SONAR_API_KEY",
-            "XAI_API_KEY", "ZHIPU_API_KEY", "QWEN_API_KEY", "DASHSCOPE_API_KEY",
-            "MOONSHOT_API_KEY", "MINIMAX_API_KEY", "STEP_API_KEY", "MIMO_API_KEY",
-            "MISTRAL_API_KEY", "HF_API_TOKEN", "ONEAPI_API_KEY",
+            "OPENAI_API_KEY",
+            "ANTHROPIC_API_KEY",
+            "DEEPSEEK_API_KEY",
+            "GEMINI_API_KEY",
+            "GOOGLE_API_KEY",
+            "GROQ_API_KEY",
+            "OPENROUTER_API_KEY",
+            "PERPLEXITY_API_KEY",
+            "SONAR_API_KEY",
+            "XAI_API_KEY",
+            "ZHIPU_API_KEY",
+            "QWEN_API_KEY",
+            "DASHSCOPE_API_KEY",
+            "MOONSHOT_API_KEY",
+            "MINIMAX_API_KEY",
+            "STEP_API_KEY",
+            "MIMO_API_KEY",
+            "MISTRAL_API_KEY",
+            "HF_API_TOKEN",
+            "ONEAPI_API_KEY",
             "DEEPSEEK_OCR2_API_KEY",
         ]
         _NON_SECRET_MODEL_KEYS = [
-            "OLLAMA_URL", "OLLAMA_MODEL", "ONEAPI_URL",
-            "LOCAL_VLLM_URL", "VLLM_URL", "OPENAI_API_BASE",
+            "OLLAMA_URL",
+            "OLLAMA_MODEL",
+            "ONEAPI_URL",
+            "LOCAL_VLLM_URL",
+            "VLLM_URL",
+            "OPENAI_API_BASE",
         ]
         config_data = {
             "api_base_url": f"http://{host}:{port}",
@@ -387,6 +429,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """列出所有 MCP Server 及其工具/资源/状态"""
         try:
             from core.mcp_loader import mcp_loader
+
             servers = mcp_loader.list_servers()
             return JSONResponse({"servers": servers})
         except Exception as e:
@@ -398,12 +441,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """列出所有已加载 Skill 及执行统计"""
         try:
             from core.skill_loader import skill_loader
+
             skills = skill_loader.list_skills()
             stats = skill_loader.get_stats()
-            return JSONResponse({
-                "skills": [s.to_dict() if hasattr(s, 'to_dict') else s for s in skills],
-                "stats": stats
-            })
+            return JSONResponse(
+                {"skills": [s.to_dict() if hasattr(s, "to_dict") else s for s in skills], "stats": stats}
+            )
         except Exception as e:
             logger.warning(f"获取 Skill 状态失败: {e}")
             return JSONResponse({"skills": [], "stats": {}, "error": str(e)})
@@ -446,6 +489,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """
         try:
             from core.system_mode import resolve_fabric_config
+
             fabric = resolve_fabric_config()
             cross_device_on = fabric.cross_device_enabled
             current_mode = fabric.mode.value
@@ -461,6 +505,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         # Cross-device switch may override the fabric config at runtime
         try:
             from galaxy_gateway.cross_device_switch import is_cross_device_enabled
+
             cross_device_on = is_cross_device_enabled()
         except Exception as exc:
             logger.debug("Suppressed: %s", exc)
@@ -468,22 +513,27 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         # Count connected Android devices from the active connection manager
         android_online = 0
         try:
-            android_online = len([
-                did for did in connection_manager.online_device_ids()
-                if did in registered_devices
-                and registered_devices[did].get("device_type", "").startswith("android")
-            ])
+            android_online = len(
+                [
+                    did
+                    for did in connection_manager.online_device_ids()
+                    if did in registered_devices
+                    and registered_devices[did].get("device_type", "").startswith("android")
+                ]
+            )
         except Exception as exc:
             logger.debug("Suppressed: %s", exc)
 
-        return JSONResponse({
-            "mode": current_mode,
-            "cross_device_enabled": cross_device_on,
-            "takeover_available": cross_device_on,
-            "android_devices_online": android_online,
-            "nats_enabled": nats_enabled,
-            "fabric_strict": fabric_strict,
-            "schema_version": "1.0",
-        })
+        return JSONResponse(
+            {
+                "mode": current_mode,
+                "cross_device_enabled": cross_device_on,
+                "takeover_available": cross_device_on,
+                "android_devices_online": android_online,
+                "nats_enabled": nats_enabled,
+                "fabric_strict": fabric_strict,
+                "schema_version": "1.0",
+            }
+        )
 
     return router

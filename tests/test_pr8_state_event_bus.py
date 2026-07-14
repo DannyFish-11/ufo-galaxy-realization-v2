@@ -18,6 +18,7 @@ Tests covering:
 11. config.json — PR-8 flags present.
 12. Backward compatibility — existing integration.event_bus unaffected.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -40,10 +41,10 @@ from core.state_event_bus import (
     reset_state_event_bus,
 )
 
-
 # ===========================================================================
 # Helpers
 # ===========================================================================
+
 
 def _collect(bus: StateEventBus, event_type=None) -> List[StateEvent]:
     """Register a sync listener and return the shared list."""
@@ -93,8 +94,13 @@ class TestStateEventSchema:
         e = StateEvent(type="task.started", source="my_module", payload={"k": "v"})
         d = e.to_dict()
         assert set(d.keys()) == {
-            "event_id", "type", "timestamp", "trace_id",
-            "runtime_session_id", "source", "payload",
+            "event_id",
+            "type",
+            "timestamp",
+            "trace_id",
+            "runtime_session_id",
+            "source",
+            "payload",
         }
         assert d["payload"] == {"k": "v"}
         assert d["source"] == "my_module"
@@ -107,24 +113,24 @@ class TestStateEventSchema:
 
 class TestStateEventType:
     def test_phase_values(self):
-        assert StateEventType.PHASE_SILENT   == "phase.silent"
-        assert StateEventType.PHASE_LIMINAL  == "phase.liminal"
+        assert StateEventType.PHASE_SILENT == "phase.silent"
+        assert StateEventType.PHASE_LIMINAL == "phase.liminal"
         assert StateEventType.PHASE_MANIFEST == "phase.manifest"
 
     def test_task_values(self):
         assert StateEventType.TASK_STARTED == "task.started"
-        assert StateEventType.TASK_DONE    == "task.done"
-        assert StateEventType.TASK_FAILED  == "task.failed"
+        assert StateEventType.TASK_DONE == "task.done"
+        assert StateEventType.TASK_FAILED == "task.failed"
 
     def test_skill_values(self):
         assert StateEventType.SKILL_INVOKED == "skill.invoked"
-        assert StateEventType.SKILL_DONE    == "skill.done"
-        assert StateEventType.SKILL_FAILED  == "skill.failed"
+        assert StateEventType.SKILL_DONE == "skill.done"
+        assert StateEventType.SKILL_FAILED == "skill.failed"
 
     def test_executor_values(self):
         assert StateEventType.EXECUTOR_START == "executor.start"
-        assert StateEventType.EXECUTOR_DONE  == "executor.done"
-        assert StateEventType.EXECUTOR_FAIL  == "executor.fail"
+        assert StateEventType.EXECUTOR_DONE == "executor.done"
+        assert StateEventType.EXECUTOR_FAIL == "executor.fail"
 
     def test_device_updated(self):
         assert StateEventType.DEVICE_UPDATED == "device.updated"
@@ -402,10 +408,12 @@ class TestTaskLifecycleIntegration:
     def _make_envelope(self, tool_name: str = "test_tool"):
         """Minimal TaskEnvelope-like object."""
         from core.schemas.task_envelope import TaskEnvelope
+
         return TaskEnvelope(tool_name=tool_name, args={})
 
     def test_mark_running_emits_task_started(self):
         from core.task_lifecycle import TaskLifecycleManager
+
         bus = get_state_event_bus()
         received: List[StateEvent] = []
         bus.subscribe(StateEventType.TASK_STARTED, received.append)
@@ -424,6 +432,7 @@ class TestTaskLifecycleIntegration:
 
     def test_mark_done_emits_task_done(self):
         from core.task_lifecycle import TaskLifecycleManager
+
         bus = get_state_event_bus()
         received: List[StateEvent] = []
         bus.subscribe(StateEventType.TASK_DONE, received.append)
@@ -441,6 +450,7 @@ class TestTaskLifecycleIntegration:
 
     def test_mark_failed_emits_task_failed(self):
         from core.task_lifecycle import TaskLifecycleManager
+
         bus = get_state_event_bus()
         received: List[StateEvent] = []
         bus.subscribe(StateEventType.TASK_FAILED, received.append)
@@ -458,6 +468,7 @@ class TestTaskLifecycleIntegration:
 
     def test_trace_id_carried_in_lifecycle_event(self):
         from core.task_lifecycle import TaskLifecycleManager
+
         bus = get_state_event_bus()
         received: List[StateEvent] = []
         bus.subscribe(StateEventType.TASK_STARTED, received.append)
@@ -487,6 +498,7 @@ class TestDesktopPresenceRuntimeIntegration:
 
     def test_advance_to_liminal_emits_phase_liminal(self):
         from core.desktop_presence_runtime import RuntimeSession, TriState
+
         bus = get_state_event_bus()
         received: List[StateEvent] = []
         bus.subscribe(StateEventType.PHASE_LIMINAL, received.append)
@@ -500,6 +512,7 @@ class TestDesktopPresenceRuntimeIntegration:
 
     def test_advance_to_manifest_emits_phase_manifest(self):
         from core.desktop_presence_runtime import RuntimeSession, TriState
+
         bus = get_state_event_bus()
         received: List[StateEvent] = []
         bus.subscribe(StateEventType.PHASE_MANIFEST, received.append)
@@ -513,6 +526,7 @@ class TestDesktopPresenceRuntimeIntegration:
 
     def test_advance_to_silent_emits_phase_silent(self):
         from core.desktop_presence_runtime import RuntimeSession, TriState
+
         bus = get_state_event_bus()
         received: List[StateEvent] = []
         bus.subscribe(StateEventType.PHASE_SILENT, received.append)
@@ -528,6 +542,7 @@ class TestDesktopPresenceRuntimeIntegration:
 
     def test_runtime_session_id_in_phase_event(self):
         from core.desktop_presence_runtime import RuntimeSession, TriState
+
         bus = get_state_event_bus()
         received: List[StateEvent] = []
         bus.subscribe(None, received.append)  # wildcard
@@ -562,14 +577,15 @@ class TestConfigFlags:
 
 class TestBackwardCompatibility:
     def test_integration_event_bus_still_importable(self):
-        from integration.event_bus import event_bus, EventType
+        from integration.event_bus import EventType, event_bus
+
         assert event_bus is not None
         assert EventType.COMMAND_DISPATCHED is not None
 
     def test_task_lifecycle_m2_emit_still_works(self):
         """mark_running should not raise even when M2 event bus is unavailable."""
-        from core.task_lifecycle import TaskLifecycleManager
         from core.schemas.task_envelope import TaskEnvelope
+        from core.task_lifecycle import TaskLifecycleManager
 
         reset_state_event_bus()
         env = TaskEnvelope(tool_name="compat_test", args={})
@@ -581,6 +597,7 @@ class TestBackwardCompatibility:
     def test_state_event_bus_does_not_break_process(self):
         """Importing state_event_bus does not import openclawd at module level."""
         import core.state_event_bus as seb
+
         # If openclawd were imported at module level, circular import errors
         # would surface here.
         assert hasattr(seb, "StateEventBus")

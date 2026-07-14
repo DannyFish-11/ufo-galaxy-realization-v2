@@ -99,7 +99,6 @@ from core.five_area_impl_review import (
     reset_five_area_impl_review,
 )
 
-
 # =============================================================================
 # SECTION 1 — Module import and sentinel sanity
 # =============================================================================
@@ -113,9 +112,7 @@ class TestModuleImport:
         assert len(FIVE_AREA_REVIEW_AUTHORITY) > 0
 
     def test_authority_contains_canonical_prefix(self) -> None:
-        assert FIVE_AREA_REVIEW_AUTHORITY.startswith(
-            "FIVE_AREA_IMPL_REVIEW_AUTHORITY"
-        )
+        assert FIVE_AREA_REVIEW_AUTHORITY.startswith("FIVE_AREA_IMPL_REVIEW_AUTHORITY")
 
     def test_authority_contains_dual_repo_phrase(self) -> None:
         assert "dual-repo" in FIVE_AREA_REVIEW_AUTHORITY
@@ -209,9 +206,7 @@ class TestBuildReport:
         reset_five_area_impl_review()
         return build_five_area_impl_review()
 
-    def test_returns_five_area_impl_review_instance(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_returns_five_area_impl_review_instance(self, review: FiveAreaImplReview) -> None:
         assert isinstance(review, FiveAreaImplReview)
 
     def test_has_exactly_five_area_entries(self, review: FiveAreaImplReview) -> None:
@@ -221,65 +216,43 @@ class TestBuildReport:
         seen = {e.area for e in review.area_entries}
         assert seen == set(ReviewArea)
 
-    def test_authority_matches_module_constant(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_authority_matches_module_constant(self, review: FiveAreaImplReview) -> None:
         assert review.authority == FIVE_AREA_REVIEW_AUTHORITY
 
-    def test_methodology_matches_module_constant(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_methodology_matches_module_constant(self, review: FiveAreaImplReview) -> None:
         assert review.methodology == FIVE_AREA_REVIEW_METHODOLOGY
 
     def test_report_id_is_non_empty_string(self, review: FiveAreaImplReview) -> None:
         assert isinstance(review.report_id, str)
         assert len(review.report_id) > 0
 
-    def test_generated_at_is_positive_float(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_generated_at_is_positive_float(self, review: FiveAreaImplReview) -> None:
         assert isinstance(review.generated_at, float)
         assert review.generated_at > 0
 
     def test_overall_summary_is_non_empty(self, review: FiveAreaImplReview) -> None:
         assert len(review.overall_summary) > 0
 
-    def test_overall_summary_mentions_all_areas(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_overall_summary_mentions_all_areas(self, review: FiveAreaImplReview) -> None:
         summary = review.overall_summary
         for area in ReviewArea:
-            assert area.value in summary, (
-                f"overall_summary does not mention {area.value}"
-            )
+            assert area.value in summary, f"overall_summary does not mention {area.value}"
 
-    def test_next_pr_priority_order_has_five_items(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_next_pr_priority_order_has_five_items(self, review: FiveAreaImplReview) -> None:
         assert len(review.next_pr_priority_order) == 5
 
-    def test_next_pr_priority_order_all_valid_review_area_values(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_next_pr_priority_order_all_valid_review_area_values(self, review: FiveAreaImplReview) -> None:
         valid = {a.value for a in ReviewArea}
         for item in review.next_pr_priority_order:
             assert item in valid, f"{item!r} is not a valid ReviewArea value"
 
-    def test_next_pr_priority_order_starts_with_unified_panel(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_next_pr_priority_order_starts_with_unified_panel(self, review: FiveAreaImplReview) -> None:
         assert review.next_pr_priority_order[0] == ReviewArea.UNIFIED_PANEL_AGGREGATION.value
 
-    def test_next_pr_priority_order_ends_with_multimodal(
-        self, review: FiveAreaImplReview
-    ) -> None:
-        assert (
-            review.next_pr_priority_order[-1] == ReviewArea.MULTIMODAL_CANONICAL_PATH.value
-        )
+    def test_next_pr_priority_order_ends_with_multimodal(self, review: FiveAreaImplReview) -> None:
+        assert review.next_pr_priority_order[-1] == ReviewArea.MULTIMODAL_CANONICAL_PATH.value
 
-    def test_next_pr_priority_rationale_is_non_empty(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_next_pr_priority_rationale_is_non_empty(self, review: FiveAreaImplReview) -> None:
         assert len(review.next_pr_priority_rationale) > 0
 
 
@@ -301,41 +274,25 @@ class TestAreaMaturityLabels:
         assert entry is not None, f"Entry for {area.value} not found"
         return entry
 
-    def test_unified_panel_aggregation_is_partially_established(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_unified_panel_aggregation_is_partially_established(self, review: FiveAreaImplReview) -> None:
         entry = self._get(review, ReviewArea.UNIFIED_PANEL_AGGREGATION)
         assert entry.maturity_label == AreaMaturityLabel.PARTIALLY_ESTABLISHED
 
-    def test_desktop_three_state_existence_is_partially_established(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_desktop_three_state_existence_is_partially_established(self, review: FiveAreaImplReview) -> None:
         entry = self._get(review, ReviewArea.DESKTOP_THREE_STATE_EXISTENCE)
         assert entry.maturity_label == AreaMaturityLabel.PARTIALLY_ESTABLISHED
 
-    def test_operator_actionability_is_observation_only(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_operator_actionability_is_observation_only(self, review: FiveAreaImplReview) -> None:
         entry = self._get(review, ReviewArea.OPERATOR_ACTIONABILITY)
-        assert (
-            entry.maturity_label
-            == AreaMaturityLabel.OBSERVATION_ONLY_NO_ACTION_SURFACE
-        )
+        assert entry.maturity_label == AreaMaturityLabel.OBSERVATION_ONLY_NO_ACTION_SURFACE
 
-    def test_nl_canonical_path_is_partially_established(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_nl_canonical_path_is_partially_established(self, review: FiveAreaImplReview) -> None:
         entry = self._get(review, ReviewArea.NATURAL_LANGUAGE_CANONICAL_PATH)
         assert entry.maturity_label == AreaMaturityLabel.PARTIALLY_ESTABLISHED
 
-    def test_multimodal_canonical_path_is_infra_not_e2e_proven(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_multimodal_canonical_path_is_infra_not_e2e_proven(self, review: FiveAreaImplReview) -> None:
         entry = self._get(review, ReviewArea.MULTIMODAL_CANONICAL_PATH)
-        assert (
-            entry.maturity_label
-            == AreaMaturityLabel.INFRASTRUCTURE_PRESENT_NOT_YET_E2E_PROVEN
-        )
+        assert entry.maturity_label == AreaMaturityLabel.INFRASTRUCTURE_PRESENT_NOT_YET_E2E_PROVEN
 
 
 # =============================================================================
@@ -356,44 +313,33 @@ class TestAreaActionabilityLevels:
         assert entry is not None
         return entry
 
-    def test_unified_panel_aggregation_is_read_only(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_unified_panel_aggregation_is_read_only(self, review: FiveAreaImplReview) -> None:
         assert (
             self._get(review, ReviewArea.UNIFIED_PANEL_AGGREGATION).actionability
             == ActionabilityLevel.READ_ONLY_PROJECTION
         )
 
-    def test_desktop_three_state_is_read_only(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_desktop_three_state_is_read_only(self, review: FiveAreaImplReview) -> None:
         assert (
             self._get(review, ReviewArea.DESKTOP_THREE_STATE_EXISTENCE).actionability
             == ActionabilityLevel.READ_ONLY_PROJECTION
         )
 
-    def test_operator_actionability_is_read_only(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_operator_actionability_is_read_only(self, review: FiveAreaImplReview) -> None:
         assert (
             self._get(review, ReviewArea.OPERATOR_ACTIONABILITY).actionability
             == ActionabilityLevel.READ_ONLY_PROJECTION
         )
 
-    def test_nl_canonical_path_is_action_capable(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_nl_canonical_path_is_action_capable(self, review: FiveAreaImplReview) -> None:
         assert (
             self._get(review, ReviewArea.NATURAL_LANGUAGE_CANONICAL_PATH).actionability
             == ActionabilityLevel.ACTION_CAPABLE
         )
 
-    def test_multimodal_canonical_path_is_action_capable(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_multimodal_canonical_path_is_action_capable(self, review: FiveAreaImplReview) -> None:
         assert (
-            self._get(review, ReviewArea.MULTIMODAL_CANONICAL_PATH).actionability
-            == ActionabilityLevel.ACTION_CAPABLE
+            self._get(review, ReviewArea.MULTIMODAL_CANONICAL_PATH).actionability == ActionabilityLevel.ACTION_CAPABLE
         )
 
 
@@ -419,27 +365,19 @@ class TestAreaMaturityUnlocks:
         entry = self._get(review, ReviewArea.UNIFIED_PANEL_AGGREGATION)
         assert entry.maturity_unlock == FollowUpPrMaturityUnlock.PANEL_STATE_UNIFIED
 
-    def test_desktop_three_state_maturity_unlock(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_desktop_three_state_maturity_unlock(self, review: FiveAreaImplReview) -> None:
         entry = self._get(review, ReviewArea.DESKTOP_THREE_STATE_EXISTENCE)
         assert entry.maturity_unlock == FollowUpPrMaturityUnlock.DESKTOP_ASSISTANT_PRESENCE
 
-    def test_operator_actionability_maturity_unlock(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_operator_actionability_maturity_unlock(self, review: FiveAreaImplReview) -> None:
         entry = self._get(review, ReviewArea.OPERATOR_ACTIONABILITY)
         assert entry.maturity_unlock == FollowUpPrMaturityUnlock.OPERATOR_ACTION_CAPABLE
 
-    def test_nl_canonical_path_maturity_unlock(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_nl_canonical_path_maturity_unlock(self, review: FiveAreaImplReview) -> None:
         entry = self._get(review, ReviewArea.NATURAL_LANGUAGE_CANONICAL_PATH)
         assert entry.maturity_unlock == FollowUpPrMaturityUnlock.NL_E2E_CI_PROVEN
 
-    def test_multimodal_canonical_path_maturity_unlock(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_multimodal_canonical_path_maturity_unlock(self, review: FiveAreaImplReview) -> None:
         entry = self._get(review, ReviewArea.MULTIMODAL_CANONICAL_PATH)
         assert entry.maturity_unlock == FollowUpPrMaturityUnlock.MULTIMODAL_E2E_ACTIVATED
 
@@ -466,57 +404,39 @@ class TestAreaGapItems:
         assert entry is not None
         return entry
 
-    def test_unified_panel_has_gap_about_aggregation(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_unified_panel_has_gap_about_aggregation(self, review: FiveAreaImplReview) -> None:
         entry = self._get(review, ReviewArea.UNIFIED_PANEL_AGGREGATION)
         combined = " ".join(entry.gap_items).lower()
         assert any(
-            term in combined
-            for term in ["unified", "aggregation", "single", "panel"]
+            term in combined for term in ["unified", "aggregation", "single", "panel"]
         ), "UNIFIED_PANEL_AGGREGATION gap_items do not mention aggregation gap"
 
-    def test_desktop_three_state_has_gap_about_unified_surface(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_desktop_three_state_has_gap_about_unified_surface(self, review: FiveAreaImplReview) -> None:
         entry = self._get(review, ReviewArea.DESKTOP_THREE_STATE_EXISTENCE)
         combined = " ".join(entry.gap_items).lower()
         assert any(
-            term in combined
-            for term in ["unified", "single", "joint", "coherent"]
+            term in combined for term in ["unified", "single", "joint", "coherent"]
         ), "DESKTOP_THREE_STATE_EXISTENCE gap_items do not mention unified surface gap"
 
-    def test_operator_actionability_has_gap_about_no_action_endpoints(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_operator_actionability_has_gap_about_no_action_endpoints(self, review: FiveAreaImplReview) -> None:
         entry = self._get(review, ReviewArea.OPERATOR_ACTIONABILITY)
         combined = " ".join(entry.gap_items).lower()
         assert any(
-            term in combined
-            for term in ["action", "no action", "read-only", "read_only"]
+            term in combined for term in ["action", "no action", "read-only", "read_only"]
         ), "OPERATOR_ACTIONABILITY gap_items do not mention lack of action endpoints"
 
-    def test_nl_canonical_path_has_gap_about_no_e2e_ci_test(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_nl_canonical_path_has_gap_about_no_e2e_ci_test(self, review: FiveAreaImplReview) -> None:
         entry = self._get(review, ReviewArea.NATURAL_LANGUAGE_CANONICAL_PATH)
         combined = " ".join(entry.gap_items).lower()
         assert any(
-            term in combined
-            for term in ["ci", "test", "e2e", "end-to-end", "roundtrip"]
+            term in combined for term in ["ci", "test", "e2e", "end-to-end", "roundtrip"]
         ), "NATURAL_LANGUAGE_CANONICAL_PATH gap_items do not mention missing CI test"
 
-    def test_multimodal_has_gap_about_missing_e2e_or_disabled(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_multimodal_has_gap_about_missing_e2e_or_disabled(self, review: FiveAreaImplReview) -> None:
         entry = self._get(review, ReviewArea.MULTIMODAL_CANONICAL_PATH)
         combined = " ".join(entry.gap_items).lower()
-        assert any(
-            term in combined
-            for term in ["disabled", "e2e", "ci", "test", "end-to-end", "not yet"]
-        ), (
-            "MULTIMODAL_CANONICAL_PATH gap_items do not mention disabled-by-default "
-            "or missing e2e CI test"
+        assert any(term in combined for term in ["disabled", "e2e", "ci", "test", "end-to-end", "not yet"]), (
+            "MULTIMODAL_CANONICAL_PATH gap_items do not mention disabled-by-default " "or missing e2e CI test"
         )
 
 
@@ -538,62 +458,48 @@ class TestAreaImplCutPoints:
         assert entry is not None
         return entry
 
-    def test_all_areas_have_at_least_one_cut_point(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_all_areas_have_at_least_one_cut_point(self, review: FiveAreaImplReview) -> None:
         for entry in review.area_entries:
-            assert len(entry.impl_cut_points) >= 1, (
-                f"{entry.area.value} has no impl_cut_points"
-            )
+            assert len(entry.impl_cut_points) >= 1, f"{entry.area.value} has no impl_cut_points"
 
-    def test_unified_panel_has_new_module_or_new_endpoint_cut_point(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_unified_panel_has_new_module_or_new_endpoint_cut_point(self, review: FiveAreaImplReview) -> None:
         entry = self._get(review, ReviewArea.UNIFIED_PANEL_AGGREGATION)
         types = {cp.change_type for cp in entry.impl_cut_points}
-        assert types & {"new_module", "new_endpoint"}, (
-            "UNIFIED_PANEL_AGGREGATION cut points should include new_module or new_endpoint"
-        )
+        assert types & {
+            "new_module",
+            "new_endpoint",
+        }, "UNIFIED_PANEL_AGGREGATION cut points should include new_module or new_endpoint"
 
-    def test_operator_actionability_has_new_endpoint_cut_point(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_operator_actionability_has_new_endpoint_cut_point(self, review: FiveAreaImplReview) -> None:
         entry = self._get(review, ReviewArea.OPERATOR_ACTIONABILITY)
         types = {cp.change_type for cp in entry.impl_cut_points}
-        assert "new_endpoint" in types, (
-            "OPERATOR_ACTIONABILITY cut points should include new_endpoint"
-        )
+        assert "new_endpoint" in types, "OPERATOR_ACTIONABILITY cut points should include new_endpoint"
 
-    def test_nl_canonical_path_has_test_only_cut_point(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_nl_canonical_path_has_test_only_cut_point(self, review: FiveAreaImplReview) -> None:
         entry = self._get(review, ReviewArea.NATURAL_LANGUAGE_CANONICAL_PATH)
         types = {cp.change_type for cp in entry.impl_cut_points}
-        assert "test_only" in types, (
-            "NATURAL_LANGUAGE_CANONICAL_PATH cut points should include test_only"
-        )
+        assert "test_only" in types, "NATURAL_LANGUAGE_CANONICAL_PATH cut points should include test_only"
 
-    def test_multimodal_has_test_only_or_wire_existing_cut_point(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_multimodal_has_test_only_or_wire_existing_cut_point(self, review: FiveAreaImplReview) -> None:
         entry = self._get(review, ReviewArea.MULTIMODAL_CANONICAL_PATH)
         types = {cp.change_type for cp in entry.impl_cut_points}
-        assert types & {"test_only", "wire_existing"}, (
-            "MULTIMODAL_CANONICAL_PATH cut points should include test_only or wire_existing"
-        )
+        assert types & {
+            "test_only",
+            "wire_existing",
+        }, "MULTIMODAL_CANONICAL_PATH cut points should include test_only or wire_existing"
 
-    def test_all_cut_points_have_required_fields(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_all_cut_points_have_required_fields(self, review: FiveAreaImplReview) -> None:
         for entry in review.area_entries:
             for cp in entry.impl_cut_points:
                 assert cp.cut_point_id, f"cut_point_id is empty in {entry.area.value}"
                 assert cp.description, f"description is empty in {entry.area.value}"
                 assert cp.target_module, f"target_module is empty in {entry.area.value}"
                 assert cp.change_type, f"change_type is empty in {entry.area.value}"
-                assert cp.estimated_scope in {"small", "medium", "large"}, (
-                    f"estimated_scope {cp.estimated_scope!r} not in {{small, medium, large}}"
-                )
+                assert cp.estimated_scope in {
+                    "small",
+                    "medium",
+                    "large",
+                }, f"estimated_scope {cp.estimated_scope!r} not in {{small, medium, large}}"
 
 
 # =============================================================================
@@ -609,51 +515,31 @@ class TestAreaCodeAnchors:
         reset_five_area_impl_review()
         return build_five_area_impl_review()
 
-    def test_all_areas_have_at_least_one_code_anchor(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_all_areas_have_at_least_one_code_anchor(self, review: FiveAreaImplReview) -> None:
         for entry in review.area_entries:
-            assert len(entry.code_anchors) >= 1, (
-                f"{entry.area.value} has no code anchors"
-            )
+            assert len(entry.code_anchors) >= 1, f"{entry.area.value} has no code anchors"
 
-    def test_all_areas_have_at_least_one_v2_anchor(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_all_areas_have_at_least_one_v2_anchor(self, review: FiveAreaImplReview) -> None:
         for entry in review.area_entries:
             v2_anchors = [a for a in entry.code_anchors if a.repo == "v2"]
-            assert len(v2_anchors) >= 1, (
-                f"{entry.area.value} has no v2 code anchors"
-            )
+            assert len(v2_anchors) >= 1, f"{entry.area.value} has no v2 code anchors"
 
-    def test_operator_actionability_anchors_include_operator_route(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_operator_actionability_anchors_include_operator_route(self, review: FiveAreaImplReview) -> None:
         entry = review.get_area(ReviewArea.OPERATOR_ACTIONABILITY)
         assert entry is not None
         modules = {a.module_path for a in entry.code_anchors}
-        assert "core.routes.operator" in modules, (
-            "OPERATOR_ACTIONABILITY anchors should include core.routes.operator"
-        )
+        assert "core.routes.operator" in modules, "OPERATOR_ACTIONABILITY anchors should include core.routes.operator"
 
-    def test_multimodal_has_android_evidence_refs(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_multimodal_has_android_evidence_refs(self, review: FiveAreaImplReview) -> None:
         entry = review.get_area(ReviewArea.MULTIMODAL_CANONICAL_PATH)
         assert entry is not None
-        assert len(entry.android_evidence_refs) >= 1, (
-            "MULTIMODAL_CANONICAL_PATH should have android_evidence_refs"
-        )
+        assert len(entry.android_evidence_refs) >= 1, "MULTIMODAL_CANONICAL_PATH should have android_evidence_refs"
 
-    def test_all_code_anchors_have_required_fields(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_all_code_anchors_have_required_fields(self, review: FiveAreaImplReview) -> None:
         for entry in review.area_entries:
             for anchor in entry.code_anchors:
                 assert anchor.module_path, "module_path is empty"
-                assert anchor.repo in {"v2", "android"}, (
-                    f"repo {anchor.repo!r} not in {{v2, android}}"
-                )
+                assert anchor.repo in {"v2", "android"}, f"repo {anchor.repo!r} not in {{v2, android}}"
                 assert anchor.role, "role is empty"
                 assert isinstance(anchor.importable, bool)
 
@@ -671,9 +557,7 @@ class TestInvariantChecker:
         reset_five_area_impl_review()
         return build_five_area_impl_review()
 
-    def test_invariants_pass_on_fresh_build(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_invariants_pass_on_fresh_build(self, review: FiveAreaImplReview) -> None:
         assert_five_area_review_invariants(review)
 
     def test_invariants_detect_too_few_entries(self) -> None:
@@ -742,9 +626,7 @@ class TestJsonSerialisation:
         parsed = json.loads(result)
         assert isinstance(parsed, dict)
 
-    def test_to_dict_has_required_top_level_keys(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_to_dict_has_required_top_level_keys(self, review: FiveAreaImplReview) -> None:
         d = review.to_dict()
         required = {
             "report_id",
@@ -756,19 +638,13 @@ class TestJsonSerialisation:
             "next_pr_priority_order",
             "next_pr_priority_rationale",
         }
-        assert required.issubset(d.keys()), (
-            f"Missing keys: {required - d.keys()}"
-        )
+        assert required.issubset(d.keys()), f"Missing keys: {required - d.keys()}"
 
-    def test_to_dict_area_entries_has_five_items(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_to_dict_area_entries_has_five_items(self, review: FiveAreaImplReview) -> None:
         d = review.to_dict()
         assert len(d["area_entries"]) == 5
 
-    def test_area_entry_to_dict_has_required_keys(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_area_entry_to_dict_has_required_keys(self, review: FiveAreaImplReview) -> None:
         required = {
             "area",
             "maturity_label",
@@ -787,24 +663,16 @@ class TestJsonSerialisation:
         }
         for entry in review.area_entries:
             d = entry.to_dict()
-            assert required.issubset(d.keys()), (
-                f"{entry.area.value}: missing keys {required - d.keys()}"
-            )
+            assert required.issubset(d.keys()), f"{entry.area.value}: missing keys {required - d.keys()}"
 
-    def test_code_anchor_to_dict_has_required_keys(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_code_anchor_to_dict_has_required_keys(self, review: FiveAreaImplReview) -> None:
         required = {"module_path", "repo", "role", "importable"}
         for entry in review.area_entries:
             for anchor in entry.code_anchors:
                 d = anchor.to_dict()
-                assert required.issubset(d.keys()), (
-                    f"CodeAnchor missing keys: {required - d.keys()}"
-                )
+                assert required.issubset(d.keys()), f"CodeAnchor missing keys: {required - d.keys()}"
 
-    def test_impl_cut_point_to_dict_has_required_keys(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_impl_cut_point_to_dict_has_required_keys(self, review: FiveAreaImplReview) -> None:
         required = {
             "cut_point_id",
             "description",
@@ -815,20 +683,14 @@ class TestJsonSerialisation:
         for entry in review.area_entries:
             for cp in entry.impl_cut_points:
                 d = cp.to_dict()
-                assert required.issubset(d.keys()), (
-                    f"ImplCutPoint missing keys: {required - d.keys()}"
-                )
+                assert required.issubset(d.keys()), f"ImplCutPoint missing keys: {required - d.keys()}"
 
-    def test_modification_zone_to_dict_has_required_keys(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_modification_zone_to_dict_has_required_keys(self, review: FiveAreaImplReview) -> None:
         required = {"zone_id", "files_or_modules", "rationale"}
         for entry in review.area_entries:
             for zone in entry.modification_zones:
                 d = zone.to_dict()
-                assert required.issubset(d.keys()), (
-                    f"ModificationZone missing keys: {required - d.keys()}"
-                )
+                assert required.issubset(d.keys()), f"ModificationZone missing keys: {required - d.keys()}"
 
     def test_round_trip_area_count(self, review: FiveAreaImplReview) -> None:
         json_str = review.to_json()
@@ -898,42 +760,32 @@ class TestOverclaimingPrevention:
         reset_five_area_impl_review()
         return build_five_area_impl_review()
 
-    def test_no_area_with_gaps_is_strongly_established(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_no_area_with_gaps_is_strongly_established(self, review: FiveAreaImplReview) -> None:
         for entry in review.area_entries:
             if entry.gap_items:
-                assert entry.maturity_label != AreaMaturityLabel.STRONGLY_ESTABLISHED, (
-                    f"{entry.area.value} has gap_items but is labeled STRONGLY_ESTABLISHED"
-                )
+                assert (
+                    entry.maturity_label != AreaMaturityLabel.STRONGLY_ESTABLISHED
+                ), f"{entry.area.value} has gap_items but is labeled STRONGLY_ESTABLISHED"
 
-    def test_no_area_with_gaps_is_runtime_evidenced_closed(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_no_area_with_gaps_is_runtime_evidenced_closed(self, review: FiveAreaImplReview) -> None:
         for entry in review.area_entries:
             if entry.gap_items:
                 assert entry.maturity_label != AreaMaturityLabel.RUNTIME_EVIDENCED_CLOSED, (
-                    f"{entry.area.value} has gap_items but is labeled "
-                    f"RUNTIME_EVIDENCED_CLOSED"
+                    f"{entry.area.value} has gap_items but is labeled " f"RUNTIME_EVIDENCED_CLOSED"
                 )
 
-    def test_all_areas_below_strongly_established_have_overclaiming_rationale(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_all_areas_below_strongly_established_have_overclaiming_rationale(self, review: FiveAreaImplReview) -> None:
         for entry in review.area_entries:
             if entry.maturity_label not in (
                 AreaMaturityLabel.STRONGLY_ESTABLISHED,
                 AreaMaturityLabel.RUNTIME_EVIDENCED_CLOSED,
             ):
                 assert len(entry.overclaiming_rationale) > 0, (
-                    f"{entry.area.value} is {entry.maturity_label.value} but "
-                    f"overclaiming_rationale is empty"
+                    f"{entry.area.value} is {entry.maturity_label.value} but " f"overclaiming_rationale is empty"
                 )
 
-    def test_all_areas_have_non_empty_maturity_unlock_description(
-        self, review: FiveAreaImplReview
-    ) -> None:
+    def test_all_areas_have_non_empty_maturity_unlock_description(self, review: FiveAreaImplReview) -> None:
         for entry in review.area_entries:
-            assert len(entry.maturity_unlock_description) > 0, (
-                f"{entry.area.value} has empty maturity_unlock_description"
-            )
+            assert (
+                len(entry.maturity_unlock_description) > 0
+            ), f"{entry.area.value} has empty maturity_unlock_description"

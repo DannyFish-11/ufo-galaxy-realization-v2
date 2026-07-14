@@ -83,9 +83,9 @@ try:
     from core.distributed_release_gate_skeleton import (
         GATE_IS_NOW_CI_ENFORCING_AUTHORITY,
         GATE_SKELETON_IS_NON_ENFORCING_POLICY,
-        evaluate_distributed_release_gate,
         ReleaseGateReport,
         ReleaseGateVerdict,
+        evaluate_distributed_release_gate,
     )
 
     _SKELETON_AVAILABLE = True
@@ -94,11 +94,11 @@ except ImportError:
 
 try:
     from core.governance_validation_gate import (
-        run_governance_verdict_ci,
         GovernanceValidationGate,
-        ValidationOutcome,
         ValidationFailReason,
+        ValidationOutcome,
         ValidationResult,
+        run_governance_verdict_ci,
     )
 
     _GOV_GATE_AVAILABLE = True
@@ -107,10 +107,10 @@ except ImportError:
 
 try:
     from core.cross_repo_consistency_gates import (
-        build_consistency_gate_snapshot,
-        run_all_consistency_gates,
         ConsistencyGateSnapshot,
         GateVerdict,
+        build_consistency_gate_snapshot,
+        run_all_consistency_gates,
     )
 
     _CONSISTENCY_GATES_AVAILABLE = True
@@ -119,9 +119,9 @@ except ImportError:
 
 try:
     from core.dual_repo_system_reality_audit import (
-        build_dual_repo_reality_audit,
         AuditDimension,
         MaturityLabel,
+        build_dual_repo_reality_audit,
     )
 
     _AUDIT_AVAILABLE = True
@@ -173,12 +173,12 @@ def test_A02_gate_is_now_ci_enforcing_authority_present():
 @_skip_skeleton
 def test_A03_enforcement_sentinel_references_pr_block3_and_is_enforcing():
     """Enforcement sentinel must reference PR-Block3 and is_enforcing=True."""
-    assert "PR-Block3" in GATE_IS_NOW_CI_ENFORCING_AUTHORITY, (
-        "GATE_IS_NOW_CI_ENFORCING_AUTHORITY must reference PR-Block3"
-    )
-    assert "is_enforcing=True" in GATE_IS_NOW_CI_ENFORCING_AUTHORITY, (
-        "GATE_IS_NOW_CI_ENFORCING_AUTHORITY must reference is_enforcing=True"
-    )
+    assert (
+        "PR-Block3" in GATE_IS_NOW_CI_ENFORCING_AUTHORITY
+    ), "GATE_IS_NOW_CI_ENFORCING_AUTHORITY must reference PR-Block3"
+    assert (
+        "is_enforcing=True" in GATE_IS_NOW_CI_ENFORCING_AUTHORITY
+    ), "GATE_IS_NOW_CI_ENFORCING_AUTHORITY must reference is_enforcing=True"
 
 
 @_skip_skeleton
@@ -186,9 +186,9 @@ def test_A04_enforcement_sentinel_in_all():
     """GATE_IS_NOW_CI_ENFORCING_AUTHORITY must be in __all__."""
     import core.distributed_release_gate_skeleton as mod
 
-    assert "GATE_IS_NOW_CI_ENFORCING_AUTHORITY" in mod.__all__, (
-        "GATE_IS_NOW_CI_ENFORCING_AUTHORITY missing from __all__"
-    )
+    assert (
+        "GATE_IS_NOW_CI_ENFORCING_AUTHORITY" in mod.__all__
+    ), "GATE_IS_NOW_CI_ENFORCING_AUTHORITY missing from __all__"
 
 
 @_skip_skeleton
@@ -286,9 +286,7 @@ def test_B03_readiness_blocked_returns_exit_code_1():
     ):
         code = run_governance_verdict_ci()
 
-    assert code == 1, (
-        f"Expected exit code 1 when readiness is blocked, got {code}."
-    )
+    assert code == 1, f"Expected exit code 1 when readiness is blocked, got {code}."
 
 
 @_skip_gov
@@ -316,9 +314,7 @@ def test_B04_warn_with_strict_returns_exit_code_1():
     ):
         code = run_governance_verdict_ci(strict=True)
 
-    assert code == 1, (
-        f"Expected exit code 1 for WARN outcome in strict mode, got {code}."
-    )
+    assert code == 1, f"Expected exit code 1 for WARN outcome in strict mode, got {code}."
 
 
 @_skip_gov
@@ -346,9 +342,7 @@ def test_B05_warn_without_strict_returns_exit_code_0():
     ):
         code = run_governance_verdict_ci(strict=False)
 
-    assert code == 0, (
-        f"Expected exit code 0 for WARN outcome in non-strict mode, got {code}."
-    )
+    assert code == 0, f"Expected exit code 0 for WARN outcome in non-strict mode, got {code}."
 
 
 @_skip_gov
@@ -440,9 +434,7 @@ def test_C01_build_consistency_gate_snapshot_returns_snapshot():
 def test_C02_snapshot_has_positive_total_gates():
     """Snapshot must contain at least one gate."""
     snapshot = build_consistency_gate_snapshot()
-    assert snapshot.total_gates > 0, (
-        f"Expected total_gates > 0, got {snapshot.total_gates}"
-    )
+    assert snapshot.total_gates > 0, f"Expected total_gates > 0, got {snapshot.total_gates}"
 
 
 @_skip_consistency
@@ -491,8 +483,7 @@ def test_C05_enforcement_exits_1_when_failed_gates_present():
         exit_code = 1 if snapshot.failed_gates > 0 else 0
 
     assert exit_code == 1, (
-        "Enforcement must return exit code 1 when consistency gates FAIL. "
-        "This proves drift is blocked from merging."
+        "Enforcement must return exit code 1 when consistency gates FAIL. " "This proves drift is blocked from merging."
     )
 
 
@@ -509,9 +500,7 @@ def test_C06_enforcement_exits_0_when_no_failed_gates():
     mock_snapshot.gate_results = []
 
     exit_code = 1 if mock_snapshot.failed_gates > 0 else 0
-    assert exit_code == 0, (
-        f"Enforcement must return exit code 0 when all gates pass, got {exit_code}."
-    )
+    assert exit_code == 0, f"Enforcement must return exit code 0 when all gates pass, got {exit_code}."
 
 
 @_skip_consistency
@@ -519,9 +508,7 @@ def test_C07_gate_results_carry_drift_detected_flag():
     """Individual gate results must carry the drift_detected flag."""
     results = run_all_consistency_gates()
     for result in results:
-        assert hasattr(result, "drift_detected"), (
-            f"Gate result for '{result.gate_id}' missing drift_detected"
-        )
+        assert hasattr(result, "drift_detected"), f"Gate result for '{result.gate_id}' missing drift_detected"
         assert isinstance(result.drift_detected, bool)
 
 
@@ -543,10 +530,7 @@ def test_D01_audit_does_not_report_non_enforcing_gap():
 
     assert gov_entry is not None, "Governance dimension missing from audit"
 
-    non_enforcing_gaps = [
-        g for g in gov_entry.gaps
-        if "non-enforcing skeleton" in g or "is_enforcing is False" in g
-    ]
+    non_enforcing_gaps = [g for g in gov_entry.gaps if "non-enforcing skeleton" in g or "is_enforcing is False" in g]
     assert not non_enforcing_gaps, (
         f"Audit still reports non-enforcing gap after PR Block 3 promotion: "
         f"{non_enforcing_gaps!r}.  "
@@ -591,9 +575,7 @@ def test_D03_gate_is_now_ci_enforcing_authority_importable():
 
 def test_E01_governance_gate_enforcement_workflow_exists():
     """governance_gate_enforcement.yml must exist in .github/workflows/."""
-    workflow_path = (
-        PROJECT_ROOT / ".github" / "workflows" / "governance_gate_enforcement.yml"
-    )
+    workflow_path = PROJECT_ROOT / ".github" / "workflows" / "governance_gate_enforcement.yml"
     assert workflow_path.exists(), (
         f"governance_gate_enforcement.yml not found at {workflow_path}.  "
         "PR Block 3 requires a CI workflow that enforces governance gate checks."
@@ -602,38 +584,30 @@ def test_E01_governance_gate_enforcement_workflow_exists():
 
 def test_E02_workflow_references_governance_validation_gate():
     """Workflow must reference core.governance_validation_gate or the module."""
-    workflow_path = (
-        PROJECT_ROOT / ".github" / "workflows" / "governance_gate_enforcement.yml"
-    )
+    workflow_path = PROJECT_ROOT / ".github" / "workflows" / "governance_gate_enforcement.yml"
     if not workflow_path.exists():
         pytest.skip("governance_gate_enforcement.yml not found")
     content = workflow_path.read_text(encoding="utf-8")
-    assert "governance_validation_gate" in content, (
-        "governance_gate_enforcement.yml must reference governance_validation_gate"
-    )
+    assert (
+        "governance_validation_gate" in content
+    ), "governance_gate_enforcement.yml must reference governance_validation_gate"
 
 
 def test_E03_workflow_references_cross_repo_consistency_gates():
     """Workflow must reference core.cross_repo_consistency_gates."""
-    workflow_path = (
-        PROJECT_ROOT / ".github" / "workflows" / "governance_gate_enforcement.yml"
-    )
+    workflow_path = PROJECT_ROOT / ".github" / "workflows" / "governance_gate_enforcement.yml"
     if not workflow_path.exists():
         pytest.skip("governance_gate_enforcement.yml not found")
     content = workflow_path.read_text(encoding="utf-8")
-    assert "cross_repo_consistency_gates" in content, (
-        "governance_gate_enforcement.yml must reference cross_repo_consistency_gates"
-    )
+    assert (
+        "cross_repo_consistency_gates" in content
+    ), "governance_gate_enforcement.yml must reference cross_repo_consistency_gates"
 
 
 def test_E04_workflow_references_is_enforcing():
     """Workflow must reference is_enforcing to prove enforcement is asserted."""
-    workflow_path = (
-        PROJECT_ROOT / ".github" / "workflows" / "governance_gate_enforcement.yml"
-    )
+    workflow_path = PROJECT_ROOT / ".github" / "workflows" / "governance_gate_enforcement.yml"
     if not workflow_path.exists():
         pytest.skip("governance_gate_enforcement.yml not found")
     content = workflow_path.read_text(encoding="utf-8")
-    assert "is_enforcing" in content, (
-        "governance_gate_enforcement.yml must reference is_enforcing"
-    )
+    assert "is_enforcing" in content, "governance_gate_enforcement.yml must reference is_enforcing"

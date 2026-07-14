@@ -98,6 +98,7 @@ Functions::
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
+
 logger = logging.getLogger(__name__)
 
 
@@ -403,9 +404,11 @@ class RuntimeCapabilityProfile:
             "runtime_enabled": self.runtime_enabled,
             "supports_remote_handoff": self.supports_remote_handoff,
             "android_host_role": self.android_host_role,
-            "capability_tier": self.capability_tier.value
-            if isinstance(self.capability_tier, CapabilityTier)
-            else str(self.capability_tier),
+            "capability_tier": (
+                self.capability_tier.value
+                if isinstance(self.capability_tier, CapabilityTier)
+                else str(self.capability_tier)
+            ),
             "authority": CANONICAL_CAPABILITY_SCHEDULING_BASIS_AUTHORITY,
         }
 
@@ -420,8 +423,7 @@ class RuntimeCapabilityProfile:
             device_id=str(data.get("device_id", "") or ""),
             platform=str(data.get("platform", "") or ""),
             source_runtime_posture=str(
-                data.get("source_runtime_posture", _POSTURE_CONTROL_ONLY)
-                or _POSTURE_CONTROL_ONLY
+                data.get("source_runtime_posture", _POSTURE_CONTROL_ONLY) or _POSTURE_CONTROL_ONLY
             ),
             coordination_role=str(data.get("coordination_role", "") or ""),
             is_host_present=bool(data.get("is_host_present", False)),
@@ -429,9 +431,7 @@ class RuntimeCapabilityProfile:
             runtime_enabled=bool(data.get("runtime_enabled", False)),
             supports_remote_handoff=bool(data.get("supports_remote_handoff", False)),
             android_host_role=str(data.get("android_host_role", "") or ""),
-            capability_tier=CapabilityTier.from_string(
-                str(data.get("capability_tier", "unknown"))
-            ),
+            capability_tier=CapabilityTier.from_string(str(data.get("capability_tier", "unknown"))),
             profile_id=data.get("profile_id"),
         )
 
@@ -544,9 +544,11 @@ class SchedulingBasisInputs:
             "source_runtime_posture": self.source_runtime_posture,
             "coordination_role": self.coordination_role,
             "participant_tier": self.participant_tier,
-            "capability_tier": self.capability_tier.value
-            if isinstance(self.capability_tier, CapabilityTier)
-            else str(self.capability_tier),
+            "capability_tier": (
+                self.capability_tier.value
+                if isinstance(self.capability_tier, CapabilityTier)
+                else str(self.capability_tier)
+            ),
             "is_host_present": self.is_host_present,
             "is_android_device": self.is_android_device,
             "android_host_role": self.android_host_role,
@@ -624,12 +626,12 @@ class ExecutionSurfaceEligibility:
         return {
             "eligibility_id": self.eligibility_id,
             "eligible": self.eligible,
-            "surface": self.surface.value
-            if isinstance(self.surface, ExecutionSurface)
-            else str(self.surface),
-            "capability_tier": self.capability_tier.value
-            if isinstance(self.capability_tier, CapabilityTier)
-            else str(self.capability_tier),
+            "surface": self.surface.value if isinstance(self.surface, ExecutionSurface) else str(self.surface),
+            "capability_tier": (
+                self.capability_tier.value
+                if isinstance(self.capability_tier, CapabilityTier)
+                else str(self.capability_tier)
+            ),
             "reason": self.reason,
             "inputs_snapshot": self.inputs_snapshot,
             "authority": CANONICAL_CAPABILITY_SCHEDULING_BASIS_AUTHORITY,
@@ -685,11 +687,7 @@ def _derive_capability_tier(
         return CapabilityTier.command_only
 
     # Rule 2: full join posture + both autonomy flags → full_runtime.
-    if (
-        posture_norm == _POSTURE_JOIN_RUNTIME
-        and runtime_enabled
-        and supports_remote_handoff
-    ):
+    if posture_norm == _POSTURE_JOIN_RUNTIME and runtime_enabled and supports_remote_handoff:
         return CapabilityTier.full_runtime
 
     # Rule 3: join_runtime posture alone → partial_runtime at minimum.
@@ -738,10 +736,7 @@ def build_runtime_capability_profile(device: Any) -> RuntimeCapabilityProfile:
         if isinstance(device, dict):
             device_id = str(device.get("device_id", "") or "")
             platform = str(device.get("platform", "") or "")
-            posture = str(
-                device.get("source_runtime_posture", _POSTURE_CONTROL_ONLY)
-                or _POSTURE_CONTROL_ONLY
-            )
+            posture = str(device.get("source_runtime_posture", _POSTURE_CONTROL_ONLY) or _POSTURE_CONTROL_ONLY)
             role = str(device.get("coordination_role", "") or "")
             is_host_present = bool(device.get("is_host_present", False))
             is_runtime_host = bool(device.get("is_runtime_host", False))
@@ -750,30 +745,19 @@ def build_runtime_capability_profile(device: Any) -> RuntimeCapabilityProfile:
             autonomy_raw = device.get("autonomy") or {}
             if isinstance(autonomy_raw, dict):
                 runtime_enabled = bool(autonomy_raw.get("runtime_enabled", False))
-                supports_remote_handoff = bool(
-                    autonomy_raw.get("supports_remote_handoff", False)
-                )
+                supports_remote_handoff = bool(autonomy_raw.get("supports_remote_handoff", False))
             else:
-                runtime_enabled = bool(
-                    getattr(autonomy_raw, "runtime_enabled", False)
-                )
-                supports_remote_handoff = bool(
-                    getattr(autonomy_raw, "supports_remote_handoff", False)
-                )
+                runtime_enabled = bool(getattr(autonomy_raw, "runtime_enabled", False))
+                supports_remote_handoff = bool(getattr(autonomy_raw, "supports_remote_handoff", False))
             # Allow flat fields as fallback when no autonomy sub-object.
             if not runtime_enabled:
                 runtime_enabled = bool(device.get("runtime_enabled", False))
             if not supports_remote_handoff:
-                supports_remote_handoff = bool(
-                    device.get("supports_remote_handoff", False)
-                )
+                supports_remote_handoff = bool(device.get("supports_remote_handoff", False))
         else:
             device_id = str(getattr(device, "device_id", "") or "")
             platform = str(getattr(device, "platform", "") or "")
-            posture = str(
-                getattr(device, "source_runtime_posture", _POSTURE_CONTROL_ONLY)
-                or _POSTURE_CONTROL_ONLY
-            )
+            posture = str(getattr(device, "source_runtime_posture", _POSTURE_CONTROL_ONLY) or _POSTURE_CONTROL_ONLY)
             role = str(getattr(device, "coordination_role", "") or "")
             is_host_present = bool(getattr(device, "is_host_present", False))
             is_runtime_host = bool(getattr(device, "is_runtime_host", False))
@@ -782,14 +766,10 @@ def build_runtime_capability_profile(device: Any) -> RuntimeCapabilityProfile:
             autonomy = getattr(device, "autonomy", None)
             if autonomy is not None:
                 runtime_enabled = bool(getattr(autonomy, "runtime_enabled", False))
-                supports_remote_handoff = bool(
-                    getattr(autonomy, "supports_remote_handoff", False)
-                )
+                supports_remote_handoff = bool(getattr(autonomy, "supports_remote_handoff", False))
             else:
                 runtime_enabled = bool(getattr(device, "runtime_enabled", False))
-                supports_remote_handoff = bool(
-                    getattr(device, "supports_remote_handoff", False)
-                )
+                supports_remote_handoff = bool(getattr(device, "supports_remote_handoff", False))
 
         tier = _derive_capability_tier(
             source_runtime_posture=posture,
@@ -813,7 +793,7 @@ def build_runtime_capability_profile(device: Any) -> RuntimeCapabilityProfile:
             capability_tier=tier,
         )
 
-    except Exception as exc:
+    except Exception:
         try:
             fallback_id = str(getattr(device, "device_id", "") or "")
         except Exception as exc:
@@ -947,9 +927,7 @@ def normalize_scheduling_inputs(raw: Dict[str, Any]) -> SchedulingBasisInputs:
 
     # Detect Android device by platform or by presence of android-specific fields.
     is_android = (
-        str(platform).lower() == "android"
-        or bool(raw.get("is_android_device", False))
-        or bool(android_host_role)
+        str(platform).lower() == "android" or bool(raw.get("is_android_device", False)) or bool(android_host_role)
     )
 
     # Autonomy signals may live in a nested dict or flat at root level.
@@ -1081,10 +1059,7 @@ def evaluate_execution_surface_eligibility(
         if (
             inputs.is_host_present
             and eligible_tier
-            and (
-                posture == _POSTURE_JOIN_RUNTIME
-                or role == _ROLE_JOINED_RUNTIME_PARTICIPANT
-            )
+            and (posture == _POSTURE_JOIN_RUNTIME or role == _ROLE_JOINED_RUNTIME_PARTICIPANT)
         ):
             return ExecutionSurfaceEligibility(
                 eligible=True,
@@ -1141,7 +1116,7 @@ def evaluate_execution_surface_eligibility(
             inputs_snapshot=inputs_snap,
         )
 
-    except Exception as exc:
+    except Exception:
         return ExecutionSurfaceEligibility(
             eligible=False,
             surface=ExecutionSurface.unavailable,

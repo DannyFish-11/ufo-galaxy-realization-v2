@@ -17,6 +17,7 @@
 那条报错就复活。这个模块把解析收口成【一扇门】:所有取 ollama 地址的地方都
 调 :func:`resolve_ollama_base_url`,保证永远拿到带协议头、非空的合法 URL。
 """
+
 from __future__ import annotations
 
 import os

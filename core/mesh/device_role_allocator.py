@@ -47,31 +47,31 @@ logger = logging.getLogger("Galaxy.Mesh.DeviceRoleAllocator")
 
 _DEFAULT_CAPABILITY_RULES: List[Tuple[str, DeviceRole]] = [
     # Perception capabilities
-    ("camera",        DeviceRole.PERCEPTION),
-    ("microphone",    DeviceRole.PERCEPTION),
-    ("sensor",        DeviceRole.PERCEPTION),
-    ("gps",           DeviceRole.PERCEPTION),
+    ("camera", DeviceRole.PERCEPTION),
+    ("microphone", DeviceRole.PERCEPTION),
+    ("sensor", DeviceRole.PERCEPTION),
+    ("gps", DeviceRole.PERCEPTION),
     ("accelerometer", DeviceRole.PERCEPTION),
-    ("gyroscope",     DeviceRole.PERCEPTION),
-    ("lidar",         DeviceRole.PERCEPTION),
+    ("gyroscope", DeviceRole.PERCEPTION),
+    ("lidar", DeviceRole.PERCEPTION),
     # Action capabilities
-    ("touch",         DeviceRole.ACTION),
-    ("keyboard",      DeviceRole.ACTION),
-    ("mouse",         DeviceRole.ACTION),
-    ("automation",    DeviceRole.ACTION),
-    ("actuator",      DeviceRole.ACTION),
-    ("motor",         DeviceRole.ACTION),
-    ("robot",         DeviceRole.ACTION),
-    ("printer",       DeviceRole.ACTION),
-    ("drone",         DeviceRole.ACTION),
+    ("touch", DeviceRole.ACTION),
+    ("keyboard", DeviceRole.ACTION),
+    ("mouse", DeviceRole.ACTION),
+    ("automation", DeviceRole.ACTION),
+    ("actuator", DeviceRole.ACTION),
+    ("motor", DeviceRole.ACTION),
+    ("robot", DeviceRole.ACTION),
+    ("printer", DeviceRole.ACTION),
+    ("drone", DeviceRole.ACTION),
     # Presence capabilities
-    ("screen",        DeviceRole.PRESENCE),
-    ("display",       DeviceRole.PRESENCE),
-    ("speaker",       DeviceRole.PRESENCE),
-    ("notification",  DeviceRole.PRESENCE),
-    ("bluetooth",     DeviceRole.PRESENCE),
-    ("nfc",           DeviceRole.PRESENCE),
-    ("audio",         DeviceRole.PRESENCE),
+    ("screen", DeviceRole.PRESENCE),
+    ("display", DeviceRole.PRESENCE),
+    ("speaker", DeviceRole.PRESENCE),
+    ("notification", DeviceRole.PRESENCE),
+    ("bluetooth", DeviceRole.PRESENCE),
+    ("nfc", DeviceRole.PRESENCE),
+    ("audio", DeviceRole.PRESENCE),
 ]
 
 
@@ -258,6 +258,7 @@ class DeviceRoleAllocator:
         results: List[AllocationResult] = []
         try:
             from core.unified.device_manager import UnifiedDeviceManager
+
             udm = UnifiedDeviceManager()
             devices = udm.list_devices()
         except Exception as exc:
@@ -266,6 +267,7 @@ class DeviceRoleAllocator:
 
         try:
             from core.unified.device_health import DeviceHealthScorer
+
             scorer = DeviceHealthScorer()
         except Exception as exc:
             logger.debug("Fallback triggered: %s", exc)
