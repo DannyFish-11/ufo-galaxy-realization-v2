@@ -154,10 +154,27 @@ class NodeSystemLauncher:
         if "modulenotfounderror" in low or "importerror" in low or "no module named" in low:
             return "import"
         infra_signals = (
-            "connection refused", "errno 111", "could not connect", "connect call failed",
-            "timed out", "timeout", "5432", "6333", "6379", "7687", "4222", "27017",
-            "psycopg", "qdrant", "redis", "neo4j", "nats", "pymongo", "mongo",
-            "name or service not known", "max retries exceeded",
+            "connection refused",
+            "errno 111",
+            "could not connect",
+            "connect call failed",
+            "timed out",
+            "timeout",
+            "5432",
+            "6333",
+            "6379",
+            "7687",
+            "4222",
+            "27017",
+            "psycopg",
+            "qdrant",
+            "redis",
+            "neo4j",
+            "nats",
+            "pymongo",
+            "mongo",
+            "name or service not known",
+            "max retries exceeded",
         )
         if any(s in low for s in infra_signals):
             return "infra"
@@ -184,8 +201,7 @@ class NodeSystemLauncher:
                 logger.warning("读取节点配置失败 %s: %s", primary, exc)
 
         logger.error(
-            "未找到节点配置文件。已检查路径: %s。"
-            "请确保 node_dependencies.json 存在于项目根目录。",
+            "未找到节点配置文件。已检查路径: %s。" "请确保 node_dependencies.json 存在于项目根目录。",
             primary,
         )
         return {}
@@ -224,9 +240,9 @@ class NodeSystemLauncher:
         The result is sorted by config priority then name.
         """
         eligible = [
-            name for name in self.node_configs
-            if not self.should_skip(name)
-            and (self.nodes_dir / name / "main.py").exists()
+            name
+            for name in self.node_configs
+            if not self.should_skip(name) and (self.nodes_dir / name / "main.py").exists()
         ]
 
         def _sort_key(name: str):
@@ -288,10 +304,7 @@ class NodeSystemLauncher:
         """
         allowed_groups = self._TIER_GROUPS.get(tier)
         if tier not in self._TIER_GROUPS:
-            raise ValueError(
-                f"Unknown startup tier {tier!r}. "
-                f"Valid tiers: {list(self._TIER_GROUPS)}"
-            )
+            raise ValueError(f"Unknown startup tier {tier!r}. " f"Valid tiers: {list(self._TIER_GROUPS)}")
 
         result: List[str] = []
         for name, cfg in self.node_configs.items():
@@ -409,11 +422,10 @@ class NodeSystemLauncher:
         """
         # Determine which nodes the startup config considers active.
         startup_node_names: set = set(
-            name for name, cfg in self.node_configs.items()
+            name
+            for name, cfg in self.node_configs.items()
             if isinstance(cfg, dict)
-            and cfg.get("startup_policy", self._POLICY_ACTIVE) in (
-                self._POLICY_ACTIVE, self._POLICY_OPTIONAL
-            )
+            and cfg.get("startup_policy", self._POLICY_ACTIVE) in (self._POLICY_ACTIVE, self._POLICY_OPTIONAL)
             and (self.nodes_dir / name / "main.py").exists()
         )
 
@@ -451,9 +463,7 @@ class NodeSystemLauncher:
                     non_callable_nodes.append(nid)
 
             # Nodes that the startup config expects but haven't registered yet.
-            unregistered_startup_nodes = sorted(
-                startup_node_names - registered_node_ids
-            )
+            unregistered_startup_nodes = sorted(startup_node_names - registered_node_ids)
             classification_available = True
 
         except Exception as exc:
@@ -492,8 +502,10 @@ class NodeSystemLauncher:
         entries are found, ensuring the system can always bootstrap.
         """
         import re as _re
+
         core_nodes = [
-            name for name, cfg in self.node_configs.items()
+            name
+            for name, cfg in self.node_configs.items()
             if isinstance(cfg, dict)
             and cfg.get("group") == "core"
             and not self.should_skip(name)
@@ -511,8 +523,7 @@ class NodeSystemLauncher:
 
         fundamental = all_active[:10]
         logger.info(
-            "节点配置中未找到 'group': 'core' 标记，"
-            "自动回退为前 10 个活跃节点: %s",
+            "节点配置中未找到 'group': 'core' 标记，" "自动回退为前 10 个活跃节点: %s",
             fundamental,
         )
         return fundamental
@@ -525,14 +536,12 @@ class NodeSystemLauncher:
         """
         if not self.nodes_dir.exists():
             return []
-        return sorted(
-            d.name for d in self.nodes_dir.iterdir()
-            if d.is_dir() and (d / "main.py").exists()
-        )
+        return sorted(d.name for d in self.nodes_dir.iterdir() if d.is_dir() and (d / "main.py").exists())
 
     async def start_node(self, node_name: str) -> bool:
         """启动单个节点，传递关键环境变量并轮询健康检查。"""
         import aiohttp
+
         node_dir = self.nodes_dir / node_name
         main_py = node_dir / "main.py"
 
@@ -545,6 +554,7 @@ class NodeSystemLauncher:
         if port is None:
             try:
                 from core.port_config import get_node_port
+
                 port = get_node_port(node_name)
             except Exception:
                 port = None
@@ -595,9 +605,7 @@ class NodeSystemLauncher:
             for attempt in range(1, _retries + 1):
                 await asyncio.sleep(1)
                 try:
-                    async with aiohttp.ClientSession(
-                        timeout=aiohttp.ClientTimeout(total=2)
-                    ) as session:
+                    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
                         async with session.get(health_url) as resp:
                             if resp.status < 400:
                                 try:
@@ -610,12 +618,17 @@ class NodeSystemLauncher:
                                     logger.warning(
                                         "节点 %s 以 %s 模式启动 (尝试 %d/10, 端口 %d) — "
                                         "部分功能可能受限，但不影响系统启动",
-                                        node_name, node_status_val, attempt, port,
+                                        node_name,
+                                        node_status_val,
+                                        attempt,
+                                        port,
                                     )
                                 else:
                                     logger.info(
                                         "节点 %s 健康检查通过 (尝试 %d/10, 端口 %d)",
-                                        node_name, attempt, port,
+                                        node_name,
+                                        attempt,
+                                        port,
                                     )
                                 await self._register_node_with_runtime_registry(node_name, port)
                                 return True
@@ -625,37 +638,47 @@ class NodeSystemLauncher:
 
             # 读取子进程 stderr 并对失败原因归类（infra/import/other）。
             # 关键降噪：不再对每个失败节点 logger.error 整段 stderr + logger.warning 超时
-            #（desktop-local 下会满屏刷屏）。改为 debug 记录细节、把分类结果存起来，
+            # （desktop-local 下会满屏刷屏）。改为 debug 记录细节、把分类结果存起来，
             # 由 start_all 汇总成一行清晰摘要。
             stderr_text = ""
             svc = self.service_manager.services.get(node_name)
-            if svc and svc.process and svc.process.stderr:
+            proc = svc.process if svc else None
+            proc_alive = bool(proc) and proc.poll() is None
+            # 只有进程已退出才读 stderr:select.select 对管道在 Windows 上
+            # 不支持(只支持 socket),此前这里必抛 OSError 被吞 —— Windows
+            # 用户的失败原因永远是空,日志里查不到任何东西。进程已死时
+            # 直接 read(EOF 立返,不会阻塞);进程存活时无需读。
+            if proc and not proc_alive and proc.stderr:
                 try:
-                    import select as _select
-                    if _select.select([svc.process.stderr], [], [], 0.5)[0]:
-                        stderr_out = svc.process.stderr.read1(4096)  # type: ignore[attr-defined]
-                        if stderr_out:
-                            stderr_text = stderr_out.decode(errors="replace")
-                except Exception:
+                    stderr_out = proc.stderr.read()
+                    if stderr_out:
+                        stderr_text = stderr_out[-4096:].decode(errors="replace")
+                except Exception:  # noqa: BLE001
                     pass
-            reason = self._classify_node_failure(stderr_text)
+            if proc_alive:
+                # 进程存活、只是健康未及时就绪 —— 慢机上的常见情形,不是死亡。
+                # 如实归类,后续 UDP/HTTP 健康探测转正(启动摘要不再误导为"失败")。
+                reason = "slow_start"
+            else:
+                reason = self._classify_node_failure(stderr_text)
             self._node_failure_reasons[node_name] = reason
             if stderr_text:
                 logger.debug("节点 %s 启动失败(%s)，stderr:\n%s", node_name, reason, stderr_text)
             logger.debug(
-                "节点 %s 健康检查超时（%d 次, 归类=%s），视为启动失败",
-                node_name, _retries, reason,
+                "节点 %s 健康检查超预算（%d 次, 归类=%s, 进程存活=%s）",
+                node_name,
+                _retries,
+                reason,
+                proc_alive,
             )
-            self._register_node_in_canonical_registry(node_name, port, "offline")
+            self._register_node_in_canonical_registry(node_name, port, "starting" if proc_alive else "offline")
             return False
 
         logger.info("节点 %s 已启动（无端口，跳过健康检查）", node_name)
         await self._register_node_with_runtime_registry(node_name, port)
         return True
 
-    async def _register_node_with_runtime_registry(
-        self, node_name: str, port: Optional[int]
-    ) -> None:
+    async def _register_node_with_runtime_registry(self, node_name: str, port: Optional[int]) -> None:
         """向运行时节点注册表注册已启动的节点（失败时静默忽略）。
 
         先通过 _register_node_in_canonical_registry() 直接写入
@@ -674,6 +697,7 @@ class NodeSystemLauncher:
         # Secondary: HTTP notification for dashboard/legacy consumers.
         try:
             import aiohttp
+
             api_host = os.environ.get("GALAXY_API_HOST", "127.0.0.1")
             api_port = self.config.web_ui_port
             url = f"http://{api_host}:{api_port}/api/v1/nodes/register"
@@ -683,9 +707,7 @@ class NodeSystemLauncher:
                 "port": port,
                 "status": "running",
             }
-            async with aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=2)
-            ) as session:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
                 async with session.post(url, json=payload) as resp:
                     if resp.status < 400:
                         logger.debug("节点 %s 已注册到运行时注册表", node_name)
@@ -738,24 +760,16 @@ class NodeSystemLauncher:
                     fabric.heartbeat(node_name)
                 logger.debug(
                     "节点 %s 已在 NodeFabricRegistry 中，更新状态为 %s",
-                    node_name, node_status.value,
+                    node_name,
+                    node_status.value,
                 )
                 return
 
             # Build NodeInfo from launcher configuration.
             node_cfg = self.node_configs.get(node_name, {})
-            deps = (
-                node_cfg.get("dependencies", [])
-                if isinstance(node_cfg, dict) else []
-            )
-            description = (
-                node_cfg.get("description", "")
-                if isinstance(node_cfg, dict) else ""
-            )
-            group = (
-                node_cfg.get("group", "")
-                if isinstance(node_cfg, dict) else ""
-            )
+            deps = node_cfg.get("dependencies", []) if isinstance(node_cfg, dict) else []
+            description = node_cfg.get("description", "") if isinstance(node_cfg, dict) else ""
+            group = node_cfg.get("group", "") if isinstance(node_cfg, dict) else ""
 
             _group_role_map = {
                 "core": NodeRole.WORKER,
@@ -783,12 +797,14 @@ class NodeSystemLauncher:
             fabric.register(node_info)
             logger.debug(
                 "节点 %s 已直接注册到 NodeFabricRegistry (status=%s)",
-                node_name, node_status.value,
+                node_name,
+                node_status.value,
             )
         except Exception as exc:
             logger.debug(
                 "直接注册节点 %s 到 NodeFabricRegistry 失败（可忽略）: %s",
-                node_name, exc,
+                node_name,
+                exc,
             )
 
     def _announce_node_to_discovery(
@@ -811,10 +827,7 @@ class NodeSystemLauncher:
 
             discovery = get_node_discovery()
             node_cfg = self.node_configs.get(node_name, {})
-            description = (
-                node_cfg.get("description", "")
-                if isinstance(node_cfg, dict) else ""
-            )
+            description = node_cfg.get("description", "") if isinstance(node_cfg, dict) else ""
             capabilities = [node_name]
             if description:
                 capabilities.append(description)
@@ -830,7 +843,8 @@ class NodeSystemLauncher:
         except Exception as exc:
             logger.debug(
                 "NodeSystemLauncher: announce %s to discovery failed (non-fatal): %s",
-                node_name, exc,
+                node_name,
+                exc,
             )
 
     async def initialize_discovery_after_startup(self) -> int:
@@ -884,9 +898,7 @@ class NodeSystemLauncher:
             logger.debug("stop_node: 未找到服务 %s（可能已停止）", node_name)
         return stopped
 
-    async def start_nodes(
-        self, nodes: List[str], parallel: bool = True
-    ) -> Dict[str, bool]:
+    async def start_nodes(self, nodes: List[str], parallel: bool = True) -> Dict[str, bool]:
         """启动多个节点"""
         results: Dict[str, bool] = {}
 
@@ -954,8 +966,7 @@ class NodeSystemLauncher:
         # desktop-local 单机模式下 infra 类属预期 —— 用一行可执行的摘要替代满屏告警。
         infra_failed = [n for n in failed_nodes if self._node_failure_reasons.get(n) == "infra"]
         import_failed = [n for n in failed_nodes if self._node_failure_reasons.get(n) == "import"]
-        other_failed = [n for n in failed_nodes
-                        if self._node_failure_reasons.get(n) not in ("infra", "import")]
+        other_failed = [n for n in failed_nodes if self._node_failure_reasons.get(n) not in ("infra", "import")]
 
         logger.info("节点启动完成: %d 就绪 / %d 未就绪", len(success_nodes), len(failed_nodes))
         if infra_failed:
