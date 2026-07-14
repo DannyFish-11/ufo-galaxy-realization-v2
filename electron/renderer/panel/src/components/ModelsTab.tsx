@@ -237,6 +237,18 @@ function LocalBrainTiers() {
                     {m.source === 'local'
                       ? <StatusBadge st={status[m.tag]} />
                       : <span className="mt-mstatus idle" title="容器模型(vLLM),不经 Ollama">容器</span>}
+                    {catalog?.gpu_fit?.[m.tag] === 'no_gpu' && (
+                      <span
+                        className="mt-mstatus warn"
+                        title="此模型需要显卡,当前未检测到可用 GPU:会以 CPU 运行,首字延迟数秒到数十秒。建议选 A 档或在下方配置云端 API(如 Agnes 免费全模态)。"
+                      >无显卡·会极慢</span>
+                    )}
+                    {catalog?.gpu_fit?.[m.tag] === 'insufficient_vram' && (
+                      <span
+                        className="mt-mstatus warn"
+                        title="显存装不下此模型,会部分溢出到内存(明显变慢)。建议换更小档位或量化版本。"
+                      >显存不足</span>
+                    )}
                   </div>
                 ))}
               </div>

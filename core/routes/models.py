@@ -55,12 +55,48 @@ def _ollama_base() -> str:
 
 @router.get("/catalog")
 async def get_catalog() -> Dict[str, Any]:
-    """完整模型目录（档位 + 模型 + 能力 + 有效 IO + 当前档位）。"""
-    from core.model_catalog import catalog_snapshot
+    """完整模型目录（档位 + 模型 + 能力 + 有效 IO + 当前档位 + 硬件适配诚实评估）。"""
+    from core.model_catalog import catalog_snapshot, get_model
 
     snap = catalog_snapshot()
     # 当前主脑（供面板高亮）
     snap["current_main_brain"] = os.environ.get("OLLAMA_MODEL", "")
+
+    # 硬件适配诚实评估:requires_gpu 的模型在无够格显卡的机器上会被
+    # Ollama 静默放到 CPU 上硬爬(首 token 数秒到数十秒)。此前目录里
+    # 的 requires_gpu 只是描述文字,运行时无人消费 —— 用户选了 B 档
+    # 也得不到任何"会极慢"的告警。这里按真实硬件画像逐模型给出
+    # gpu_fit,面板据此如实提示,不假装能跑。
+    try:
+        from core.hardware_compute_profiler import get_hardware_profiler
+
+        prof = get_hardware_profiler().profile_sync()
+        has_gpu = bool(prof.gpus)
+        snap["hardware"] = {
+            "has_gpu": has_gpu,
+            "can_run_local_multimodal": bool(prof.can_run_local_multimodal),
+            "max_model_size_mb": int(prof.max_model_size_mb),
+            "recommended_quantization": prof.recommended_quantization,
+        }
+        fits: Dict[str, str] = {}
+        for tier in snap.get("tiers", []) or []:
+            for m in tier.get("models", []) or []:
+                tag = m.get("tag", "")
+                spec = get_model(tag)
+                if spec is None or spec.source != "local":
+                    continue
+                if not getattr(spec, "requires_gpu", False):
+                    fits[tag] = "ok"
+                elif not has_gpu:
+                    fits[tag] = "no_gpu"  # 需显卡但没有:CPU 硬爬,如实告警
+                elif spec.size_mb_val > prof.max_model_size_mb:
+                    fits[tag] = "insufficient_vram"  # 有显卡但装不下:会溢出到内存
+                else:
+                    fits[tag] = "ok"
+        snap["gpu_fit"] = fits
+    except Exception as exc:  # 探测失败不阻塞目录,但如实说明未评估
+        snap["hardware"] = {"has_gpu": None, "probe_error": str(exc)[:120]}
+        snap["gpu_fit"] = {}
     return snap
 
 

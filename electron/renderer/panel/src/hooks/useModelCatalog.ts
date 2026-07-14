@@ -43,6 +43,10 @@ export interface Catalog {
   current_tier: string;
   current_main_brain: string;
   tiers: CatalogTier[];
+  /** 硬件适配诚实评估(后端 /catalog 附带;探测失败时 has_gpu 为 null) */
+  hardware?: { has_gpu: boolean | null; can_run_local_multimodal?: boolean; max_model_size_mb?: number };
+  /** 逐模型 GPU 适配:ok | no_gpu(需显卡但没有) | insufficient_vram(装不下) */
+  gpu_fit?: Record<string, 'ok' | 'no_gpu' | 'insufficient_vram'>;
 }
 export type ModelStatus = 'installed' | 'absent' | 'broken';
 export interface StatusEntry {
