@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useConfigCache } from '@/hooks/useConfigCache';
 import { useModelCatalog, type CatalogModel, type StatusEntry } from '@/hooks/useModelCatalog';
-import { getBackendUrl } from '@/lib/api';
+import { getBackendUrl, fetchWithTimeout, withTimeout } from '@/lib/api';
 import './ModelsTab.css';
 
 /**
@@ -74,10 +74,16 @@ interface FrontendConfig {
 
 // ── 读取配置(Electron IPC 优先,浏览器预览兜底直连 /api/config)──────────
 async function fetchConfig(): Promise<FrontendConfig> {
+  // 均加超时:IPC 或 HTTP 挂死时,缓存 hook 的 loading 会永远为 true,
+  // 保存后回读服务端真值这一步就永远转圈,"已配置"状态刷不出来。
   if (window.galaxyAPI?.getConfig) {
-    return (await window.galaxyAPI.getConfig()) as unknown as FrontendConfig;
+    return withTimeout(
+      window.galaxyAPI.getConfig() as unknown as Promise<FrontendConfig>,
+      15000,
+      '读取配置',
+    );
   }
-  const r = await fetch('/api/config');
+  const r = await fetchWithTimeout('/api/config', {}, 15000);
   if (!r.ok) throw new Error(`/api/config ${r.status}`);
   return r.json();
 }
@@ -87,12 +93,20 @@ async function fetchConfig(): Promise<FrontendConfig> {
 // (未知配置键、.env 写入失败等),但被这里直接丢弃,失败时只能显示笼统的
 // "保存失败"，用户没法自己判断到底是哪个字段的问题。现在把 error 一并带出。
 async function saveConfig(changed: Record<string, string>): Promise<{ success: boolean; error?: string }> {
-  if (window.galaxyAPI?.setConfig) return window.galaxyAPI.setConfig(changed);
-  const r = await fetch('/api/config', {
+  // IPC 与 HTTP 两条路径都加超时:后端启动期/写盘卡住时,裸调用会挂到 OS 级
+  // 超时(几分钟),"保存中…"按钮就一直转圈。到点即返回一个可显示的错误。
+  if (window.galaxyAPI?.setConfig) {
+    try {
+      return await withTimeout(window.galaxyAPI.setConfig(changed), 20000, '保存配置');
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : '保存超时' };
+    }
+  }
+  const r = await fetchWithTimeout('/api/config', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ config: changed }),
-  });
+  }, 20000);
   if (r.ok) return { success: true };
   let detail = `HTTP ${r.status}`;
   try {
@@ -366,53 +380,60 @@ export default function ModelsTab() {
     // 立即给等待态:后端启动期/拥塞时这一步可能要好几秒,没有这条用户会以为
     // "点了没反应"(真机反馈)。
     flash('保存中…', 30000);
+
+    // 阶段一:持久化。saveConfig 现已带超时,不会无限挂起。持久化【一结束】
+    // 就释放按钮 —— 后续的连通性验证是慢步骤(真实上游试调),绝不能再把
+    // "保存中…"按钮卡在那里转圈(这正是"保存半天没反应"的根因)。
+    let persisted = false;
     try {
       const result = await saveConfig(changed);
       if (!result.success) {
-        // 修复:之前不管真实原因是什么,一律显示"保存失败"四个字。现在把
-        // 后端/IPC 层透传上来的真实原因(未知配置键、.env 写入失败等)带出,
-        // 且失败提示驻留更久,不会一闪而过。
         flash(result.error ? `保存失败：${result.error}` : '保存失败', 8000);
         return;
       }
-      // 保存成功后使缓存失效并重新加载，回读服务端真值
-      invalidate();
-      // 「保存成功」≠「能用」:对改动里的每个 API Key 做一次真实连通验证
-      // (后端 1-token 试调),把"到底好了没有"直接答在 toast 里。
-      const keys = Object.keys(changed).filter(
-        (k) => k.endsWith('_API_KEY') || k === 'OLLAMA_URL' || k === 'HF_TOKEN',
-      );
-      if (keys.length === 0) {
-        flash('已保存并即时生效');
-        return;
-      }
-      flash('已保存 · 正在验证连通性…', 30000);
-      const base = await getBackendUrl();
-      const results: string[] = [];
-      for (const k of keys) {
-        try {
-          const r = await fetch(`${base}/api/v1/models/verify-provider`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ env_key: k }),
-          });
-          const v = await r.json();
-          if (v.ok) {
-            results.push(`${v.provider} ✓ 可用 ${Math.round(v.latency_ms)}ms`);
-          } else {
-            results.push(`${v.provider || k} ✗ ${v.error || '验证失败'}`);
-          }
-        } catch (e) {
-          results.push(`${k} ✗ 验证请求失败：${e instanceof Error ? e.message : ''}`);
-        }
-      }
-      const anyFail = results.some((s) => s.includes('✗'));
-      flash(`已保存 · ${results.join('；')}`, anyFail ? 12000 : 6000);
+      persisted = true;
+      invalidate(); // 使缓存失效并回读服务端真值,刷新"已配置"状态
     } catch (e) {
       flash(`保存出错：${e instanceof Error ? e.message : ''}`, 8000);
+      return;
     } finally {
-      setSaving(false);
+      setSaving(false); // 无论成败,持久化阶段一结束就解锁按钮
     }
+    if (!persisted) return;
+
+    // 阶段二:连通性验证(按钮已解锁,此步只更新 toast,不阻塞界面)。
+    // 「保存成功」≠「能用」:对改动里的每个 API Key 做一次真实试调,
+    // 把"到底好了没有"答在 toast 里。每个请求都带超时,整体不会挂死。
+    const keys = Object.keys(changed).filter(
+      (k) => k.endsWith('_API_KEY') || k === 'OLLAMA_URL' || k === 'HF_TOKEN',
+    );
+    if (keys.length === 0) {
+      flash('已保存并即时生效');
+      return;
+    }
+    flash('已保存 · 正在验证连通性…', 30000);
+    const base = await getBackendUrl();
+    const results: string[] = [];
+    for (const k of keys) {
+      try {
+        const r = await fetchWithTimeout(`${base}/api/v1/models/verify-provider`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ env_key: k }),
+        }, 12000);
+        const v = await r.json();
+        if (v.ok) {
+          results.push(`${v.provider} ✓ 可用 ${Math.round(v.latency_ms)}ms`);
+        } else {
+          results.push(`${v.provider || k} ✗ ${v.error || '验证失败'}`);
+        }
+      } catch (e) {
+        const to = e instanceof DOMException && e.name === 'TimeoutError';
+        results.push(`${k} ✗ ${to ? '验证超时(12s)' : `验证请求失败：${e instanceof Error ? e.message : ''}`}`);
+      }
+    }
+    const anyFail = results.some((s) => s.includes('✗'));
+    flash(`已保存 · ${results.join('；')}`, anyFail ? 12000 : 6000);
   }, [changed, flash, invalidate, saving]);
 
   // 状态统计

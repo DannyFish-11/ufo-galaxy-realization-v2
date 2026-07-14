@@ -8,6 +8,45 @@
 
 let cachedBase: string | null = null;
 
+/**
+ * 带超时的 fetch —— 任何请求都不该无限等待。后端启动期/провайдер 不可达时,
+ * 裸 fetch 会挂到 OS 级 TCP 超时(可达几分钟),表现为按钮"一直转圈没反应"。
+ * 到点即 abort,把"挂死"转成一个可显示的错误。调用方传入的 signal 仍受尊重
+ * (任一触发都会中断)。
+ */
+export async function fetchWithTimeout(
+  input: string,
+  init: RequestInit = {},
+  timeoutMs = 15000,
+): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(new DOMException('timeout', 'TimeoutError')), timeoutMs);
+  // 若调用方也给了 signal,任一 abort 都应生效。
+  if (init.signal) {
+    if (init.signal.aborted) ctrl.abort(init.signal.reason);
+    else init.signal.addEventListener('abort', () => ctrl.abort(init.signal!.reason), { once: true });
+  }
+  try {
+    return await fetch(input, { ...init, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** 给任意 Promise 套一个超时(用于 IPC 调用等无法 abort 的场景)。 */
+export function withTimeout<T>(p: Promise<T>, timeoutMs: number, label = '操作'): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`${label}超时(${Math.round(timeoutMs / 1000)}s 未响应)`)),
+      timeoutMs,
+    );
+    p.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
+}
+
 /** 解析后端基址:优先 preload 暴露的 getBackendUrl,回退 localhost:9000。 */
 export async function getBackendUrl(): Promise<string> {
   if (cachedBase) return cachedBase;
