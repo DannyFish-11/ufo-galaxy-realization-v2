@@ -34,6 +34,12 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "Meta Model API Key (Muse Spark)",
     },
     "MISTRAL_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "Mistral API Key"},
+    "AGNES_API_KEY": {
+        "default": "",
+        "type": "string",
+        "category": "llm",
+        "description": "Agnes AI API Key(全模态免费)",
+    },
     "QWEN_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "Qwen API Key"},
     "DASHSCOPE_API_KEY": {
         "default": "",

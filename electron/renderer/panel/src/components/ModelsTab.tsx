@@ -34,6 +34,7 @@ const OPEN_CLOUD: Provider[] = [
   { key: 'STEP_API_KEY', name: '阶跃星辰', latin: 'StepFun', note: 'Step · 多模态' },
   { key: 'MIMO_API_KEY', name: '小米 MiMo', latin: 'mimo', note: '快速响应' },
   { key: 'MISTRAL_API_KEY', name: 'Mistral', latin: 'mistral', note: '开源权重' },
+  { key: 'AGNES_API_KEY', name: 'Agnes AI', latin: 'agnes', note: '全模态 · 免费 · 256K' },
 ];
 
 const PROPRIETARY: Provider[] = [

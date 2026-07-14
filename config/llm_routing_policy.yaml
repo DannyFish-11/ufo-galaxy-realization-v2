@@ -1,7 +1,8 @@
 # config/llm_routing_policy.yaml
 # ================================
 # Galaxy Multi-LLM 路由策略配置（2026-06-10更新）
-# 14个提供商, 覆盖8个任务类型
+# 15个提供商, 覆盖8个任务类型
+# 新增: agnes(Agnes 2.0 Flash, 全模态免费 API, 256K 上下文, 2026-07)
 # 新增: minimax(M2.7), step(3.7 Flash), mimo(V2.5 Pro)
 # 新增: anthropic/fable-5 (2026-06-09 Mythos-class发布)
 #
@@ -49,7 +50,7 @@ task_routing:
     fallback_chain: [deepseek, openai]
 
   fast_response:
-    priorities: [deepseek, mimo, groq, google, openai, zhipu, moonshot]
+    priorities: [deepseek, agnes, mimo, groq, google, openai, zhipu, moonshot]
     constraints:
       require_tools: false
     cost_budget:
@@ -119,7 +120,7 @@ task_routing:
     fallback_chain: [openai, anthropic]
 
   general:
-    priorities: [openai, anthropic, deepseek, google, qwen, zhipu, minimax, step, mimo]
+    priorities: [openai, anthropic, deepseek, google, agnes, qwen, zhipu, minimax, step, mimo]
     constraints:
       require_tools: false
     cost_budget:
