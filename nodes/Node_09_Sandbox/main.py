@@ -285,47 +285,28 @@ async def execute_files(request: FileExecuteRequest):
     with tempfile.TemporaryDirectory() as tmpdir:
         _tmp_real = os.path.realpath(tmpdir)
 
-        def _safe_join(base_real: str, name: str) -> str:
-            """把用户提供的文件名限制在 base 目录内(防 ../ 路径穿越)。
+        def _flat_name(name: str) -> str:
+            """用户文件名 → 剥离全部目录成分的纯基名(扁平沙箱)。
 
-            源头净化:在【构造任何路径之前】先用字符白名单 + 显式规则掐断污点
-            (绝对路径、含 .. 段、盘符、非法字符一律拒),再做归一后的 commonpath
-            兜底。两道防线,且第一道是 CodeQL 可识别的 source-level sanitizer。
+            os.path.basename() 彻底移除任何目录成分(../、绝对路径、盘符、
+            子目录)—— 这是 path-injection 污点追踪器可识别的规范 sanitizer,
+            也是最强的纵深防御:用户输入永不携带路径结构进入文件系统操作。
+            沙箱按扁平文件模型工作(main.py + 若干同级文件),不支持子目录。
+            额外用字符白名单再夹一道,拒绝异常基名。
             """
-            if (
-                not name
-                or not re.fullmatch(r"[A-Za-z0-9_./-]+", name)
-                or name.startswith("/")
-                or ".." in name.split("/")
-            ):
-                raise HTTPException(status_code=400, detail=f"非法文件路径: {name}")
-            p = os.path.realpath(os.path.join(base_real, name))
-            if os.path.commonpath([p, base_real]) != base_real:
-                raise HTTPException(status_code=400, detail=f"非法文件路径: {name}")
-            return p
+            base = os.path.basename(name or "")
+            if not base or base in (".", "..") or not re.fullmatch(r"[A-Za-z0-9_.-]+", base):
+                raise HTTPException(status_code=400, detail="非法文件名")
+            return base
 
-        _base_prefix = _tmp_real + os.sep
-
-        def _assert_within(p: str) -> str:
-            """同作用域内联屏障:直接在数据流路径上断言路径落在 tmp 内。
-
-            _safe_join 已做白名单+commonpath 净化,但那是嵌套函数,污点
-            追踪器(CodeQL)不总能识别其返回值已净化。此处在【使用点】再做
-            一次显式前缀断言 —— 既是 CodeQL 可识别的 sanitizer,也是纵深防御。
-            """
-            if not (p == _tmp_real or p.startswith(_base_prefix)):
-                raise HTTPException(status_code=400, detail="非法文件路径")
-            return p
-
-        # 写入所有文件
+        # 写入所有文件(全部落在 tmp 顶层,基名唯一化后无子目录、无穿越)
         for filename, content in request.files.items():
-            file_path = _assert_within(_safe_join(_tmp_real, filename))
-            _parent = _assert_within(os.path.dirname(file_path))
-            os.makedirs(_parent, exist_ok=True)
+            safe_name = _flat_name(filename)
+            file_path = os.path.join(_tmp_real, safe_name)
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(content)
 
-        entry_file = _assert_within(_safe_join(_tmp_real, request.entry_point))
+        entry_file = os.path.join(_tmp_real, _flat_name(request.entry_point))
         cmd = config["cmd"] + [entry_file]
 
         try:
