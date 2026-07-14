@@ -120,8 +120,8 @@ class WebRTCCameraSession:
             logger.warning("aiortc not available; WebRTC camera ingest disabled")
             return None
 
-        from aiortc import RTCPeerConnection, RTCSessionDescription
-
+        # 模块顶部探测 import 成功即已绑定 RTCPeerConnection/RTCSessionDescription;
+        # 上面的 _AIORTC_AVAILABLE 守卫保证走到这里时名字必然可用。
         self._state = WebRTCSessionState.CONNECTING
         try:
             self._pc = RTCPeerConnection()

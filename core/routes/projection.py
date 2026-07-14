@@ -2527,6 +2527,8 @@ except ImportError:  # pragma: no cover
 # classification infrastructure, making the authority matrix machine-checkable
 # and diagnosable at the projection surface level.
 try:
+    # 别名带 _abc_ 前缀以区别于 PR-10 architecture_stabilization_baseline
+    # 同名函数的哨兵 import(此前两者互相遮蔽,F811)。
     from core.authority_boundary_classification import (  # noqa: F401
         ADAPTER_SURFACES_ARE_ROUTING_ONLY_POLICY as _ABC_ADAPTER_POLICY,
     )
@@ -2557,7 +2559,9 @@ try:
         get_non_authoritative_surfaces as _get_non_authoritative_surfaces,
     )
     from core.authority_boundary_classification import get_surfaces_by_role as _get_surfaces_by_role  # noqa: F401
-    from core.authority_boundary_classification import get_transitional_surfaces as _get_transitional_surfaces
+    from core.authority_boundary_classification import (  # noqa: F401
+        get_transitional_surfaces as _get_abc_transitional_surfaces,
+    )
 
     AUTHORITY_BOUNDARY_CLASSIFICATION_ALIGNED_PR6: str = (
         "PROJECTION_ROUTES::AUTHORITY_BOUNDARY_CLASSIFICATION_ALIGNED_PR6_V1: "
@@ -4599,7 +4603,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 "topology_authoritative": true,
                 "topology_readiness": "canonical",
                 "oneapi_is_lower_horizon_only": true,
-                "integration_contract_authority": "contracts.desktop_status_projection.DesktopStatusBoardIntegrationPayload",
+                "integration_contract_authority": "contracts.desktop_status_projection"
+                ".DesktopStatusBoardIntegrationPayload",
                 ...
               },
               "integration_authority": "contracts.desktop_status_projection.DesktopStatusBoardIntegrationPayload",
@@ -6216,10 +6221,14 @@ def _source_of_truth_boundaries() -> Dict[str, str]:
         "v2_authoritative": "Derived from V2 canonical core/contracts sources.",
         "android_originated": "Requires Android-originated evidence from Android-linked surfaces.",
         "joint_cross_repo_derived": "Derived from correlated Android + V2 sources.",
-        "authority_truth_source": "Canonical authority truth producers (runtime truth compiler / Android SSOT / acceptance gate).",
-        "acceptance_closure_truth": "Acceptance and closure truth used to determine if results can be closed and consumed.",
-        "outward_projection_truth": "Operator/board projection surfaces that only consume canonical truth and never define it.",
-        "ui_visible_summary_constraint": "UI-visible summary is consumption-only interpretation and must not be promoted to backend truth.",
+        "authority_truth_source": "Canonical authority truth producers "
+        "(runtime truth compiler / Android SSOT / acceptance gate).",
+        "acceptance_closure_truth": "Acceptance and closure truth used to determine "
+        "if results can be closed and consumed.",
+        "outward_projection_truth": "Operator/board projection surfaces that only "
+        "consume canonical truth and never define it.",
+        "ui_visible_summary_constraint": "UI-visible summary is consumption-only "
+        "interpretation and must not be promoted to backend truth.",
         "diagnostics_snapshot": "Audit and diagnostics artifacts; useful for investigation but not authority truth.",
     }
 

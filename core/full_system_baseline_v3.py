@@ -1795,7 +1795,8 @@ class FullSystemBaselineV3Evaluator:
                 ),
                 signal_source="core.canonical_cross_repo_evidence_pipeline (pipeline_verdict)",
                 currently_answerable=android_detected,
-                next_action_hint="Run Android protected CI and verify canonical evidence artifact delivery into V2 ingress.",
+                next_action_hint="Run Android protected CI and verify canonical evidence "
+                "artifact delivery into V2 ingress.",
             ),
             OpenQuestion(
                 question_id="release_gate_truly_blocking",
@@ -1807,7 +1808,8 @@ class FullSystemBaselineV3Evaluator:
                     "core.distributed_release_gate_skeleton " "(GATE_IS_NOW_CI_ENFORCING_AUTHORITY + CI workflow logs)"
                 ),
                 currently_answerable=self._try_import("core.distributed_release_gate_skeleton") is not None,
-                next_action_hint="Verify release_blocking_gate workflow blocks merges when critical gate dimensions fail.",
+                next_action_hint="Verify release_blocking_gate workflow blocks merges when "
+                "critical gate dimensions fail.",
             ),
             OpenQuestion(
                 question_id="recovery_reconnect_e2e_proven",
@@ -1817,7 +1819,8 @@ class FullSystemBaselineV3Evaluator:
                 ),
                 signal_source=("tests/integration/test_dual_runtime_cross_repo_harness_reporting.py"),
                 currently_answerable=False,
-                next_action_hint="Run dual-runtime cross-repo harness against induced reconnect/replay failure scenarios.",
+                next_action_hint="Run dual-runtime cross-repo harness against induced "
+                "reconnect/replay failure scenarios.",
             ),
             OpenQuestion(
                 question_id="nats_distributed_runtime_real",
@@ -1827,7 +1830,8 @@ class FullSystemBaselineV3Evaluator:
                 ),
                 signal_source="core.agent_bus_fabric or NATS runtime logs",
                 currently_answerable=False,
-                next_action_hint="Produce runtime proof artifact from real NATS/fabric execution path before claiming closure.",
+                next_action_hint="Produce runtime proof artifact from real NATS/fabric "
+                "execution path before claiming closure.",
             ),
             OpenQuestion(
                 question_id="dual_repo_ci_gate_enforced",

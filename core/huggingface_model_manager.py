@@ -428,8 +428,7 @@ class HuggingFaceModelManager:
     ) -> asyncio.Task:
         """Start a background download task. Returns the Task immediately
         so the caller (e.g., startup code) is not blocked."""
-        global _download_tasks
-
+        # _download_tasks 仅做键值增删(原地变更),无重绑定,无需 global 声明
         if model_id in _download_tasks and not _download_tasks[model_id].done():
             logger.info("[MODEL-DL] %s already downloading in background", model_id)
             return _download_tasks[model_id]

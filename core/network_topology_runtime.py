@@ -968,7 +968,8 @@ class NetworkTopologyRuntime:
                     "restored_view": TRUTH_GRADE_RECOVERABLE,
                 },
                 notes=[
-                    "Recovered topology entries remain degraded/recoverable view truth until live updates replace them.",
+                    "Recovered topology entries remain degraded/recoverable view truth "
+                    "until live updates replace them.",
                 ],
                 extra={
                     "durable_state_path": self._state_path,

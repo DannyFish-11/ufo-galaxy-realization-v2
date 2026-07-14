@@ -602,7 +602,9 @@ def classify_responsiveness(inp: ResponsivenessInput) -> ResponsivenessContract:
         return _classify_impl(inp)
     except (
         Exception
-    ) as exc:  # noqa: BLE001  # intentional: top-level safety wrapper; BaseException subclasses (KeyboardInterrupt, SystemExit) are NOT caught
+        # intentional: top-level safety wrapper; BaseException subclasses
+        # (KeyboardInterrupt, SystemExit) are NOT caught
+    ) as exc:  # noqa: BLE001
         logger.warning(
             "classify_responsiveness: unexpected error during classification — %s; "
             "returning unavailable (fail-conservative)",

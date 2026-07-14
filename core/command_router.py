@@ -3608,7 +3608,8 @@ class CommandRouter:
                         "success": False,
                         "result": None,
                         "error_code": GatewayErrorCode.HITL_TIMEOUT.value,
-                        "error_message": f"High-risk command '{command}' requires approval (timed out after {exc.timeout_seconds}s). "
+                        "error_message": f"High-risk command '{command}' requires approval "
+                        f"(timed out after {exc.timeout_seconds}s). "
                         f"Use POST /api/v1/approvals/{exc.request_id} to approve.",
                         "approval_request_id": exc.request_id,
                         "latency_ms": round(latency_ms, 1),

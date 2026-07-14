@@ -474,7 +474,7 @@ class SystemLoadMonitor:
             return self.get_load_score()
 
         recent = list(self._load_history)[-samples:]
-        return sum(l.overall_load_score() for l in recent) / len(recent)
+        return sum(s.overall_load_score() for s in recent) / len(recent)
 
     async def start_monitoring(self):
         """启动监控"""

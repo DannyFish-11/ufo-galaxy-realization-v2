@@ -246,7 +246,7 @@ CROSS_DEVICE_INTEGRATION_REALITY: Dict[str, Any] = {
     "pending_delivery_buffer_max_queue_per_device": PENDING_DELIVERY_BUFFER_MAX_QUEUE_PER_DEVICE,
     "durable_pending_delivery_buffer_present": DURABLE_PENDING_DELIVERY_BUFFER_PRESENT,
     "v2_command_timeout_s": V2_COMMAND_TIMEOUT_S,
-    "inflight_task_loss_residual_risk_android_terminal_reconnect": INFLIGHT_TASK_LOSS_RESIDUAL_RISK_ANDROID_TERMINAL_RECONNECT,
+    "inflight_task_loss_residual_risk_android_terminal_reconnect": INFLIGHT_TASK_LOSS_RESIDUAL_RISK_ANDROID_TERMINAL_RECONNECT,  # noqa: E501
     "inflight_task_loss_residual_risk_process_restart": INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART,
     # Result ingestion (fixed: observable error counters)
     "result_ingestion_has_silent_failure_paths": RESULT_INGESTION_HAS_SILENT_FAILURE_PATHS,

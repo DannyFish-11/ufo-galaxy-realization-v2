@@ -140,7 +140,7 @@ class EventBridge:
         # 2. Monitoring Alerts → EventBus
         # ====================================================================
         try:
-            from core.monitoring import AlertSeverity, get_monitoring_manager
+            from core.monitoring import get_monitoring_manager
 
             monitoring = get_monitoring_manager()
 

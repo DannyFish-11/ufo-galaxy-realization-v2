@@ -777,7 +777,8 @@ WORKSTREAM_GAP_REGISTRY: List[WorkstreamGapEntry] = [
     ),
     WorkstreamGapEntry(
         gap_id="GAP_DURABLE_TRUTH_AUTHORITY_CONVERGENCE",
-        title="Session truth, task lifecycle, and result continuity form parallel persistence fragments rather than a unified authority chain",
+        title="Session truth, task lifecycle, and result continuity form parallel "
+        "persistence fragments rather than a unified authority chain",
         severity=GapSeverity.P1,
         description=(
             "After PR-1 (GAP_V2_TRUTH_PERSISTENCE closure), V2 gained "
@@ -811,7 +812,8 @@ WORKSTREAM_GAP_REGISTRY: List[WorkstreamGapEntry] = [
     ),
     WorkstreamGapEntry(
         gap_id="GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION",
-        title="Multi-device, delegated takeover, and failure/recovery paths lack automated network-level integration assurance",
+        title="Multi-device, delegated takeover, and failure/recovery paths lack "
+        "automated network-level integration assurance",
         severity=GapSeverity.P0,
         description=(
             "Existing separated-process E2E covers the single-participant "

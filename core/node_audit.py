@@ -39,7 +39,9 @@ PACKAGING_POLICY_SKIP         — "skip"
 PACKAGING_POLICY_UNREGISTERED — "unregistered"
 """
 
-from scripts.node_audit import (  # re-export for importability; PR-2: check category constants; PR-2: check result constants; PR-5: packaging policy-class constants
+# re-export for importability; PR-2: check category/result constants;
+# PR-5: packaging policy-class constants
+from scripts.node_audit import (
     CHECK_FAIL,
     CHECK_HYGIENE,
     CHECK_PACKAGING,

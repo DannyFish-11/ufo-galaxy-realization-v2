@@ -605,7 +605,8 @@ class LiveMeshSessionCoordinator:
         device_id:
             Android device identifier.
         signal_kind:
-            String matching an :class:`~core.mesh.android_mesh_participant_signal_adapter.AndroidMeshParticipantSignalKind`
+            String matching an
+            :class:`~core.mesh.android_mesh_participant_signal_adapter.AndroidMeshParticipantSignalKind`
             value.
         result_payload:
             Optional result dict for ``"task_completed"`` signals.

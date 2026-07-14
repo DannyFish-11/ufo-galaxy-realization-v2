@@ -1335,7 +1335,7 @@ _LAST_OPERATOR_ACTION_STATE_PATH = os.environ.get(
 
 def _persist_last_operator_action_result() -> None:
     """Persist the latest operator action result to disk for restart recovery."""
-    global _LAST_OPERATOR_ACTION_RESULT
+    # 本函数只读该模块级变量,无重绑定,无需 global 声明
     result = _LAST_OPERATOR_ACTION_RESULT
     if result is None:
         return

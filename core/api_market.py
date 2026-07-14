@@ -193,7 +193,8 @@ async def get_market_skill(skill_id: str):
                     "success": True,
                     "skill": {
                         **skill,
-                        "download_url": f"https://raw.githubusercontent.com/DannyFish-11/galaxy-realization-v2/main/skills/examples/{skill_id}/SKILL.md",
+                        "download_url": "https://raw.githubusercontent.com/DannyFish-11/galaxy-realization-v2"
+                        f"/main/skills/examples/{skill_id}/SKILL.md",
                         "readme": f"# {skill['name']}\n\n{skill['description']}",
                     },
                 }

@@ -927,7 +927,7 @@ class MasterBrain:
             "device_type": registration.device_type,
             "platform": registration.platform,
             "capabilities": [c.model_dump() for c in registration.capabilities],
-            "supported_languages": [l.value for l in registration.supported_languages],
+            "supported_languages": [lang.value for lang in registration.supported_languages],
             "has_docker": registration.has_docker,
             "has_gpu": registration.has_gpu,
             "memory_total_mb": registration.memory_total_mb,

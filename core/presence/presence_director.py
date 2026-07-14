@@ -109,7 +109,8 @@ class PresenceDirector:
             session_id:      Session scope.
             trace_id:        Distributed trace identifier.
             android_presence_participation:
-                             Optional :class:`~core.presence.android_presence_participation.AndroidPresenceParticipationSummary`.
+                             Optional
+                             :class:`~core.presence.android_presence_participation.AndroidPresenceParticipationSummary`.
                              When provided, Android devices that are presence
                              participants receive elevated projection intensity
                              and their participation mode is stamped on the

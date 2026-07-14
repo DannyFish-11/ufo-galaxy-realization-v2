@@ -134,7 +134,8 @@ _GITHUB_BUILTIN_TOOLS: List[Dict] = [
                 "properties": {
                     "url": {
                         "type": "string",
-                        "description": "GitHub HTTPS 仓库 URL，例如 https://github.com/owner/repo 或 https://github.com/owner/repo/tree/main",
+                        "description": "GitHub HTTPS 仓库 URL，例如 https://github.com/owner/repo "
+                        "或 https://github.com/owner/repo/tree/main",
                     },
                     "ref": {
                         "type": "string",
@@ -2253,7 +2254,8 @@ class OpenClawd:
         presence_mode: Optional[str] = None,
         stream_runtime_status: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
-        """PR-16: Build a serializable :class:`~core.perception.canonical_perception_state.CanonicalPerceptionState` dict.
+        """PR-16: Build a serializable dict of
+        :class:`~core.perception.canonical_perception_state.CanonicalPerceptionState`.
 
         Assembles the canonical perception truth from two sources:
 

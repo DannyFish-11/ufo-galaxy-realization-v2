@@ -25,7 +25,9 @@ from core.schemas.agent import (  # Phase 2: Team Manifest
 )
 
 # -- Contract models (Agentic OS) -------------------------------------------
-from core.schemas.contracts import (  # Enums; Common; Task payloads; Task dispatch/result; LSP; Execution; MCP; Worker; Events; Envelope
+# Enums; Common; Task payloads; Task dispatch/result; LSP; Execution; MCP; Worker;
+# Events; Envelope
+from core.schemas.contracts import (
     AgentEventModel,
     AgentMessageModel,
     AgentMessageType,

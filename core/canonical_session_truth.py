@@ -1262,7 +1262,8 @@ def record_session_truth(
             "truth_surface_boundary_policy",
             PROJECTION_INTEROP_COMPAT_NOT_TRUTH_AUTHORITY_POLICY,
         )
-    from core.ugcp_truth_event_model import (  # noqa: PLC0415  (lazy import inside function to avoid transitive pydantic dependency at module load time)
+    # 惰性导入:避免模块加载期传递依赖 pydantic(lazy import inside function)
+    from core.ugcp_truth_event_model import (  # noqa: PLC0415
         build_session_truth_authoritative_event,
     )
 

@@ -31,7 +31,8 @@ Architecture
 The :class:`UnifiedControlPlan` is the stable contract that:
 
 * captures perception truth (from :class:`~core.perception.canonical_perception_state.CanonicalPerceptionState`)
-* captures model supply truth (from :class:`~core.model_topology.canonical_model_supply_state.CanonicalModelSupplyState`)
+* captures model supply truth
+  (from :class:`~core.model_topology.canonical_model_supply_state.CanonicalModelSupplyState`)
 * records the chosen model decision and execution decision
 * records fallback intent, lifecycle target, and diagnostics summary
 * preserves the authority chain so every downstream consumer can verify

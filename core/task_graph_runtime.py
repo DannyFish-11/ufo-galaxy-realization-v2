@@ -1438,7 +1438,7 @@ class TaskGraphRuntime:
         """Return the internal fanout/fanin ring buffer."""
         return self._fanout_records
 
-    # ── Workflow projection adapter ────────────────────────────────────────── ──────────────────────────────────────────
+    # ── Workflow projection adapter ──────────────────────────────────────────
 
     def project_workflow(
         self,

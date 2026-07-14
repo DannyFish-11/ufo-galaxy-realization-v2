@@ -117,7 +117,8 @@ Functions::
 
     classify_execution_evidence(state, *, proof_class, is_duplicate, is_stale, ...) -> EvidenceTrustLevel
     build_execution_evidence_record(task_id, device_id, state, *, ...) -> ExecutionEvidenceRecord
-    infer_execution_evidence_state(normalized_status, *, source_channel, truth_chain_complete, ...) -> ExecutionEvidenceState
+    infer_execution_evidence_state(normalized_status, *, source_channel,
+                                   truth_chain_complete, ...) -> ExecutionEvidenceState
 """
 
 from __future__ import annotations
@@ -933,7 +934,7 @@ def _build_android_evidence_runtime_context(
 ) -> Dict[str, Any]:
     context_sources: List[str] = []
     context: Dict[str, Any] = {}
-    for field in (
+    for context_field in (
         "participation_tier",
         "dispatch_eligible",
         "runtime_constrained",
@@ -941,13 +942,13 @@ def _build_android_evidence_runtime_context(
         "local_loop_ready",
     ):
         value = _pick_context_value(
-            field,
+            context_field,
             payload=payload,
             runtime_truth_context=runtime_truth_context,
             context_sources=context_sources,
         )
         if value is not None:
-            context[field] = value
+            context[context_field] = value
     for supplemental_field in (
         "proof_class_source",
         "acceptance_tag",

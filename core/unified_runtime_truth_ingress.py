@@ -40,7 +40,8 @@ This module closes that gap by providing:
    function that routes any Android runtime state message through the correct
    sub-ingress path:
    - Execution signals → :func:`~core.android_delegated_signal_ingress.ingest_delegated_execution_signal`
-   - Participant / session / runtime truth → :func:`~core.android_participant_truth_ingress.ingest_android_participant_truth_message`
+   - Participant / session / runtime truth →
+     :func:`~core.android_participant_truth_ingress.ingest_android_participant_truth_message`
    - Handoff v2 responses → :func:`~core.android_handoff_v2_response_ingress.ingest_android_handoff_response`
 5. :class:`RuntimeTruthIngressOutcome` — typed result of an ingress attempt
    that surfaces which sub-path was used, whether reconciliation succeeded,

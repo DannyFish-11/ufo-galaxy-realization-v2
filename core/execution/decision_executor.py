@@ -349,7 +349,8 @@ class DecisionExecutor:
         if entry_mode == "cross_device" and not force_local_execution:
             _trace_id = _extract_trace_id(state_continuum)
             logger.info(
-                "DecisionExecutor: execution skipped | entry_mode=%s trace_id=%s skipped_reason=entry_mode=cross_device",
+                "DecisionExecutor: execution skipped | entry_mode=%s trace_id=%s "
+                "skipped_reason=entry_mode=cross_device",
                 entry_mode,
                 _trace_id,
             )

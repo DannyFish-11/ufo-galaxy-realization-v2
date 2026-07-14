@@ -509,7 +509,8 @@ def classify_task_envelope(
     routing_policy: Any = None,
     execution_policy: Any = None,
 ) -> ClassifiedStep:
-    """Classify a :class:`~core.schemas.task_envelope.TaskEnvelope` into a :class:`~.task_semantic_summary.ClassifiedStep`.
+    """Classify a :class:`~core.schemas.task_envelope.TaskEnvelope` into a
+    :class:`~.task_semantic_summary.ClassifiedStep`.
 
     Accepts TaskEnvelope objects (Pydantic) or plain dicts.
 
@@ -573,7 +574,8 @@ def _build_summary_from_steps(
     trace_id: str = "",
     runtime_session_id: str = "",
 ) -> TaskSemanticSummary:
-    """Build a :class:`~.task_semantic_summary.TaskSemanticSummary` from a list of :class:`~.task_semantic_summary.ClassifiedStep` objects."""
+    """Build a :class:`~.task_semantic_summary.TaskSemanticSummary` from a list
+    of :class:`~.task_semantic_summary.ClassifiedStep` objects."""
     has_side_effectful = False
     has_cross_device = False
     has_confirmation_required = False

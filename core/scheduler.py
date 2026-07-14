@@ -145,11 +145,14 @@ _BUILTIN_TOOLS = [
                     },
                     "task_type": {
                         "type": "string",
-                        "description": "The type of task: open_app, click, swipe, type_text, screenshot, shell_command, install_apk, key_event, get_device_info, get_battery, etc.",
+                        "description": "The type of task: open_app, click, swipe, type_text, "
+                        "screenshot, shell_command, install_apk, key_event, get_device_info, get_battery, etc.",
                     },
                     "payload": {
                         "type": "object",
-                        "description": "Task parameters. For open_app: {app_name: 'WeChat'}. For click: {x: 100, y: 200}. For type_text: {text: 'hello'}. For shell_command: {command: 'ls'}.",
+                        "description": "Task parameters. For open_app: {app_name: 'WeChat'}. "
+                        "For click: {x: 100, y: 200}. For type_text: {text: 'hello'}. "
+                        "For shell_command: {command: 'ls'}.",
                     },
                 },
                 "required": ["device_id", "task_type"],
@@ -331,7 +334,7 @@ class AutonomousScheduler:
             if match:
                 doc = match.group(1).strip()
                 # 取前两行作为描述
-                lines = [l.strip() for l in doc.split("\n") if l.strip() and not l.strip().startswith("=")]
+                lines = [ln.strip() for ln in doc.split("\n") if ln.strip() and not ln.strip().startswith("=")]
                 if lines:
                     return " ".join(lines[:2])[:200]
 
@@ -573,7 +576,8 @@ Your goal: satisfy the user's request by calling the available tools.
 You operate in a ReAct loop: Think → Act (call tools) → Observe results → Think again.
 
 RULES:
-1. For device operations (open app, click, swipe, type, screenshot): use 'send_to_device' tool with the target device_id.
+1. For device operations (open app, click, swipe, type, screenshot):
+   use 'send_to_device' tool with the target device_id.
 2. For system operations (file, web, shell, OCR): use the appropriate 'node__<node_id>__<action>' tool.
 3. Always explain what you're doing before calling tools.
 4. After tool execution, interpret the result and decide next steps.

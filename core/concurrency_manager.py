@@ -137,7 +137,7 @@ class LockManager:
         """释放锁"""
         async with self._mu:
             locks = self._locks.get(resource_id, [])
-            self._locks[resource_id] = [l for l in locks if l.holder_id != holder_id]
+            self._locks[resource_id] = [lk for lk in locks if lk.holder_id != holder_id]
             self._holder_resources[holder_id].discard(resource_id)
 
             if not self._locks[resource_id]:
@@ -154,7 +154,7 @@ class LockManager:
             resources = list(self._holder_resources.get(holder_id, set()))
             for res in resources:
                 locks = self._locks.get(res, [])
-                self._locks[res] = [l for l in locks if l.holder_id != holder_id]
+                self._locks[res] = [lk for lk in locks if lk.holder_id != holder_id]
                 if not self._locks.get(res):
                     self._locks.pop(res, None)
                 self._wake_waiters(res)
@@ -166,13 +166,13 @@ class LockManager:
             return True
 
         # 重入检测
-        for l in current_locks:
-            if l.holder_id == holder_id:
+        for lk in current_locks:
+            if lk.holder_id == holder_id:
                 return True
 
         if lock_type == LockType.SHARED:
             # 共享锁：只要没有排他锁就行
-            return all(l.lock_type == LockType.SHARED for l in current_locks)
+            return all(lk.lock_type == LockType.SHARED for lk in current_locks)
 
         # 排他锁：必须无锁
         return False
@@ -219,14 +219,14 @@ class LockManager:
 
         # 现有等待关系
         for res, waiters in self._wait_queue.items():
-            holders = {l.holder_id for l in self._locks.get(res, [])}
+            holders = {lk.holder_id for lk in self._locks.get(res, [])}
             for w in waiters:
                 for h in holders:
                     if w.waiter_id != h:
                         graph[w.waiter_id].add(h)
 
         # 添加新的等待关系
-        target_holders = {l.holder_id for l in self._locks.get(target_resource, [])}
+        target_holders = {lk.holder_id for lk in self._locks.get(target_resource, [])}
         for h in target_holders:
             if holder_id != h:
                 graph[holder_id].add(h)
@@ -254,10 +254,10 @@ class LockManager:
         """清理过期锁"""
         expired = []
         for res, locks in list(self._locks.items()):
-            for l in locks:
-                if l.is_expired:
-                    expired.append(f"{l.holder_id}:{res}")
-            self._locks[res] = [l for l in locks if not l.is_expired]
+            for lk in locks:
+                if lk.is_expired:
+                    expired.append(f"{lk.holder_id}:{res}")
+            self._locks[res] = [lk for lk in locks if not lk.is_expired]
             if not self._locks[res]:
                 del self._locks[res]
                 self._wake_waiters(res)

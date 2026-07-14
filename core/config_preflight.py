@@ -184,7 +184,8 @@ _CHECKS: List[EnvCheck] = [
         description="Master encryption key for Node_03 SecretVault.",
         hint=(
             "Generate and set SECRETVAULT_MASTER_KEY in .env:\n"
-            "  SECRETVAULT_MASTER_KEY=$(python3 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')\n"
+            "  SECRETVAULT_MASTER_KEY=$(python3 -c 'from cryptography.fernet import Fernet;"
+            " print(Fernet.generate_key().decode())')\n"
             "  Required when GALAXY_SECRET_BACKEND=vault."
         ),
         groups=["vault", "all"],
@@ -608,8 +609,11 @@ def require_env(var: str, hint: str = "") -> str:
     Intended for inline use inside module-level code that needs a specific
     env var and wants a clear error message:
 
-        secret = require_env("SECRETVAULT_MASTER_KEY",
-                             "Generate with: python3 -c \\"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\\"")
+        secret = require_env(
+            "SECRETVAULT_MASTER_KEY",
+            "Generate with: python3 -c \\"from cryptography.fernet import Fernet; "
+            "print(Fernet.generate_key().decode())\\"",
+        )
     """
     value = os.environ.get(var, "")
     if not value or value.lower().startswith(_PLACEHOLDER_PREFIXES):

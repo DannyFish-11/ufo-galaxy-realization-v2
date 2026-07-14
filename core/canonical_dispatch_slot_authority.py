@@ -755,7 +755,8 @@ def _evaluate_slot_impl(
             execution_mode=execution_mode,
             slot_approved=False,
             status=CanonicalDispatchSlotStatus.SLOT_BLOCKED_CONTINUITY_LEGALITY.value,
-            reason=f"Continuity legality rejected dispatch: {continuity_notes[0] if continuity_notes else 'see continuity authority'}",
+            reason="Continuity legality rejected dispatch: "
+            f"{continuity_notes[0] if continuity_notes else 'see continuity authority'}",
             dimension_results=dimensions,
             blocking_dimension="continuity_legality",
             registered=gate_result.registered,
@@ -784,7 +785,8 @@ def _evaluate_slot_impl(
             execution_mode=execution_mode,
             slot_approved=False,
             status=CanonicalDispatchSlotStatus.SLOT_BLOCKED_EXECUTION_MODE_INELIGIBLE.value,
-            reason=f"Device not eligible for execution mode {execution_mode!r}: {mode_notes[0] if mode_notes else 'eligibility check failed'}",
+            reason=f"Device not eligible for execution mode {execution_mode!r}: "
+            f"{mode_notes[0] if mode_notes else 'eligibility check failed'}",
             dimension_results=dimensions,
             blocking_dimension="execution_mode_eligibility",
             registered=gate_result.registered,
@@ -845,7 +847,8 @@ def _evaluate_slot_impl(
             execution_mode=execution_mode,
             slot_approved=False,
             status=CanonicalDispatchSlotStatus.SLOT_BLOCKED_POLICY.value,
-            reason=f"Dispatch blocked by policy: {policy_notes[0] if policy_notes else 'policy allowance check failed'}",
+            reason="Dispatch blocked by policy: "
+            f"{policy_notes[0] if policy_notes else 'policy allowance check failed'}",
             dimension_results=dimensions,
             blocking_dimension="policy_allowance",
             registered=gate_result.registered,
@@ -881,7 +884,8 @@ def _evaluate_slot_impl(
             execution_mode=execution_mode,
             slot_approved=False,
             status=CanonicalDispatchSlotStatus.SLOT_BLOCKED_DELEGATED_HANDOFF.value,
-            reason=f"Device cannot accept {execution_mode!r} task: {delegated_notes[0] if delegated_notes else 'delegated/handoff check failed'}",
+            reason=f"Device cannot accept {execution_mode!r} task: "
+            f"{delegated_notes[0] if delegated_notes else 'delegated/handoff check failed'}",
             dimension_results=dimensions,
             blocking_dimension="delegated_handoff_acceptability",
             registered=gate_result.registered,

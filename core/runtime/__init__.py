@@ -60,7 +60,8 @@ from contracts.cross_runtime_result_merge import (
 # side): canonical ingress path for Android delegated execution signals.
 # Re-exported here so callers can reach the ingress API from core.runtime
 # without importing the module directly.
-from core.android_delegated_signal_ingress import (  # noqa: E402; PR-21: canonical path closure sentinels; PR-22: ingress registry consolidation sentinels
+# PR-21: canonical path closure sentinels; PR-22: ingress registry consolidation sentinels
+from core.android_delegated_signal_ingress import (  # noqa: E402
     ANDROID_DELEGATED_SIGNAL_INGRESS_AUTHORITY,
     ANDROID_DELEGATED_SIGNAL_INGRESS_PR16_SENTINEL,
     CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_PR21_SENTINEL,
@@ -270,7 +271,8 @@ from core.attached_runtime_reuse_binding import (  # noqa: E402
 # Re-exported here to provide a stable public API surface for reuse dispatch
 # functionality so callers can import from core.runtime without depending on
 # the module path directly.
-from core.attached_runtime_reuse_dispatch import (  # noqa: E402; PR-23: canonical takeover dispatch / delegated fallback
+# PR-23: canonical takeover dispatch / delegated fallback
+from core.attached_runtime_reuse_dispatch import (  # noqa: E402
     ATTACHED_RUNTIME_REUSE_DISPATCH_AUTHORITY,
     ATTACHED_RUNTIME_REUSE_DISPATCH_PR17_SENTINEL,
     DELEGATED_FALLBACK_REQUIRES_INELIGIBLE_CANONICAL_PATH_PR23_POLICY,
@@ -336,7 +338,9 @@ from core.attached_runtime_session import (  # noqa: E402
     list_active_attached_sessions,
     reset_attached_runtime_session_runtime,
 )
-from core.attached_runtime_session_registry import (  # noqa: E402; PR-23: canonical takeover dispatch authority sentinels
+
+# PR-23: canonical takeover dispatch authority sentinels
+from core.attached_runtime_session_registry import (  # noqa: E402
     ATTACHED_RUNTIME_REGISTRY_CONSOLIDATION_PR22_SENTINEL,
     ATTACHED_RUNTIME_REGISTRY_TAKEOVER_DISPATCH_PR23_SENTINEL,
     ATTACHED_RUNTIME_SESSION_REGISTRY_AUTHORITY,
@@ -721,7 +725,8 @@ from core.mesh.live_mesh_session_coordinator import (  # noqa: E402
 # PR-37: Mesh Session Coordinator (mesh package)
 # Imported here for convenience so consumers can reach the coordinator
 # from either core.runtime or core.mesh.
-from core.mesh.mesh_session_coordinator import (  # noqa: E402; PR-J: live mesh runtime execution helpers; MESH-002 closure: MeshSession progression driver
+# PR-J: live mesh runtime execution helpers; MESH-002 closure: MeshSession progression driver
+from core.mesh.mesh_session_coordinator import (  # noqa: E402
     MERGE_TRIGGERED_WHEN_BARRIER_RELEASED_POLICY,
     MESH_SESSION_COORDINATOR_LIVE_RUNTIME_ENGINE_PR_J_SENTINEL,
     MESH_SESSION_PROGRESSION_DRIVER_SENTINEL,
@@ -779,7 +784,17 @@ from core.posture_contract_canonicalization import (  # noqa: E402
 )
 
 # PR-35: Source Runtime Dispatch Orchestrator
-from core.runtime.source_dispatch_orchestrator import (  # PR-24: dispatch selection truth consolidation; PR-25: mainline abnormal-path matrix + Phase A acceptance; PR-26: client-facing result surfacing normalization; PR-27: gateway-facing registration and capability error semantics hardening; PR-28: integrated regression closure and release-readiness tightening; PR-29: post-release follow-up tightening across dispatch and client semantics; PR-30: observability and diagnostics hardening for rollout safety; PR-31: rollout controls, default behaviors, and safe-operating release toggles; PR-32: staged mesh minimal executable closure; PR-J: live mesh runtime engine; PR-33: reconnect and recovery consistency hardening; PR-34: final product-grade cross-device and runtime acceptance pack; PR-closure: Android terminal signal → canonical ReplayFoundation truth
+# PR-24: dispatch selection truth consolidation; PR-25: mainline abnormal-path matrix +
+# Phase A acceptance; PR-26: client-facing result surfacing normalization; PR-27:
+# gateway-facing registration and capability error semantics hardening; PR-28: integrated
+# regression closure and release-readiness tightening; PR-29: post-release follow-up
+# tightening across dispatch and client semantics; PR-30: observability and diagnostics
+# hardening for rollout safety; PR-31: rollout controls, default behaviors, and
+# safe-operating release toggles; PR-32: staged mesh minimal executable closure; PR-J:
+# live mesh runtime engine; PR-33: reconnect and recovery consistency hardening; PR-34:
+# final product-grade cross-device and runtime acceptance pack; PR-closure: Android
+# terminal signal → canonical ReplayFoundation truth
+from core.runtime.source_dispatch_orchestrator import (
     ANDROID_ATTACHED_RUNTIME_ORCHESTRATION_STABILITY_PR34_POLICY,
     ANDROID_TERMINAL_SIGNAL_RECORDED_TO_CANONICAL_TRUTH_SENTINEL,
     ANDROID_TERMINAL_SIGNAL_RECORDS_TO_REPLAY_FOUNDATION_POLICY,

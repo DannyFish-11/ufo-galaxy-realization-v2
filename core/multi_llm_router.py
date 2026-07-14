@@ -2322,7 +2322,8 @@ class MultiLLMRouter:
                     return RoutingDecision(
                         provider="hf_local",
                         model=model,
-                        reason=f"本地主脑优先: HuggingFace 本地模型 [{model}] 可用，任务类型 [{task_type.value}] 复杂度 {complexity_score:.2f}",
+                        reason=f"本地主脑优先: HuggingFace 本地模型 [{model}] 可用，"
+                        f"任务类型 [{task_type.value}] 复杂度 {complexity_score:.2f}",
                         alternatives=[
                             f"{name}:{self.select_model_by_complexity(name, task_type, complexity_score)}"
                             for name in TASK_ROUTING_PREFERENCES.get(task_type, [])

@@ -219,7 +219,7 @@ class CognitiveFieldEngine:
     def remove_tick_listener(self, listener: Callable) -> None:
         """Deregister a previously registered tick listener."""
         with self._lock:
-            self._listeners = [l for l in self._listeners if l != listener]
+            self._listeners = [cb for cb in self._listeners if cb != listener]
 
     @property
     def tick_count(self) -> int:

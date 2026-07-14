@@ -117,7 +117,10 @@ from .assembly_governance import (
     summarize_intent_for_projection,
     summarize_readiness_for_projection,
 )
-from .projection_compiler import (  # PR-5: server-side canonicalization sentinels; PR-6: topology-ready projection delivery sentinel; PR-7: projection readiness / quality contract sentinel
+
+# PR-5: server-side canonicalization sentinels; PR-6: topology-ready projection
+# delivery sentinel; PR-7: projection readiness / quality contract sentinel
+from .projection_compiler import (
     DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY,
     LEGACY_PROJECTION_UCP_KEYS,
     PROJECTION_COMPILER_AUTHORITY,

@@ -1506,10 +1506,10 @@ class DualRepoSystemCompletenessReviewer:
 
         labels = [e.label for e in entries]
 
-        not_present_count = sum(1 for l in labels if l == CompletenessLabel.not_present)
-        evidence_gap_count = sum(1 for l in labels if l == CompletenessLabel.evidence_gap)
-        nominally_present_count = sum(1 for l in labels if l == CompletenessLabel.nominally_present)
-        structure_only_count = sum(1 for l in labels if l == CompletenessLabel.structure_only)
+        not_present_count = sum(1 for lab in labels if lab == CompletenessLabel.not_present)
+        evidence_gap_count = sum(1 for lab in labels if lab == CompletenessLabel.evidence_gap)
+        nominally_present_count = sum(1 for lab in labels if lab == CompletenessLabel.nominally_present)
+        structure_only_count = sum(1 for lab in labels if lab == CompletenessLabel.structure_only)
 
         if not_present_count >= 2:
             return CompletenessVerdict.insufficient_evidence
@@ -1520,8 +1520,8 @@ class DualRepoSystemCompletenessReviewer:
         if structure_only_count >= 3:
             return CompletenessVerdict.structural_only_runtime_not_closed
 
-        all_complete = all(l in (CompletenessLabel.complete, CompletenessLabel.deferred) for l in labels)
-        if all_complete and not any(l.is_blocking() for l in labels):
+        all_complete = all(lab in (CompletenessLabel.complete, CompletenessLabel.deferred) for lab in labels)
+        if all_complete and not any(lab.is_blocking() for lab in labels):
             return CompletenessVerdict.fully_closed
 
         return CompletenessVerdict.partial_closure_gaps_present

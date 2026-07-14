@@ -593,7 +593,8 @@ class NetworkGraphRuntime:
                     "restored_view": TRUTH_GRADE_RECOVERABLE,
                 },
                 notes=[
-                    "Recovered graph entries are kept as degraded/recoverable view truth until live updates replace them.",
+                    "Recovered graph entries are kept as degraded/recoverable view truth "
+                    "until live updates replace them.",
                 ],
                 extra={
                     "durable_state_path": self._state_path,

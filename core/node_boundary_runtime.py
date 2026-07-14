@@ -604,10 +604,7 @@ def get_canonical_nodes(fabric_registry: Any = None) -> List[Any]:
     registry = fabric_registry
     if registry is None:
         try:
-            from core.nodes.node_fabric_registry import (
-                NodeArchitecturalClass,
-                get_node_fabric_registry,
-            )
+            from core.nodes.node_fabric_registry import get_node_fabric_registry
 
             registry = get_node_fabric_registry()
         except ImportError:

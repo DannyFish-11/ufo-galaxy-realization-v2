@@ -187,7 +187,8 @@ class PresenceProjection:
                               in this session are targeted.
             trace_id:         Optional trace identifier.
             android_presence_participation:
-                              Optional :class:`~core.presence.android_presence_participation.AndroidPresenceParticipationSummary`
+                              Optional
+                              :class:`~core.presence.android_presence_participation.AndroidPresenceParticipationSummary`
                               (or any object with a ``records`` iterable of
                               :class:`~core.presence.android_presence_participation.AndroidPresenceParticipationRecord`).
                               When provided, Android devices that are presence

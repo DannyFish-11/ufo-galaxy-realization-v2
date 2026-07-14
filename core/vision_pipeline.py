@@ -310,7 +310,8 @@ You must return ONLY valid JSON (no markdown, no code blocks) with this exact st
   "elements": [
     {
       "id": "elem_0",
-      "type": "button|text|input|image|icon|checkbox|radio|toggle|slider|dropdown|tab|link|menu|toolbar|status_bar|navigation|dialog|list_item|card|container",
+      "type": "button|text|input|image|icon|checkbox|radio|toggle|slider|dropdown|tab|link|
+               menu|toolbar|status_bar|navigation|dialog|list_item|card|container",
       "text": "visible text content",
       "bbox": [x, y, width, height],
       "confidence": 0.95,
@@ -639,7 +640,10 @@ If not found, return: {{"found": false, "reason": "why not found"}}"""
             client = await self._get_client()
 
             headers = {"Content-Type": "application/json"}
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={self.gemini_api_key}"
+            url = (
+                "https://generativelanguage.googleapis.com/v1beta/models/"
+                f"gemini-2.0-flash:generateContent?key={self.gemini_api_key}"
+            )
 
             payload = {
                 "contents": [
