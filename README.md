@@ -190,10 +190,33 @@ cd electron && npm install && npm start
 - Ollama (本地模型)
 
 ### 1. 克隆仓库
+
 ```bash
-git clone <仓库地址> ufo-galaxy
+git clone https://github.com/DannyFish-11/ufo-galaxy-realization-v2.git ufo-galaxy
 cd ufo-galaxy
 ```
+
+**弱网/克隆卡住？** 按下面顺序处理（逐级降低对网络的要求）：
+
+```bash
+# ① 先给 git 配置弱网参数（一次性，全局生效）：
+#    低速阈值 1KB/s 持续 60s 才判失败，避免"慢"被当成"死"；缓冲放大避免大包中断
+git config --global http.lowSpeedLimit 1000
+git config --global http.lowSpeedTime  60
+git config --global http.postBuffer    536870912
+
+# ② 浅克隆（只拉最新一版历史，体积显著减小；后续可 git fetch --unshallow 补全）
+git clone --depth 1 https://github.com/DannyFish-11/ufo-galaxy-realization-v2.git ufo-galaxy
+
+# ③ 还是卡：部分克隆 + 跳过评测数据（external/agentcpm/eval 约 40MB，仅离线评测用，
+#    运行时完全不需要；其余目录全部保留）
+git clone --filter=blob:none --sparse https://github.com/DannyFish-11/ufo-galaxy-realization-v2.git ufo-galaxy
+cd ufo-galaxy
+git sparse-checkout set --no-cone '/*' '!external/agentcpm/eval'
+```
+
+> git clone 不支持断点续传——中断后重试是从零开始，所以弱网下**优先用 ②/③ 减小体积**，
+> 而不是反复重试完整克隆。
 
 ### 2. 安装 Python 依赖
 ```bash

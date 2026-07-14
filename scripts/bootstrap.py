@@ -90,19 +90,35 @@ def _venv_python(venv_dir: Path) -> Path:
     return venv_dir / "bin" / "python"
 
 
+# 弱网加固:默认源失败后逐个回退国内镜像(与 main.py Phase 2 同一套候选)。
+PIP_INDEX_CANDIDATES: list = [
+    None,  # 默认源(尊重用户已配置的 pip.conf / 环境)
+    "https://pypi.tuna.tsinghua.edu.cn/simple",
+    "https://mirrors.aliyun.com/pypi/simple/",
+]
+
+
 def install_deps(python_exe: Path) -> None:
     _section("3/5 安装依赖")
     req = PROJECT_ROOT / "requirements.txt"
     if not req.exists():
         _err(f"未找到 {req}")
         sys.exit(1)
-    try:
-        subprocess.run([str(python_exe), "-m", "pip", "install", "--upgrade", "pip"], check=False)
-        subprocess.run([str(python_exe), "-m", "pip", "install", "-r", str(req)], check=True)
-    except subprocess.CalledProcessError as exc:
-        _err(f"pip install 失败：{exc}")
-        sys.exit(1)
-    _ok("requirements.txt 已安装")
+    subprocess.run([str(python_exe), "-m", "pip", "install", "--upgrade", "pip"], check=False)
+    base = [str(python_exe), "-m", "pip", "install",
+            "--retries", "3", "--timeout", "60", "-r", str(req)]
+    for idx, index_url in enumerate(PIP_INDEX_CANDIDATES):
+        cmd = base + (["-i", index_url] if index_url else [])
+        if index_url:
+            _info(f"回退镜像源 {idx}/{len(PIP_INDEX_CANDIDATES) - 1}: {index_url}")
+        try:
+            subprocess.run(cmd, check=True)
+            _ok("requirements.txt 已安装")
+            return
+        except subprocess.CalledProcessError as exc:
+            _err(f"pip install 失败：{exc}")
+    _err("默认源与国内镜像均失败，请检查网络后重试")
+    sys.exit(1)
 
 
 def ensure_env_file() -> None:
