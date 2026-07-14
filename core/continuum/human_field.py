@@ -38,7 +38,7 @@ Usage::
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 from core.continuum.config import ContinuumConfig, DEFAULT_CONTINUUM_CONFIG

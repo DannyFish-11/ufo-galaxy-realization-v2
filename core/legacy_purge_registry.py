@@ -44,7 +44,7 @@ from __future__ import annotations
 
 import dataclasses
 from enum import Enum
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Tuple
 
 __all__ = [
     "PurgeStatus",

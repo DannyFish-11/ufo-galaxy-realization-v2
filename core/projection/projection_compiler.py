@@ -40,7 +40,7 @@ import logging
 import time
 from typing import Any, Dict, List, Optional
 
-from core.continuum.types import ContinuumState, RuntimeDomain
+from core.continuum.types import ContinuumState
 
 from .runtime_projection import RuntimeProjection
 

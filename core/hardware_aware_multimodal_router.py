@@ -138,6 +138,7 @@ MULTIMODAL_LOCAL_FIRST_PREFERENCES: Dict[str, List[Tuple[SourceType, List[str]]]
 # Hardware-Aware Multimodal Router
 # ---------------------------------------------------------------------------
 
+
 class HardwareAwareMultimodalRouter:
     """硬件感知多模态优先路由器
 
@@ -551,6 +552,7 @@ class HardwareAwareMultimodalRouter:
 # ── 全局单例 ──
 
 _ha_router: Optional[HardwareAwareMultimodalRouter] = None
+
 
 def get_ha_router() -> HardwareAwareMultimodalRouter:
     global _ha_router

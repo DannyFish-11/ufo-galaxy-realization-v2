@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 
 SYSTEM_REALITY_CHECKPOINT_AUTHORITY: str = (

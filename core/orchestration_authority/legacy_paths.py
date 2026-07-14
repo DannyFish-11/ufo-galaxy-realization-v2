@@ -42,7 +42,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 from enum import Enum
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional
 
 logger = logging.getLogger("Galaxy.OrchestrationAuthority")
 
@@ -140,6 +140,7 @@ class LegacyPathEntry:
 #: single source of truth consulted by :func:`is_legacy_path` and
 #: :func:`emit_legacy_guardrail`.
 LEGACY_PATH_REGISTRY: Dict[str, LegacyPathEntry] = {}
+
 
 def _register(*entries: LegacyPathEntry) -> None:
     for entry in entries:

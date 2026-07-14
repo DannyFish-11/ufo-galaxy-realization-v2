@@ -44,9 +44,9 @@ from __future__ import annotations
 
 import dataclasses
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
-from .merge_status import MergeStatus, is_terminal_failure
+from .merge_status import MergeStatus
 
 __all__ = [
     "RecoveryPosture",

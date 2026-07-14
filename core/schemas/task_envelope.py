@@ -35,7 +35,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 from core.schemas.remote_execution import ExecutorTargetType, RemoteExecutionMode
 
@@ -49,6 +49,7 @@ TaskLifecycleStatus = Literal["created", "running", "done", "failed"]
 # ---------------------------------------------------------------------------
 # Canonical TaskEnvelope
 # ---------------------------------------------------------------------------
+
 
 class TaskEnvelope(BaseModel):
     """Canonical internal task representation used across the Agent Bus.

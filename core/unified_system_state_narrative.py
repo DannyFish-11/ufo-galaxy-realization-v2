@@ -722,7 +722,6 @@ def _build_autonomy_participation_state() -> NarrativeDimension:
     try:
         from core.android_network_participation import (
             ANDROID_NETWORK_PARTICIPATION_AUTHORITY,
-            AndroidParticipationTier,
             get_participation_state_for_device,
         )
         from core.android_device_state_store import list_device_state_snapshots
@@ -954,7 +953,7 @@ def _build_recovery_degradation_blockage() -> NarrativeDimension:
 
     # Runtime readiness matrix — blocked/degraded dimensions
     try:
-        from core.runtime_readiness_matrix import ReadinessMatrix, ReadinessVerdict
+        from core.runtime_readiness_matrix import ReadinessMatrix
         matrix = ReadinessMatrix()
         verdict = matrix.evaluate()
         verdict_str = verdict.verdict if hasattr(verdict, "verdict") else str(verdict)

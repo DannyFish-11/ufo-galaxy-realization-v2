@@ -12,8 +12,6 @@
 """
 
 import os
-import json
-import asyncio
 import logging
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
@@ -39,7 +37,7 @@ class DeviceInfo:
     name: str
     status: str = "offline"
     capabilities: List[str] = None
-    
+
     def __post_init__(self):
         if self.capabilities is None:
             self.capabilities = []
@@ -47,7 +45,7 @@ class DeviceInfo:
 
 class DeviceControlService:
     """设备控制服务"""
-    
+
     def __init__(self):
         # 节点服务地址
         self.node_urls = {
@@ -56,23 +54,23 @@ class DeviceControlService:
             "adb": os.getenv("NODE_33_URL", "http://localhost:8033"),
             "multi_device": os.getenv("NODE_71_URL", "http://localhost:8071"),
         }
-        
+
         # 已注册的设备
         self.devices: Dict[str, DeviceInfo] = {}
-        
+
         # HTTP 客户端
         self._client: Optional[httpx.AsyncClient] = None
-    
+
     async def _get_client(self) -> httpx.AsyncClient:
         """获取 HTTP 客户端"""
         if self._client is None:
             self._client = httpx.AsyncClient(timeout=30.0)
         return self._client
-    
+
     # =========================================================================
     # 设备管理
     # =========================================================================
-    
+
     async def register_device(
         self,
         device_id: str,
@@ -91,19 +89,19 @@ class DeviceControlService:
         self.devices[device_id] = device
         logger.info(f"Device registered: {device_id} ({platform})")
         return True
-    
+
     def get_device(self, device_id: str) -> Optional[DeviceInfo]:
         """获取设备信息"""
         return self.devices.get(device_id)
-    
+
     def list_devices(self) -> List[DeviceInfo]:
         """列出所有设备"""
         return list(self.devices.values())
-    
+
     # =========================================================================
     # 统一控制接口 - 真正执行操作
     # =========================================================================
-    
+
     async def click(
         self,
         device_id: str,
@@ -113,7 +111,7 @@ class DeviceControlService:
     ) -> Dict[str, Any]:
         """
         点击屏幕
-        
+
         真正执行：
         - Windows: pyautogui.click(x, y)
         - Android: AccessibilityService.performClick(x, y)
@@ -121,10 +119,10 @@ class DeviceControlService:
         device = self.get_device(device_id)
         if not device:
             return {"success": False, "error": "Device not found"}
-        
+
         try:
             client = await self._get_client()
-            
+
             if device.platform == DevicePlatform.WINDOWS:
                 # 调用 Node_92 AutoControl
                 response = await client.post(
@@ -140,7 +138,7 @@ class DeviceControlService:
                 result = response.json()
                 logger.info(f"Windows click: ({x}, {y}) -> {result}")
                 return result
-            
+
             elif device.platform == DevicePlatform.ANDROID:
                 # 调用 Node_92 AutoControl (Android)
                 response = await client.post(
@@ -155,14 +153,14 @@ class DeviceControlService:
                 result = response.json()
                 logger.info(f"Android click: ({x}, {y}) -> {result}")
                 return result
-            
+
             else:
                 return {"success": False, "error": f"Unsupported platform: {device.platform}"}
-        
+
         except Exception as e:
             logger.error(f"Click failed: {e}")
             return {"success": False, "error": str(e)}
-    
+
     async def input_text(
         self,
         device_id: str,
@@ -170,7 +168,7 @@ class DeviceControlService:
     ) -> Dict[str, Any]:
         """
         输入文本
-        
+
         真正执行：
         - Windows: pyautogui.typewrite(text)
         - Android: AccessibilityService.inputText(text)
@@ -178,10 +176,10 @@ class DeviceControlService:
         device = self.get_device(device_id)
         if not device:
             return {"success": False, "error": "Device not found"}
-        
+
         try:
             client = await self._get_client()
-            
+
             if device.platform == DevicePlatform.WINDOWS:
                 response = await client.post(
                     f"{self.node_urls['auto_control']}/input",
@@ -194,7 +192,7 @@ class DeviceControlService:
                 result = response.json()
                 logger.info(f"Windows input: {text[:20]}... -> {result}")
                 return result
-            
+
             elif device.platform == DevicePlatform.ANDROID:
                 response = await client.post(
                     f"{self.node_urls['auto_control']}/input",
@@ -207,14 +205,14 @@ class DeviceControlService:
                 result = response.json()
                 logger.info(f"Android input: {text[:20]}... -> {result}")
                 return result
-            
+
             else:
                 return {"success": False, "error": f"Unsupported platform: {device.platform}"}
-        
+
         except Exception as e:
             logger.error(f"Input failed: {e}")
             return {"success": False, "error": str(e)}
-    
+
     async def scroll(
         self,
         device_id: str,
@@ -223,7 +221,7 @@ class DeviceControlService:
     ) -> Dict[str, Any]:
         """
         滚动屏幕
-        
+
         真正执行：
         - Windows: pyautogui.scroll(amount)
         - Android: AccessibilityService.swipe()
@@ -231,10 +229,10 @@ class DeviceControlService:
         device = self.get_device(device_id)
         if not device:
             return {"success": False, "error": "Device not found"}
-        
+
         try:
             client = await self._get_client()
-            
+
             if device.platform == DevicePlatform.WINDOWS:
                 scroll_amount = amount if direction == "down" else -amount
                 response = await client.post(
@@ -248,7 +246,7 @@ class DeviceControlService:
                 result = response.json()
                 logger.info(f"Windows scroll: {direction} -> {result}")
                 return result
-            
+
             elif device.platform == DevicePlatform.ANDROID:
                 response = await client.post(
                     f"{self.node_urls['auto_control']}/scroll",
@@ -261,18 +259,18 @@ class DeviceControlService:
                 result = response.json()
                 logger.info(f"Android scroll: {direction} -> {result}")
                 return result
-            
+
             else:
                 return {"success": False, "error": f"Unsupported platform: {device.platform}"}
-        
+
         except Exception as e:
             logger.error(f"Scroll failed: {e}")
             return {"success": False, "error": str(e)}
-    
+
     async def screenshot(self, device_id: str) -> Dict[str, Any]:
         """
         截图
-        
+
         真正执行：
         - Windows: pyautogui.screenshot()
         - Android: AccessibilityService.takeScreenshot()
@@ -280,10 +278,10 @@ class DeviceControlService:
         device = self.get_device(device_id)
         if not device:
             return {"success": False, "error": "Device not found"}
-        
+
         try:
             client = await self._get_client()
-            
+
             # 尝试调用截图接口
             response = await client.post(
                 f"{self.node_urls['auto_control']}/screenshot",
@@ -295,11 +293,11 @@ class DeviceControlService:
             result = response.json()
             logger.info(f"Screenshot: {device_id} -> {result.get('success', False)}")
             return result
-        
+
         except Exception as e:
             logger.error(f"Screenshot failed: {e}")
             return {"success": False, "error": str(e)}
-    
+
     async def open_app(
         self,
         device_id: str,
@@ -390,7 +388,7 @@ class DeviceControlService:
         except Exception as e:
             logger.error(f"Open app failed: {e}")
             return {"success": False, "error": str(e)}
-    
+
     async def press_key(
         self,
         device_id: str,
@@ -398,7 +396,7 @@ class DeviceControlService:
     ) -> Dict[str, Any]:
         """
         按键
-        
+
         真正执行：
         - Windows: pyautogui.press(key)
         - Android: adb shell input keyevent
@@ -406,10 +404,10 @@ class DeviceControlService:
         device = self.get_device(device_id)
         if not device:
             return {"success": False, "error": "Device not found"}
-        
+
         try:
             client = await self._get_client()
-            
+
             response = await client.post(
                 f"{self.node_urls['auto_control']}/press_key",
                 json={
@@ -421,15 +419,15 @@ class DeviceControlService:
             result = response.json()
             logger.info(f"Press key: {key} -> {result}")
             return result
-        
+
         except Exception as e:
             logger.error(f"Press key failed: {e}")
             return {"success": False, "error": str(e)}
-    
+
     # =========================================================================
     # 跨设备控制
     # =========================================================================
-    
+
     async def control_device(
         self,
         from_device_id: str,
@@ -439,7 +437,7 @@ class DeviceControlService:
     ) -> Dict[str, Any]:
         """
         跨设备控制
-        
+
         从一个设备控制另一个设备：
         - 从 Android 控制 Windows
         - 从 Windows 控制 Android
@@ -449,7 +447,7 @@ class DeviceControlService:
         to_device = self.get_device(to_device_id)
         if not to_device:
             return {"success": False, "error": "Target device not found"}
-        
+
         # 执行操作
         if action == "click":
             return await self.click(

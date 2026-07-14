@@ -11,8 +11,8 @@ import logging
 import os
 import platform
 import time
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any, Dict
 
 logger = logging.getLogger("Galaxy.Health")
 

@@ -68,33 +68,33 @@ class StateEventType(str, Enum):
     """
 
     # ── Phase / tri-state transitions ─────────────────────────────────────
-    PHASE_SILENT    = "phase.silent"    # session entered SILENT state
-    PHASE_LIMINAL   = "phase.liminal"   # session entered LIMINAL state
-    PHASE_MANIFEST  = "phase.manifest"  # session entered MANIFEST state
+    PHASE_SILENT = "phase.silent"    # session entered SILENT state
+    PHASE_LIMINAL = "phase.liminal"   # session entered LIMINAL state
+    PHASE_MANIFEST = "phase.manifest"  # session entered MANIFEST state
 
     # ── Task lifecycle ─────────────────────────────────────────────────────
-    TASK_STARTED    = "task.started"    # task transitioned to 'running'
-    TASK_DONE       = "task.done"       # task completed successfully
-    TASK_FAILED     = "task.failed"     # task failed
+    TASK_STARTED = "task.started"    # task transitioned to 'running'
+    TASK_DONE = "task.done"       # task completed successfully
+    TASK_FAILED = "task.failed"     # task failed
 
     # ── Skill / tool invocation ────────────────────────────────────────────
-    SKILL_INVOKED   = "skill.invoked"   # skill/MCP tool call started
-    SKILL_DONE      = "skill.done"      # skill/MCP tool call succeeded
-    SKILL_FAILED    = "skill.failed"    # skill/MCP tool call failed
+    SKILL_INVOKED = "skill.invoked"   # skill/MCP tool call started
+    SKILL_DONE = "skill.done"      # skill/MCP tool call succeeded
+    SKILL_FAILED = "skill.failed"    # skill/MCP tool call failed
 
     # ── Executor / device actions ──────────────────────────────────────────
-    EXECUTOR_START  = "executor.start"  # execution action started
-    EXECUTOR_DONE   = "executor.done"   # execution action finished
-    EXECUTOR_FAIL   = "executor.fail"   # execution action failed
+    EXECUTOR_START = "executor.start"  # execution action started
+    EXECUTOR_DONE = "executor.done"   # execution action finished
+    EXECUTOR_FAIL = "executor.fail"   # execution action failed
 
     # ── Device state ───────────────────────────────────────────────────────
-    DEVICE_UPDATED  = "device.updated"  # device state / capability updated
+    DEVICE_UPDATED = "device.updated"  # device state / capability updated
 
     # ── Block-4: Presence / mesh / HITL ───────────────────────────────────
     PRESENCE_PROJECTED = "presence.projected"  # cognitive state projected to device(s)
-    HITL_EVALUATED     = "hitl.evaluated"      # HITL gate evaluation completed
-    MESH_UPDATED       = "mesh.updated"        # body mesh topology changed
-    TASK_CANCELLED     = "task.cancelled"      # task cancelled by cancel/interrupt signal
+    HITL_EVALUATED = "hitl.evaluated"      # HITL gate evaluation completed
+    MESH_UPDATED = "mesh.updated"        # body mesh topology changed
+    TASK_CANCELLED = "task.cancelled"      # task cancelled by cancel/interrupt signal
 
     # ── Desktop shell / clothing state (PR-8 V2) ──────────────────────────
     # These correspond to the UI shell expansion modes in
@@ -104,10 +104,10 @@ class StateEventType(str, Enum):
     # FULLAGENT.  They are distinct from the tri-state lifecycle events above:
     # shell events describe how the desktop clothing is rendered; phase events
     # describe the subject's existential state.
-    SHELL_DORMANT    = "shell.dormant"    # clothing hidden / collapsed
-    SHELL_ISLAND     = "shell.island"     # compact clothing (island mode)
-    SHELL_SIDESHEET  = "shell.sidesheet"  # side panel clothing expansion
-    SHELL_FULLAGENT  = "shell.fullagent"  # full clothing expansion
+    SHELL_DORMANT = "shell.dormant"    # clothing hidden / collapsed
+    SHELL_ISLAND = "shell.island"     # compact clothing (island mode)
+    SHELL_SIDESHEET = "shell.sidesheet"  # side panel clothing expansion
+    SHELL_FULLAGENT = "shell.fullagent"  # full clothing expansion
 
     # ── Entry-mode unification (PR-1 EntryMode) ────────────────────────────
     ENTRY_MODE_RESOLVED = "entry_mode.resolved"  # entry_mode stamped on a request
@@ -123,7 +123,7 @@ class StateEventType(str, Enum):
     AMBIENT_DECISION = "ambient.decision"
 
     # ── Generic / passthrough ─────────────────────────────────────────────
-    GENERIC         = "generic"         # uncategorised event
+    GENERIC = "generic"         # uncategorised event
 
 
 # ---------------------------------------------------------------------------

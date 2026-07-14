@@ -29,7 +29,7 @@ GET  /api/v1/audit/snapshot
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Dict, Optional
 
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
@@ -122,7 +122,6 @@ def create_router() -> APIRouter:
                     status_code=404,
                     content={"ok": False, "error": f"No events found for trace_id '{trace_id}'"},
                 )
-            from core.control_plane.audit_ledger import events_to_json
             return JSONResponse(
                 content={
                     "ok": True,

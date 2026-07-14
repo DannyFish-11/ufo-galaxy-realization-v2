@@ -26,8 +26,8 @@ from __future__ import annotations
 import dataclasses
 from typing import Any, Dict, List, Optional
 
-from .formation_group import DeviceFormationGroup, EMPTY_FORMATION_GROUP
-from .formation_policy import BarrierPosture, FormationPolicy, DEFAULT_LOCAL_FORMATION_POLICY
+from .formation_group import DeviceFormationGroup
+from .formation_policy import BarrierPosture, FormationPolicy
 from .formation_resolver import resolve_formation
 
 __all__ = [

@@ -22,14 +22,12 @@ Version: 1.0.0
 
 from __future__ import annotations
 
-import copy
 import json
 import logging
 import os
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 try:
@@ -58,9 +56,9 @@ class ConfirmationLevel(str, Enum):
     """命令确认等级，从低到高。"""
     NONE = "none"           # 无需确认
     VOICE = "voice"         # 语音确认
-    WATCH_BTN = "watch_btn" # 手表按键确认
+    WATCH_BTN = "watch_btn"  # 手表按键确认
     DUAL = "dual"           # 双重确认（语音+按键）
-    FORBIDDEN = "forbidden" # 完全禁止
+    FORBIDDEN = "forbidden"  # 完全禁止
 
 
 class AuditLevel(str, Enum):

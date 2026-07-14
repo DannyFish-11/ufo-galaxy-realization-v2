@@ -58,13 +58,11 @@ from core.android_nl_semantic_chain_contract import (
     ANDROID_CROSS_DEVICE_NL_PATH_TYPE,
     ANDROID_NL_CARRIER_SOURCE,
     V2_SEMANTIC_AUTHORITY,
-    is_android_nl_carrier,
     is_v2_semantic_authority_path,
 )
 from core.android_originated_authority_boundary import (
     ANDROID_NL_MUST_ENTER_MAIN_CHAIN_POLICY,
     AndroidParticipationKind,
-    AndroidSignalPermissionLevel,
     classify_android_participation,
 )
 

@@ -67,12 +67,12 @@ except ImportError:
 
 class NodeStatus(str, Enum):
     """Lifecycle states for a single DAG node."""
-    PENDING    = "pending"
-    RUNNING    = "running"
-    DONE       = "done"
-    FAILED     = "failed"
-    SKIPPED    = "skipped"
-    CANCELLED  = "cancelled"   # Block-4: cancel signal received
+    PENDING = "pending"
+    RUNNING = "running"
+    DONE = "done"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+    CANCELLED = "cancelled"   # Block-4: cancel signal received
     INTERRUPTED = "interrupted"  # Block-4: immediate abort signal
 
 

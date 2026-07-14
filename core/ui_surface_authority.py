@@ -73,7 +73,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 from enum import Enum
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.UISurfaceAuthority")
 

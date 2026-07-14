@@ -56,7 +56,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from .exceptions import DeviceAlreadyRegisteredError, DeviceManagerError, DeviceNotFoundError
+from .exceptions import DeviceManagerError
 from .models import UnifiedDevice, UnifiedDeviceStatus, UnifiedDeviceType
 
 logger = logging.getLogger("Galaxy.Unified.DeviceManager")

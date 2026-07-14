@@ -45,7 +45,7 @@ Usage::
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from core.interaction.interaction_types import InteractionDecision, InteractionMode
 from core.interaction.mode_selector import ModeSelector

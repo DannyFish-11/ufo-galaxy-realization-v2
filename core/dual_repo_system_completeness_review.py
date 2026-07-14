@@ -128,7 +128,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.DualRepoSystemCompletenessReview")
 
@@ -1343,7 +1343,6 @@ class DualRepoSystemCompletenessReviewer:
         if _try_import("core.release_governance_taxonomy"):
             try:
                 from core.release_governance_taxonomy import (  # type: ignore[import]
-                    classify_issue,
                     get_terminology_registry,
                 )
                 reg = get_terminology_registry()

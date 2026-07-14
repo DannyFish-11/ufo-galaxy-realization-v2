@@ -21,8 +21,7 @@ import os
 import platform
 import subprocess
 import tempfile
-from pathlib import Path
-from typing import Any, Callable, List, Optional
+from typing import Any, List, Optional
 
 logger = logging.getLogger("Galaxy.TTS")
 

@@ -30,6 +30,7 @@ logger = logging.getLogger("Galaxy.Agent.IntentRouter")
 # 数据模型
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class IntentMode:
     CHAT_ONLY = "chat_only"
     TASK_EXECUTE = "task_execute"

@@ -58,12 +58,9 @@ governance constraint is present and active.
     result = await capability_orchestrator.execute("搜索网页", query="Python")
 """
 
-import asyncio
 import json
 import logging
-import os
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 from enum import Enum
@@ -108,7 +105,7 @@ class Capability:
     tags: List[str] = field(default_factory=list)
     priority: int = 5          # 优先级 (1-10)
     enabled: bool = True
-    
+
     def to_dict(self) -> Dict:
         return {
             "id": self.id,
@@ -130,24 +127,24 @@ class Capability:
 class CapabilityOrchestrator:
     """
     能力编排器
-    
+
     统一管理所有能力，提供智能发现和调用
     """
-    
+
     _instance = None
-    
+
     def __init__(self):
         self.capabilities: Dict[str, Capability] = {}
         self._initialized = False
-        
+
         logger.info("能力编排器初始化")
-    
+
     @classmethod
     def get_instance(cls) -> "CapabilityOrchestrator":
         if cls._instance is None:
             cls._instance = CapabilityOrchestrator()
         return cls._instance
-    
+
     async def reinitialize(self):
         """重新加载所有能力（MCP/Skill 变更后调用）"""
         self.capabilities.clear()
@@ -397,25 +394,25 @@ class CapabilityOrchestrator:
         self._refresh_capability_projection()
         self._initialized = True
         logger.info(f"已加载 {len(self.capabilities)} 个能力")
-    
+
     async def _load_mcp_tools(self):
         self._refresh_capability_projection()
-    
+
     async def _load_skills(self):
         self._refresh_capability_projection()
-    
+
     async def _load_nodes(self):
         await self._seed_static_node_contracts()
         self._refresh_capability_projection()
-    
+
     def _load_builtins(self):
         self._seed_builtin_contracts()
         self._refresh_capability_projection()
-    
+
     # ========================================================================
     # 能力发现
     # ========================================================================
-    
+
     async def discover(
         self,
         query: str,
@@ -423,54 +420,54 @@ class CapabilityOrchestrator:
     ) -> List[Dict]:
         """
         发现能力
-        
+
         Args:
             query: 查询字符串
             limit: 返回数量限制
-        
+
         Returns:
             匹配的能力列表
         """
         if not self._initialized:
             await self.initialize()
-        
+
         query_lower = query.lower()
         results = []
-        
+
         for cap in self.capabilities.values():
             if not cap.enabled:
                 continue
-            
+
             score = 0
             matched = False
-            
+
             # 名称匹配
             if query_lower in cap.name.lower():
                 score += 10
                 matched = True
-            
+
             # 描述匹配
             if query_lower in cap.description.lower():
                 score += 5
                 matched = True
-            
+
             # 标签匹配
             for tag in cap.tags:
                 if query_lower in tag.lower():
                     score += 3
                     matched = True
-            
+
             if matched:
                 # 仅在有真实语义匹配时再叠加优先级，避免未知查询被“最高优先级”
                 # 能力误吸附，破坏 fallback-to-chat 行为。
                 score += cap.priority
                 results.append((cap, score))
-        
+
         # 按分数排序
         results.sort(key=lambda x: x[1], reverse=True)
-        
+
         return [cap.to_dict() for cap, _ in results[:limit]]
-    
+
     async def find_best(
         self,
         query: str,
@@ -481,11 +478,11 @@ class CapabilityOrchestrator:
             cap_dict = results[0]
             return self.capabilities.get(cap_dict["id"])
         return None
-    
+
     # ========================================================================
     # 能力执行
     # ========================================================================
-    
+
     async def execute(
         self,
         capability_id: str,
@@ -493,24 +490,24 @@ class CapabilityOrchestrator:
     ) -> Any:
         """
         执行能力
-        
+
         Args:
             capability_id: 能力 ID
             **params: 参数
-        
+
         Returns:
             执行结果
         """
         if not self._initialized:
             await self.initialize()
-        
+
         cap = self.capabilities.get(capability_id)
         if not cap:
             raise ValueError(f"能力不存在: {capability_id}")
-        
+
         if not cap.enabled:
             raise RuntimeError(f"能力已禁用: {capability_id}")
-        
+
         # 根据类型执行
         if cap.type == CapabilityType.MCP_TOOL:
             return await self._execute_mcp(cap, params)
@@ -522,7 +519,7 @@ class CapabilityOrchestrator:
             return await self._execute_builtin(cap, params)
         else:
             raise RuntimeError(f"未知能力类型: {cap.type}")
-    
+
     async def _execute_mcp(self, cap: Capability, params: Dict) -> Any:
         """执行 MCP 工具"""
         from core.mcp_loader import mcp_loader
@@ -534,13 +531,13 @@ class CapabilityOrchestrator:
             raise RuntimeError(f"MCP 服务器 {cap.source} 未找到")
 
         return await mcp_loader.call_tool(server_id, tool_name, params)
-    
+
     async def _execute_skill(self, cap: Capability, params: Dict) -> Any:
         """执行技能"""
         from core.skill_loader import skill_loader
         skill_id = cap.source
         return await skill_loader.execute(skill_id, **params)
-    
+
     async def _execute_node(self, cap: Capability, params: Dict) -> Any:
         """执行节点 — 优先走 NodeRegistry in-process 调用，降级到 HTTP"""
         import httpx
@@ -608,7 +605,7 @@ class CapabilityOrchestrator:
             )
 
         return await self.execute(cap.id, **params)
-    
+
     async def _execute_builtin(self, cap: Capability, params: Dict) -> Any:
         """执行内置能力"""
         if cap.id == "builtin_chat":
@@ -616,7 +613,7 @@ class CapabilityOrchestrator:
             from core.multi_llm_router import get_llm_router
             router = get_llm_router()
             return await router.chat([{"role": "user", "content": params.get("message", "")}])
-        
+
         elif cap.id == "builtin_device_control":
             # 设备控制
             from core.device_control_service import device_control
@@ -701,11 +698,11 @@ class CapabilityOrchestrator:
             }
 
         return None
-    
+
     # ========================================================================
     # 智能执行
     # ========================================================================
-    
+
     async def smart_execute(
         self,
         query: str,
@@ -713,17 +710,17 @@ class CapabilityOrchestrator:
     ) -> Any:
         """
         智能执行 - 自动发现并执行最佳能力
-        
+
         Args:
             query: 查询字符串
             **params: 参数
-        
+
         Returns:
             执行结果
         """
         # 发现最佳能力
         cap = await self.find_best(query)
-        
+
         if cap:
             logger.info(f"智能执行: {query} -> {cap.id}")
             return await self.execute(cap.id, **params)
@@ -731,22 +728,22 @@ class CapabilityOrchestrator:
             # 没有找到，使用默认对话
             logger.info(f"智能执行: {query} -> builtin_chat")
             return await self.execute("builtin_chat", message=query)
-    
+
     # ========================================================================
     # 能力管理
     # ========================================================================
-    
+
     def list_capabilities(self) -> List[Dict]:
         """列出所有能力"""
         return [cap.to_dict() for cap in self.capabilities.values()]
-    
+
     def enable_capability(self, id: str) -> bool:
         """启用能力"""
         if id in self.capabilities:
             self.capabilities[id].enabled = True
             return True
         return False
-    
+
     def disable_capability(self, id: str) -> bool:
         """禁用能力"""
         if id in self.capabilities:

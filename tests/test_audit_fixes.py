@@ -282,22 +282,23 @@ class TestNodeFailover(unittest.TestCase):
 class TestBufferBounds(unittest.TestCase):
     """测试各模块的缓冲区大小限制"""
 
-    def test_mqtt_message_uses_deque(self):
-        """MQTT 消息列表应使用有界 deque"""
-        from nodes.Node_41_MQTT.main import MQTTManager
-        mgr = MQTTManager()
-        self.assertIsInstance(mgr.messages, deque)
-        self.assertEqual(mgr.messages.maxlen, MQTTManager.MAX_MESSAGE_HISTORY)
+    def test_mqtt_capability_relocated_to_transport_adapter(self):
+        """MQTT 能力已从独立 Node_41 节点归位为 AIP 传输适配器。
 
-    def test_mqtt_deque_auto_evicts(self):
-        """验证 deque 超出上限时自动淘汰旧消息"""
-        from nodes.Node_41_MQTT.main import MQTTManager
-        mgr = MQTTManager()
-        for i in range(MQTTManager.MAX_MESSAGE_HISTORY + 100):
-            mgr.messages.append({"id": i})
-        self.assertEqual(len(mgr.messages), MQTTManager.MAX_MESSAGE_HISTORY)
-        # 最旧的应该被淘汰
-        self.assertEqual(mgr.messages[0]["id"], 100)
+        registry drift 收口(Canonical Node Audit):Node_37/38/41/42/48
+        这些传输类能力从无独立 nodes/ 目录,已作为 core.adapters 的
+        DBus/BLE/MQTT/CANbus/Serial 传输适配器实现并注册进 AIPTransport。
+        原钉 nodes.Node_41_MQTT.MQTTManager 的消息历史 deque 是已删除
+        节点形态独有的缓存,转发型 adapter 不保留消息历史 —— 那是能力
+        归位前的退役契约。此处改钉能力仍在(adapter 存在且是 canonical
+        传输实现)。
+        """
+        from core.adapters.mqtt_adapter import MQTTAdapter
+        adapter = MQTTAdapter()
+        self.assertEqual(adapter.transport_type, "mqtt")
+        # 节点形态确已退役,不得复活
+        with self.assertRaises(ModuleNotFoundError):
+            import nodes.Node_41_MQTT.main  # noqa: F401
 
     def test_event_bus_bounded_queue(self):
         """EventBus 事件队列应有最大容量"""

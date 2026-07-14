@@ -21,7 +21,7 @@ This runtime is the third canonical system graph (alongside the
     │  NETWORK GRAPH RUNTIME  (this module)                               │
     │  Tracks: fabric_participant | reachable_endpoint | route_participant │
     │                                                                      │
-    │  Edges: fabric_link (two nodes share a fabric layer)                 
+    │  Edges: fabric_link (two nodes share a fabric layer)
     │         route_hint  (one node advertises a route to another)         │
     └──────────────────────────────────────────────────────────────────────┘
                ↑ projected from CapabilityAssimilationLayer

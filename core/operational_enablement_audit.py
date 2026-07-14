@@ -32,9 +32,9 @@ Authority sentinel
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List
 
 # ---------------------------------------------------------------------------
 # Authority sentinel
@@ -65,16 +65,17 @@ AUDIT_SCOPE: str = (
 #   core/routes/vault.py           — API vault: POST /api/v1/vault/credentials writes secrets
 # ---------------------------------------------------------------------------
 
+
 class V2ConfigSource(str, Enum):
     """
     Canonical config source layers, ordered lowest → highest precedence.
     Source: core/unified_config.py docstring "Config source precedence" section.
     """
-    STATIC_CONFIG_JSON        = "config.json (root)"          # lowest; read-only static defaults
-    RUNTIME_CONFIG_JSON       = "runtime/config.json"         # written by ConfigService/ConfigStore
-    RUNTIME_SECRETS_ENV       = "runtime/secrets.env"         # written by ConfigService/ConfigStore
-    LEGACY_DOT_ENV            = ".env"                        # user-managed legacy secrets file
-    PROCESS_ENVIRONMENT       = "os.environ"                  # highest; CLI / Docker / CI overrides
+    STATIC_CONFIG_JSON = "config.json (root)"          # lowest; read-only static defaults
+    RUNTIME_CONFIG_JSON = "runtime/config.json"         # written by ConfigService/ConfigStore
+    RUNTIME_SECRETS_ENV = "runtime/secrets.env"         # written by ConfigService/ConfigStore
+    LEGACY_DOT_ENV = ".env"                        # user-managed legacy secrets file
+    PROCESS_ENVIRONMENT = "os.environ"                  # highest; CLI / Docker / CI overrides
 
 
 V2_CONFIG_SOURCE_PRECEDENCE: List[V2ConfigSource] = [
@@ -198,9 +199,9 @@ class AndroidConfigLayer(str, Enum):
     Source: app/src/main/assets/config.properties header comment
             and app/build.gradle comment on GALAXY_SERVER_URL.
     """
-    BUILD_CONFIG     = "BuildConfig (app/build.gradle)"
-    ASSET_DEFAULTS   = "assets/config.properties"
-    SHARED_PREFS     = "SharedPreferences (AppSettings)"
+    BUILD_CONFIG = "BuildConfig (app/build.gradle)"
+    ASSET_DEFAULTS = "assets/config.properties"
+    SHARED_PREFS = "SharedPreferences (AppSettings)"
 
 
 ANDROID_CONFIG_PRECEDENCE: List[AndroidConfigLayer] = [
@@ -302,12 +303,12 @@ Failures are logged and local config is preserved unchanged.
 
 class DesktopBoardCapability(str, Enum):
     """What the status_board_v2 package is capable of."""
-    STATUS_READ_ONLY           = "read_only_status_projection"
-    CONFIG_WRITE_PROVIDER      = "config_write_provider_enable_disable"
-    CONFIG_WRITE_ROUTING       = "config_write_routing_policy"
-    TOPOLOGY_INSPECT           = "topology_inspect_nodes_and_relations"
-    DIAGNOSTIC_INSPECT         = "diagnostic_inspect_single_task"
-    TASK_ROUTE_INSPECT         = "task_route_and_executor_inspect"
+    STATUS_READ_ONLY = "read_only_status_projection"
+    CONFIG_WRITE_PROVIDER = "config_write_provider_enable_disable"
+    CONFIG_WRITE_ROUTING = "config_write_routing_policy"
+    TOPOLOGY_INSPECT = "topology_inspect_nodes_and_relations"
+    DIAGNOSTIC_INSPECT = "diagnostic_inspect_single_task"
+    TASK_ROUTE_INSPECT = "task_route_and_executor_inspect"
 
 
 DESKTOP_BOARD_IS_CONTROL_SURFACE: bool = True
@@ -392,8 +393,8 @@ class TriStateMode(str, Enum):
     Source: core/desktop_presence_runtime.py class TriState(str, Enum).
     This is the 'three states' the user referred to.
     """
-    SILENT   = "silent"    # at rest; multimodal ingress continues
-    LIMINAL  = "liminal"   # request received; OpenClawd cognition in progress
+    SILENT = "silent"    # at rest; multimodal ingress continues
+    LIMINAL = "liminal"   # request received; OpenClawd cognition in progress
     MANIFEST = "manifest"  # actively producing output / controlling devices
 
 
@@ -438,14 +439,15 @@ Source: windows_client/status_board_v2/phase_surface.py (display only)
         and core/desktop_presence_runtime.py (authoritative driver).
 """
 
+
 class UIShellMode(str, Enum):
     """
     Desktop clothing expansion modes — NOT the subject lifecycle tri-state.
     These describe how the desktop UI shell is rendered, not what the subject is doing.
     Source: system_integration/hardware_trigger.py class SystemState(str, Enum).
     """
-    DORMANT   = "dormant"    # clothing hidden / collapsed
-    ISLAND    = "island"     # compact clothing mode (dynamic island style)
+    DORMANT = "dormant"    # clothing hidden / collapsed
+    ISLAND = "island"     # compact clothing mode (dynamic island style)
     SIDESHEET = "sidesheet"  # side panel clothing expansion
     FULLAGENT = "fullagent"  # full clothing expansion
 
@@ -455,8 +457,8 @@ class FabricMode(str, Enum):
     Fabric / deployment modes — resolved once at startup from env vars.
     Source: core/system_mode.py class SystemMode(str, Enum).
     """
-    DESKTOP_LOCAL         = "desktop-local"        # default; no cross-device fabric
-    DESKTOP_CROSS_DEVICE  = "desktop-cross-device" # opt-in; NATS / control-plane active
+    DESKTOP_LOCAL = "desktop-local"        # default; no cross-device fabric
+    DESKTOP_CROSS_DEVICE = "desktop-cross-device"  # opt-in; NATS / control-plane active
 
 
 THREE_STATE_DISAMBIGUATION: Dict[str, str] = {
@@ -777,9 +779,9 @@ class OperabilityTier(str, Enum):
     """
     Operability tier for the integrated dual-repo system.
     """
-    MATURE_CONFIGURABLE_APP       = "mature_configurable_application"
+    MATURE_CONFIGURABLE_APP = "mature_configurable_application"
     IMPL_COMPLETE_DEVOPS_ORIENTED = "implementation_complete_developer_ops_oriented"
-    PARTIALLY_COMPLETE            = "partially_complete"
+    PARTIALLY_COMPLETE = "partially_complete"
 
 
 FINAL_VERDICT: OperabilityTier = OperabilityTier.IMPL_COMPLETE_DEVOPS_ORIENTED
@@ -867,7 +869,7 @@ CHINESE_SUMMARY: str = """
 
   不是"半成品"——主架构完整，配置界面存在，模型供给流水线正式且完整。
   不是"零门槛消费级产品"——跨设备需要Tailscale，Android本地AI需要额外推理库。
-  
+
   一个具备DevOps能力的操作员可以按照可文档化的步骤完整搭建和运行这套系统。
   一个普通最终用户在当前代码状态下无法开箱即用。
 """
@@ -962,4 +964,3 @@ __all__ = [
     "CHINESE_SUMMARY",
     "get_audit_summary",
 ]
-

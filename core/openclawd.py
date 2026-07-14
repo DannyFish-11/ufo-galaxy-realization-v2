@@ -86,13 +86,10 @@ _logger = logging.getLogger(__name__)
 
 
 import asyncio as _asyncio_module
-import dataclasses
-import enum
 import logging
-import socket
 import time
 import uuid
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.OpenClawd")
 
@@ -109,14 +106,9 @@ OPENCLAWD_ENTRYPOINT_ROLE: str = "internal_entry"
 # the built-in tool lists below depend on these names being in scope and the
 # import must follow the top-of-module stdlib imports already present above.
 from core.orchestration.lifecycle import (  # noqa: E402
-    _LOCAL_DEVICE_PREFIXES,
-    _LOCAL_HOSTNAME,
     _is_local_device,
-    _SubtaskStatus,
     _SubtaskEntry,
-    ParallelResult,
     ParallelGroupTracker,
-    LIFECYCLE_MANAGER_AUTHORITY,
     LifecycleManager,
 )
 
@@ -1727,7 +1719,6 @@ class OpenClawd:
         try:
             from core.degraded_operation_envelope import (  # noqa: PLC0415
                 build_degraded_operation_envelope,
-                envelope_summary,
             )
 
             env = build_degraded_operation_envelope(
@@ -1972,7 +1963,6 @@ class OpenClawd:
                 apply_execution_policy_override,
                 apply_source_override,
                 build_override_summary,
-                OperatorOverrideSnapshot,
             )
 
             state = get_operator_override_state()
@@ -7762,7 +7752,8 @@ class OpenClawd:
         except Exception as exc:
             return None
         try:
-            import json, os
+            import json
+            import os
 
             registry_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config", "node_registry.json")
             with open(registry_path, "r", encoding="utf-8") as f:
@@ -8537,7 +8528,7 @@ class OpenClawd:
     async def _execute_team_task(self, message: str, intent, factory, router) -> dict:
         """执行团队协作任务 — 复杂度驱动策略 + 工具注入 + Manifest 记录"""
         try:
-            from core.agent_team import TeamManager, TeamStrategy
+            from core.agent_team import TeamManager
             from core.schemas.agent import TeamManifestSchema, TeamMemberSchema, TeamStrategyEnum
 
             manager = TeamManager(agent_factory=factory, llm_router=router)

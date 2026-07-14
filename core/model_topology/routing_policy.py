@@ -23,15 +23,14 @@ No UI semantics; no dashboard imports.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
 
 from core.continuum.types import RuntimeDomain, TriStatePhase
 
 from .model_node import ModelNode
 from .model_supply_graph import ModelSupplyGraph
 from .model_weight_field import ModelWeightField, apply_weight_fields
-from .topology_types import TopologyRole
 
 logger = logging.getLogger("Galaxy.ModelTopology.RoutingPolicy")
 

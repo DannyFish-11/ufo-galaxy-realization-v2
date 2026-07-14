@@ -48,7 +48,6 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from core.config_schema import (
-    CONFIG_SCHEMA_AUTHORITY,
     ConfigDefaults,
     SECRET_KEYS,
     classify_key,
@@ -73,6 +72,7 @@ _DEFAULT_SECRETS_PATH = _REPO_ROOT / "runtime" / "secrets.env"
 # ---------------------------------------------------------------------------
 # Errors
 # ---------------------------------------------------------------------------
+
 
 class SecretInConfigError(ValueError):
     """Raised when a caller attempts to write a secret key into config.json."""

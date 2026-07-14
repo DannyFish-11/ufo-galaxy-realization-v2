@@ -56,15 +56,15 @@ logger = logging.getLogger("Galaxy.Unified.DeviceHealth")
 
 _DEFAULT_WINDOW = 20          # Samples kept per device
 _LATENCY_GOOD_MS = 50.0       # Latency ≤ this is scored as 1.0
-_LATENCY_BAD_MS  = 2000.0     # Latency ≥ this is scored as 0.0
-_JITTER_GOOD_MS  = 20.0       # Jitter ≤ this is scored as 1.0
-_JITTER_BAD_MS   = 500.0      # Jitter ≥ this is scored as 0.0
+_LATENCY_BAD_MS = 2000.0     # Latency ≥ this is scored as 0.0
+_JITTER_GOOD_MS = 20.0       # Jitter ≤ this is scored as 1.0
+_JITTER_BAD_MS = 500.0      # Jitter ≥ this is scored as 0.0
 
 # Component weights (must sum to 1.0)
-_W_LATENCY    = 0.35
+_W_LATENCY = 0.35
 _W_ERROR_RATE = 0.30
-_W_JITTER     = 0.20
-_W_HEARTBEAT  = 0.15
+_W_JITTER = 0.20
+_W_HEARTBEAT = 0.15
 
 
 # ---------------------------------------------------------------------------
@@ -220,10 +220,10 @@ class DeviceHealthScorer:
         heartbeat_score = self._score_heartbeat(s)
 
         total = (
-            _W_LATENCY    * latency_score
+            _W_LATENCY * latency_score
             + _W_ERROR_RATE * error_rate_score
-            + _W_JITTER     * jitter_score
-            + _W_HEARTBEAT  * heartbeat_score
+            + _W_JITTER * jitter_score
+            + _W_HEARTBEAT * heartbeat_score
         )
         total = max(0.0, min(1.0, total))
 

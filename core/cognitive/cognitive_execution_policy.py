@@ -58,7 +58,6 @@ Usage::
 from __future__ import annotations
 
 import logging
-import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional

@@ -16,7 +16,7 @@ import json
 import logging
 import socket
 import struct
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from core.aip_transport import TransportAdapter
 

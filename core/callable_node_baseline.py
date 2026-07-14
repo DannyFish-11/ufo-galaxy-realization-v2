@@ -62,6 +62,7 @@ CALLABLE_NODE_BASELINE_ESTABLISHED: str = (
 # Canonical callable-class set
 # ---------------------------------------------------------------------------
 
+
 def _build_callable_classes() -> "FrozenSet":
     """Return the frozenset of NodeArchitecturalClass values that are callable.
 
@@ -71,7 +72,6 @@ def _build_callable_classes() -> "FrozenSet":
     """
     try:
         from core.nodes.node_fabric_registry import (
-            NodeArchitecturalClass,
             _CAPABILITY_SYNC_ELIGIBLE,
         )
         # _CAPABILITY_SYNC_ELIGIBLE is the authoritative set defined in

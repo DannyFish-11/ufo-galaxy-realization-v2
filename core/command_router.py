@@ -4056,7 +4056,7 @@ class CommandRouter:
                 _retry_task_id = f"{task_id}:retry:{attempt + 1}"
                 _tgr_retry = _get_tgr_retry()
                 # Register retry node (stub) so edge can be wired
-                from core.task_graph_runtime import GraphNode as _GN_retry, GraphNodeState as _GNS_retry
+                from core.task_graph_runtime import GraphNode as _GN_retry
 
                 _retry_stub = _GN_retry(
                     task_id=_retry_task_id,

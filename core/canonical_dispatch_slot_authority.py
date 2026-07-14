@@ -1282,7 +1282,6 @@ def _eval_delegated_handoff_acceptability(
     notes: List[str] = []
     try:
         from core.delegated_flow_acceptance_gate import (
-            DelegatedFlowAcceptanceGate,
             get_acceptance_gate,
         )
         gate = get_acceptance_gate()

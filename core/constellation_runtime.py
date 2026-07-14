@@ -735,7 +735,7 @@ class ConstellationRuntime:
         if ledger is None:
             return
         try:
-            from core.control_plane.audit_ledger import EventType, Severity
+            from core.control_plane.audit_ledger import EventType
             et = getattr(EventType, event_name.upper(), None)
             if et is None:
                 return

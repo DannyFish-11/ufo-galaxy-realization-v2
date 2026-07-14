@@ -19,7 +19,6 @@ only initialised when ``build()`` is called with ``enabled=True``.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 from typing import Any, Dict, Optional

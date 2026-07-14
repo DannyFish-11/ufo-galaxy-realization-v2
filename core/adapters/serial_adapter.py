@@ -6,7 +6,7 @@ Migrated from nodes/Node_48_Serial/main.py
 
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from core.aip_transport import TransportAdapter
 

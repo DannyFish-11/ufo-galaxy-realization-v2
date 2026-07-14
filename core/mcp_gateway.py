@@ -28,11 +28,9 @@ import fnmatch
 import json
 import logging
 import os
-import tempfile
-import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger("mcp_gateway")
 
@@ -42,10 +40,8 @@ from core.schemas.contracts import (
     AgentEventModel,
     EventDomain,
     EventSeverity,
-    MCPRegistrationAction,
     MCPToolDescriptorModel,
     MCPToolRegistrationModel,
-    MCPToolRegistrationResultModel,
     TimestampModel,
 )
 

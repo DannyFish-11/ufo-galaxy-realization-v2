@@ -51,7 +51,6 @@ from .route_explanation import (
     RejectedCandidate,
     RouteExplanation,
     build_route_explanation,
-    EMPTY_ROUTE_EXPLANATION,
 )
 from .explanation_summary import (
     RoutingExplanationSummary,

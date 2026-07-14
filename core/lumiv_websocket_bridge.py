@@ -380,7 +380,6 @@ class GalaxyPresenceBridge:
             },
         }
 
-
     async def _broadcast_conversation(self, msg: Dict[str, Any]) -> None:
         """对话消息只走 WebSocket（useConversation 的通道）。
 

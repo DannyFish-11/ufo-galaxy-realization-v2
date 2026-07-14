@@ -787,7 +787,7 @@ class AgentKernel:
     def _format_hybrid_reply(self, message: str, result: ExecutionResult) -> str:
         """Hybrid 模式：在执行结果前附加自然语言说明。"""
         if not result.reply:
-            return f"我已根据你的请求执行了任务。"
+            return "我已根据你的请求执行了任务。"
         return result.reply
 
     async def _record_session(

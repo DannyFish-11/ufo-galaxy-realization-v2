@@ -51,12 +51,11 @@ import dataclasses
 from typing import Any, Dict, Optional
 
 from .agent_role import AgentRole
-from .handoff_policy import HandoffPolicy, DEFAULT_HANDOFF_POLICY, get_policy_for_role
+from .handoff_policy import HandoffPolicy, get_policy_for_role
 from .ownership_summary import (
     OwnershipSummary,
     IDLE_OWNERSHIP_SUMMARY,
     build_ownership_summary,
-    make_ownership_summary,
 )
 from .responsibility_graph import OwnershipRecord
 

@@ -6,8 +6,7 @@ Linux D-Bus IPC (Inter-Process Communication) transport.
 """
 
 import logging
-import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from core.aip_transport import TransportAdapter
 

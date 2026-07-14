@@ -17,13 +17,13 @@ Galaxy - 统一设备通信协议
 
 使用方法：
     from core.device_communication import device_comm
-    
+
     # 连接设备
     await device_comm.connect("android_001", websocket)
-    
+
     # 发送命令
     result = await device_comm.send_command("android_001", "click", {"x": 100, "y": 200})
-    
+
     # 断开设备
     await device_comm.disconnect("android_001")
 """
@@ -36,7 +36,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Callable, Union
+from typing import Any, Dict, List, Optional, Callable
 from fastapi import WebSocket
 
 logger = logging.getLogger("Galaxy.DeviceComm")
@@ -91,8 +91,8 @@ class MessageType(str, Enum):
 
     # 唤醒与会话漫游
     WAKE_EVENT = "wake_event"           # 设备唤醒事件
-    SESSION_MIGRATE = "session_migrate" # 会话迁移请求
-    SESSION_RESTORE = "session_restore" # 会话恢复
+    SESSION_MIGRATE = "session_migrate"  # 会话迁移请求
+    SESSION_RESTORE = "session_restore"  # 会话恢复
 
     def to_aip_v3(self):
         """转换为 AIP v3.0 MessageType 枚举值（若可用）或名称字符串。
@@ -135,7 +135,7 @@ class DeviceMessage:
     timestamp: float = field(default_factory=time.time)
     device_id: str = ""
     correlation_id: str = ""  # 关联的请求 ID
-    
+
     def to_json(self) -> str:
         return json.dumps({
             "type": self.type.value,
@@ -161,7 +161,7 @@ class DeviceMessage:
                 **self.payload,
             },
         }
-    
+
     @classmethod
     def from_json(cls, data: str) -> "DeviceMessage":
         obj = json.loads(data)
@@ -184,19 +184,19 @@ class DeviceConnection:
     connected_at: float = field(default_factory=time.time)
     last_heartbeat: float = field(default_factory=time.time)
     last_message: float = field(default_factory=time.time)
-    
+
     # 统计
     messages_sent: int = 0
     messages_received: int = 0
     commands_executed: int = 0
     errors: int = 0
-    
+
     # 状态
     status: str = "connected"
-    
+
     # 等待响应的请求
     pending_requests: Dict[str, asyncio.Future] = field(default_factory=dict)
-    
+
     def is_alive(self, timeout: float = 60.0) -> bool:
         """检查连接是否存活"""
         return time.time() - self.last_heartbeat < timeout
@@ -209,34 +209,34 @@ class DeviceConnection:
 class DeviceCommunication:
     """
     统一设备通信管理器
-    
+
     管理所有设备的通信连接
     """
-    
+
     _instance = None
-    
+
     def __init__(self):
         # 设备连接
         self.connections: Dict[str, DeviceConnection] = {}
-        
+
         # 心跳任务
         self._heartbeat_task: Optional[asyncio.Task] = None
-        
+
         # 消息处理器
         self._message_handlers: Dict[str, Callable] = {}
-        
+
         # 事件回调
         self._on_device_connected: List[Callable] = []
         self._on_device_disconnected: List[Callable] = []
         self._on_device_message: List[Callable] = []
-        
+
         # 配置
         self.heartbeat_interval = 30.0
         self.heartbeat_timeout = 60.0
         self.command_timeout = 30.0
-        
+
         logger.info("设备通信管理器初始化")
-    
+
     @classmethod
     def get_instance(cls) -> "DeviceCommunication":
         # NOTE: This singleton is used for process-wide state sharing.
@@ -246,11 +246,11 @@ class DeviceCommunication:
         if cls._instance is None:
             cls._instance = DeviceCommunication()
         return cls._instance
-    
+
     # ========================================================================
     # 连接管理
     # ========================================================================
-    
+
     async def connect(
         self,
         device_id: str,
@@ -258,11 +258,11 @@ class DeviceCommunication:
     ) -> bool:
         """
         连接设备
-        
+
         Args:
             device_id: 设备 ID
             websocket: WebSocket 连接
-        
+
         Returns:
             是否成功
         """
@@ -275,37 +275,37 @@ class DeviceCommunication:
                 last_heartbeat=time.time(),
                 status="connected",
             )
-            
+
             self.connections[device_id] = conn
-            
+
             # 更新设备注册表
             try:
                 from core.device_registry import device_registry
                 await device_registry.update_status(device_id, status="online")
             except (ImportError, AttributeError) as e:
                 logger.debug(f"设备注册表不可用: {e}")
-            
+
             # 启动心跳任务
             if not self._heartbeat_task:
                 self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
-            
+
             # 触发事件
             await self._emit_event("connected", device_id)
-            
+
             logger.info(f"设备连接: {device_id}")
             return True
-            
+
         except Exception as e:
             logger.error(f"设备连接失败: {device_id} - {e}")
             return False
-    
+
     async def disconnect(self, device_id: str) -> bool:
         """断开设备连接"""
         if device_id not in self.connections:
             return False
-        
+
         conn = self.connections.pop(device_id)
-        
+
         # 关闭 WebSocket（带超时防止挂起）
         if conn.websocket:
             try:
@@ -319,29 +319,29 @@ class DeviceCommunication:
             await device_registry.update_status(device_id, status=DeviceStatus.OFFLINE)
         except (ImportError, AttributeError) as e:
             logger.debug(f"设备注册表不可用: {e}")
-        
+
         # 触发事件
         await self._emit_event("disconnected", device_id)
-        
+
         logger.info(f"设备断开: {device_id}")
         return True
-    
+
     def is_connected(self, device_id: str) -> bool:
         """检查设备是否连接"""
         conn = self.connections.get(device_id)
         return conn is not None and conn.is_alive(self.heartbeat_timeout)
-    
+
     def list_connected_devices(self) -> List[str]:
         """列出已连接的设备"""
         return [
             device_id for device_id, conn in self.connections.items()
             if conn.is_alive(self.heartbeat_timeout)
         ]
-    
+
     # ========================================================================
     # 消息发送
     # ========================================================================
-    
+
     async def send(
         self,
         device_id: str,
@@ -349,11 +349,11 @@ class DeviceCommunication:
     ) -> bool:
         """
         发送消息
-        
+
         Args:
             device_id: 设备 ID
             message: 消息
-        
+
         Returns:
             是否成功
         """
@@ -361,7 +361,7 @@ class DeviceCommunication:
         if not conn or not conn.websocket:
             logger.warning(f"设备未连接: {device_id}")
             return False
-        
+
         try:
             message.device_id = device_id
             await conn.websocket.send_text(message.to_json())
@@ -372,7 +372,7 @@ class DeviceCommunication:
             logger.error(f"发送消息失败: {device_id} - {e}")
             conn.errors += 1
             return False
-    
+
     async def send_command(
         self,
         device_id: str,
@@ -382,52 +382,52 @@ class DeviceCommunication:
     ) -> Dict[str, Any]:
         """
         发送命令并等待响应
-        
+
         Args:
             device_id: 设备 ID
             action: 动作
             params: 参数
             timeout: 超时时间
-        
+
         Returns:
             响应结果
         """
         conn = self.connections.get(device_id)
         if not conn or not conn.websocket:
             return {"success": False, "error": "设备未连接"}
-        
+
         timeout = timeout or self.command_timeout
-        
+
         # 创建消息
         message = DeviceMessage(
             type=MessageType.COMMAND,
             action=action,
             payload=params or {},
         )
-        
+
         # 创建等待响应的 Future
         future = asyncio.Future()
         conn.pending_requests[message.message_id] = future
-        
+
         try:
             # 发送命令
             success = await self.send(device_id, message)
             if not success:
                 return {"success": False, "error": "发送失败"}
-            
+
             # 等待响应
             response = await asyncio.wait_for(future, timeout=timeout)
-            
+
             conn.commands_executed += 1
             return response
-            
+
         except asyncio.TimeoutError:
             return {"success": False, "error": "命令超时"}
         except Exception as e:
             return {"success": False, "error": str(e)}
         finally:
             conn.pending_requests.pop(message.message_id, None)
-    
+
     async def broadcast(
         self,
         message: DeviceMessage,
@@ -435,27 +435,27 @@ class DeviceCommunication:
     ) -> Dict[str, bool]:
         """
         广播消息
-        
+
         Args:
             message: 消息
             device_ids: 设备 ID 列表 (None 表示所有设备)
-        
+
         Returns:
             各设备的发送结果
         """
         if device_ids is None:
             device_ids = list(self.connections.keys())
-        
+
         results = {}
         for device_id in device_ids:
             results[device_id] = await self.send(device_id, message)
-        
+
         return results
-    
+
     # ========================================================================
     # 消息处理
     # ========================================================================
-    
+
     async def handle_message(
         self,
         device_id: str,
@@ -703,7 +703,7 @@ class DeviceCommunication:
         except Exception as e:
             logger.error("处理消息失败: %s - %s", device_id, e)
             return None
-    
+
     def register_handler(self, action: str, handler: Callable):
         """注册消息处理器"""
         self._message_handlers[action] = handler
@@ -729,7 +729,7 @@ class DeviceCommunication:
             # ...
         except (ImportError, AttributeError) as e:
             logger.debug(f"设备注册表不可用: {e}")
-    
+
     async def _handle_event(self, device_id: str, message: DeviceMessage):
         """处理事件"""
         event_type = message.payload.get("event_type", "")
@@ -757,17 +757,17 @@ class DeviceCommunication:
             await wake_event_bus.publish(raw)
         except Exception as e:
             logger.warning(f"转发唤醒事件失败: {device_id} - {e}")
-    
+
     # ========================================================================
     # 心跳
     # ========================================================================
-    
+
     async def _heartbeat_loop(self):
         """心跳循环"""
         while True:
             try:
                 await asyncio.sleep(self.heartbeat_interval)
-                
+
                 # 检查所有连接
                 now = time.time()
                 for device_id, conn in list(self.connections.items()):
@@ -776,21 +776,21 @@ class DeviceCommunication:
                         logger.warning(f"设备心跳超时: {device_id}")
                         await self.disconnect(device_id)
                         continue
-                    
+
                     # 发送心跳
                     await self.send(device_id, DeviceMessage(
                         type=MessageType.HEARTBEAT,
                     ))
-                    
+
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error(f"心跳循环错误: {e}")
-    
+
     # ========================================================================
     # 事件
     # ========================================================================
-    
+
     async def _emit_event(self, event_type: str, device_id: str, message: DeviceMessage = None):
         """触发事件"""
         if event_type == "connected":
@@ -802,7 +802,7 @@ class DeviceCommunication:
                         callback(device_id)
                 except Exception as e:
                     logger.error(f"事件回调失败: {e}")
-        
+
         elif event_type == "disconnected":
             for callback in self._on_device_disconnected:
                 try:
@@ -812,7 +812,7 @@ class DeviceCommunication:
                         callback(device_id)
                 except Exception as e:
                     logger.error(f"事件回调失败: {e}")
-        
+
         elif event_type == "message":
             for callback in self._on_device_message:
                 try:
@@ -822,30 +822,30 @@ class DeviceCommunication:
                         callback(device_id, message)
                 except Exception as e:
                     logger.error(f"事件回调失败: {e}")
-    
+
     def on_device_connected(self, callback: Callable):
         """注册设备连接事件回调"""
         self._on_device_connected.append(callback)
-    
+
     def on_device_disconnected(self, callback: Callable):
         """注册设备断开事件回调"""
         self._on_device_disconnected.append(callback)
-    
+
     def on_device_message(self, callback: Callable):
         """注册设备消息事件回调"""
         self._on_device_message.append(callback)
-    
+
     # ========================================================================
     # 统计
     # ========================================================================
-    
+
     def get_stats(self) -> Dict:
         """获取统计信息"""
         total_sent = sum(c.messages_sent for c in self.connections.values())
         total_received = sum(c.messages_received for c in self.connections.values())
         total_commands = sum(c.commands_executed for c in self.connections.values())
         total_errors = sum(c.errors for c in self.connections.values())
-        
+
         return {
             "connected_devices": len(self.connections),
             "total_messages_sent": total_sent,

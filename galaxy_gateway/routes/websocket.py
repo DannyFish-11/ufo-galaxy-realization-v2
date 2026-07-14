@@ -54,7 +54,7 @@ DEVICE_WS_INGRESS_SURFACE_REGISTRY = [
     {
         "path": "/ws/device/{device_id}",
         "method": "WS",
-        "auth": "AIP_TOKEN + device_cert",
+        "auth": "AIP_TOKEN",  # device_cert 未实现(诚实化):登记表不再声称一个不存在的凭证层
         "description": "Canonical WebSocket ingress for Android Agent and IoT devices",
         "handler": "_handle_android_ws",
         "classification": "canonical",
@@ -83,15 +83,13 @@ DEVICE_WS_INGRESS_SURFACE_REGISTRY = [
         "handler": "_handle_android_ws",
         "classification": "compat",
     },
-    {
-        "path": "/ws/master",
-        "method": "WS",
-        "auth": "MASTER_TOKEN",
-        "description": "Master node WebSocket for multi-node federation",
-        "handler": "GatewayWSManager.handle_master_connection",
-        "classification": "internal",
-    },
 ]
+# /ws/master 已拆除(幻影门):其 handler GatewayWSManager.handle_master_
+# connection 全仓不存在,注册函数 create_device_websocket_routes 也无人
+# 调用 —— 挂上即 AttributeError。其历史动机(多中心联邦/算力聚合)已由
+# 声明式提供商注册表 + NATS worker 网格覆盖;规划归档见
+# docs/FUTURE_EXPANSION_OPTIONS.md。联邦通道若将来真造,走 HTTP
+# core.galaxy_federation,不复活这扇 WS 空门。
 
 
 # ── Canonical Android/device WebSocket handler ──
@@ -241,11 +239,3 @@ def create_device_websocket_routes(app, service_manager=None):
         else:
             await websocket.close(code=1011, reason="GatewayWSManager not available")
 
-    @app.websocket("/ws/master")
-    async def master_ws_endpoint(websocket: WebSocket):
-        await websocket.accept()
-        if GatewayWSManager is not None:
-            manager = GatewayWSManager()
-            await manager.handle_master_connection(websocket)
-        else:
-            await websocket.close(code=1011, reason="GatewayWSManager not available")

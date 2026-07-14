@@ -13,7 +13,6 @@ Galaxy Core - 系统整合核心
 import os
 import sys
 import json
-import asyncio
 import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Any
@@ -59,10 +58,10 @@ logger = logging.getLogger("GalaxyCore")
 class GalaxyCore:
     """
     Galaxy 核心整合层
-    
+
     使用已有协议整合所有节点
     """
-    
+
     def __init__(self):
         self.nodes: Dict[str, Dict] = {}
         self.devices: Dict[str, Dict] = {}
@@ -110,11 +109,11 @@ class GalaxyCore:
                     logger.warning("GalaxyCore.startup: MasterBrain.start() returned %s", result)
             except Exception as exc:
                 logger.warning("GalaxyCore.startup: MasterBrain start error: %s", exc)
-    
+
     def _load_node_registry(self):
         """加载节点注册表"""
         registry_path = os.path.join(PROJECT_ROOT, "config", "node_registry.json")
-        
+
         if os.path.exists(registry_path):
             try:
                 with open(registry_path, "r", encoding="utf-8") as f:
@@ -126,7 +125,7 @@ class GalaxyCore:
                 self._init_default_nodes()
         else:
             self._init_default_nodes()
-    
+
     def _init_default_nodes(self):
         """初始化默认节点"""
         self.nodes = {
@@ -143,17 +142,17 @@ class GalaxyCore:
             "108": {"name": "MetaCognition", "port": 8108, "capabilities": ["thinking"]},
         }
         logger.info(f"已初始化 {len(self.nodes)} 个默认节点")
-    
+
     async def _get_http_client(self) -> httpx.AsyncClient:
         """获取 HTTP 客户端"""
         if self._http_client is None:
             self._http_client = httpx.AsyncClient(timeout=30.0)
         return self._http_client
-    
+
     # =========================================================================
     # 节点调用 - 使用已有协议
     # =========================================================================
-    
+
     async def call_node(
         self,
         node_id: str,
@@ -165,13 +164,13 @@ class GalaxyCore:
         """
         if node_id not in self.nodes:
             return {"success": False, "error": f"Node {node_id} not found"}
-        
+
         node = self.nodes[node_id]
         port = node.get("port", 8000)
         endpoint = f"http://{self._node_host}:{port}"
-        
+
         params = params or {}
-        
+
         try:
             client = await self._get_http_client()
 
@@ -206,7 +205,7 @@ class GalaxyCore:
         except Exception as e:
             logger.error(f"调用节点 {node_id} ({node.get('name', '?')}) 失败: {type(e).__name__}: {e}")
             return {"success": False, "error": str(e)}
-    
+
     async def call_node_with_protocol(
         self,
         node_id: str,
@@ -218,10 +217,10 @@ class GalaxyCore:
         """
         if node_id not in self.nodes:
             return {"success": False, "error": f"Node {node_id} not found"}
-        
+
         node = self.nodes[node_id]
         port = node.get("port", 8000)
-        
+
         # 创建协议消息
         message = Message(
             header=MessageHeader(
@@ -235,25 +234,25 @@ class GalaxyCore:
                 "params": params or {}
             }
         )
-        
+
         try:
             client = await self._get_http_client()
-            
+
             response = await client.post(
                 f"http://{self._node_host}:{port}/protocol/message",
                 json=message.to_dict()
             )
-            
+
             return response.json()
-        
+
         except Exception as e:
             logger.error(f"协议调用节点 {node_id} 失败: {e}")
             return {"success": False, "error": str(e)}
-    
+
     # =========================================================================
     # 设备管理 - 使用 device_protocol
     # =========================================================================
-    
+
     async def register_device(
         self,
         device_id: str,
@@ -279,7 +278,7 @@ class GalaxyCore:
                     "registered_at": datetime.now().isoformat()
                 }
             )
-        
+
         self.devices[device_id] = {
             "device_id": device_id,
             "device_type": device_type,
@@ -288,11 +287,11 @@ class GalaxyCore:
             "status": "online",
             "registered_at": datetime.now().isoformat()
         }
-        
+
         logger.info(f"已注册设备: {device_id} ({name})")
-        
+
         return {"success": True, "device_id": device_id}
-    
+
     async def send_device_command(
         self,
         device_id: str,
@@ -304,10 +303,10 @@ class GalaxyCore:
         """
         if device_id not in self.devices:
             return {"success": False, "error": f"Device {device_id} not found"}
-        
+
         device = self.devices[device_id]
         device_type = device.get("device_type", "android")
-        
+
         # 根据设备类型选择节点
         if device_type == "android":
             # Android 设备通过 Node_33_ADB 或 Node_92_AutoControl
@@ -316,18 +315,18 @@ class GalaxyCore:
                 "platform": "android",
                 **(params or {})
             })
-        
+
         elif device_type in ["windows", "desktop"]:
             # Windows 设备通过 Node_36_UIAWindows 或 Node_45_DesktopAuto
             return await self.call_node("36", command, params)
-        
+
         else:
             return {"success": False, "error": f"Unknown device type: {device_type}"}
-    
+
     # =========================================================================
     # 智能调用 - 通过 Node_04_Router 路由
     # =========================================================================
-    
+
     async def smart_call(
         self,
         capability: str,
@@ -363,18 +362,18 @@ class GalaxyCore:
             "action": action,
             "params": params or {}
         })
-    
+
     # =========================================================================
     # 自主能力 - 调用已有节点
     # =========================================================================
-    
+
     async def autonomous_learn(
         self,
         experience: Dict[str, Any]
     ) -> Dict[str, Any]:
         """自主学习 - 调用 Node_70"""
         return await self.call_node("70", "record_experience", experience)
-    
+
     async def autonomous_think(
         self,
         goal: str,
@@ -385,7 +384,7 @@ class GalaxyCore:
             "goal": goal,
             "context": context or {}
         })
-    
+
     async def autonomous_code(
         self,
         task: str,
@@ -396,7 +395,7 @@ class GalaxyCore:
             "task": task,
             "target_files": files or []
         })
-    
+
     async def query_knowledge(
         self,
         query: str,
@@ -407,11 +406,11 @@ class GalaxyCore:
             "query": query,
             "top_k": top_k
         })
-    
+
     # =========================================================================
     # 系统状态
     # =========================================================================
-    
+
     def get_status(self) -> Dict[str, Any]:
         """获取系统状态"""
         return {

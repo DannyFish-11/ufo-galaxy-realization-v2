@@ -62,7 +62,7 @@ ownership from BRIDGE when the remote runtime is unreachable.
 from __future__ import annotations
 
 import dataclasses
-from typing import Any, Dict, FrozenSet, Optional, Set, Tuple
+from typing import Any, Dict, FrozenSet, Optional
 
 from .agent_role import AgentRole
 

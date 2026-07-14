@@ -37,7 +37,7 @@ import time
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.HFModelManager")
 
@@ -519,6 +519,7 @@ class HuggingFaceModelManager:
 # ── 全局单例 ──
 
 _manager: Optional[HuggingFaceModelManager] = None
+
 
 def get_hf_model_manager() -> HuggingFaceModelManager:
     global _manager

@@ -83,8 +83,6 @@ from core.schemas.contracts import (
 from core.schemas.aip_v3 import (
     AIPMessage,
     AckMsg,
-    CancelResultMsg,
-    CapabilityQueryMsg,
     CapabilityReportMsg,
     CoordSyncMsg,
     DelegatedExecutionSignalMsg,
@@ -98,7 +96,6 @@ from core.schemas.aip_v3 import (
     MeshLeaveMsg,
     MeshResultMsg,
     MeshTopologyMsg,
-    MsgType,
     PeerAnnounceMsg,
     PeerExchangeMsg,
     ReconciliationSignalMsg,
@@ -111,8 +108,6 @@ from core.schemas.aip_v3 import (
     WebRTCBindMsg,
     WebRTCUnbindMsg,
     WebRTCTransportStateMsg,
-    create_aip_message,
-    parse_aip_message,
 )
 
 # NATS import — may not be installed

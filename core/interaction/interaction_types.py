@@ -13,9 +13,9 @@ imported early in the boot sequence without triggering heavy module loads.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 
 class InteractionMode(str, Enum):

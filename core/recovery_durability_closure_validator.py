@@ -1115,7 +1115,6 @@ def _build_rs16_offline_queue_ordering_deferred() -> RecoveryScenarioEntry:
         from core.offline_replay_ordering_contract import (
             build_offline_replay_ordering_report,
             OfflineReplayContractVerdict,
-            OFFLINE_REPLAY_ORDERING_CONTRACT_AUTHORITY,
         )
         rpt = build_offline_replay_ordering_report()
         obs = rpt.verdict.value

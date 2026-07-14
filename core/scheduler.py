@@ -16,7 +16,6 @@ import os
 import re
 import json
 import logging
-import asyncio
 import uuid
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
@@ -112,6 +111,7 @@ SCHEDULER_SEND_TO_DEVICE_CANONICAL_GATED: str = (
     "require_canonical_router=true unless allow_legacy_scheduler_fallback is "
     "explicitly enabled."
 )
+
 
 class ToolDefinition(BaseModel):
     name: str

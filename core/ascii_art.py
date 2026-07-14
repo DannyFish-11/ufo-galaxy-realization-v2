@@ -83,10 +83,10 @@ GALAXY_BANNER = _normalize_banner(_RAW_BANNER_LINES)
 GALAXY_ASCII = """\
    ██████╗  █████╗ ██╗      █████╗ ██╗  ██╗██╗   ██╗
   ██╔════╝ ██╔══██╗██║     ██╔══██╗╚██╗██╔╝╚██╗ ██╔╝
-  ██║  ███╗███████║██║     ███████║ ╚███╔╝  ╚████╔╝ 
-  ██║   ██║██╔══██║██║     ██╔══██║ ██╔██╗   ╚██╔╝  
-  ╚██████╔╝██║  ██║███████╗██║  ██║██╔╝ ██╗   ██║   
-   ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   
+  ██║  ███╗███████║██║     ███████║ ╚███╔╝  ╚████╔╝
+  ██║   ██║██╔══██║██║     ██╔══██║ ██╔██╗   ╚██╔╝
+  ╚██████╔╝██║  ██║███████╗██║  ██║██╔╝ ██╗   ██║
+   ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝
 
   {tagline}
   Version: {version}""".format(tagline=GALAXY_TAGLINE, version=GALAXY_VERSION)
@@ -101,19 +101,20 @@ GALAXY_ASCII_MINIMAL = GALAXY_BANNER
 # Windows cmd/PowerShell also supports these since Windows 10 1511+
 # ---------------------------------------------------------------------------
 
+
 class Colors:
     """ANSI 终端颜色代码 (gracefully degrades on unsupported terminals)."""
     HEADER = '\033[95m'
-    BLUE   = '\033[94m'
-    CYAN   = '\033[96m'
-    GREEN  = '\033[92m'
+    BLUE = '\033[94m'
+    CYAN = '\033[96m'
+    GREEN = '\033[92m'
     YELLOW = '\033[93m'
-    RED    = '\033[91m'
+    RED = '\033[91m'
     PURPLE = '\033[35m'
-    PINK   = '\033[95m'
-    ENDC   = '\033[0m'
-    BOLD   = '\033[1m'
-    DIM    = '\033[2m'
+    PINK = '\033[95m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    DIM = '\033[2m'
 
 
 def ansi_supported() -> bool:
@@ -156,8 +157,8 @@ def ansi_supported() -> bool:
 # ---------------------------------------------------------------------------
 
 _ANCHOR_COLORS = [
-    (  0, 225, 253),  # aurora cyan
-    ( 41, 156, 255),  # tech blue
+    (0, 225, 253),  # aurora cyan
+    (41, 156, 255),  # tech blue
     (109,  92, 255),  # indigo
     (184,  61, 245),  # neon purple
     (255,  46, 147),  # cyber pink
@@ -353,7 +354,7 @@ def print_status_row(
 
     if use_color:
         color = color_map.get(status, Colors.BLUE)
-        end   = Colors.ENDC
+        end = Colors.ENDC
     else:
         color = end = ""
 

@@ -128,6 +128,7 @@ def _extract_account(service: str, tok: Dict[str, Any], userinfo: Optional[Dict[
         pass
     return None
 
+
 # 节点编号 → 连接器服务(供前端在节点卡上显示「连接」)。
 NODE_TO_SERVICE: Dict[int, str] = {
     11: "github", 106: "github",

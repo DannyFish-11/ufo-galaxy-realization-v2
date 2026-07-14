@@ -54,8 +54,8 @@ logger = logging.getLogger("Galaxy.Policy.HITL")
 class HITLMode(str, Enum):
     """Operating mode for the HITL policy gate."""
 
-    AUTO   = "auto"    # No human confirmation required
-    SEMI   = "semi"    # Confirmation for high-risk only
+    AUTO = "auto"    # No human confirmation required
+    SEMI = "semi"    # Confirmation for high-risk only
     MANUAL = "manual"  # All gated actions require confirmation
 
 
@@ -64,7 +64,7 @@ class HITLDecisionOutcome(str, Enum):
 
     APPROVED = "approved"
     REJECTED = "rejected"
-    TIMEOUT  = "timeout"
+    TIMEOUT = "timeout"
 
 
 # ---------------------------------------------------------------------------

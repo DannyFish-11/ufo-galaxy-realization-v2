@@ -855,7 +855,6 @@ class RuntimeRestartRecoveryCoordinator:
         try:
             from core.mesh.mesh_session_persistence import (
                 get_persistence_store,
-                MeshSessionPersistenceStore,
             )
             store = self._mesh_session_store or get_persistence_store()
             all_ids_raw = store.list_recoverable()

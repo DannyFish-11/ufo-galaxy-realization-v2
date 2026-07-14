@@ -18,13 +18,11 @@ All backends implement the unified LocalModelBackend interface:
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional, AsyncIterator
+from typing import List, Dict, Any, Optional
 import asyncio
 import logging
 import os
-import json
 import gc
-import shutil
 
 logger = logging.getLogger("Galaxy.LocalBackends")
 

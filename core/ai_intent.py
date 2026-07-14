@@ -670,11 +670,6 @@ class SemanticSearch:
 
         try:
             from qdrant_client.models import PointStruct
-            from dataclasses import dataclass, field, asdict
-            import hashlib
-            import json
-            import os
-            import time
             self._qdrant_client.upsert(
                 collection_name=self._collection_name,
                 points=[PointStruct(

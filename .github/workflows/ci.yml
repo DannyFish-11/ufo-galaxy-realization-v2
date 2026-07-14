@@ -33,19 +33,29 @@ jobs:
       - uses: actions/checkout@v4
       - name: Ensure no direct aip_protocol_v2 imports outside the deprecated file itself
         run: |
-          # Allow the deprecated stub and the guard test; block everything else.
-          FORBIDDEN=$(grep -rn "aip_protocol_v2" \
+          # 只拦【真正的 import 语句】,不再裸串匹配任意出现。
+          # 守卫名为 "No Forbidden Imports" —— 此前用裸 grep aip_protocol_v2
+          # 误伤了文档/注释/registry 数据/守卫自测样本(它们合法说明或
+          # 数据引用这个已弃用名,并非导入)。改为精确匹配 import 行:
+          #   import galaxy_gateway.aip_protocol_v2[.…]
+          #   from galaxy_gateway.aip_protocol_v2 import …
+          #   from galaxy_gateway import aip_protocol_v2
+          # 且跳过被 # 注释掉的行与守卫自测样本(用字符串喂检测器)。
+          FORBIDDEN=$(grep -rnE \
+            "^[^#]*(import[[:space:]]+galaxy_gateway\.aip_protocol_v2([.[:space:]]|$)|from[[:space:]]+galaxy_gateway\.aip_protocol_v2[[:space:]]+import|from[[:space:]]+galaxy_gateway[[:space:]]+import[[:space:]]+([^#]*[[:space:],])?aip_protocol_v2([[:space:],]|$))" \
             --include="*.py" \
             --exclude="aip_protocol_v2.py" \
             --exclude="test_v3_protocol_guard.py" \
+            --exclude="test_pr7_final_consolidation.py" \
+            --exclude="test_device_ssot_capability_integration.py" \
             galaxy_gateway/ core/ enhancements/ tests/ \
             2>/dev/null || true)
           if [ -n "$FORBIDDEN" ]; then
-            echo "❌ Forbidden reference to aip_protocol_v2 detected:"
+            echo "❌ Forbidden IMPORT of aip_protocol_v2 detected:"
             echo "$FORBIDDEN"
             exit 1
           fi
-          echo "✅ No forbidden aip_protocol_v2 references found."
+          echo "✅ No forbidden aip_protocol_v2 imports found."
 
   s6-compat-smoke:
     # PR-S6: Regression & Compatibility Guardrails smoke suite.

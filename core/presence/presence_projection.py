@@ -58,10 +58,10 @@ logger = logging.getLogger("Galaxy.Presence.Projection")
 class ProjectionIntensity(float, Enum):
     """Normalised projection intensity by device role."""
 
-    FULL     = 1.0   # PRESENCE role devices
-    MEDIUM   = 0.6   # ACTION role devices
-    LOW      = 0.3   # PERCEPTION role devices
-    MINIMAL  = 0.1   # No-role / unknown devices
+    FULL = 1.0   # PRESENCE role devices
+    MEDIUM = 0.6   # ACTION role devices
+    LOW = 0.3   # PERCEPTION role devices
+    MINIMAL = 0.1   # No-role / unknown devices
 
 
 # Role → intensity mapping

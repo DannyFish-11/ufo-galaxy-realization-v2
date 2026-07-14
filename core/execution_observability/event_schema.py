@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
 from .executor_level import ExecutorLevel
-from .fallback_schema import FallbackContext, FallbackReason
+from .fallback_schema import FallbackContext
 from .trace_schema import TraceCorrelation
 
 

@@ -155,7 +155,18 @@ def _schedule_pending_delivery_replay_on_canonical_reconnect(
             async def _aip_send(msg_dict):
                 msg_dict["_transport"] = "auto"
                 msg_dict["version"] = "3.0"
-                await get_aip_transport().send(msg_dict, device_id)
+                # 必须核对发送结果:此前无视返回值,AIPTransport 返回
+                # {"success": False}(如零适配器/websocket 适配器发往
+                # connection_manager 注册表而设备挂在 bridge 上)时也被
+                # 计成 delivered —— 断连缓冲的任务在 replay 中直接蒸发。
+                # 失败兜底直发本次 continuity_resume 的新 socket(与
+                # send_to_device 同一兜底语义)。
+                try:
+                    result = await get_aip_transport().send(msg_dict, device_id)
+                    if not result.get("success"):
+                        raise RuntimeError(f"AIPTransport failed for {device_id}")
+                except Exception:
+                    await websocket.send_json(msg_dict)
 
             delivered, skipped = await _pending_delivery_buffer.flush(
                 device_id,

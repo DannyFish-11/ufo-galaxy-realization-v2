@@ -61,31 +61,31 @@ class RepoCoordinator:
       应查询 UDM，而非直接读取此字段。
     - 任务分发已委托给 DeviceRouter（PR-S3）。
     """
-    
+
     def __init__(self):
         # 主仓库配置
         self.main_repo_url = os.getenv("MAIN_REPO_URL", "http://localhost:8080")
-        
+
         # ⚠️  LEGACY COMPAT CACHE — 不是设备事实来源（SSOT）。
         # 事实来源已迁移到 core.unified.device_manager.UnifiedDeviceManager (UDM)。
         # 此字典仅供遗留代码只读兼容使用；所有写操作应优先通过 UDM 进行。
         self.android_devices: Dict[str, Dict] = {}
-        
+
         # HTTP 客户端
         self._http_client: Optional[httpx.AsyncClient] = None
-        
+
         logger.info("仓库协调器初始化完成")
-    
+
     async def _get_http_client(self) -> httpx.AsyncClient:
         """获取 HTTP 客户端"""
         if self._http_client is None:
             self._http_client = httpx.AsyncClient(timeout=30.0)
         return self._http_client
-    
+
     # =========================================================================
     # Android 设备注册 — delegates to UDM (PR-S4)
     # =========================================================================
-    
+
     async def register_android_device(
         self,
         device_id: str,
@@ -132,9 +132,9 @@ class RepoCoordinator:
 
         # Step 2 — update legacy compat cache.
         self.android_devices[device_id] = device_record
-        
+
         logger.info(f"已注册 Android 设备: {device_id}")
-        
+
         # Construct AIPMessage for protocol validation only (not dispatched here).
         # AIPMessage / AIPMessageType may be None when the optional package
         # is not installed.
@@ -148,13 +148,13 @@ class RepoCoordinator:
                     "capabilities": device_info.get("capabilities", [])
                 }
             )
-        
+
         return {
             "success": True,
             "device_id": device_id,
             "message": "Device registered successfully"
         }
-    
+
     async def unregister_android_device(self, device_id: str) -> Dict[str, Any]:
         """注销 Android 设备 — canonical 写入委托 UDM（PR-S4）。
 
@@ -182,7 +182,7 @@ class RepoCoordinator:
             logger.info(f"已注销 Android 设备: {device_id}")
             return {"success": True}
         return {"success": False, "error": "Device not found"}
-    
+
     async def heartbeat_android_device(self, device_id: str) -> Dict[str, Any]:
         """Android 设备心跳 — canonical 写入委托 UDM（PR-S4）。
 
@@ -207,11 +207,11 @@ class RepoCoordinator:
             self.android_devices[device_id]["status"] = "online"
             return {"success": True}
         return {"success": False, "error": "Device not found"}
-    
+
     # =========================================================================
     # Agent 分发到 Android 设备
     # =========================================================================
-    
+
     async def dispatch_agent_to_android(
         self,
         device_id: str,
@@ -282,7 +282,7 @@ class RepoCoordinator:
         except Exception as e:
             logger.error(f"分发 Agent 到 {device_id} 失败: {e}")
             return {"success": False, "error": str(e)}
-    
+
     async def _send_via_websocket(
         self,
         ws_url: str,
@@ -290,7 +290,7 @@ class RepoCoordinator:
     ) -> Dict[str, Any]:
         """通过 WebSocket 发送"""
         import websockets
-        
+
         try:
             async with websockets.connect(ws_url, timeout=10) as ws:
                 await ws.send(message.to_json())
@@ -299,7 +299,7 @@ class RepoCoordinator:
         except Exception as e:
             logger.error(f"WebSocket 发送失败: {e}")
             return {"success": False, "error": str(e)}
-    
+
     async def _send_via_http(
         self,
         endpoint: str,
@@ -317,11 +317,11 @@ class RepoCoordinator:
         except Exception as e:
             logger.error(f"HTTP 发送失败: {e}")
             return {"success": False, "error": str(e)}
-    
+
     # =========================================================================
     # 批量操作
     # =========================================================================
-    
+
     async def broadcast_to_all_android(
         self,
         task_type: str,
@@ -348,30 +348,30 @@ class RepoCoordinator:
             device_ids = list(self.android_devices.keys())
 
         results = {}
-        
+
         tasks = [
             self.dispatch_agent_to_android(device_id, task_type, params)
             for device_id in device_ids
         ]
-        
+
         responses = await asyncio.gather(*tasks, return_exceptions=True)
-        
+
         for device_id, response in zip(device_ids, responses):
             if isinstance(response, Exception):
                 results[device_id] = {"success": False, "error": str(response)}
             else:
                 results[device_id] = response
-        
+
         return {
             "success": True,
             "total": len(results),
             "results": results
         }
-    
+
     # =========================================================================
     # 状态查询 — delegates to UDM (PR-S4)
     # =========================================================================
-    
+
     def get_android_devices(self) -> List[Dict[str, Any]]:
         """获取所有 Android 设备 — 优先委托 UDM（PR-S4）。
 
@@ -406,7 +406,7 @@ class RepoCoordinator:
             )
         # Legacy compat cache fallback.
         return list(self.android_devices.values())
-    
+
     def get_android_device(self, device_id: str) -> Optional[Dict[str, Any]]:
         """获取指定 Android 设备 — 优先委托 UDM（PR-S4）。
 
@@ -434,7 +434,7 @@ class RepoCoordinator:
             )
         # Legacy compat cache fallback.
         return self.android_devices.get(device_id)
-    
+
     def get_status(self) -> Dict[str, Any]:
         """获取协调器状态摘要 — 优先使用 UDM 设备计数（PR-S4）。"""
         try:

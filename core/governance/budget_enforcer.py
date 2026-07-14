@@ -55,7 +55,7 @@ from typing import List  # auto: missing import
 
 import asyncio
 import logging
-from datetime import date, datetime, timezone
+from datetime import date
 from typing import Dict, Optional
 
 from .policy_schema import BudgetPolicy, ModelPolicy, OnBudgetExceed

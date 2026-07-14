@@ -81,7 +81,7 @@ class AgentResponseSchema(BaseModel):
 class TeamStrategyEnum(str, Enum):
     """团队协作策略"""
     PARALLEL = "parallel"       # Perplexity 风格 — 同一任务多 LLM 并行
-    SPECIALIZED = "specialized" # 特种部队 — 子任务分解，各匹配最优 Agent+LLM
+    SPECIALIZED = "specialized"  # 特种部队 — 子任务分解，各匹配最优 Agent+LLM
     SWARM = "swarm"             # 群体智能 — 批量同类 Agent 投票/合并
     CRITIC = "critic"           # 做/审分离 — executor(本地小模型)产出，critic(开源大模型)审核可打回
     PIPELINE = "pipeline"       # 流水线 — A→B→C 顺序交接，前一步产出为后一步输入

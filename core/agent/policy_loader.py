@@ -18,7 +18,6 @@ core/agent/policy_loader.py
 from __future__ import annotations
 
 import logging
-import os
 import threading
 import time
 from pathlib import Path
@@ -60,7 +59,7 @@ class PolicyLoader:
 
     def get_soul(self) -> str:
         """返回 SOUL.md 内容。
-        
+
         ⚠️  此方法 **仅应** 由 kernel 在 intent = task_execute 或 hybrid
             的执行阶段调用，纯聊天路径禁止调用。
 

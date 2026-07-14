@@ -19,7 +19,6 @@ Galaxy - 外部渠道插件框架（Channel Plugins）
     plugins = loader.list_plugins()
 """
 
-import asyncio
 import importlib
 import importlib.util
 import logging

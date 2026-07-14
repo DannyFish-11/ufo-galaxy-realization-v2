@@ -27,7 +27,7 @@ import uuid
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 # ---------------------------------------------------------------------------
 # MsgType enum — mirrors AipModels.kt MsgType exactly
@@ -126,9 +126,7 @@ class AIPMessage(BaseModel):
     )
     aip_version: str = Field(default="3.0", description="AIP protocol version")
 
-    class Config:
-        populate_by_name = True
-        use_enum_values = True
+    model_config = ConfigDict(populate_by_name=True, use_enum_values=True)
 
 
 # ---------------------------------------------------------------------------

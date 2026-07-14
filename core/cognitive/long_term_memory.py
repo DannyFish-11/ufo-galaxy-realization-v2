@@ -41,7 +41,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.Cognitive.LongTermMemory")
 

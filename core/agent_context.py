@@ -11,12 +11,11 @@ Galaxy - Agent 上下文管理
 
 使用方法：
     from core.agent_context import get_agent_context
-    
+
     context = get_agent_context()
     # context 包含 AGENTS.md 的内容
 """
 
-import os
 from pathlib import Path
 from typing import Optional
 
@@ -33,30 +32,30 @@ _cached_context: Optional[str] = None
 def get_agent_context() -> str:
     """
     获取 Agent 上下文
-    
+
     返回 AGENTS.md 的内容，作为每轮对话的上下文
     """
     global _cached_context
-    
+
     if _cached_context is not None:
         return _cached_context
-    
+
     if AGENTS_MD_PATH.exists():
         with open(AGENTS_MD_PATH, "r", encoding="utf-8") as f:
             _cached_context = f.read()
         return _cached_context
-    
+
     return ""
 
 
 def get_system_prompt() -> str:
     """
     获取系统提示词
-    
+
     包含 AGENTS.md 内容，用于初始化对话
     """
     context = get_agent_context()
-    
+
     return f"""你是 Galaxy 的 AI 助手。
 
 以下是系统的知识索引，请参考这些信息来回答问题和执行任务：

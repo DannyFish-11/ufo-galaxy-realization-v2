@@ -17,7 +17,7 @@ import numpy as np
 
 from .vad import VoiceActivityDetector, VADConfig
 from .audio_features import AudioState, extract_audio_features
-from .signal_quality import SignalQuality, QualityFlag
+from .signal_quality import SignalQuality
 
 logger = logging.getLogger(__name__)
 

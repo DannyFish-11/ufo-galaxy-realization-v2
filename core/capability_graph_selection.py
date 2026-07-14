@@ -495,7 +495,6 @@ def select_fallback_providers(
     try:
         from core.capability_assimilation import (
             get_capability_assimilation_layer,
-            AssimilationPresenceState,
         )
     except Exception as exc:  # pragma: no cover
         logger.warning("capability_graph_selection: assimilation layer unavailable — %s", exc)

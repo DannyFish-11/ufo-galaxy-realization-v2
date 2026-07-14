@@ -16,14 +16,12 @@ Galaxy - 监控告警系统
 
 import asyncio
 import logging
-import os
-import platform
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Set
+from typing import Any, Callable, Coroutine, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.Monitoring")
 
@@ -35,7 +33,7 @@ logger = logging.getLogger("Galaxy.Monitoring")
 class CircuitState(str, Enum):
     CLOSED = "closed"       # 正常：请求通过
     OPEN = "open"           # 熔断：请求直接拒绝
-    HALF_OPEN = "half_open" # 探测：允许少量请求试探
+    HALF_OPEN = "half_open"  # 探测：允许少量请求试探
 
 
 class CircuitBreaker:

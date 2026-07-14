@@ -89,7 +89,7 @@ Canonical layer hierarchy (unchanged from prior PRs)
               Stage 4: Manifest
                 └─ AgentKernel (embedded cognition sub-layer)
                       └─ ExecutionPlanner (planning helper)
-                            ├─ single-agent path    → AgentFactory.create_agent()
+                            ├─ single-agent path    → AgentFactory.create_from_template / create_from_llm
                             ├─ team/swarm path      → TeamManager / AgentTeam
                             └─ fractal path         → FractalAgent
 

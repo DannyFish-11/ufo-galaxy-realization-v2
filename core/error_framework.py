@@ -14,7 +14,7 @@ import logging
 import time
 import traceback
 from typing import Dict, List, Optional, Any, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from collections import defaultdict, deque
 from functools import wraps

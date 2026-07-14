@@ -45,15 +45,13 @@ Integration
 
 from __future__ import annotations
 
-import asyncio
 import logging
-import re
 import threading
 import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("Galaxy.Cognitive.PatternMiner")
 
@@ -73,6 +71,7 @@ _ACTIVATION_DECAY_PER_DAY = 0.92  # Soar-style base-level decay
 _ACTIVATION_BOOST_ON_HIT = 0.15   # activation increase when pattern is validated
 _ACTIVATION_BOOST_ON_ACCESS = 0.05  # activation increase when pattern is queried
 _MAX_PATTERNS = 200               # cap to prevent unbounded growth
+
 
 # Recursive abstraction levels
 class AbstractionLevel(int, Enum):

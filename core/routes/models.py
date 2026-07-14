@@ -141,6 +141,7 @@ def _kick_refresh() -> None:
     global _refresh_task
     if _refresh_task is not None and not _refresh_task.done():
         return
+
     async def _refresh() -> None:
         global _refresh_task
         try:

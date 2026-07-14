@@ -86,7 +86,7 @@ from __future__ import annotations
 import logging
 import threading
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 __all__ = [
     # Sentinels
@@ -583,7 +583,6 @@ class MultiDeviceRuntimeHarness:
             from core.device_formation.formation_runtime_coordinator import (
                 FormationParticipantState,
                 FormationRuntimeCoordinator,
-                RecoveryActionType,
             )
 
             # Map string to enum

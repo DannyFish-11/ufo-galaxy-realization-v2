@@ -339,7 +339,7 @@ class CredentialVault:
         """
         info = self._tokens.get(token)
         if not info:
-            logger.warning(f"get_credential_by_token: unknown token")
+            logger.warning("get_credential_by_token: unknown token")
             return None
         if time.time() > info["expires_at"]:
             del self._tokens[token]

@@ -1885,7 +1885,18 @@ class UnifiedResultIngress:
                     "task_id": event.task_id,
                     "result": event.payload.get("result", ""),
                     "source": event.source_channel.value,
+                    # 信息保全:统一 ingress 收编 future 解析之前,awaiter 拿
+                    # 到的是设备原始消息本身(含 payload 键与会话身份)。收编
+                    # 不得降级契约 —— 原始消息字段原样铺底,规范化字段覆盖
+                    # 其上,否则重连收敛/跨设备回环的消费方拿不到它们本来
+                    # 就有的字段(KeyError 'payload' /
+                    # runtime_attachment_session_id=None)。
+                    "runtime_attachment_session_id": event.runtime_attachment_session_id or "",
+                    "trace_id": event.trace_id or "",
                 }
+                _raw = event.raw_message or event.payload or {}
+                if isinstance(_raw, dict):
+                    result_payload = {**_raw, **result_payload}
                 future.set_result(result_payload)
                 logger.debug(
                     "unified_result_ingress: _pending_responses future resolved " "task_id=%r",

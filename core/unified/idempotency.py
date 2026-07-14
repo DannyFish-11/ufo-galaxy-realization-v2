@@ -55,13 +55,11 @@ import hashlib
 import json
 import logging
 import os
-import tempfile
-import threading
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger("Galaxy.Idempotency")
 

@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from core.device_types import DeviceType, DevicePlatform, resolve_device_type
+from core.device_types import DeviceType, resolve_device_type
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

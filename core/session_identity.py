@@ -103,4 +103,3 @@ def build_canonical_session_identity(
         device_id=device_id,
         source_session_id=session_id or conversation_session_id,
     )
-

@@ -552,7 +552,6 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
             },
         )
 
-
     # -----------------------------------------------------------------------
     # NOTE (Batch PR-4): All /api/v1/* inline route handlers below this point
     # were dead code — they were already covered by the sub-module routers
@@ -1342,10 +1341,6 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
 
                         elif msg_type == "get_health":
                             from core.monitoring import get_monitoring_manager
-                            from dataclasses import dataclass, field, asdict
-                            import base64
-                            import os
-                            import time
                             mon = get_monitoring_manager()
                             await websocket.send_json({
                                 "type": "health",

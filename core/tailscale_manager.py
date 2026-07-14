@@ -359,7 +359,7 @@ class TailscaleManager:
         if not self._available:
             return None
         # Gateway is typically 100.64.0.1 in our allocation scheme
-        return f"wss://100.64.0.1:9000"
+        return "wss://100.64.0.1:9000"
 
     def get_peer_by_hostname(self, hostname: str) -> Optional[Dict[str, Any]]:
         """Get peer info from tailscale status by hostname."""

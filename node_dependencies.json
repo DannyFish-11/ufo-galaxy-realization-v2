@@ -492,39 +492,6 @@
       "description": "Auto-generated config for Node_36_UIAWindows",
       "startup_policy": "active"
     },
-    "Node_37_LinuxDBus": {
-      "port": 8037,
-      "group": "extended",
-      "priority": 4,
-      "dependencies": [
-        "Node_01_OneAPI"
-      ],
-      "optional_dependencies": [],
-      "description": "Linux D-Bus通信节点，支持系统服务交互和桌面通知",
-      "capabilities": [
-        "dbus_communication",
-        "service_discovery",
-        "desktop_notifications"
-      ],
-      "startup_policy": "active"
-    },
-    "Node_38_BLE": {
-      "port": 8038,
-      "group": "extended",
-      "priority": 4,
-      "dependencies": [
-        "Node_01_OneAPI"
-      ],
-      "optional_dependencies": [],
-      "description": "蓝牙低功耗节点，支持设备扫描、连接和数据传输",
-      "capabilities": [
-        "device_scanning",
-        "ble_connection",
-        "gatt_operations",
-        "notifications"
-      ],
-      "startup_policy": "active"
-    },
     "Node_39_SSH": {
       "port": 8039,
       "group": "extended",
@@ -550,33 +517,6 @@
         "file_download",
         "directory_management",
         "ssh_key_auth"
-      ],
-      "startup_policy": "active"
-    },
-    "Node_41_MQTT": {
-      "port": 8041,
-      "group": "extended",
-      "priority": 4,
-      "dependencies": [
-        "Node_01_OneAPI"
-      ],
-      "optional_dependencies": [],
-      "description": "Auto-generated config for Node_41_MQTT",
-      "startup_policy": "active"
-    },
-    "Node_42_CANbus": {
-      "port": 8042,
-      "group": "extended",
-      "priority": 4,
-      "dependencies": [
-        "Node_01_OneAPI"
-      ],
-      "optional_dependencies": [],
-      "description": "CAN总线通信节点，支持车载网络和工业控制",
-      "capabilities": [
-        "can_communication",
-        "message_filtering",
-        "protocol_support"
       ],
       "startup_policy": "active"
     },
@@ -662,23 +602,6 @@
       ],
       "optional_dependencies": [],
       "description": "Auto-generated config for Node_125_MediaGen",
-      "startup_policy": "active"
-    },
-    "Node_48_Serial": {
-      "port": 9001,
-      "group": "extended",
-      "priority": 4,
-      "dependencies": [
-        "Node_01_OneAPI"
-      ],
-      "optional_dependencies": [],
-      "description": "串口通信节点，支持RS232/RS485设备连接和数据传输",
-      "capabilities": [
-        "serial_communication",
-        "device_connection",
-        "data_transfer",
-        "protocol_handling"
-      ],
       "startup_policy": "active"
     },
     "Node_49_OctoPrint": {

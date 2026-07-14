@@ -19,15 +19,13 @@ import logging  # auto: ensure module logger is defined
 _logger = logging.getLogger(__name__)
 
 
-import asyncio
-import hashlib
 import logging
 import time
 import uuid
 from collections import defaultdict, deque
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 logger = logging.getLogger("Galaxy.SecurityMiddleware")
 

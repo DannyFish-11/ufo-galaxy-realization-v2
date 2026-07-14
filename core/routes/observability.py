@@ -717,7 +717,6 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         try:
             from core.operator_execution_observability_surface import (
                 build_operator_execution_observability_snapshot,
-                OPERATOR_EXECUTION_OBSERVABILITY_CONTRACT_VERSION,
             )
             snapshot = build_operator_execution_observability_snapshot(
                 max_entries=max_entries,

@@ -83,6 +83,7 @@ CANONICAL_DISPATCHER_SPINE_HARDENED: str = (
 # Capability layer classification
 # ---------------------------------------------------------------------------
 
+
 class CapabilityLayer(str, Enum):
     """Classification of a capability invocation by its naming prefix."""
 

@@ -8,10 +8,10 @@ This module provides a single entry point to initialize the entire cognitive
 evolution subsystem and manage its lifecycle:
 
     from core.cognitive.evolution_system import init_cognitive_evolution, shutdown_cognitive_evolution
-    
+
     # On system startup (called once from main.py)
     init_cognitive_evolution()
-    
+
     # On system shutdown
     shutdown_cognitive_evolution()
 
@@ -84,11 +84,11 @@ def shutdown_cognitive_evolution() -> None:
     global _initialized, _maintenance_task
     if not _initialized:
         return
-    
+
     # Signal shutdown
     if _shutdown_event is not None:
         _shutdown_event.set()
-    
+
     # Cancel maintenance task
     if _maintenance_task is not None and not _maintenance_task.done():
         _maintenance_task.cancel()
@@ -98,7 +98,7 @@ def shutdown_cognitive_evolution() -> None:
             )
         except (asyncio.CancelledError, asyncio.TimeoutError):
             pass
-    
+
     _initialized = False
     _maintenance_task = None
     logger.info("Cognitive evolution system shut down")
@@ -115,7 +115,7 @@ def get_cognitive_health() -> Dict[str, Any]:
         "initialized": _initialized,
         "timestamp": time.time(),
     }
-    
+
     # ReflectionEngine stats
     try:
         from core.cognitive.reflection_engine import get_reflection_engine
@@ -133,7 +133,7 @@ def get_cognitive_health() -> Dict[str, Any]:
             health["reflections"]["by_type"][rt] = health["reflections"]["by_type"].get(rt, 0) + 1
     except Exception as exc:
         health["reflections"] = {"error": str(exc)}
-    
+
     # PatternMiner stats
     try:
         from core.cognitive.pattern_miner import get_pattern_miner
@@ -151,7 +151,7 @@ def get_cognitive_health() -> Dict[str, Any]:
             health["patterns"]["by_type"][pt] = health["patterns"]["by_type"].get(pt, 0) + 1
     except Exception as exc:
         health["patterns"] = {"error": str(exc)}
-    
+
     # AdaptivePredictor stats
     try:
         from core.cognitive.adaptive_predictor import get_adaptive_predictor
@@ -159,7 +159,7 @@ def get_cognitive_health() -> Dict[str, Any]:
         health["predictor"] = predictor.get_calibration_stats()
     except Exception as exc:
         health["predictor"] = {"error": str(exc)}
-    
+
     return health
 
 
@@ -169,7 +169,7 @@ def get_cognitive_health() -> Dict[str, Any]:
 def _do_init() -> None:
     """Perform actual initialization."""
     global _shutdown_event, _maintenance_task
-    
+
     # 1. Initialize ReflectionEngine (auto-subscribes to event bus)
     try:
         from core.cognitive.reflection_engine import get_reflection_engine
@@ -177,7 +177,7 @@ def _do_init() -> None:
         logger.debug("ReflectionEngine initialized")
     except Exception as exc:
         logger.warning("ReflectionEngine init failed (non-fatal): %s", exc)
-    
+
     # 2. Initialize PatternMiner (auto-subscribes to event bus)
     try:
         from core.cognitive.pattern_miner import get_pattern_miner
@@ -185,7 +185,7 @@ def _do_init() -> None:
         logger.debug("PatternMiner initialized")
     except Exception as exc:
         logger.warning("PatternMiner init failed (non-fatal): %s", exc)
-    
+
     # 3. Initialize AdaptivePredictor
     try:
         from core.cognitive.adaptive_predictor import get_adaptive_predictor
@@ -193,7 +193,7 @@ def _do_init() -> None:
         logger.debug("AdaptivePredictor initialized")
     except Exception as exc:
         logger.warning("AdaptivePredictor init failed (non-fatal): %s", exc)
-    
+
     # 4. Start background maintenance task
     _shutdown_event = threading.Event()
     try:
@@ -211,15 +211,15 @@ def _do_init() -> None:
 
 async def _maintenance_loop() -> None:
     """Background task: periodically decay activation scores.
-    
+
     Runs every _DECAY_INTERVAL_SECONDS (default 1 hour).
     Decays both reflections and patterns to prevent unbounded growth.
     """
     if _shutdown_event is None:
         return
-    
+
     logger.debug("Cognitive maintenance loop started (interval=%.0fs)", _DECAY_INTERVAL_SECONDS)
-    
+
     while not _shutdown_event.is_set():
         try:
             # Wait for interval or shutdown signal
@@ -233,10 +233,10 @@ async def _maintenance_loop() -> None:
         except asyncio.CancelledError:
             logger.debug("Cognitive maintenance loop cancelled")
             return
-        
+
         if _shutdown_event.is_set():
             return
-        
+
         # Decay reflections
         try:
             from core.cognitive.reflection_engine import get_reflection_engine
@@ -245,7 +245,7 @@ async def _maintenance_loop() -> None:
             logger.debug("ReflectionEngine decay cycle completed")
         except Exception as exc:
             logger.debug("Reflection decay failed (non-fatal): %s", exc)
-        
+
         # Decay patterns
         try:
             from core.cognitive.pattern_miner import get_pattern_miner

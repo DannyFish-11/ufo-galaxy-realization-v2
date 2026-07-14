@@ -206,6 +206,7 @@ AUTO_AGENT_TRIGGER_KEYWORDS: tuple = (
     "fractal", "分型", "递归", "分形", "多层", "深度拆解",
 )
 
+
 def _estimate_complexity(message: str) -> float:
     """粗略估算任务复杂度 0~1。"""
     m = message.lower()
@@ -1206,7 +1207,7 @@ class ExecutionPlanner:
         t0 = time.monotonic()
 
         try:
-            from core.fractal_agent import FractalExecutor, FractalTask, Complexity
+            from core.fractal_agent import FractalExecutor
             from core.agent_factory import get_agent_factory
 
             factory = get_agent_factory(self._llm_router)

@@ -2977,7 +2977,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             payload = session.to_dict()
         except Exception as exc:
             try:
-                from contracts.mesh_session import build_mesh_session, MeshSessionStatus
+                from contracts.mesh_session import build_mesh_session
 
                 session = build_mesh_session(mesh_id="default_mesh")
                 payload = session.to_dict()
@@ -3432,7 +3432,6 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             # --- runtime devices (PR-29) ---
             runtime_devices: list = []
             try:
-                from contracts.registered_runtime_device import build_registered_runtime_device
                 from core.unified.device_manager import UnifiedDeviceManager
 
                 udm = UnifiedDeviceManager.get_instance()
@@ -3671,7 +3670,6 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             from contracts.runtime_recovery_reconciliation import (
                 from_multi_device_projection,
                 build_recovery_summary,
-                RecoveryStatus,
             )
 
             # Attempt to get the projection dict from the multi-device projection
@@ -4531,7 +4529,7 @@ def _assemble_projection() -> Dict[str, Any]:
     and result in the minimal fallback payload rather than a 500 error.
     """
     try:
-        from core.projection import build_runtime_projection, ExecutionSummary
+        from core.projection import build_runtime_projection
         from core.continuum.types import ContinuumPhase, ContinuumState  # noqa: F401
     except Exception as exc:
         logger.warning("Projection imports unavailable, returning minimal payload: %s", exc)
@@ -4719,7 +4717,7 @@ def _assemble_canonical_routing_payload() -> Dict[str, Any]:
     degrade gracefully when the relevant sub-systems are unavailable.
     """
     try:
-        from core.projection import build_runtime_projection, ExecutionSummary
+        from core.projection import build_runtime_projection
         from core.continuum.types import ContinuumPhase, ContinuumState  # noqa: F401
     except Exception as exc:
         logger.warning("_assemble_canonical_routing_payload: imports unavailable: %s", exc)
@@ -4909,7 +4907,6 @@ def _assemble_projection_with_execution_policy() -> Dict[str, Any]:
         from core.execution_policy import (
             resolve_policy,
             attach_policy_to_projection,
-            DEFAULT_CONSERVATIVE_POLICY,
         )
 
         phase_str = base.get("tri_state_phase")
@@ -5095,7 +5092,6 @@ def _assemble_projection_with_device_formation() -> Dict[str, Any]:
 
     try:
         from core.device_formation import (
-            IDLE_FORMATION_SUMMARY,
             attach_formation_to_projection,
             get_formation_hints,
             resolve_formation_summary,
@@ -5168,7 +5164,6 @@ def _assemble_projection_with_agent_dispatch() -> Dict[str, Any]:
 
     try:
         from core.agent_governance import (
-            IDLE_DISPATCH_SUMMARY,
             attach_dispatch_summary_to_projection,
             get_ownership_hints,
             resolve_dispatch_summary,
@@ -5249,7 +5244,6 @@ def _assemble_projection_with_routing_explanation() -> Dict[str, Any]:
 
     try:
         from core.routing_explanation import (
-            IDLE_EXPLANATION_SUMMARY,
             attach_explanation_to_projection,
             get_explanation_hints,
             resolve_explanation_from_projection,

@@ -92,7 +92,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
-from .formation_group import DeviceFormationGroup, EMPTY_FORMATION_GROUP
+from .formation_group import DeviceFormationGroup
 from .formation_policy import BarrierPosture, FormationPolicy, DEFAULT_LOCAL_FORMATION_POLICY
 from .formation_role import FormationMember, FormationRole
 
@@ -637,6 +637,7 @@ class FormationRebalanceEngine:
         if not candidates:
             return None
         # Sort by health score descending
+
         def _score(m: FormationMember) -> float:
             sig = health_map.get(getattr(m, "device_id", ""))
             return sig.health_score if sig is not None else 1.0
@@ -787,7 +788,6 @@ def maybe_promote_fallback(
             decision.promoted_device_ids = [best_fallback_id]
             decision.new_primary_device_id = best_fallback_id
             decision.rebalance_needed = True
-            from .formation_role import FormationRole as _FR
             decision.actions[best_fallback_id] = MemberRebalanceAction.PROMOTE_TO_PRIMARY
         new_group, _ = engine.reshape(group, decision)
         return new_group

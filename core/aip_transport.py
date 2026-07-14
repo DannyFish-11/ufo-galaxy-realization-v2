@@ -34,7 +34,6 @@ core/aip_transport.py — AIP v3 统一传输层
            WS MQTT TCP UDP BLE SERIAL
 """
 
-import asyncio
 import json
 import logging
 import os

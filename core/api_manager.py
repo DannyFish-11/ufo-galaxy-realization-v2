@@ -15,9 +15,8 @@ import json
 import asyncio
 import logging
 from datetime import datetime
-from typing import Dict, List, Optional, Any
-from dataclasses import dataclass, field
-from pathlib import Path
+from typing import Dict, List, Any
+from dataclasses import dataclass
 import httpx
 
 logger = logging.getLogger("APIManager")
@@ -56,7 +55,6 @@ class NodeConfig:
     port: int
     status: str = "configured"
     endpoint: str = ""
-
 
 
 # =========================================================================
@@ -130,22 +128,22 @@ class APIManager:
     支持工具类 API
     支持环境变量同步
     """
-    
+
     def __init__(self, config_path: str = None):
         if config_path is None:
             config_path = os.path.join(
                 os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                 "config", "api_config.json"
             )
-        
+
         self.config_path = config_path
         self.config: Dict[str, Any] = {}
         self.models: Dict[str, ModelConfig] = {}
         self.tools: Dict[str, ToolConfig] = {}
         self.nodes: Dict[str, NodeConfig] = {}
-        
+
         self._load_config()
-    
+
     def _load_config(self):
         """加载配置"""
         if os.path.exists(self.config_path):
@@ -158,16 +156,16 @@ class APIManager:
                         self._init_default_config()
                         self._save_config()
                         return
-                    
+
                     self.config = json.loads(content)
-                    
+
                     # 确保是字典类型
                     if not isinstance(self.config, dict):
-                        logger.error(f"配置文件格式错误: 不是有效的 JSON 对象")
+                        logger.error("配置文件格式错误: 不是有效的 JSON 对象")
                         self._init_default_config()
                         self._save_config()
                         return
-                    
+
                 logger.info(f"已加载配置: {self.config_path}")
                 self._parse_config()
             except json.JSONDecodeError as e:
@@ -181,7 +179,7 @@ class APIManager:
         else:
             self._init_default_config()
             self._save_config()
-    
+
     def _init_default_config(self):
         """初始化默认配置"""
         self.config = {
@@ -191,7 +189,7 @@ class APIManager:
             "nodes": {}
         }
         logger.info("使用默认配置")
-    
+
     def _parse_config(self):
         """解析配置"""
         # 解析 OneAPI 模型
@@ -207,7 +205,7 @@ class APIManager:
                     base_url=oneapi.get("base_url", ""),
                     enabled=True
                 )
-        
+
         # 解析直接模型
         direct_models = self.config.get("direct_models", {})
         for provider, config in direct_models.items():
@@ -223,7 +221,7 @@ class APIManager:
                         enabled=True,
                         env_key=config.get("env_key", f"{provider.upper()}_API_KEY")
                     )
-        
+
         # 解析工具
         tools = self.config.get("tools", {})
         for tool_id, config in tools.items():
@@ -237,11 +235,11 @@ class APIManager:
                 node=config.get("node", ""),
                 env_key=config.get("env_key", f"{tool_id.upper()}_API_KEY")
             )
-        
+
         # 解析节点
         nodes = self.config.get("nodes", {}).get("registry", {})
         base_url = self.config.get("nodes", {}).get("base_url", "http://localhost")
-        
+
         for node_id, config in nodes.items():
             self.nodes[node_id] = NodeConfig(
                 node_id=node_id,
@@ -250,21 +248,21 @@ class APIManager:
                 status=config.get("status", "configured"),
                 endpoint=f"{base_url}:{config.get('port', 8000)}"
             )
-        
+
         logger.info(f"已解析 {len(self.models)} 个模型, {len(self.tools)} 个工具, {len(self.nodes)} 个节点")
-    
+
     # =========================================================================
     # 环境变量同步 - 关键功能
     # =========================================================================
-    
+
     def sync_to_env(self) -> Dict[str, bool]:
         """
         将配置同步到环境变量
-        
+
         这是关键功能，确保节点能读取到 API Key
         """
         results = {}
-        
+
         # 同步 OneAPI
         oneapi = self.config.get("oneapi", {})
         if oneapi.get("api_key"):
@@ -289,17 +287,17 @@ class APIManager:
                 os.environ[env_key] = config["api_key"]
                 results[env_key] = True
                 logger.debug("已同步 %s 到环境变量", env_key)
-        
+
         return results
-    
+
     def sync_from_env(self) -> Dict[str, str]:
         """
         从环境变量同步到配置
-        
+
         用于首次启动时读取已有的环境变量
         """
         synced = {}
-        
+
         # 同步直接模型
         direct_models = self.config.get("direct_models", {})
         for provider, config in direct_models.items():
@@ -308,7 +306,7 @@ class APIManager:
             if env_value:
                 config["api_key"] = env_value
                 synced[env_key] = "已同步"
-        
+
         # 同步工具
         tools = self.config.get("tools", {})
         for tool_id, config in tools.items():
@@ -317,21 +315,21 @@ class APIManager:
             if env_value:
                 config["api_key"] = env_value
                 synced[env_key] = "已同步"
-        
+
         if synced:
             self._save_config()
             logger.info(f"从环境变量同步了 {len(synced)} 个配置")
-        
+
         return synced
-    
+
     # =========================================================================
     # 配置管理
     # =========================================================================
-    
+
     def get_config(self) -> Dict[str, Any]:
         """获取完整配置"""
         return self.config
-    
+
     def update_config(self, new_config: Dict[str, Any]) -> bool:
         """更新配置"""
         try:
@@ -344,7 +342,7 @@ class APIManager:
         except Exception as e:
             logger.error(f"更新配置失败: {e}")
             return False
-    
+
     def _save_config(self):
         """保存配置"""
         try:
@@ -354,15 +352,15 @@ class APIManager:
             logger.info(f"配置已保存: {self.config_path}")
         except Exception as e:
             logger.error(f"保存配置失败: {e}")
-    
+
     # =========================================================================
     # API Key 管理
     # =========================================================================
-    
+
     def set_api_key(self, category: str, key_name: str, api_key: str) -> bool:
         """
         设置 API Key
-        
+
         category: "oneapi", "direct_models", "tools"
         key_name: 具体的提供商或工具名称
         """
@@ -386,7 +384,7 @@ class APIManager:
                     logger.info(f"未知 provider '{key_name}'，已启用但需手动配置 models 列表")
             elif category == "tools":
                 self.config.setdefault("tools", {}).setdefault(key_name, {})["api_key"] = api_key
-            
+
             self._save_config()
             self._parse_config()
             # 同步到环境变量
@@ -395,7 +393,7 @@ class APIManager:
         except Exception as e:
             logger.error(f"设置 API Key 失败: {e}")
             return False
-    
+
     def get_api_key(self, category: str, key_name: str) -> str:
         """获取 API Key"""
         if category == "oneapi":
@@ -405,11 +403,11 @@ class APIManager:
         elif category == "tools":
             return self.config.get("tools", {}).get(key_name, {}).get("api_key", "")
         return ""
-    
+
     # =========================================================================
     # 模型管理
     # =========================================================================
-    
+
     def get_models(self) -> List[Dict[str, Any]]:
         """获取所有模型"""
         return [
@@ -424,7 +422,7 @@ class APIManager:
             }
             for key, model in self.models.items()
         ]
-    
+
     def get_available_models(self) -> List[Dict[str, Any]]:
         """获取已配置的可用模型"""
         return [
@@ -437,11 +435,11 @@ class APIManager:
             for key, model in self.models.items()
             if model.enabled and model.api_key
         ]
-    
+
     # =========================================================================
     # 工具管理
     # =========================================================================
-    
+
     def get_tools(self) -> List[Dict[str, Any]]:
         """获取所有工具"""
         return [
@@ -456,7 +454,7 @@ class APIManager:
             }
             for tool in self.tools.values()
         ]
-    
+
     def get_available_tools(self) -> List[Dict[str, Any]]:
         """获取已配置的可用工具"""
         return [
@@ -468,11 +466,11 @@ class APIManager:
             for tool in self.tools.values()
             if tool.enabled and tool.api_key
         ]
-    
+
     # =========================================================================
     # 节点管理
     # =========================================================================
-    
+
     def get_nodes(self) -> List[Dict[str, Any]]:
         """获取所有节点"""
         return [
@@ -485,13 +483,13 @@ class APIManager:
             }
             for node in self.nodes.values()
         ]
-    
+
     async def check_node_health(self, node_id: str) -> Dict[str, Any]:
         """检查节点健康状态"""
         node = self.nodes.get(node_id)
         if not node:
             return {"success": False, "error": "Node not found"}
-        
+
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 response = await client.get(f"{node.endpoint}/health")
@@ -500,25 +498,25 @@ class APIManager:
                 return {"success": False, "status": "unhealthy"}
         except Exception as e:
             return {"success": False, "error": str(e)}
-    
+
     async def check_all_nodes(self) -> Dict[str, Any]:
         """检查所有节点"""
         results = {}
         tasks = [self.check_node_health(node_id) for node_id in self.nodes.keys()]
         health_results = await asyncio.gather(*tasks, return_exceptions=True)
-        
+
         for node_id, result in zip(self.nodes.keys(), health_results):
             if isinstance(result, Exception):
                 results[node_id] = {"success": False, "error": str(result)}
             else:
                 results[node_id] = result
-        
+
         return results
-    
+
     # =========================================================================
     # LLM 调用
     # =========================================================================
-    
+
     async def call_llm(
         self,
         messages: List[Dict[str, str]],
@@ -529,16 +527,16 @@ class APIManager:
         available = self.get_available_models()
         if not available:
             return {"success": False, "error": "No models configured"}
-        
+
         available.sort(key=lambda x: 0 if x["provider"] == "oneapi" else 1)
-        
+
         for model_info in available:
             result = await self._call_model(model_info, messages, max_tokens)
             if result.get("success"):
                 return result
-        
+
         return {"success": False, "error": "All models failed"}
-    
+
     async def _call_model(
         self,
         model_info: Dict[str, Any],
@@ -548,7 +546,7 @@ class APIManager:
         """调用单个模型"""
         model_key = model_info["key"]
         model_config = self.models.get(model_key)
-        
+
         if not model_config or not model_config.api_key:
             return {"success": False, "error": "Model not configured"}
 
@@ -573,7 +571,7 @@ class APIManager:
                         "max_tokens": max_tokens
                     }
                 )
-                
+
                 if response.status_code == 200:
                     data = response.json()
                     return {
@@ -583,27 +581,27 @@ class APIManager:
                         "content": data["choices"][0]["message"]["content"],
                         "usage": data.get("usage", {})
                     }
-                
+
                 return {"success": False, "error": f"HTTP {response.status_code}"}
-        
+
         except Exception as e:
             return {"success": False, "error": str(e)}
-    
+
     # =========================================================================
     # API 验证 - 关键功能
     # =========================================================================
-    
+
     async def validate_api_key(self, category: str, key_name: str) -> Dict[str, Any]:
         """
         验证 API Key 是否有效
-        
+
         这是关键功能，确保 API Key 真的能用
         """
         api_key = self.get_api_key(category, key_name)
-        
+
         if not api_key:
             return {"valid": False, "error": "API Key not configured"}
-        
+
         # 根据不同的 API 进行验证
         if category == "direct_models":
             return await self._validate_llm_api(key_name, api_key)
@@ -611,9 +609,9 @@ class APIManager:
             return await self._validate_tool_api(key_name, api_key)
         elif category == "oneapi":
             return await self._validate_oneapi(api_key)
-        
+
         return {"valid": False, "error": "Unknown category"}
-    
+
     async def _validate_llm_api(self, provider: str, api_key: str) -> Dict[str, Any]:
         """验证 LLM API"""
         endpoints = {
@@ -625,12 +623,12 @@ class APIManager:
             "openrouter": ("https://openrouter.ai/api/v1/chat/completions", "openai/gpt-3.5-turbo"),
             "gemini": ("https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent", None)
         }
-        
+
         if provider not in endpoints:
             return {"valid": False, "error": f"Unknown provider: {provider}"}
-        
+
         url, model = endpoints[provider]
-        
+
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 if provider == "gemini":
@@ -667,17 +665,17 @@ class APIManager:
                             "max_tokens": 10
                         }
                     )
-                
+
                 if response.status_code == 200:
                     return {"valid": True, "message": "API Key 有效"}
                 elif response.status_code == 401:
                     return {"valid": False, "error": "API Key 无效"}
                 else:
                     return {"valid": False, "error": f"HTTP {response.status_code}"}
-        
+
         except Exception as e:
             return {"valid": False, "error": str(e)}
-    
+
     async def _validate_tool_api(self, tool_id: str, api_key: str) -> Dict[str, Any]:
         """验证工具 API"""
         if tool_id == "brave_search":
@@ -693,7 +691,7 @@ class APIManager:
                     return {"valid": False, "error": f"HTTP {response.status_code}"}
             except Exception as e:
                 return {"valid": False, "error": str(e)}
-        
+
         elif tool_id == "openweather":
             try:
                 async with httpx.AsyncClient(timeout=10.0) as client:
@@ -706,13 +704,13 @@ class APIManager:
                     return {"valid": False, "error": f"HTTP {response.status_code}"}
             except Exception as e:
                 return {"valid": False, "error": str(e)}
-        
+
         return {"valid": False, "error": f"Unknown tool: {tool_id}"}
-    
+
     async def _validate_oneapi(self, api_key: str) -> Dict[str, Any]:
         """验证 OneAPI"""
         base_url = self.config.get("oneapi", {}).get("base_url", "http://localhost:8001/v1")
-        
+
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(
@@ -724,16 +722,16 @@ class APIManager:
                 return {"valid": False, "error": f"HTTP {response.status_code}"}
         except Exception as e:
             return {"valid": False, "error": str(e)}
-    
+
     # =========================================================================
     # 状态
     # =========================================================================
-    
+
     def get_status(self) -> Dict[str, Any]:
         """获取状态"""
         available_models = self.get_available_models()
         available_tools = self.get_available_tools()
-        
+
         return {
             "total_models": len(self.models),
             "configured_models": len(available_models),

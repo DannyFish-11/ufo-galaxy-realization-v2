@@ -16,12 +16,11 @@ import logging
 import re
 from datetime import datetime, timezone
 import os
-import time
 import hashlib
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Any
 from fastapi import APIRouter, HTTPException, Header
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 logger = logging.getLogger("Galaxy.MarketAPI")
 
@@ -159,15 +158,15 @@ async def list_market_skills(
 ):
     """列出市场技能"""
     skills = BUILTIN_SKILLS + _published_skills
-    
+
     # 按标签过滤
     if tag:
         skills = [s for s in skills if tag in s["tags"]]
-    
+
     # 分页
     total = len(skills)
     skills = skills[offset:offset + limit]
-    
+
     return JSONResponse({
         "success": True,
         "skills": skills,
@@ -191,7 +190,7 @@ async def get_market_skill(skill_id: str):
                     "readme": f"# {skill['name']}\n\n{skill['description']}",
                 },
             })
-    
+
     return JSONResponse({
         "success": False,
         "error": "技能不存在",
@@ -202,7 +201,7 @@ async def get_market_skill(skill_id: str):
 async def search_market_skills(q: str, limit: int = 10):
     """搜索技能"""
     q = q.lower()
-    
+
     results = []
     for skill in BUILTIN_SKILLS + _published_skills:
         # 搜索名称、描述、标签
@@ -210,7 +209,7 @@ async def search_market_skills(q: str, limit: int = 10):
             q in skill["description"].lower() or
             any(q in tag.lower() for tag in skill["tags"])):
             results.append(skill)
-    
+
     return JSONResponse({
         "success": True,
         "query": q,
@@ -292,7 +291,7 @@ async def list_tags():
     tags = set()
     for skill in BUILTIN_SKILLS + _published_skills:
         tags.update(skill["tags"])
-    
+
     return JSONResponse({
         "success": True,
         "tags": sorted(list(tags)),

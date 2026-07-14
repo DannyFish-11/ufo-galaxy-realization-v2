@@ -12,7 +12,6 @@ import time
 import math
 import asyncio
 import logging
-import random
 from typing import List, Dict, Any, Optional, Callable, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
@@ -64,7 +63,7 @@ class ProviderConfig:
     supports_vision: bool = False     # 是否支持图像输入（VLM能力）
     supports_audio: bool = False      # 是否支持音频输入
     kv_cache_enabled: bool = False    # 是否启用KV cache（借鉴vLLM）
-    prefix_cache_enabled: bool = False # 是否启用前缀缓存（借鉴SGLang RadixAttention）
+    prefix_cache_enabled: bool = False  # 是否启用前缀缓存（借鉴SGLang RadixAttention）
     quantization: str = "none"        # "none" / "q4" / "q5" / "q8" / "awq" / "gptq"
     # 运行时状态
     status: ProviderStatus = ProviderStatus.HEALTHY
@@ -1267,7 +1266,6 @@ class OllamaAdapter(BaseProviderAdapter):
             tool_calls=self._normalize_tool_calls(raw_tool_calls),
             raw_response=final or None,
         )
-
 
 
 # ───────────────────── 主路由器 ─────────────────────

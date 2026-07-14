@@ -76,7 +76,7 @@ import json
 import logging
 import time
 import uuid
-from typing import Dict, Any, Optional, Callable, Awaitable, List, Tuple
+from typing import Dict, Any, Optional, Callable, Awaitable, List
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -114,6 +114,7 @@ HYBRID_EXECUTOR_CONTINUITY_WIRED: str = (
 APP_EXECUTION_CAPABILITY_REGISTRY_RENAMED: str = (
     "CapabilityRegistry → AppExecutionCapabilityRegistry"
 )
+
 
 class ExecutionLevel(str, Enum):
     A2A = "a2a"          # Agent-to-Agent (API/MCP direct call)

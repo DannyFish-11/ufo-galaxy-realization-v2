@@ -16,7 +16,6 @@ All values can be overridden at runtime by passing a populated
 
 from __future__ import annotations
 
-from typing import Optional
 
 from pydantic import BaseModel, Field
 

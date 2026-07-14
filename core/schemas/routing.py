@@ -30,7 +30,7 @@ class ModelTier(str, Enum):
 class CircuitBreakerState(str, Enum):
     CLOSED = "closed"       # 正常
     OPEN = "open"           # 熔断（请求阻断）
-    HALF_OPEN = "half_open" # 探测恢复中
+    HALF_OPEN = "half_open"  # 探测恢复中
 
 
 # ───────── 复杂度评估 ─────────

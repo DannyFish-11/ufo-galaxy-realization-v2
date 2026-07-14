@@ -1535,7 +1535,6 @@ def execute_governed_operator_action(
             try:
                 from core.pr3_session_continuity_authority import (
                     classify_reconnect_event,
-                    ContinuityReconnectClass,
                 )
                 result = classify_reconnect_event(
                     device_id=device_id or None,

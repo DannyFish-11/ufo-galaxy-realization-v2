@@ -40,7 +40,7 @@ import dataclasses
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from .execution_policy import ExecutionPolicy, DEFAULT_CONSERVATIVE_POLICY
+from .execution_policy import ExecutionPolicy
 
 
 __all__ = ["PolicyOutcome", "PolicyDecision"]

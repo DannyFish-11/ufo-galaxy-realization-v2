@@ -102,6 +102,7 @@ def get_body_mesh_registry() -> Any:  # type: ignore[return]
 
     return _real()
 
+
 #: Module-level authority sentinel — identifies this module unambiguously in
 #: diagnostic / registry surfaces.
 MESH_PARTICIPATION_SUMMARY_AUTHORITY = (

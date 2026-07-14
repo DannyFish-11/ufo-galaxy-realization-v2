@@ -12,22 +12,19 @@ Galaxy - 系统集成层
 
 使用方法：
     from core.system_integration import system
-    
+
     # 注册能力
     system.register_capability("device_control", "android_001", handler)
-    
+
     # 发现能力
     cap = await system.discover_capability("web_search")
-    
+
     # 执行任务
     result = await system.execute("搜索 Python 教程")
 """
 
 import inspect
-import json
 import logging
-import time
-from datetime import datetime
 from typing import Any, Dict, List, Optional, Callable
 
 from core.unified.capability_contract import (
@@ -41,15 +38,16 @@ logger = logging.getLogger("Galaxy.SystemIntegration")
 # 系统集成管理器
 # ============================================================================
 
+
 class SystemIntegration:
     """
     系统集成管理器
-    
+
     统一协调所有子系统
     """
-    
+
     _instance = None
-    
+
     def __init__(self):
         # 运行时执行附件。能力 schema 与 authority 统一来自 CapabilityContract /
         # CapabilityRegistry / CapabilityResolver；这里只保存执行器绑定和少量
@@ -57,9 +55,9 @@ class SystemIntegration:
         self._runtime_handlers: Dict[str, Callable] = {}
         # 初始化标志
         self._initialized = False
-        
+
         logger.info("系统集成管理器初始化")
-    
+
     @classmethod
     def get_instance(cls) -> "SystemIntegration":
         # NOTE: This singleton is used for process-wide state sharing.
@@ -69,11 +67,11 @@ class SystemIntegration:
         if cls._instance is None:
             cls._instance = SystemIntegration()
         return cls._instance
-    
+
     # ========================================================================
     # 初始化
     # ========================================================================
-    
+
     async def initialize(self):
         """初始化统一能力外观层。"""
         if self._initialized:
@@ -82,22 +80,22 @@ class SystemIntegration:
         self._load_builtin_capabilities()
         self._initialized = True
         logger.info("系统集成初始化完成（统一能力外观层）")
-    
+
     async def _load_device_capabilities(self):
         return
-    
+
     async def _load_mcp_capabilities(self):
         return
-    
+
     async def _load_skill_capabilities(self):
         return
-    
+
     async def _load_node_capabilities(self):
         return
-    
+
     async def _load_agent_capabilities(self):
         return
-    
+
     def _load_builtin_capabilities(self):
         """加载内置能力。
 
@@ -123,7 +121,7 @@ class SystemIntegration:
     # ========================================================================
     # 能力注册
     # ========================================================================
-    
+
     def register_capability(
         self,
         id: str,
@@ -161,7 +159,7 @@ class SystemIntegration:
             self._runtime_handlers.pop(name, None)
         logger.debug(f"注册能力: {id} ({type.value})")
         return contract
-    
+
     def unregister_capability(self, id: str) -> bool:
         """注销能力。"""
         from core.agent.capability_registry import CapabilityRegistry
@@ -175,11 +173,11 @@ class SystemIntegration:
         get_capability_resolver().invalidate_cache()
         self._runtime_handlers.pop(target_item.name, None)
         return True
-    
+
     # ========================================================================
     # 能力发现
     # ========================================================================
-    
+
     async def discover_capability(
         self,
         name: str,
@@ -188,7 +186,7 @@ class SystemIntegration:
     ) -> Optional[Capability]:
         """
         发现能力
-        
+
         找到具有指定名称的最佳能力
         """
         from core.unified.capability_resolver import get_capability_resolver
@@ -220,7 +218,7 @@ class SystemIntegration:
 
         candidates.sort(key=lambda c: c.priority, reverse=True)
         return candidates[0]
-    
+
     async def _is_capability_available(self, cap: Capability) -> bool:
         """检查能力是否可用"""
         if not cap.enabled:
@@ -255,7 +253,7 @@ class SystemIntegration:
             return True
 
         return False
-    
+
     def list_capabilities(
         self,
         type: CapabilityType = None,
@@ -270,11 +268,11 @@ class SystemIntegration:
         if name:
             capabilities = [cap for cap in capabilities if cap.name == name]
         return capabilities
-    
+
     # ========================================================================
     # 能力执行
     # ========================================================================
-    
+
     async def execute(
         self,
         capability_name: str,
@@ -282,16 +280,16 @@ class SystemIntegration:
     ) -> Any:
         """
         执行能力
-        
+
         自动发现并执行最佳能力
         """
         cap = await self.discover_capability(capability_name)
-        
+
         if not cap:
             raise ValueError(f"能力不存在: {capability_name}")
 
         return await self._execute_capability(cap, params)
-    
+
     async def _execute_capability(
         self,
         cap: Capability,
@@ -311,24 +309,24 @@ class SystemIntegration:
 
         if cap.type == CapabilityType.DEVICE:
             return await self._execute_device(cap, params)
-        
+
         elif cap.type == CapabilityType.MCP:
             return await self._execute_mcp(cap, params)
-        
+
         elif cap.type == CapabilityType.SKILL:
             return await self._execute_skill(cap, params)
-        
+
         elif cap.type == CapabilityType.NODE:
             return await self._execute_node(cap, params)
-        
+
         elif cap.type == CapabilityType.AGENT:
             return await self._execute_agent(cap, params)
-        
+
         elif cap.type == CapabilityType.BUILTIN:
             return await self._execute_builtin(cap, params)
-        
+
         raise RuntimeError(f"未知能力类型: {cap.type}")
-    
+
     async def _execute_device(self, cap: Capability, params: Dict) -> Any:
         """执行设备能力"""
         try:
@@ -341,28 +339,28 @@ class SystemIntegration:
         except Exception as e:
             logger.error(f"执行设备能力失败: {e}")
             raise
-    
+
     async def _execute_mcp(self, cap: Capability, params: Dict) -> Any:
         """执行 MCP 能力"""
         try:
             from core.mcp_loader import mcp_loader
-            
+
             server_id = cap.source_id
             tool_name = cap.name
-            
+
             return await mcp_loader.call_tool(server_id, tool_name, params)
         except Exception as e:
             logger.error(f"执行 MCP 能力失败: {e}")
             raise
-    
+
     async def _execute_skill(self, cap: Capability, params: Dict) -> Any:
         """执行技能能力"""
         try:
             from core.skill_loader import skill_loader
             from core.skill_md_loader import skill_md_loader
-            
+
             skill_id = cap.source_id
-            
+
             # 尝试 skill_loader
             try:
                 return await skill_loader.execute(skill_id, **params)
@@ -374,12 +372,12 @@ class SystemIntegration:
                 return await skill_md_loader.execute(skill_id, params)
             except Exception as e:
                 logger.debug(f"skill_md_loader 执行 {skill_id} 失败: {e}")
-            
+
             raise ValueError(f"技能不存在: {skill_id}")
         except Exception as e:
             logger.error(f"执行技能能力失败: {e}")
             raise
-    
+
     async def _execute_node(self, cap: Capability, params: Dict) -> Any:
         """执行节点能力 (unified executor with HTTP fallback)"""
         node_name = cap.source_id
@@ -410,12 +408,11 @@ class SystemIntegration:
         except Exception as e:
             logger.error(f"执行节点能力失败: {e}")
             raise
-    
+
     async def _execute_agent(self, cap: Capability, params: Dict) -> Any:
         """执行 Agent 能力"""
         try:
-            from core.agent_factory import get_agent_factory_instance
-            
+
             agent_id = cap.source_id
             # Agent 执行逻辑
             # ...
@@ -423,7 +420,7 @@ class SystemIntegration:
         except Exception as e:
             logger.error(f"执行 Agent 能力失败: {e}")
             raise
-    
+
     async def _execute_builtin(self, cap: Capability, params: Dict) -> Any:
         """执行内置能力"""
         if cap.id == "builtin_chat":
@@ -431,20 +428,20 @@ class SystemIntegration:
             from core.llm.route_authority import get_llm_route_authority
             router = get_llm_route_authority().execution_router
             return await router.chat([{"role": "user", "content": params.get("message", "")}])
-        
+
         elif cap.id == "builtin_device_control":
             # 设备控制
             from core.device_control_service import device_control
             device_id = params.get("device_id")
             action = params.get("action")
             return await device_control.execute_action(device_id, action)
-        
+
         return None
-    
+
     # ========================================================================
     # 统计
     # ========================================================================
-    
+
     def get_stats(self) -> Dict:
         """获取统计信息"""
         capabilities = self.list_capabilities()

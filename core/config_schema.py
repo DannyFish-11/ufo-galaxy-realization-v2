@@ -128,6 +128,7 @@ VALID_ANDROID_INFERENCE_MODES: FrozenSet[str] = frozenset(
 # Default values for runtime/config.json
 # ---------------------------------------------------------------------------
 
+
 class ConfigDefaults:
     """Immutable namespace of default values for non-secret config keys."""
 

@@ -616,7 +616,7 @@ class NodeLifecycleGovernor:
                 if not rec.is_capability_registered:
                     detail = (
                         "promotion blocked: capability not registered — "
-                        f"violates PROMOTION_REQUIRES_CAPABILITY_REGISTRATION_POLICY"
+                        "violates PROMOTION_REQUIRES_CAPABILITY_REGISTRATION_POLICY"
                     )
                     rec._record_gate(
                         "promotion",

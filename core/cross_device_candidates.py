@@ -335,7 +335,7 @@ def _resolve_candidates_inner(
         candidate.ready = ready
         if not ready:
             candidate.reasons.append(
-                f"excluded: not cross-device ready"
+                "excluded: not cross-device ready"
             )
             candidate.reasons.extend(readiness_reasons)
             logger.info(
@@ -351,7 +351,7 @@ def _resolve_candidates_inner(
             candidate.orchestration_eligible = eligible
             if not eligible:
                 candidate.reasons.append(
-                    f"excluded: not orchestration-eligible"
+                    "excluded: not orchestration-eligible"
                 )
                 candidate.reasons.extend(participation_reasons)
                 logger.info(

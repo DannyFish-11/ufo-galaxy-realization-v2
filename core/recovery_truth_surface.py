@@ -918,7 +918,6 @@ def _build_in_flight_continuity_entry(available_modules: List[str]) -> RecoveryT
                 InFlightTaskContinuityContract,
                 TaskContinuityStatus,
                 TaskContinuityReport,
-                STATE_RESTORED_IS_NOT_CONTINUITY_RESTORED_POLICY,
             )
             continuity_contract_present = all([
                 callable(InFlightTaskContinuityContract),
@@ -1047,7 +1046,6 @@ def _build_duplicate_dispatch_entry(available_modules: List[str]) -> RecoveryTru
         try:
             from core.delegated_flow_recovery_coordinator import (
                 RecoveryAction,
-                DelegatedFlowRecoveryCoordinator,
             )
             idempotency_present = hasattr(RecoveryAction, "suppress_duplicate_recovery")
         except Exception as exc:

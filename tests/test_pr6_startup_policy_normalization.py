@@ -112,13 +112,18 @@ class TestPolicyCounts:
     """Registry counts must be consistent with NODE_ACTIVE_MANIFEST.md figures."""
 
     def test_total_node_count(self, nodes):
-        assert len(nodes) == 130, (
-            f"Expected 130 total nodes, got {len(nodes)}"
+        # 130→125:registry-drift 收口移除 5 个虚构节点(能力已归位为
+        # core.adapters 传输适配器)。
+        assert len(nodes) == 125, (
+            f"Expected 125 total nodes, got {len(nodes)}"
         )
 
     def test_active_count(self, nodes):
         active = sum(1 for e in nodes.values() if e.get("startup_policy") == "active")
-        assert active == 95, f"Expected 95 active nodes, got {active}"
+        # 95→90:Canonical Node Audit registry-drift 收口移除了 5 个
+        # 无目录的虚构 active 节点(Node_37/38/41/42/48 传输能力已归位
+        # 为 core.adapters 传输适配器)。
+        assert active == 90, f"Expected 90 active nodes, got {active}"
 
     def test_optional_count(self, nodes):
         optional = sum(1 for e in nodes.values() if e.get("startup_policy") == "optional")

@@ -38,10 +38,9 @@ import logging
 import os
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from core.auth import require_auth
 
 from core.routes._shared import (
     connection_manager,
@@ -64,6 +63,7 @@ try:
 except ImportError:  # pragma: no cover
     _CANONICAL_NODE_COUNT_AVAILABLE = False
     _get_node_count_from_canonical_source = None  # type: ignore[assignment]
+
 
 # 支持的 API Key 白名单
 def create_router(service_manager=None, config=None) -> APIRouter:
