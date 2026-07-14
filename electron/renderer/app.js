@@ -128,10 +128,37 @@ class GalaxyRenderer {
     }
   }
 
-  // ── Spring 物理（只平滑，不切换） ──
+  // ── Spring 物理（只平滑，不切换）+ 编排限速 ──
+  //
+  // 后端相位是一步跳变（static 0.05 → liminal 0.50 → manifest 0.92），
+  // 而着色器的分阶段编排（0.25-0.40 边缘光从下往上收回 → 灵动岛 →
+  // 0.40-0.85 空间展开）假设 depth 匀速穿越。原先纯弹簧（临界阻尼、
+  // 时间常数 ≈0.14s）约 100ms 就冲过整个收回窗口——回收动画在数学上
+  // 就不可能被看见。修复：穿越编排带 [0.10, 0.90] 时对 depth 变化限速，
+  // 让每一幕按设计秩序播出；带外仍是弹簧微平滑。仍然纯渲染节奏，
+  // 不做状态机、不改后端。
 
   _springUpdate(dt) {
     const target = this.depth;
+    const gap = target - this.currentDepth;
+
+    // 编排带内的大跨度跳变 → 匀速穿越（intent 最多提速 ~1.8x）
+    const CHOREO_UP = 0.34;    // 上行速度（depth/秒）：0.05→0.50 约 1.3s，回收窗口约 0.45s 可见
+    const CHOREO_DOWN = 0.55;  // 下行（回到静默）稍快
+    const inBand =
+      Math.max(this.currentDepth, target) > 0.10 &&
+      Math.min(this.currentDepth, target) < 0.90;
+    if (inBand && Math.abs(gap) > 0.04) {
+      const boost = 1.0 + this.intent * 0.8;
+      const speed = (gap > 0 ? CHOREO_UP : CHOREO_DOWN) * boost;
+      const step = Math.sign(gap) * Math.min(Math.abs(gap), speed * dt);
+      this.currentDepth += step;
+      this.springV = Math.sign(gap) * speed; // 供帧率/活跃判定复用
+      this.currentDepth = Math.max(0, Math.min(1, this.currentDepth));
+      return;
+    }
+
+    // 小跨度/带外 → 原弹簧微平滑
     const intentBoost = 1.0 + this.intent * 1.5;
     const tension = this.currentDepth < target ? 50 * intentBoost : 70;
     const friction = 14;
