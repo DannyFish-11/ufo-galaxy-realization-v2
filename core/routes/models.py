@@ -378,3 +378,103 @@ async def select_tier(req: TierSelectRequest) -> Dict[str, Any]:
         "main_brain": chosen,
         "pulling": pulled,
     }
+
+
+@router.post("/latency-probe")
+async def latency_probe() -> Dict[str, Any]:
+    """本地推理一键测速:用 Ollama 自带的 eval 计数算真实 prefill/decode 速度。
+
+    诚实原则:只报实测数字与由此推出的判词,测不了(Ollama 不可达/模型
+    未装)就如实说测不了。两次探测:小提示词(测冷/热加载 + decode),
+    ~2.4k token 合成长提示词(测规模化 prefill —— 代理回合的延迟大头)。
+    """
+    import httpx as _httpx
+
+    base = _ollama_base()
+    model = os.environ.get("OLLAMA_MODEL", "").strip()
+    out: Dict[str, Any] = {"ollama_base": base, "model": model, "stages": {}, "verdicts": []}
+    if not model:
+        out["verdicts"].append("未选择本地主脑(OLLAMA_MODEL 空)——本测速仅针对本地模型。")
+        return out
+
+    async with _httpx.AsyncClient(timeout=90.0) as client:
+        # 1) 可达性 + 是否已驻留
+        t0 = _time.monotonic()
+        try:
+            tags = await client.get(f"{base}/api/tags")
+            out["stages"]["ollama_reachable_ms"] = round((_time.monotonic() - t0) * 1000, 1)
+            tags.raise_for_status()
+        except Exception as exc:
+            out["stages"]["ollama_reachable_ms"] = None
+            out["verdicts"].append(f"Ollama 不可达({str(exc)[:80]})——先确认它在运行。")
+            return out
+        try:
+            ps = await client.get(f"{base}/api/ps")
+            loaded = [m.get("name", "") for m in (ps.json().get("models") or [])]
+            out["stages"]["model_resident"] = any(model in name for name in loaded)
+        except Exception:
+            out["stages"]["model_resident"] = None
+
+        async def _gen(prompt: str, predict: int) -> Dict[str, Any]:
+            r = await client.post(
+                f"{base}/api/generate",
+                json={
+                    "model": model,
+                    "prompt": prompt,
+                    "stream": False,
+                    "keep_alive": -1,
+                    "options": {"num_predict": predict, "temperature": 0.0},
+                },
+            )
+            r.raise_for_status()
+            return r.json()
+
+        # 2) 小提示词:加载 + decode 速度
+        t0 = _time.monotonic()
+        try:
+            small = await _gen("用一句话介绍你自己。", 24)
+        except Exception as exc:
+            out["verdicts"].append(f"模型调用失败({str(exc)[:80]})——模型可能未安装或内存不足。")
+            return out
+        out["stages"]["small_total_ms"] = round((_time.monotonic() - t0) * 1000, 1)
+        _ns = 1e9
+        decode_tps = (small.get("eval_count") or 0) / max((small.get("eval_duration") or 1) / _ns, 1e-6)
+        out["stages"]["decode_tokens_per_s"] = round(decode_tps, 1)
+        out["stages"]["load_ms"] = round((small.get("load_duration") or 0) / 1e6, 1)
+
+        # 3) 长提示词(~2.4k token):规模化 prefill —— 代理回合的延迟大头
+        long_prompt = ("这是用于测速的填充文本,请忽略其内容。" * 300) + "\n请回复:好"
+        t0 = _time.monotonic()
+        try:
+            big = await _gen(long_prompt, 1)
+            out["stages"]["long_total_ms"] = round((_time.monotonic() - t0) * 1000, 1)
+            prefill_tokens = big.get("prompt_eval_count") or 0
+            prefill_tps = prefill_tokens / max((big.get("prompt_eval_duration") or 1) / _ns, 1e-6)
+            out["stages"]["prefill_tokens"] = prefill_tokens
+            out["stages"]["prefill_tokens_per_s"] = round(prefill_tps, 1)
+        except Exception as exc:
+            out["verdicts"].append(f"长提示词探测失败({str(exc)[:80]})——大概率内存不足(换页)。")
+            prefill_tps = 0.0
+
+        # 4) 诚实判词
+        if decode_tps and decode_tps < 5:
+            out["verdicts"].append(
+                f"生成速度 {decode_tps:.1f} tok/s:低于可用线(≈5)。最常见原因是内存不足在换页,"
+                "或模型对这台 CPU 过大——建议关闭其他占内存程序,或换更小档。"
+            )
+        elif decode_tps:
+            out["verdicts"].append(f"生成速度 {decode_tps:.1f} tok/s:对话可用。")
+        if prefill_tps:
+            agent_prompt_tokens = 3500  # 代理回合典型规模(系统提示+工具+记忆)
+            est = agent_prompt_tokens / prefill_tps
+            out["stages"]["est_agent_first_token_s"] = round(est, 1)
+            if est > 8:
+                out["verdicts"].append(
+                    f"预填速度 {prefill_tps:.0f} tok/s → 满配代理回合首字约 {est:.0f}s。"
+                    "这就是'怎么都慢'的主因:每回合重发全部工具定义。已启用工具粘滞"
+                    "(GALAXY_TOOLS_STICKY)让前缀缓存生效——同一会话第二回合起应显著变快;"
+                    "语音实时体验建议叠加云端 API(如 Agnes 免费档)。"
+                )
+            else:
+                out["verdicts"].append(f"预填速度 {prefill_tps:.0f} tok/s:满配代理回合首字约 {est:.1f}s。")
+    return out

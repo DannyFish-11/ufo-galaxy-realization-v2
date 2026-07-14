@@ -112,11 +112,20 @@ def slim_tools(
     query: str,
     max_tools: int = 0,
 ) -> List[Dict[str, Any]]:
-    """工具数 ≤ 阈值时原样返回(零行为变化);超了才按词法相关性挑 top-K。
+    """工具数 ≤ 阈值时原样返回(零行为变化);超了才挑 top-K。
 
     GALAXY_TOOLS_SLIM=auto(默认)|off;阈值 GALAXY_TOOLS_MAX=24。
-    核心工具(memory__/ask_human__)始终入选;排序稳定(同分保持原序),
-    不破坏前缀缓存的字节稳定性。
+    核心工具(memory__/ask_human__)始终入选。
+
+    选取策略(GALAXY_TOOLS_STICKY=auto(默认)|on|off):
+    - 粘滞(本地主脑场景):按【静态优先级】挑——核心工具 + 目录原序
+      前 K 个,与 query 无关 → 逐回合字节级同一子集。这是 CPU 本地模型
+      的关键:按 query 挑会让每回合工具子集不同 → 提示词前缀不同 →
+      Ollama KV 前缀缓存每回合失效 → 每回合全量重预填(数千 token,
+      CPU 上十几秒)。粘滞牺牲少量相关性,换回"prefill 只发生一次"。
+    - 非粘滞(云端场景,prefill 便宜):按与本次请求的词法相关性挑
+      top-K,排序稳定(同分保持原序)。
+    auto = 已选本地主脑(OLLAMA_MODEL 非空)时粘滞,否则按相关性。
     """
     mode = os.environ.get("GALAXY_TOOLS_SLIM", "auto").strip().lower()
     if mode in ("0", "off", "false", "no"):
@@ -124,6 +133,19 @@ def slim_tools(
     limit = max_tools or _env_int("GALAXY_TOOLS_MAX", 24)
     if limit <= 0 or len(tools) <= limit:
         return tools
+
+    sticky_mode = os.environ.get("GALAXY_TOOLS_STICKY", "auto").strip().lower()
+    sticky = sticky_mode in ("1", "on", "true", "yes") or (
+        sticky_mode == "auto" and bool(os.environ.get("OLLAMA_MODEL", "").strip())
+    )
+    if sticky:
+        core = [
+            t for t in tools if any(m in str((t.get("function") or {}).get("name", "")) for m in _CORE_TOOL_MARKERS)
+        ]
+        rest = [t for t in tools if t not in core]
+        picked_sticky = core + rest[: max(0, limit - len(core))]
+        # 保持目录原序(与 core/rest 拼接后的顺序已是原序稳定的)
+        return picked_sticky
 
     q_terms = _terms_of(query)
 
