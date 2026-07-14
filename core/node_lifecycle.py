@@ -139,11 +139,18 @@ def start_node(node: str) -> Dict[str, object]:
     try:
         _LOG_DIR.mkdir(parents=True, exist_ok=True)
         logf = open(_LOG_DIR / f"{dir_name}.log", "ab")
+        # PYTHONPATH 必须带仓库根:以脚本方式启动时 sys.path[0] 是脚本目录
+        # 而非 cwd,节点里 `from nodes.common...` 的导入(125 个节点中 120 个)
+        # 没有这行会直接 ModuleNotFoundError: No module named 'nodes',
+        # 且错误只写进 logs/nodes/*.log,面板上表现为"点了启动却没启用"。
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(_ROOT) + ((os.pathsep + env["PYTHONPATH"]) if env.get("PYTHONPATH") else "")
         kwargs: Dict[str, object] = dict(
             cwd=str(_ROOT),
             stdout=logf,
             stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL,
+            env=env,
         )
         if sys.platform == "win32":
             kwargs["creationflags"] = getattr(subprocess, "DETACHED_PROCESS", 0x00000008) | getattr(
