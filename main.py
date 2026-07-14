@@ -676,18 +676,54 @@ def phase2_ensure_deps(env_status: dict) -> bool:
             print_item("检测到 Electron 依赖残缺，正在补齐...", "ok")
         else:
             print_item("正在下载 Electron 依赖...", "ok")
-        try:
-            rc = sp.run(
-                [npm_cmd, "install"],
-                cwd=str(ELECTRON_DIR),
-                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300,
-            ).returncode
+
+        # 弱网加固:①electron 二进制走国内镜像(避开 GitHub 卡死,与
+        # electron/.npmrc 双保险),多候选镜像轮换抗单点/路径失效;
+        # ②npm 网络重试/超时放宽;③【流式输出】不再 capture,让 npm 进度条
+        # 可见——避免"看着像卡死"的错觉;④首次失败逐镜像回退再试。
+        _npm_net_flags = [
+            "--fetch-retries=5",
+            "--fetch-retry-mintimeout=10000",
+            "--fetch-retry-maxtimeout=120000",
+            "--fetch-timeout=300000",
+        ]
+        # (electron 二进制镜像, 附加 npm registry 参数)候选,逐个尝试。
+        _attempts = [
+            ("https://npmmirror.com/mirrors/electron/", []),
+            ("https://registry.npmmirror.com/-/binary/electron/",
+             ["--registry=https://registry.npmmirror.com"]),
+            ("", []),  # 最后回退官方源(直连 GitHub 良好的用户)
+        ]
+
+        def _run_npm_install(electron_mirror: str, extra: list) -> int:
+            env = dict(os.environ)
+            if electron_mirror:
+                env["ELECTRON_MIRROR"] = electron_mirror
+            try:
+                # 流式输出(不 capture):慢网也能看到进度,不误判卡死。
+                return sp.run(
+                    [npm_cmd, "install", *_npm_net_flags, *extra],
+                    cwd=str(ELECTRON_DIR),
+                    env=env, timeout=900,
+                ).returncode
+            except Exception as exc:  # noqa: BLE001
+                print_item(f"npm install 异常: {exc}", "warn")
+                return 1
+
+        rc = 1
+        for _i, (_mirror, _extra) in enumerate(_attempts):
+            if _i > 0:
+                print_item(f"npm install 失败,切换镜像重试({_i}/{len(_attempts) - 1})...", "warn")
+            rc = _run_npm_install(_mirror, _extra)
             if rc == 0:
-                print_item("Electron 依赖就绪", "ok")
-            else:
-                print_item("npm install 失败", "warn", "可手动进入 electron/ 跑 npm install")
-        except Exception as exc:
-            print_item(f"npm install 异常: {exc}", "warn")
+                break
+        if rc == 0:
+            print_item("Electron 依赖就绪", "ok")
+        else:
+            print_item(
+                "npm install 仍失败", "warn",
+                "可手动: cd electron && npm install --registry=https://registry.npmmirror.com",
+            )
 
     # 2.5 Ollama install hint + model auto-download
     if not env_status.get("ollama_installed"):
