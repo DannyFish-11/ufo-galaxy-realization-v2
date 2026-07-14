@@ -30,6 +30,7 @@ import sys
 import threading
 import time
 import webbrowser
+from pathlib import Path
 from typing import Callable
 
 logger = logging.getLogger("Galaxy.Tray")
@@ -106,26 +107,52 @@ _STATUS_TOOLTIPS = {
 }
 
 
-def create_icon_image(
-    status: str = "running",
-    width: int = 64,
-    height: int = 64,
-) -> Image.Image | None:
-    """为系统托盘生成彩色渐变图标。
+# 定稿品牌图标（分形星云环 seed-19）——托盘图标的【单一真相来源】，
+# 与应用/窗口/通知图标像素一致。托盘不再自绘一颗球，而是加载这张定稿图，
+# 只在其上叠加状态圆点。文件缺失时才回退到本地自绘（诚实降级，不静默）。
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_BRAND_ICON_CANDIDATES = (
+    _REPO_ROOT / "electron" / "assets" / "icon-256.png",  # 高分辨率，缩放质量最好
+    _REPO_ROOT / "electron" / "assets" / "tray-64.png",   # 托盘专用尺寸兜底
+    _REPO_ROOT / "electron" / "assets" / "icon.png",
+)
 
-    绘制一个左→右多彩渐变的发光球体，色调与 Galaxy ASCII 启动横幅完全一致
-    （极光青 → 科技蓝 → 靛蓝 → 霓虹紫 → 赛博粉）。正常运行时是一颗干净的
-    渐变球；warning/error/offline 时在右下角叠加一个状态色圆点用于区分。
-    4x 超采样后缩回以求平滑。
-    """
-    if not _HAVE_TRAY:
-        return None
 
-    S = max(width, height) * 4
+def _load_brand_icon() -> "Image.Image | None":
+    """加载定稿星云品牌图（RGBA）。全部候选都不可用时返回 None → 触发自绘兜底。"""
+    for path in _BRAND_ICON_CANDIDATES:
+        try:
+            if path.exists():
+                return Image.open(path).convert("RGBA")
+        except Exception as exc:  # 损坏/不可读 —— 记一笔再试下一候选
+            logger.warning("品牌图标加载失败 %s: %s", path.name, exc)
+    return None
+
+
+def _overlay_status_pip(canvas: "Image.Image", status: str, S: int) -> None:
+    """在 SxS 画布右下角叠加状态色圆点（仅非 running）；带白色描边保证对比度。"""
+    if status == "running":
+        return
+    pip = _STATUS_COLORS.get(status, (128, 128, 128))
+    R = int(S * 0.40)
+    cx = cy = S // 2
+    pr = int(S * 0.135)
+    px = cx + int(R * 0.66)
+    py = cy + int(R * 0.66)
+    pd = ImageDraw.Draw(canvas)
+    ring = int(pr * 0.28)
+    pd.ellipse(
+        [px - pr - ring, py - pr - ring, px + pr + ring, py + pr + ring],
+        fill=(255, 255, 255, 235),
+    )
+    pd.ellipse([px - pr, py - pr, px + pr, py + pr], fill=(pip[0], pip[1], pip[2], 255))
+
+
+def _draw_orb_fallback(status: str, S: int) -> "Image.Image":
+    """兜底自绘：定稿星云图缺失时用的横幅渐变球（原实现，去掉白色高光）。"""
     cx = cy = S // 2
     R = int(S * 0.40)
 
-    # 1) 左→右横幅渐变：先做 1px 高的渐变条，再拉伸成正方形（与横幅同向同色）。
     row = Image.new("RGBA", (S, 1))
     rpx = row.load()
     for x in range(S):
@@ -133,44 +160,42 @@ def create_icon_image(
         rpx[x, 0] = (r, g, b, 255)
     grad = row.resize((S, S), Image.LANCZOS)
 
-    # 2) 圆形遮罩 → 渐变球
     mask = Image.new("L", (S, S), 0)
     ImageDraw.Draw(mask).ellipse([cx - R, cy - R, cx + R, cy + R], fill=255)
     orb = Image.new("RGBA", (S, S), (0, 0, 0, 0))
     orb.paste(grad, (0, 0), mask)
 
-    # 3) 外发光：用球体自身的模糊副本作柔光晕，颜色天然跟随渐变
     canvas = Image.new("RGBA", (S, S), (0, 0, 0, 0))
     glow = orb.filter(ImageFilter.GaussianBlur(S * 0.075))
     canvas = Image.alpha_composite(canvas, glow)
     canvas = Image.alpha_composite(canvas, orb)
+    return canvas
 
-    # 4) 体积高光（左上偏移柔光），裁剪到球体内
-    hr = int(R * 0.52)
-    hx, hy = cx - int(R * 0.30), cy - int(R * 0.32)
-    highlight = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    ImageDraw.Draw(highlight).ellipse(
-        [hx - hr, hy - hr, hx + hr, hy + hr], fill=(255, 255, 255, 95)
-    )
-    highlight = highlight.filter(ImageFilter.GaussianBlur(S * 0.05))
-    hclip = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    hclip.paste(highlight, (0, 0), mask)
-    canvas = Image.alpha_composite(canvas, hclip)
 
-    # 5) 状态圆点（仅非 running 状态）：右下角，带白色描边以保证对比度
-    if status != "running":
-        pip = _STATUS_COLORS.get(status, (128, 128, 128))
-        pr = int(S * 0.135)
-        px = cx + int(R * 0.66)
-        py = cy + int(R * 0.66)
-        pd = ImageDraw.Draw(canvas)
-        ring = int(pr * 0.28)
-        pd.ellipse(
-            [px - pr - ring, py - pr - ring, px + pr + ring, py + pr + ring],
-            fill=(255, 255, 255, 235),
-        )
-        pd.ellipse([px - pr, py - pr, px + pr, py + pr], fill=(pip[0], pip[1], pip[2], 255))
+def create_icon_image(
+    status: str = "running",
+    width: int = 64,
+    height: int = 64,
+) -> Image.Image | None:
+    """为系统托盘生成图标 —— 优先用定稿星云品牌图，缺失时自绘兜底。
 
+    托盘图标此前是运行时自绘的一颗渐变球，和应用/窗口图标（分形星云环）不一致，
+    也带着已被否决的白色高光。现在加载定稿 electron/assets/icon-256.png，保证托盘与
+    其它所有位置像素一致；warning/error/offline 时在右下角叠加状态色圆点。4x 超采样。
+    """
+    if not _HAVE_TRAY:
+        return None
+
+    S = max(width, height) * 4
+
+    brand = _load_brand_icon()
+    if brand is not None:
+        canvas = brand.resize((S, S), Image.LANCZOS)
+    else:
+        logger.warning("定稿星云图标不可用，托盘回退到自绘渐变球")
+        canvas = _draw_orb_fallback(status, S)
+
+    _overlay_status_pip(canvas, status, S)
     return canvas.resize((width, height), Image.LANCZOS)
 
 
