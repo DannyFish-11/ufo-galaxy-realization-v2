@@ -46,10 +46,11 @@ html, body, #root {
   place-items: center;
 }
 .rail-brand-dot {
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   border-radius: var(--r-pill);
-  background: radial-gradient(circle at 32% 30%, var(--avatar-from), var(--avatar-via) 55%, var(--avatar-to));
+  /* 品牌标识 = 定稿分形星云环，与应用/托盘/窗口图标像素一致（不再是纯渐变点）。 */
+  background: url('./assets/nebula-icon.png') center / cover no-repeat;
   box-shadow: var(--avatar-glow);
 }
 
