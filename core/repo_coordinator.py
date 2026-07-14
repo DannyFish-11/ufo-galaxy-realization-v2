@@ -25,6 +25,8 @@ import sys
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+import httpx
+
 # 添加项目路径
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
@@ -37,8 +39,6 @@ try:
     AIPProtocol = None  # no AIPProtocol in v3; legacy enhancements only
 except ImportError:
     AIPMessage = AIPMessageType = AIPProtocol = None
-
-import httpx
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("RepoCoordinator")

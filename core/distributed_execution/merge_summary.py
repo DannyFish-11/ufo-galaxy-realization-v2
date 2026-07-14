@@ -35,17 +35,15 @@ for quick downstream checks.
 
 from __future__ import annotations
 
-import logging  # auto: ensure module logger is defined
-
-logger = logging.getLogger(__name__)
-
-
 import dataclasses
+import logging  # auto: ensure module logger is defined
 import time
 from typing import Any, Dict, List, Optional
 
 from .merge_status import MergeStatus, is_successful_outcome, is_terminal_failure
 from .recovery_policy import RecoveryRecommendation
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "MergeSummary",

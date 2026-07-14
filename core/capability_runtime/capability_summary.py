@@ -26,16 +26,14 @@ Also provides:
 
 from __future__ import annotations
 
-import logging  # auto: ensure module logger is defined
-
-logger = logging.getLogger(__name__)
-
-
 import dataclasses
+import logging  # auto: ensure module logger is defined
 import time
 from typing import Any, Dict, List, Optional
 
 from .capability_state import CapabilityAvailability
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "CapabilityRuntimeSummary",

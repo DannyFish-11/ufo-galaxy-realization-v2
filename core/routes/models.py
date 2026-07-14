@@ -36,8 +36,8 @@ router = APIRouter(prefix="/api/v1/models", tags=["models"])
 #      最坏 ≈ max(单次超时) 而非求和。
 #   3) 总预算封顶:整个探测包 GALAXY_MODELS_PROBE_BUDGET(默认 4s)的 wait_for;
 #      超时返回全目录 unknown 态(键集恒等于目录,形状不破),后台继续补真值。
-import asyncio as _asyncio
-import time as _time
+import asyncio as _asyncio  # noqa: E402  分区就地导入(见上方注释)
+import time as _time  # noqa: E402  分区就地导入(见上方注释)
 
 _STATUS_TTL = float(os.environ.get("GALAXY_MODELS_STATUS_TTL", "3.0") or "3.0")
 _PROBE_BUDGET = float(os.environ.get("GALAXY_MODELS_PROBE_BUDGET", "4.0") or "4.0")

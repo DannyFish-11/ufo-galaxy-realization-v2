@@ -15,17 +15,14 @@
 4. IP 黑名单
 """
 
-import logging  # auto: ensure module logger is defined
-
-_logger = logging.getLogger(__name__)
-
-
 import logging
 import time
 import uuid
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set
+
+_logger = logging.getLogger(__name__)
 
 logger = logging.getLogger("Galaxy.SecurityMiddleware")
 

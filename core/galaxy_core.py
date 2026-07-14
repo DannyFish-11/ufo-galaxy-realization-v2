@@ -17,6 +17,8 @@ import sys
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+import httpx
+
 # 添加项目路径
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
@@ -52,8 +54,6 @@ try:
     from nodes.common.mcp_adapter import MCPAdapter, PythonMCPAdapter
 except ImportError:
     MCPAdapter = PythonMCPAdapter = None
-
-import httpx
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("GalaxyCore")

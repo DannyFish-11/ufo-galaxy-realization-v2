@@ -12,10 +12,6 @@ This layer is intentionally distinct from the technical lifecycle:
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
-
-logger = logging.getLogger(__name__)
-
-
 import time
 from dataclasses import dataclass
 from enum import Enum
@@ -25,6 +21,8 @@ from core.hidden_context_visible_action_surface import (
     build_hidden_context_visible_action_surface_contract,
 )
 from core.realtime_streaming_backbone import build_realtime_streaming_backbone_contract
+
+logger = logging.getLogger(__name__)
 
 
 class DesktopPresenceMode(str, Enum):

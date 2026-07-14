@@ -89,10 +89,6 @@ governance flow.  Companion Android repo: ``DannyFish-11/ufo-galaxy-android``.
 from __future__ import annotations
 
 import logging  # auto: ensure module _logger is defined
-
-_logger = logging.getLogger(__name__)
-
-
 import threading as _threading
 import time
 import uuid
@@ -100,6 +96,8 @@ from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Deque, Dict, List, Optional, Tuple
+
+_logger = logging.getLogger(__name__)
 
 logger_name = "Galaxy.AndroidEvaluatorArtifactIngress"
 

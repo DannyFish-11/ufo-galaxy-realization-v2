@@ -32,8 +32,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-logger = logging.getLogger("mcp_gateway")
-
 from core.acl import AntiCorruptionLayer, acl
 from core.nats_bus import NATSBus, nats_bus
 from core.schemas.contracts import (
@@ -44,6 +42,8 @@ from core.schemas.contracts import (
     MCPToolRegistrationModel,
     TimestampModel,
 )
+
+logger = logging.getLogger("mcp_gateway")
 
 # Generated tools directory
 _TOOLS_DIR = os.path.join(

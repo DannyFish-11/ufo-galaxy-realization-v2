@@ -10,12 +10,10 @@ gaps across node/runtime/panel/model/device surfaces.
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
-
-logger = logging.getLogger(__name__)
-
-
 import time
 from typing import Any, Dict
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_REALITY_CHECKPOINT_AUTHORITY: str = "SYSTEM_REALITY_CHECKPOINT_V1::core.system_reality_checkpoint"
 

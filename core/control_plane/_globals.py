@@ -20,10 +20,6 @@ Usage
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
-
-logger = logging.getLogger(__name__)
-
-
 from typing import Optional
 
 from core.control_plane.audit_ledger import AuditLedger
@@ -33,6 +29,8 @@ from core.control_plane.security_interceptor import (
     SecurityInterceptor,
 )
 from core.control_plane.smart_scheduler import DeviceScoringEngine
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Lazy singletons

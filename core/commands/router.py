@@ -36,7 +36,7 @@ command routing entry point.
 """
 
 # ── re-export from canonical implementation ───────────────────────────────
-from core.command_router import (  # noqa: F401
+from core.command_router import (  # noqa: F401,E402
     COMMAND_ROUTER_ORCHESTRATION_AUTHORITY,
     CommandMode,
     CommandRequest,

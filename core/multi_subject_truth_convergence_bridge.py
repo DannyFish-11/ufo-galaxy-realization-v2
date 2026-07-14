@@ -14,11 +14,9 @@ attach to result payloads and canonical result surfaces.
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
-
-
-from typing import Any, Dict, List, Optional
 
 MULTI_SUBJECT_TRUTH_CONVERGENCE_BRIDGE_AUTHORITY = (
     "MULTI_SUBJECT_TRUTH_CONVERGENCE_BRIDGE::CANONICAL_GOVERNANCE_V1: "

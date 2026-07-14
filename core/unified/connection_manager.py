@@ -35,16 +35,16 @@ from __future__ import annotations
 # ---------------------------------------------------------------------------
 UCM_CONNECTION_AUTHORITY = "UCM::CANONICAL_CONNECTION_AND_PRESENCE_AUTHORITY"
 
-import asyncio
-import logging
-import time
-import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+import asyncio  # noqa: E402  哨兵权威声明置顶是本仓设计习语
+import logging  # noqa: E402  哨兵权威声明置顶是本仓设计习语
+import time  # noqa: E402  哨兵权威声明置顶是本仓设计习语
+import uuid  # noqa: E402  哨兵权威声明置顶是本仓设计习语
+from datetime import datetime, timezone  # noqa: E402  哨兵权威声明置顶是本仓设计习语
+from typing import Any, Dict, List, Optional  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 
-from fastapi import WebSocket
+from fastapi import WebSocket  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 
-from .models import UnifiedConnectionInfo, UnifiedConnectionState
+from .models import UnifiedConnectionInfo, UnifiedConnectionState  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 
 logger = logging.getLogger("Galaxy.Unified.ConnectionManager")
 

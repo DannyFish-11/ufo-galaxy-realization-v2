@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
-
-logger = logging.getLogger(__name__)
-
-
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from core.device_types import DeviceType, resolve_device_type
 from core.runtime_truth_governance import TRUTH_GRADE_DURABLE
+
+logger = logging.getLogger(__name__)
 
 DEVICE_OPERATIONAL_SUPPORT_AUTHORITY: str = (
     "DEVICE_OPERATIONAL_SUPPORT_AUTHORITY::"

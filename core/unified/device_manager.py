@@ -51,13 +51,13 @@ from __future__ import annotations
 # ---------------------------------------------------------------------------
 UDM_DEVICE_STATE_AUTHORITY = "UDM::CANONICAL_DEVICE_STATE_WRITE_AUTHORITY"
 
-import asyncio
-import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+import asyncio  # noqa: E402  哨兵权威声明置顶是本仓设计习语
+import logging  # noqa: E402  哨兵权威声明置顶是本仓设计习语
+from datetime import datetime, timezone  # noqa: E402  哨兵权威声明置顶是本仓设计习语
+from typing import Any, Dict, List, Optional  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 
-from .exceptions import DeviceManagerError
-from .models import UnifiedDevice, UnifiedDeviceStatus, UnifiedDeviceType
+from .exceptions import DeviceManagerError  # noqa: E402  哨兵权威声明置顶是本仓设计习语
+from .models import UnifiedDevice, UnifiedDeviceStatus, UnifiedDeviceType  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 
 logger = logging.getLogger("Galaxy.Unified.DeviceManager")
 

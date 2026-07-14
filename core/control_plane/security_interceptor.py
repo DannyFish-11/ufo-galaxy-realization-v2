@@ -58,12 +58,8 @@ Usage
 
 from __future__ import annotations
 
-import logging  # auto: ensure module logger is defined
-
-logger = logging.getLogger(__name__)
-
-
 import asyncio
+import logging  # auto: ensure module logger is defined
 import secrets
 import uuid
 from datetime import datetime, timezone
@@ -71,6 +67,8 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Exceptions

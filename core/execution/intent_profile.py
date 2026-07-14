@@ -33,16 +33,14 @@ See ``docs/EXECUTION_INTENT_PROFILE.md`` for the full specification.
 
 from __future__ import annotations
 
-import logging  # auto: ensure module logger is defined
-
-logger = logging.getLogger(__name__)
-
-
 import json
+import logging  # auto: ensure module logger is defined
 import uuid
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # IntentMode — normalised execution-mode vocabulary

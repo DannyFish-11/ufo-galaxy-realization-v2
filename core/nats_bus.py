@@ -57,18 +57,18 @@ CAPABILITY_NETWORK_RUNTIME_ASSIMILATION_INTEGRATED: str = (
     "NATS_BUS::CAPABILITY_NETWORK_RUNTIME_ASSIMILATION_INTEGRATED_V1"
 )
 
-import asyncio
-import json
-import logging
-import os
-import socket
-import time
-from typing import Any, Callable, Dict, Optional
+import asyncio  # noqa: E402  哨兵权威声明置顶是本仓设计习语
+import json  # noqa: E402  哨兵权威声明置顶是本仓设计习语
+import logging  # noqa: E402  哨兵权威声明置顶是本仓设计习语
+import os  # noqa: E402  哨兵权威声明置顶是本仓设计习语
+import socket  # noqa: E402  哨兵权威声明置顶是本仓设计习语
+import time  # noqa: E402  哨兵权威声明置顶是本仓设计习语
+from typing import Any, Callable, Dict, Optional  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 
 logger = logging.getLogger("nats_bus")
 
 # PR-AIPV3-NATS: Unified AIP v3 models — NATS transports canonical AIP v3 messages
-from core.schemas.aip_v3 import (
+from core.schemas.aip_v3 import (  # noqa: E402  哨兵权威声明置顶是本仓设计习语
     AckMsg,
     AIPMessage,
     CapabilityReportMsg,
@@ -97,7 +97,7 @@ from core.schemas.aip_v3 import (
     WebRTCTransportStateMsg,
     WebRTCUnbindMsg,
 )
-from core.schemas.contracts import (
+from core.schemas.contracts import (  # noqa: E402  哨兵权威声明置顶是本仓设计习语
     AgentEventModel,
     MCPCallRequestModel,
     TaskDispatchModel,

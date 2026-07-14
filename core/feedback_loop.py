@@ -33,6 +33,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -98,9 +99,6 @@ class ActionQuality:
                 self.trend = "degrading"
             else:
                 self.trend = "stable"
-
-
-from collections import defaultdict
 
 
 class FeedbackLoop:

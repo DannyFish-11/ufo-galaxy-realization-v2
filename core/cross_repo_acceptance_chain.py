@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
-
-logger = logging.getLogger(__name__)
-
-
 import time
 import uuid
 from typing import Any, Dict, List, Optional, Set
+
+logger = logging.getLogger(__name__)
 
 CROSS_REPO_ACCEPTANCE_CHAIN_AUTHORITY = (
     "CROSS_REPO_ACCEPTANCE_CHAIN_AUTHORITY::"
