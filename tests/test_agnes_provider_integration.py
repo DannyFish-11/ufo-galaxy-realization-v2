@@ -21,7 +21,8 @@ class TestRegistryEntry:
         spec = next(s for s in PROVIDER_REGISTRY if s["name"] == "agnes")
         assert spec["env_key"] == "AGNES_API_KEY"
         assert spec["base_url"] == "https://apihub.agnes-ai.com/v1"
-        assert spec["default_model"] == "agnes-2.0-flash"
+        assert spec["default_model"] == "agnes-2.5-flash"
+        assert "agnes-2.0-flash" in spec["models"]  # 2.0 兜底仍在
         assert spec["default_model"] in spec["models"]
         # 免费 API:成本为 0,级联 cheap-first 才会正确排序
         assert spec["cost_in"] == 0.0 and spec["cost_out"] == 0.0
@@ -44,7 +45,7 @@ class TestRegistration:
         assert "agnes" in r.providers
         cfg = r.providers["agnes"]
         assert cfg.base_url == "https://apihub.agnes-ai.com/v1"
-        assert cfg.default_model == "agnes-2.0-flash"
+        assert cfg.default_model == "agnes-2.5-flash"
         assert isinstance(r.adapters["agnes"], OpenAIAdapter)
 
     def test_no_key_not_registered(self, monkeypatch):

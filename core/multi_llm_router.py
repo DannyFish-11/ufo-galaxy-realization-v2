@@ -1487,14 +1487,17 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
     },
     {
         # Agnes AI:全模态免费 API(2026),OpenAI 兼容协议。
-        # 免费档限流:文本 20 RPM;上下文 256K / 最大输出 64K。
+        # agnes-2.5-flash 2026-07-13 发布(agentic/编码强化,免费不限量);
+        # 2.0 仍可用作兜底(256K 上下文/64K 输出,免费档 20 RPM)。
+        # 2.5 的准确串遵循官方命名规约(1.5→2.0→2.5),若有出入由 L4
+        # 模型名单自动同步(/models 对账)+ 面板 verify_provider 试调纠正。
         # 图像(agnes-image-2.x)/视频(agnes-video-v2.0)模型不入聊天路由,
         # 属扩展层能力,按需另接。
         "name": "agnes",
         "env_key": "AGNES_API_KEY",
         "base_url": "https://apihub.agnes-ai.com/v1",
-        "models": ["agnes-2.0-flash"],
-        "default_model": "agnes-2.0-flash",
+        "models": ["agnes-2.5-flash", "agnes-2.0-flash"],
+        "default_model": "agnes-2.5-flash",
         "cost_in": 0.0,
         "cost_out": 0.0,
         "extra": {"multimodal": True, "supports_vision": True, "supports_tools": True},
