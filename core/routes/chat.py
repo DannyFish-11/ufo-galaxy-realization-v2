@@ -629,6 +629,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 on_delta=lambda t: frames.put_nowait(("delta", t)),
                 on_reset=lambda: frames.put_nowait(("reset", None)),
             )
+            # 文字/语音锁步:每句在【被念出的那一刻】才逐句上屏,文字与语音同刻对齐。
+            # reveal_q 收集"刚开口念的句子文本";speaker 的 on_sentence_start 往里塞。
+            # GALAXY_TEXT_VOICE_LOCKSTEP=0 可关(桌面默认开);关或无 TTS 时退回
+            # "文字逐 token 快流、语音按句松散跟随"。
+            reveal_q: "asyncio.Queue" = asyncio.Queue()
+
             # 边生成边念:能建则建;建成后在请求上下文里抑制收尾的整段重念。
             speaker = None
             try:
@@ -637,9 +643,19 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     suppress_final_speak_in_context,
                 )
 
-                speaker = begin_incremental_speech(source="chat")
+                speaker = begin_incremental_speech(
+                    source="chat",
+                    on_sentence_start=lambda t: reveal_q.put_nowait(t),
+                )
             except Exception as exc:  # noqa: BLE001
                 logger.debug("增量朗读建立失败(退回整段): %s", exc)
+
+            _lockstep = speaker is not None and os.environ.get("GALAXY_TEXT_VOICE_LOCKSTEP", "1").strip().lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            )
 
             async def _run():
                 # 在【任务自身上下文】里挂 sink/抑制标记:contextvars 随 await 链
@@ -665,6 +681,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             task = asyncio.get_running_loop().create_task(_run())
             deadline = asyncio.get_running_loop().time() + _chat_timeout
             streamed_chars = 0
+            revealed_chars = 0  # 锁步下已逐句上屏的字符数
             manifested = False
             try:
                 # 消费循环:增量帧即到即转;runtime 任务完成且队列排空后出循环。
@@ -673,23 +690,42 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                         break
                     if asyncio.get_running_loop().time() >= deadline:
                         raise asyncio.TimeoutError
+                    kind = payload = None
                     try:
                         kind, payload = await asyncio.wait_for(frames.get(), timeout=0.1)
                     except asyncio.TimeoutError:
-                        continue  # 无新帧:回头看任务是否已完成/超时
+                        pass  # 无新帧:落到下面锁步露出/循环条件复查
                     if kind == "delta":
-                        if not manifested:
-                            manifested = True
-                            yield _sse({"type": "phase", "phase": "manifest"})
-                        streamed_chars += len(payload)
-                        yield _sse({"type": "delta", "text": payload})
-                        if speaker is not None:
+                        if _lockstep:
+                            # 锁步:只喂 TTS,【不】立刻上屏;文字随语音逐句露出。
                             speaker.feed(payload)
+                        else:
+                            if not manifested:
+                                manifested = True
+                                yield _sse({"type": "phase", "phase": "manifest"})
+                            streamed_chars += len(payload)
+                            yield _sse({"type": "delta", "text": payload})
+                            if speaker is not None:
+                                speaker.feed(payload)
                     elif kind == "reset":
+                        if _lockstep:
+                            while not reveal_q.empty():
+                                reveal_q.get_nowait()
+                            revealed_chars = 0
                         streamed_chars = 0
                         yield _sse({"type": "reset"})
                         if speaker is not None:
                             speaker.reset()
+                    # 锁步:把"刚开口念的句子"逐句吐出(文字与语音同刻)。
+                    if _lockstep:
+                        while not reveal_q.empty():
+                            sent = reveal_q.get_nowait()
+                            if not manifested:
+                                manifested = True
+                                yield _sse({"type": "phase", "phase": "manifest"})
+                            revealed_chars += len(sent)
+                            streamed_chars += len(sent)
+                            yield _sse({"type": "delta", "text": sent})
 
                 result = task.result()  # 异常在此抛出,统一走下面的 except
                 metadata = result.get("metadata", {})
@@ -727,8 +763,41 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 if _emit_conv is not None:
                     _emit_conv("ai", text, source="text", turn_id=_turn_id)
 
-                if streamed_chars == 0 and text:
-                    # 兜底:没有任何真增量(非流式适配器/边界降级为全新文本)。
+                if _lockstep and speaker is not None:
+                    # ── 锁步收尾 ──────────────────────────────────────────────
+                    # 生成阶段一句都没喂进去过(极少:边界整段替换)→ 把全文喂进去念。
+                    try:
+                        if revealed_chars == 0 and streamed_chars == 0 and text:
+                            speaker.feed(text)
+                        speaker.finish()
+                    except Exception:  # noqa: BLE001
+                        pass
+                    # 等 _player 把剩余句子念完,边念边【逐句】露出;grace 有界,
+                    # 语音卡住也绝不无限挂 SSE。~0.2s/字 宽松估播放时长,封顶 180s。
+                    _loop = asyncio.get_running_loop()
+                    speech_grace = _loop.time() + min(180.0, max(20.0, len(text) * 0.2))
+                    ptask = getattr(speaker, "_player_task", None)
+                    while True:
+                        drained = False
+                        while not reveal_q.empty():
+                            sent = reveal_q.get_nowait()
+                            if not manifested:
+                                manifested = True
+                                yield _sse({"type": "phase", "phase": "manifest"})
+                            revealed_chars += len(sent)
+                            streamed_chars += len(sent)
+                            yield _sse({"type": "delta", "text": sent})
+                            drained = True
+                        if (ptask is None or ptask.done()) and reveal_q.empty():
+                            break
+                        if _loop.time() >= speech_grace:
+                            break
+                        if not drained:
+                            await asyncio.sleep(0.05)
+                    # 兜底:语音未能覆盖全文(TTS 部分/全失败)不在此逐字补 ——
+                    # 下面 done 的 response=全文 会把气泡快照到权威全文,自然补齐。
+                elif streamed_chars == 0 and text:
+                    # 非锁步兜底:没有任何真增量(非流式适配器/边界降级为全新文本)。
                     # 退回逐字假流式,观感与真流式前完全一致。
                     if not manifested:
                         yield _sse({"type": "phase", "phase": "manifest"})
@@ -736,9 +805,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                         yield _sse({"type": "delta", "text": text[i : i + _STREAM_CHUNK_CHARS]})
                         await asyncio.sleep(_STREAM_CHUNK_DELAY)
 
-                # 边生成边念收尾:真增量场景冲刷尾句;零增量场景把权威全文整段
-                # 喂进去再收尾(等价旧的"生成完再念",但走同一台增量播放器)。
-                if speaker is not None:
+                # 非锁步的边生成边念收尾:真增量冲刷尾句;零增量把权威全文喂进去念。
+                # (锁步已在上面 finish 过,不重复。)
+                if speaker is not None and not _lockstep:
                     try:
                         if streamed_chars == 0 and text:
                             speaker.feed(text)
