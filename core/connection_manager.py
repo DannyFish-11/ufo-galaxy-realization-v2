@@ -189,7 +189,6 @@ class ConnectionManager:
             return False
 
         conn_info = self.connections[connection_id]
-        config = self.configs[connection_id]
 
         conn_info.state = ConnectionState.CONNECTING
 

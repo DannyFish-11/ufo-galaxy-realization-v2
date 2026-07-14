@@ -339,7 +339,7 @@ class WebRTCSessionManager:
         # Start / restart the metrics polling task
         if self._metrics_task is None or self._metrics_task.done():
             try:
-                loop = asyncio.get_running_loop()
+                asyncio.get_running_loop()
                 self._metrics_task = asyncio.create_task(
                     self._metrics_loop(),
                     name="webrtc_metrics",

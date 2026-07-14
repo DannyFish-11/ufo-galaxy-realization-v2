@@ -92,7 +92,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
-from .formation_group import DeviceFormationGroup
+from .formation_group import EMPTY_FORMATION_GROUP  # noqa: F401  re-export:测试与下游从本模块导入
+from .formation_group import (
+    DeviceFormationGroup,
+)
 from .formation_policy import DEFAULT_LOCAL_FORMATION_POLICY, BarrierPosture, FormationPolicy
 from .formation_role import FormationMember, FormationRole
 
@@ -402,7 +405,6 @@ class FormationRebalanceEngine:
 
         # Classify each member
         primary_device_id: Optional[str] = None
-        source_device_id: Optional[str] = getattr(group, "source_device_id", None)
         fallback_members: List[FormationMember] = []
         primary_unhealthy = False
 

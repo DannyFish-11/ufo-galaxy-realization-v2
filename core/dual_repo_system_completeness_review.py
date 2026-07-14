@@ -599,7 +599,7 @@ def _try_import(module_path: str) -> bool:
         return True
     except (ImportError, ModuleNotFoundError):
         return False
-    except Exception as exc:
+    except Exception:
         return False
 
 
@@ -905,7 +905,7 @@ class DualRepoSystemCompletenessReviewer:
                 )
 
                 reset_system_acceptance_evaluator()
-                _rpt = evaluate_system_acceptance()
+                evaluate_system_acceptance()
                 acceptance_runnable = True
             except Exception as exc:
                 logger.warning("Exception suppressed: %s", exc)

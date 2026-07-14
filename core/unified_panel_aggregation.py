@@ -1462,7 +1462,7 @@ def _get_continuum_state_fallback() -> Optional[Any]:
         # Construct a minimal silent-phase fallback so downstream consumers
         # always receive a valid (though empty) projection.
         return ContinuumState(phase=ContinuumPhase.SILENT)
-    except Exception as exc:
+    except Exception:
         return None
 
 

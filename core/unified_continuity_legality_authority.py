@@ -577,7 +577,7 @@ def resolve_continuity_legality_mode(
     def _parse(raw: Any) -> Optional[ContinuityLegalityMode]:
         try:
             return ContinuityLegalityMode(str(raw).strip().lower())
-        except Exception as exc:
+        except Exception:
             return None
 
     if explicit_mode is not None:

@@ -560,13 +560,13 @@ class CapabilityOrchestrator:
             result = await registry.call_node(node_name, action, node_params, allow_failover=False)
             if result.get("success") is not False or "error" not in result:
                 return result
-        except Exception as exc:
+        except Exception:
             pass  # fall through to HTTP
 
         # 2. Resolve port from canonical port config (not 8000+id)
         try:
             port = get_node_port(node_name)
-        except Exception as exc:
+        except Exception:
             # Last-resort fallback: parse numeric id from node name
             try:
                 node_num = int(node_name.replace("Node_", "").split("_")[0])

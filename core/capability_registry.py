@@ -209,7 +209,7 @@ def _guard_routing_context_usage(
 
     try:
         stack = inspect.stack()
-    except Exception as exc:
+    except Exception:
         return
 
     for frameinfo in stack[2:]:

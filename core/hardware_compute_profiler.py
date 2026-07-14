@@ -387,7 +387,7 @@ class HardwareComputeProfiler:
             import cpuinfo
 
             return cpuinfo.get_cpu_info().get("brand_raw", "unknown")
-        except Exception as exc:
+        except Exception:
             return "unknown"
 
     # ── 策略决策（核心） ──

@@ -345,7 +345,7 @@ class AutonomousScheduler:
                     return line.lstrip("#").strip()[:200]
 
             return f"Node {node_name} - execute actions"
-        except Exception as exc:
+        except Exception:
             return None
 
     def _add_node_tool(self, node_name: str, description: str):

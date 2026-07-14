@@ -325,7 +325,7 @@ def build_route_explanation(
             task_id=task_id,
             trace_id=trace_id,
         )
-    except Exception as exc:
+    except Exception:
         return EMPTY_ROUTE_EXPLANATION
 
 

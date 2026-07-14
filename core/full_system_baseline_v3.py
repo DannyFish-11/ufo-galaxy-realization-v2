@@ -636,7 +636,7 @@ class FullSystemBaselineV3Evaluator:
         for attr in attrs:
             try:
                 cur = getattr(cur, attr)
-            except Exception as exc:
+            except Exception:
                 return None
         return cur
 

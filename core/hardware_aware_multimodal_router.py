@@ -185,7 +185,7 @@ class HardwareAwareMultimodalRouter:
             base = _ollama_base_url()
             resp = httpx.get(f"{base}/api/tags", timeout=2.0)
             return resp.status_code == 200
-        except Exception as exc:
+        except Exception:
             return False
 
     # ── 核心路由方法 ──

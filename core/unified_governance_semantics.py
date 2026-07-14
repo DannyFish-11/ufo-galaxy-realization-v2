@@ -1179,7 +1179,7 @@ def build_unified_governance_state(
             get_execution_runtime_snapshot,
             is_takeover_active,
         )
-    except Exception as exc:
+    except Exception:
         return {
             "devices": [],
             "local_mode_count": 0,
@@ -1208,7 +1208,7 @@ def build_unified_governance_state(
         )
 
         android_evidence_integration_summary_fn = get_android_evidence_integration_summary
-    except Exception as exc:
+    except Exception:
 
         def _fallback_get_android_evidence_integration_summary(  # type: ignore[misc]
             device_id: str,
@@ -1238,7 +1238,7 @@ def build_unified_governance_state(
         )
 
         canonical_cross_repo_report_fn = get_canonical_cross_repo_evidence_report
-    except Exception as exc:
+    except Exception:
 
         def _fallback_get_canonical_cross_repo_evidence_report() -> Dict[str, Any]:  # type: ignore[misc]
             return {
@@ -1288,7 +1288,7 @@ def build_unified_governance_state(
             mode_state = build_mode_state_for_device(device_id)
             readiness = evaluate_android_mode_readiness(device_id)
             takeover_active = is_takeover_active(device_id)
-        except Exception as exc:
+        except Exception:
             continue
 
         mode = getattr(mode_state.mode, "value", str(mode_state.mode))

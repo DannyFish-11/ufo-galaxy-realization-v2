@@ -1351,7 +1351,6 @@ class FlowContinuityCoordinator:
         _terminal_tracking = frozenset({"completed", "failed", "timed_out", "cancelled"})
         _terminal_flow = frozenset({"completed", "failed", "cancelled"})
 
-        session_is_stale = not session_state or session_state in _TERMINAL_SESSION_STATES
         tracking_is_stale = not tracking_phase or tracking_phase in _terminal_tracking
         flow_is_stale = not flow_phase or flow_phase in _terminal_flow
 

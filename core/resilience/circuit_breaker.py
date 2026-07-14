@@ -164,7 +164,7 @@ class CircuitBreaker:
         # Execute outside the lock to avoid blocking metric readers
         try:
             result = await fn(*args, **kwargs)
-        except Exception as exc:
+        except Exception:
             async with self._lock:
                 await self._record_failure()
             raise

@@ -735,8 +735,6 @@ class ModelSelectionPolicyEngine:
         available_ids: List[str] = list(canonical_supply.get("available_provider_ids") or [])
         capability_registry: Dict[str, Any] = canonical_supply.get("multimodal_registry") or {}
         # Support/fallback hints from supply state
-        fallback_candidates: List[str] = list(canonical_supply.get("fallback_candidates") or [])
-        support_candidates: List[str] = list(canonical_supply.get("support_model_candidates") or [])
 
         all_provider_ids = list(providers.keys())
         considered = all_provider_ids

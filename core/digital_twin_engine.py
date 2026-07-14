@@ -633,7 +633,7 @@ def drone_flight_model(state: Dict, params: Dict) -> Dict:
     target_alt = params.get("altitude", state.get("altitude", 0))
     target_lat = params.get("latitude", state.get("latitude", 0))
     target_lon = params.get("longitude", state.get("longitude", 0))
-    speed = params.get("speed", 5.0)  # m/s
+    params.get("speed", 5.0)  # m/s
 
     # 位置更新
     predicted["altitude"] = target_alt

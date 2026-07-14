@@ -554,7 +554,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     try:
                         ev = normalize_observability_payload(raw)
                         events.append(ev.to_dict())
-                    except Exception as exc:
+                    except Exception:
                         events.append({"raw": raw})
                 first_trace = TraceCorrelation(
                     trace_id=entries[0].get("trace_id", trace_id),

@@ -287,7 +287,7 @@ class PatternMiner:
             for p in self._patterns.values():
                 p.decay(days)
 
-            before = len(self._patterns)
+            len(self._patterns)
             dead = [pid for pid, p in self._patterns.items() if p.activation_score < 0.01]
             for pid in dead:
                 del self._patterns[pid]

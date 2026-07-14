@@ -836,7 +836,7 @@ class UnifiedDeviceManager:
             from core.unified.device_health import get_device_health_scorer
 
             return get_device_health_scorer().score(device_id)
-        except Exception as exc:
+        except Exception:
             return None
 
     def get_online_devices_by_health(self) -> List[UnifiedDevice]:
@@ -857,7 +857,7 @@ class UnifiedDeviceManager:
                 key=lambda d: scorer.score(d.device_id).total_score,
                 reverse=True,
             )
-        except Exception as exc:
+        except Exception:
             return devices
 
     def get_autonomous_devices(self) -> List[UnifiedDevice]:

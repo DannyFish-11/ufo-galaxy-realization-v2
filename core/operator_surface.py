@@ -117,7 +117,7 @@ try:
         AndroidExecutionPhase,
         FlowOperatorProjection,
     )
-except Exception as exc:
+except Exception:
     pass  # graceful degradation if module is unavailable
 
 # PR-3: Operator action contract re-exports — lazy so callers that only need
@@ -132,7 +132,7 @@ try:
         OperatorActionResult,
         build_operator_action_result_from_runtime_result,
     )
-except Exception as exc:
+except Exception:
     pass  # graceful degradation if module is unavailable
 
 __all__ = [
@@ -1264,7 +1264,7 @@ class OperatorSurface:
         """
         try:
             from core.task_envelope_lifecycle_registry import get_lifecycle_registry
-        except Exception as exc:
+        except Exception:
             return None
 
         trace_id = ""
@@ -1361,7 +1361,7 @@ class OperatorSurface:
             from core.hybrid_orchestration_continuity import (
                 get_continuity_registry,
             )
-        except Exception as exc:
+        except Exception:
             return None
 
         try:
@@ -1427,7 +1427,7 @@ class OperatorSurface:
         insp = AuditEvidenceInspection(task_id=task_id)
         try:
             from core.replay_audit_persistence import get_replay_audit_store
-        except Exception as exc:
+        except Exception:
             return insp
 
         try:

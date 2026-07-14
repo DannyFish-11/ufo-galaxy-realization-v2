@@ -259,7 +259,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
             for subtask in req.subtasks:
                 child_id = f"{agent_id}-child-{uuid.uuid4().hex[:6]}"
-                child = await factory.create_agent(
+                await factory.create_agent(
                     name=f"Split-{child_id}",
                     task=subtask,
                     parent_id=agent_id,

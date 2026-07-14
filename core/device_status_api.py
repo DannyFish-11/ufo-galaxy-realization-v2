@@ -203,7 +203,7 @@ class DeviceStatusManager:
         self._udm_write_unregister(device_id)
 
         if device_id in self._devices:
-            device = self._devices.pop(device_id)
+            self._devices.pop(device_id)
             self._status_history.pop(device_id, None)
             logger.info(f"Device unregistered: {device_id}")
             from core.task_utils import create_tracked_task

@@ -499,7 +499,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
 
         RUNTIME_CLOSURE_AUDIT_INTEGRATED: str = "API_ROUTES::RUNTIME_CLOSURE_AUDIT_INTEGRATED_V1"
     except ImportError:
-        RUNTIME_CLOSURE_AUDIT_INTEGRATED: str = (  # type: ignore[no-redef]
+        RUNTIME_CLOSURE_AUDIT_INTEGRATED: str = (  # type: ignore[no-redef]  # noqa: F841
             "API_ROUTES::RUNTIME_CLOSURE_AUDIT_INTEGRATED_UNAVAILABLE"
         )
 
@@ -993,7 +993,6 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                         #    completion linkage) ─────────────────────────────────
                         # Idempotency is entirely delegated to ingest_result so
                         # there is no double-check and no premature key recording.
-                        _ger_ingress_ok = False
                         _ger_was_dedup = False
                         _ger_outcome = None
                         try:
@@ -1021,7 +1020,6 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                             )
                             _ger_outcome = ingest_result(_ger_event)
                             _ger_was_dedup = _ger_outcome.was_deduplicated
-                            _ger_ingress_ok = True
                             if _ger_was_dedup:
                                 logger.debug(
                                     "compat_ws: duplicate goal_execution_result suppressed " "task_id=%s device_id=%s",

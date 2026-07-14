@@ -328,7 +328,7 @@ def _compute_closure_state(
     verdict = str(ingress_outcome.get("evidence_acceptance_verdict") or "").lower()
     is_fully_closed = bool(ingress_outcome.get("is_fully_closed"))
     was_deduplicated = bool(ingress_outcome.get("was_deduplicated"))
-    truth_chain_complete = bool(ingress_outcome.get("truth_chain_complete"))
+    bool(ingress_outcome.get("truth_chain_complete"))
     incomplete_reason = str(ingress_outcome.get("incomplete_reason") or "")
 
     if was_deduplicated:

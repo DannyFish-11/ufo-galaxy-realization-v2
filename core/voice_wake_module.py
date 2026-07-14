@@ -221,7 +221,7 @@ class VoiceWakeModule:
             import numpy as np
 
             # Convert bytes to numpy array
-            audio_np = np.frombuffer(audio_buffer, dtype=np.int16).astype(np.float32) / 32768.0
+            np.frombuffer(audio_buffer, dtype=np.int16).astype(np.float32) / 32768.0
 
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
                 import wave

@@ -600,7 +600,7 @@ class WindowsExecutionArbiter:
             context=context,
         )
         try:
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
             # Already inside a running event loop — cannot call run_until_complete.
             # Dispatch to a separate thread with its own event loop via asyncio.run().
             # Note: this approach spawns a new thread and loop, so thread-local state

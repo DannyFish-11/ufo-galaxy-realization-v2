@@ -324,7 +324,7 @@ class MeshSessionProgressionDriver:
             try:
                 cls = _import_live_coordinator()
                 return cls(None, barrier_timeout_seconds=barrier_timeout_seconds)
-            except Exception as exc:
+            except Exception:
                 return None
 
     # ------------------------------------------------------------------

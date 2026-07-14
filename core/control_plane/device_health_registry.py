@@ -268,8 +268,6 @@ class DeviceHealthRegistry:
             # EWMA error-rate update
             state.recent_error_rate = min(1.0, state.recent_error_rate * 0.8 + 0.2)
 
-            prev_circuit = state.circuit_state
-
             if state.circuit_state == CircuitState.HALF_OPEN:
                 state.circuit_state = CircuitState.OPEN
                 self._recalculate_health_score(state)

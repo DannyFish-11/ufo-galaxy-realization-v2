@@ -857,7 +857,7 @@ class CommandRouter:
                 device_id=device_id,
                 payload=payload or {},
             )
-        except Exception as exc:
+        except Exception:
             return None
 
     # ------------------------------------------------------------------
@@ -873,7 +873,7 @@ class CommandRouter:
                 from core.resilience.circuit_breaker import CircuitBreaker
 
                 self._circuit_breakers[target] = CircuitBreaker(target=target)
-            except Exception as exc:
+            except Exception:
                 return None
         return self._circuit_breakers.get(target)
 
@@ -992,7 +992,7 @@ class CommandRouter:
             from core.audit_event_semantics import audit_task_accepted as _audit_compat_accepted
 
             _compat_meta = request.metadata or {}
-            _compat_targets = list(request.targets)
+            list(request.targets)
             _compat_task_id = request.request_id
             _compat_trace_id = _compat_meta.get("trace_id", "") or ""
             _audit_compat_accepted(
@@ -1572,7 +1572,7 @@ class CommandRouter:
                             )
                         else:
                             _adm_validated.append(_adm_t)
-                    except Exception as exc:
+                    except Exception:
                         # Include by default on per-target error (graceful).
                         _adm_validated.append(_adm_t)
 
@@ -4327,7 +4327,7 @@ class CommandRouter:
                 return None
             best = get_scoring_engine().select_best_device(remaining, required_capabilities)
             return best.device_id if best is not None else None
-        except Exception as exc:
+        except Exception:
             # Fallback: just pick first untried candidate
             for c in candidates:
                 if c.device_id not in tried:
@@ -4787,7 +4787,6 @@ class CommandRouter:
         for attempt in range(max_retries + 1):
             target_result.retries = attempt
             call_start = time.monotonic()
-            call_error = False
             try:
                 # ── PR-G5: use adaptive semaphore when available ─────────
                 sem_ctx = self._adaptive_sem if self._adaptive_sem is not None else self._semaphore
@@ -4820,7 +4819,6 @@ class CommandRouter:
                 return
 
             except asyncio.TimeoutError:
-                call_error = True
                 last_error = f"Timeout after {timeout}s"
                 logger.warning(f"Command timeout: {target}/{command} (attempt {attempt + 1})")
                 elapsed_ms = (time.monotonic() - call_start) * 1000
@@ -4841,7 +4839,6 @@ class CommandRouter:
 
             except Exception as e:
                 logger.debug("Fallback triggered: %s", e)
-                call_error = True
                 last_error = str(e)
                 logger.warning(f"Command error: {target}/{command}: {e} (attempt {attempt + 1})")
                 elapsed_ms = (time.monotonic() - call_start) * 1000

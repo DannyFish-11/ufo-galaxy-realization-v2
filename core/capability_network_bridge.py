@@ -770,12 +770,6 @@ def fallback_joint_select(
         transport_hints = dict(rec.fabric_presence.transport_hints or {})
         path_avail = _probe_path_availability(rec.node_id, transport_hints)
 
-        cap_state = rec.fabric_presence.presence_state
-        cap_state_str = cap_state.value if hasattr(cap_state, "value") else str(cap_state)
-        is_degraded = (
-            path_avail.path_state in ("degraded", "fallback", "latent", "unknown") or cap_state_str == "degraded"
-        )
-
         joint_score = _compute_joint_score(
             cap_score.total_score,
             path_avail.path_score,

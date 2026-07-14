@@ -854,7 +854,7 @@ class RuntimeRestartRecoveryCoordinator:
             )
 
             store = self._mesh_session_store or get_persistence_store()
-            all_ids_raw = store.list_recoverable()
+            store.list_recoverable()
             # list_recoverable only returns non-terminal; total = records + skipped
             # We can get the total by checking the store's memory cache directly
             # For a conservative estimate: skipped = (total on disk) - recovered
@@ -1152,7 +1152,7 @@ class RuntimeRestartRecoveryCoordinator:
 
             # Reconstruct a PendingEnvelopeRecord and insert it directly.
             try:
-                owner = LifecycleOwner(rec.owner) if rec.owner in {o.value for o in LifecycleOwner} else target_owner
+                LifecycleOwner(rec.owner) if rec.owner in {o.value for o in LifecycleOwner} else target_owner
                 # Always use the disposition-mapped owner as the authoritative
                 # post-restart stage — the snapshot owner tells us where the
                 # task *was*, the disposition tells us where it needs to *be*.

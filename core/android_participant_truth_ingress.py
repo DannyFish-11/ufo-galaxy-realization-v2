@@ -914,7 +914,7 @@ def _emit_audit_event(
             },
         )
         return True
-    except Exception as exc:
+    except Exception:
         return False
 
 
@@ -972,7 +972,7 @@ def _is_record_terminal(record: Any) -> bool:
         # Fallback: string check against phase value
         phase_val = str(phase).lower()
         return any(t in phase_val for t in _TERMINAL_PHASES)
-    except Exception as exc:
+    except Exception:
         return False
 
 
@@ -1177,7 +1177,7 @@ def reconcile_android_participant_truth(
                 terminal_phase=tracking_record_phase,
                 canonical_update=canonical_update,
             )
-        except Exception as exc:
+        except Exception:
             pass  # audit is non-fatal
 
     outcome = AndroidParticipantReconcileOutcome(

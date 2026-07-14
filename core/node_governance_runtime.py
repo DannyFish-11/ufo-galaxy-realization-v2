@@ -308,7 +308,7 @@ def evaluate_node_governance_eligibility(
     # ------------------------------------------------------------------
     try:
         healthy = node_info.is_healthy(heartbeat_ttl)
-    except Exception as exc:
+    except Exception:
         try:
             status = getattr(node_info, "status", None)
             healthy = str(status).lower() in {"healthy", "starting"}

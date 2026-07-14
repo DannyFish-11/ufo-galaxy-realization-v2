@@ -928,14 +928,6 @@ def _probe_readiness_evidence() -> IngestionSourceEntry:
         counts = snapshot.get("artifact_counts_by_kind", {})
         latest_by_kind = snapshot.get("latest_by_kind", {})
 
-        canonical_kinds = []
-        if _ArtifactKind is not None:
-            canonical_kinds = [
-                k.value
-                for k in _ArtifactKind
-                if k != _ArtifactKind.unknown and hasattr(k, "is_canonical_gate_input") and k.is_canonical_gate_input()
-            ]
-
         # Check freshness per artifact (use received_at from latest_by_kind)
         max_age = CANONICAL_PIPELINE_PRIMARY_FRESHNESS_MAX_AGE_SECONDS
         now = time.time()
@@ -1254,10 +1246,6 @@ class CanonicalCrossRepoEvidencePipeline:
         primary_missing = [s.source_id.value for s in primary_sources if s.status == IngestionStatus.missing]
         primary_partial = [s.source_id.value for s in primary_sources if s.status == IngestionStatus.partial]
         primary_unavailable = [s.source_id.value for s in primary_sources if s.status == IngestionStatus.unavailable]
-
-        all_primary_blocking = (
-            primary_authority_unclear + primary_stale + primary_missing + primary_partial + primary_unavailable
-        )
 
         if primary_authority_unclear or primary_unavailable:
             verdict = PipelineVerdict.authority_unclear

@@ -1638,7 +1638,7 @@ def build_full_current_state_rereading() -> FullCurrentStateReport:
     paths_closed = sum(1 for p in paths if p.runtime_closed)
     p0_count = sum(1 for r in roadmap if r.priority == RoadmapPriority.P0_BLOCKING)
 
-    all_claims_strong = all(c.current_label in strong_labels for c in claims)
+    all(c.current_label in strong_labels for c in claims)
 
     # Compose system verdict
     system_verdict = (

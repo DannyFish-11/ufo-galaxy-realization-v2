@@ -429,7 +429,7 @@ def _stamp_plan_lifecycle(plan: "ExecutionPlan") -> None:
             )
             step.lifecycle_state = _ELS.CREATED.value
             step.lifecycle_trail = [step_transition]
-    except Exception as exc:
+    except Exception:
         pass  # lifecycle stamping is always additive / non-breaking
 
 

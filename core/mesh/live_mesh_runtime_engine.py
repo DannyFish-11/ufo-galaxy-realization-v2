@@ -316,7 +316,7 @@ def _emit_aip_v3_mesh_events(
                 loop.create_task(nats.publish_mesh_result(msg))
 
         elif event_type == "coord_sync":
-            mod = _import_coordinator_contracts()
+            _import_coordinator_contracts()
             participant_statuses = {}
             for p in participants:
                 did = getattr(p, "device_id", "")
@@ -897,7 +897,6 @@ def _finalise_coordinator_state(
     try:
         mod = _import_coordinator_contracts()
         participants = getattr(coordinator_state, "participants", []) or []
-        device_ids = [getattr(p, "device_id", "") for p in participants if getattr(p, "device_id", "")]
 
         completed_ids: List[str] = []
         failed_ids: List[str] = []

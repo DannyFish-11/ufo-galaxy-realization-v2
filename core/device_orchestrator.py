@@ -103,7 +103,7 @@ def _resolve_device_type(raw: str):
         from core.device_types import resolve_device_type
 
         return resolve_device_type(raw)
-    except Exception as exc:
+    except Exception:
         return None
 
 

@@ -470,7 +470,6 @@ class DeviceRegistry:
         udm = _get_udm()
         if udm is not None:
             try:
-                udm_ids = {d.device_id for d in udm.list_devices()}
                 # Bring UDM status into the local cache entries
                 for did in list(self.devices.keys()):
                     udm_dev = udm.get_device(did)

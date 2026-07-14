@@ -194,7 +194,7 @@ class MCPDynamicGateway:
                 return {"success": False, "error": "No script_content for hot-reload"}
 
             # Restart
-            result = await loader.load(
+            await loader.load(
                 name=f"generated_{tool_name}",
                 command=["python", str(script_path)],
                 auto_start=True,

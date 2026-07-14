@@ -522,12 +522,11 @@ def _build_trace(
     decision_source = FallbackDecisionSource.UNKNOWN.value
     primary_block_reason: Optional[str] = None
     candidate_paths: List[Dict[str, Any]] = []
-    readiness_status: Optional[str] = None
     readiness_blocked_by: Optional[str] = None
 
     try:
         if readiness_result is not None:
-            readiness_status = str(getattr(readiness_result, "status", "") or "")
+            str(getattr(readiness_result, "status", "") or "")
             readiness_blocked_by = str(getattr(readiness_result, "blocked_by", "") or "")
             readiness_reason = str(getattr(readiness_result, "reason", "") or "")
             is_ready = bool(getattr(readiness_result, "ready", True))

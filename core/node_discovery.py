@@ -284,7 +284,7 @@ class NodeDiscoveryService:
 
         try:
             from core.port_config import get_node_port
-        except Exception as exc:
+        except Exception:
 
             def get_node_port(name: str) -> int:
                 raise ValueError(f"Port configuration not available for node: {name}")

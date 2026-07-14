@@ -23,7 +23,7 @@ SYSTEM_REALITY_CHECKPOINT_AUTHORITY: str = "SYSTEM_REALITY_CHECKPOINT_V1::core.s
 def _safe_call(fn, default):
     try:
         return fn()
-    except Exception as exc:
+    except Exception:
         return default
 
 

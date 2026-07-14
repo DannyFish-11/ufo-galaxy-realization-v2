@@ -564,7 +564,7 @@ def accept_android_originated_nl_into_main_chain(
     ctx.is_main_chain_accepted = main_chain_accepted
 
     # Classify participation
-    participation_cls = classify_android_participation(
+    classify_android_participation(
         AndroidParticipationKind.android_originated_nl,
         is_stale=is_stale,
         is_replay=is_replay,

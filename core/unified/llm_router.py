@@ -551,7 +551,7 @@ class UnifiedLLMRouter:
                 "available_provider_ids": available,
                 "fallback_candidates": available,
             }
-        except Exception as exc:
+        except Exception:
             return {}
 
     def _enrich_l3_context(
@@ -1105,7 +1105,7 @@ class UnifiedLLMRouter:
                 precision_requirement=0.5,
                 tool_needs=0.5,
             )
-        except Exception as exc:
+        except Exception:
             return None
 
     def get_execution_backend(self) -> Any:

@@ -328,7 +328,7 @@ def _probe_orchestration_runtime_truth_coherence() -> CoherenceDimensionResult:
                 build_orchestration_review_snapshot,
             )
 
-            snap = build_orchestration_review_snapshot()
+            build_orchestration_review_snapshot()
             evidence.append(
                 "core.orchestration_review_surface: build_orchestration_review_snapshot() "
                 "returns a read-only operator surface for execution path legibility, "
@@ -362,7 +362,7 @@ def _probe_orchestration_runtime_truth_coherence() -> CoherenceDimensionResult:
                 get_control_loop_metrics,
             )
 
-            metrics = get_control_loop_metrics()
+            get_control_loop_metrics()
             evidence.append(
                 "core.routing_observability: routing decision analytics available; "
                 "get_control_loop_metrics() and record_routing_decision() present"
@@ -380,7 +380,7 @@ def _probe_orchestration_runtime_truth_coherence() -> CoherenceDimensionResult:
                 get_continuity_registry,
             )
 
-            reg = get_continuity_registry()
+            get_continuity_registry()
             evidence.append(
                 "core.hybrid_orchestration_continuity: hybrid execution lifecycle "
                 "state machine, durable continuity records, and recovery hooks "
@@ -460,7 +460,7 @@ def _probe_manifestation_operator_coherence() -> CoherenceDimensionResult:
                 get_presence_director,
             )
 
-            director = get_presence_director()
+            get_presence_director()
             evidence.append(
                 "core.presence.presence_director: presence director singleton "
                 "available; coordinates presence state across carrier surfaces"
@@ -509,7 +509,7 @@ def _probe_android_truth_path_coherence() -> CoherenceDimensionResult:
                 get_android_device_state_store,
             )
 
-            store = get_android_device_state_store()
+            get_android_device_state_store()
             evidence.append(
                 "core.android_device_state_store: canonical V2 truth store for "
                 "Android runtime snapshots and execution events; "

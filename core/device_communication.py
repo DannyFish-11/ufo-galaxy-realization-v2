@@ -739,7 +739,6 @@ class DeviceCommunication:
         try:
             from core.device_registry import device_registry  # noqa: F401
 
-            status_data = message.payload
             # 更新设备状态
             # ...
         except (ImportError, AttributeError) as e:
@@ -785,7 +784,7 @@ class DeviceCommunication:
                 await asyncio.sleep(self.heartbeat_interval)
 
                 # 检查所有连接
-                now = time.time()
+                time.time()
                 for device_id, conn in list(self.connections.items()):
                     # 检查超时
                     if not conn.is_alive(self.heartbeat_timeout):

@@ -3591,7 +3591,7 @@ class MultiLLMRouter:
         results = {}
         for name, adapter in self.adapters.items():
             try:
-                resp = await adapter.chat(
+                await adapter.chat(
                     messages=[{"role": "user", "content": "ping"}],
                     model=self.providers[name].default_model,
                     max_tokens=5,

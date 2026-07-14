@@ -685,7 +685,7 @@ def _get_governance_evaluator():  # type: ignore[return]
         )
 
         return get_governance_evaluator()
-    except Exception as exc:
+    except Exception:
         return None
 
 
@@ -699,7 +699,7 @@ def _get_acceptance_gate():  # type: ignore[return]
         from core.delegated_flow_acceptance_gate import get_acceptance_gate
 
         return get_acceptance_gate()
-    except Exception as exc:
+    except Exception:
         return None
 
 
@@ -713,7 +713,7 @@ def _get_readiness_gate():  # type: ignore[return]
         from core.delegated_flow_readiness_gate import get_readiness_gate
 
         return get_readiness_gate()
-    except Exception as exc:
+    except Exception:
         return None
 
 
@@ -727,7 +727,7 @@ def _get_truth_ownership():  # type: ignore[return]
         from core.flow_level_truth_ownership import get_truth_ownership
 
         return get_truth_ownership()
-    except Exception as exc:
+    except Exception:
         return None
 
 
@@ -741,7 +741,7 @@ def _get_result_convergence():  # type: ignore[return]
         from core.flow_aware_result_convergence import get_result_convergence
 
         return get_result_convergence()
-    except Exception as exc:
+    except Exception:
         return None
 
 
@@ -755,7 +755,7 @@ def _get_continuity_coordinator():  # type: ignore[return]
         from core.flow_continuity_coordinator import get_continuity_coordinator
 
         return get_continuity_coordinator()
-    except Exception as exc:
+    except Exception:
         return None
 
 
@@ -771,7 +771,7 @@ def _get_compat_blocking():  # type: ignore[return]
         )
 
         return get_compat_blocking()
-    except Exception as exc:
+    except Exception:
         return None
 
 
@@ -894,7 +894,7 @@ class DelegatedFlowStrategyEvaluator:
             report = gov_evaluator.evaluate()
             report_id: str = getattr(report, "report_id", "")
             return report, report_id
-        except Exception as exc:
+        except Exception:
             return None, ""
 
     def _fetch_acceptance_report(
@@ -915,7 +915,7 @@ class DelegatedFlowStrategyEvaluator:
             report = acceptance_gate.evaluate()
             report_id: str = getattr(report, "report_id", "")
             return report, report_id
-        except Exception as exc:
+        except Exception:
             return None, ""
 
     # ------------------------------------------------------------------

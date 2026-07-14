@@ -642,7 +642,7 @@ def _try_import(module_path: str) -> bool:
     try:
         importlib.import_module(module_path)
         return True
-    except Exception as exc:
+    except Exception:
         return False
 
 
@@ -651,7 +651,7 @@ def _has_attr(module_path: str, attr_name: str) -> bool:
     try:
         mod = importlib.import_module(module_path)
         return hasattr(mod, attr_name)
-    except Exception as exc:
+    except Exception:
         return False
 
 

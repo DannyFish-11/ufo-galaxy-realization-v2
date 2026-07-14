@@ -70,7 +70,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             body = {}
             try:
                 body = await request.json()
-            except Exception as exc:
+            except Exception:
                 logger.debug("channel_auto_load: no JSON body, using defaults")
             plugins_dir = body.get("directory") if body else None
             from core.channel_plugins import get_channel_loader

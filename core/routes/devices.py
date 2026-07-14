@@ -612,7 +612,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     # PR-518/GAP-517-001: canonical entry sentinel — this route now routes
     # through CommandRouter.route_envelope() instead of calling
     # CrossDeviceCoordinator.execute_cross_device_task() directly.
-    CROSS_DEVICE_REST_INGRESS_CANONICAL = (
+    CROSS_DEVICE_REST_INGRESS_CANONICAL = (  # noqa: F841 行内政策哨兵
         "DEVICES_ROUTE::CROSS_DEVICE_CANONICAL_INGRESS_V1: "
         "/api/v1/devices/cross-device normalises requests to TaskEnvelope "
         "and routes through CommandRouter.route_envelope(). "
@@ -728,7 +728,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     # PR-532/GAP-517-002: canonical entry sentinel — this route now routes
     # through CommandRouter.route_envelope() and uses CommandRouter fan-out
     # instead of dispatching raw per-device messages directly.
-    PARALLEL_DEVICE_REST_INGRESS_CANONICAL = (
+    PARALLEL_DEVICE_REST_INGRESS_CANONICAL = (  # noqa: F841 行内政策哨兵
         "DEVICES_ROUTE::PARALLEL_DEVICE_CANONICAL_INGRESS_V1: "
         "/api/v1/devices/parallel normalises requests to a top-level "
         "TaskEnvelope and routes through CommandRouter.route_envelope(), "

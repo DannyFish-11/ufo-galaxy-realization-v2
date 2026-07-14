@@ -87,7 +87,7 @@ class MeshNATSConvergence:
 
             resolver = get_resolver()
             # If we can resolve it AND the node is running locally → local
-            resolved = resolver.resolve(device_type=None, transport=None, capabilities=[])
+            resolver.resolve(device_type=None, transport=None, capabilities=[])
             # Simplified: if device_id starts with known local prefix
             is_local = device_id.startswith("local-") or ":" not in device_id
             self._local_device_cache[device_id] = is_local

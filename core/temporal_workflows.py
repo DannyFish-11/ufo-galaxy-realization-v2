@@ -337,7 +337,7 @@ class MultiDeviceTaskWorkflow:
                 )
             )
 
-        dispatch_results = await asyncio.gather(*dispatch_tasks)
+        await asyncio.gather(*dispatch_tasks)
 
         # Collect results
         result_tasks = []

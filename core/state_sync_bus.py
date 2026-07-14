@@ -320,7 +320,7 @@ class StateSynchronizationBus:
         try:
             from core.capability_bus import get_capability_bus  # noqa: PLC0415
 
-            bus = get_capability_bus()
+            get_capability_bus()
             capability_name = event.payload.get("capability_name", "")
             if capability_name:
                 # Capability is already registered via CapabilityBus.publish

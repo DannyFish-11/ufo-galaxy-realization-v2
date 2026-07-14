@@ -426,7 +426,7 @@ def _assemble_formation_facet() -> MultiDeviceTruthDomainFacet:
     try:
         from core.multi_device_runtime_harness import MultiDeviceRuntimeHarness  # type: ignore
 
-        harness = MultiDeviceRuntimeHarness()
+        MultiDeviceRuntimeHarness()
         # harness doesn't hold state in isolation; just note availability
         return MultiDeviceTruthDomainFacet(
             domain=MultiDeviceTruthDomain.FORMATION,

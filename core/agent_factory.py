@@ -1484,7 +1484,7 @@ class AgentFactory:
             try:
                 from core.device_agent_manager import DeviceAgentManager
 
-                manager = DeviceAgentManager()
+                DeviceAgentManager()
                 # DeviceAgentManager.register_device is async and requires DeviceInfo
                 # For sync unified creation, return a placeholder with info
                 return {

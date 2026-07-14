@@ -134,7 +134,6 @@ class ContextCompressor:
         # 提取关键信息
         topics = set()
         actions = []
-        facts = []
 
         for msg in messages:
             content = msg.get("content", "")

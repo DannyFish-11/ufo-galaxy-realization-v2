@@ -664,7 +664,7 @@ def _probe_continuity_available() -> bool:
         import core.flow_continuity_coordinator  # noqa: F401
 
         return True
-    except Exception as exc:
+    except Exception:
         return False
 
 
@@ -673,7 +673,7 @@ def _probe_recovery_available() -> bool:
         import core.delegated_flow_recovery_coordinator  # noqa: F401
 
         return True
-    except Exception as exc:
+    except Exception:
         return False
 
 
@@ -682,7 +682,7 @@ def _probe_closure_available() -> bool:
         import core.recovery_durability_closure_validator  # noqa: F401
 
         return True
-    except Exception as exc:
+    except Exception:
         return False
 
 
@@ -691,7 +691,7 @@ def _probe_signal_guard_available() -> bool:
         import core.attached_runtime_recovery_readiness  # noqa: F401
 
         return True
-    except Exception as exc:
+    except Exception:
         return False
 
 
@@ -700,7 +700,7 @@ def _probe_restart_recovery_available() -> bool:
         import core.runtime_restart_recovery  # noqa: F401
 
         return True
-    except Exception as exc:
+    except Exception:
         return False
 
 
@@ -709,7 +709,7 @@ def _probe_offline_replay_contract_available() -> bool:
         import core.offline_replay_ordering_contract  # noqa: F401
 
         return True
-    except Exception as exc:
+    except Exception:
         return False
 
 
@@ -718,7 +718,7 @@ def _probe_continuity_contract_available() -> bool:
         import core.inflight_task_continuity_contract  # noqa: F401
 
         return True
-    except Exception as exc:
+    except Exception:
         return False
 
 

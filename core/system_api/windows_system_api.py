@@ -240,7 +240,7 @@ class WindowsSystemAPI:
                 from core.system_api import get_system_api  # type: ignore[import]
 
                 self._adapter = get_system_api()
-            except Exception as exc:
+            except Exception:
                 from core.system_api.platform_api import NoOpSystemAPI
 
                 self._adapter = NoOpSystemAPI()
@@ -253,7 +253,7 @@ class WindowsSystemAPI:
             return False
         try:
             return bool(self._get_adapter().is_available)
-        except Exception as exc:
+        except Exception:
             return False
 
     # ------------------------------------------------------------------

@@ -363,7 +363,7 @@ def _on_runtime_event_inner(
     health_map: DeviceHealthMap,
 ) -> FormationRebuildResult:
     """Route event to coordinator and apply rebalance when recommended."""
-    formation_id = getattr(group, "formation_id", "")
+    getattr(group, "formation_id", "")
     evt = event.event_type
 
     # Route to the appropriate coordinator trigger.

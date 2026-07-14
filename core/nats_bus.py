@@ -131,7 +131,7 @@ def _get_lan_ip() -> str:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("8.8.8.8", 80))
             return s.getsockname()[0]
-    except Exception as exc:
+    except Exception:
         return ""
 
 
@@ -364,7 +364,7 @@ class NATSBus:
             for name, cfg in _STREAMS.items():
                 try:
                     await self._js.find_stream_name_by_subject(cfg["subjects"][0].replace(">", "*"))
-                except Exception as exc:
+                except Exception:
                     from nats.js.api import StreamConfig
 
                     await self._js.add_stream(
@@ -1005,7 +1005,7 @@ class NATSBus:
         """
         try:
             from core.aip_v3_nats_adapter import from_aip_to_legacy  # noqa: PLC0415
-        except Exception as exc:
+        except Exception:
             # Adapter unavailable — return callback as-is
             return callback
 

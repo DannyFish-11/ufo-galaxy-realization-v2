@@ -5152,7 +5152,7 @@ def _get_continuum_state_with_source() -> Tuple[Optional["ContinuumState"], str,
         from core.continuum.types import ContinuumPhase, ContinuumState
 
         return ContinuumState(phase=ContinuumPhase.FORMLESS), "synthetic_formless_fallback", False
-    except Exception as exc:
+    except Exception:
         return None, "unavailable", False
 
 
@@ -5166,7 +5166,7 @@ def _get_route_plan(continuum_state):
         router = TopologyRouter(inventory)
         domain = continuum_state.runtime_domain or RuntimeDomain.LOCAL
         return router.route(continuum_state.tri_state_phase, domain)
-    except Exception as exc:
+    except Exception:
         return None
 
 
@@ -5184,9 +5184,9 @@ def _get_execution_summary() -> Optional[Any]:
             online = udm.get_online_devices() if hasattr(udm, "get_online_devices") else []
             device_ids = [d.device_id for d in online] if online else []
             return ExecutionSummary(active_device_ids=device_ids)
-        except Exception as exc:
+        except Exception:
             return None
-    except Exception as exc:
+    except Exception:
         return None
 
 
@@ -5680,7 +5680,7 @@ def _assemble_projection_with_agent_dispatch() -> Dict[str, Any]:
         )
 
         # Seed from formation/runtime context available in the base projection
-        runtime_domain = base.get("runtime_domain", "local")
+        base.get("runtime_domain", "local")
         device_formation = base.get("device_formation", {})
         is_multi_device = (
             device_formation.get("is_multi_device", False) if isinstance(device_formation, dict) else False

@@ -176,7 +176,7 @@ def _collect_team_providers(team_result: Any) -> Optional[List[str]]:
                 if entry and entry not in providers:
                     providers.append(entry)
         return providers or None
-    except Exception as exc:
+    except Exception:
         return None
 
 

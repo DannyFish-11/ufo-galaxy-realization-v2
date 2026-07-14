@@ -217,7 +217,6 @@ async def call_with_guardian(
 
     # ── 执行 + 重试 ──
     last_exc: Optional[Exception] = None
-    last_result: Any = None
     attempts = 0
 
     for attempt in range(cfg.max_retries + 1):
@@ -246,7 +245,6 @@ async def call_with_guardian(
         except Exception as exc:
             logger.debug("Fallback triggered: %s", exc)
             last_exc = exc
-            last_result = None
             logger.warning(
                 "[ToolGuardian] 调用失败 (attempt %d/%d): tool=%s err=%s",
                 attempts,

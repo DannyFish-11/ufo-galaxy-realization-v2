@@ -166,7 +166,7 @@ def normalize_handoff_envelope(
                 trace_id=str(uuid.uuid4()),
                 task={},
             )
-        except Exception as exc:
+        except Exception:
             return None
 
 
@@ -267,7 +267,7 @@ def adopt_handoff_session(
                 session_id=str(uuid.uuid4()),
                 adopted=False,
             )
-        except Exception as exc:
+        except Exception:
             return None
 
 

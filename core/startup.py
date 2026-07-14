@@ -503,9 +503,9 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             get_smart_recommender,
         )
 
-        intent_parser = get_intent_parser()
+        get_intent_parser()
         memory = get_conversation_memory(cache_backend=cache)
-        recommender = get_smart_recommender(memory=memory)
+        get_smart_recommender(memory=memory)
 
         results["ai_intent"] = {"status": "ok"}
         logger.info("AI 意图引擎已初始化")
@@ -582,7 +582,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             from core.fractal_agent import get_fractal_executor
 
             agent_factory = get_agent_factory(llm_router=llm_router)
-            fractal_executor = get_fractal_executor(llm_router=llm_router, agent_factory=agent_factory)
+            get_fractal_executor(llm_router=llm_router, agent_factory=agent_factory)
             # 启动 Agent TTL 清理循环
             await agent_factory.start_cleanup_loop()
             results["agent_system"] = {
@@ -609,7 +609,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         from core.session_manager import get_session_manager
 
         session_mgr = get_session_manager()
-        pipeline = init_pipeline(
+        init_pipeline(
             session_manager=session_mgr,
             llm_router=llm_router,
             agent_factory=agent_factory if "agent_factory" in dir() else None,
@@ -717,7 +717,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     try:
         from core.digital_twin_engine import get_digital_twin_engine
 
-        twin_engine = get_digital_twin_engine()
+        get_digital_twin_engine()
         results["digital_twin"] = {"status": "ok"}
         logger.info("数字孪生引擎已初始化")
     except Exception as e:
@@ -731,7 +731,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     try:
         from enhancements.reasoning.world_model import WorldModel
 
-        world_model = WorldModel()
+        WorldModel()
         results["world_model"] = {"status": "ok", "pillars": ["ontology", "epistemology", "information"]}
         logger.info("三位一体世界模型已初始化 (本体论 + 认知论 + 信息论)")
     except Exception as e:

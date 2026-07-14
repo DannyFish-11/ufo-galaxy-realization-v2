@@ -73,7 +73,6 @@ def _extract_code(raw: str, language: Optional[str]) -> str:
     lines = raw.strip().splitlines()
     inside = False
     collected: List[str] = []
-    lang = (language or "").lower()
     for line in lines:
         stripped = line.strip()
         if not inside:

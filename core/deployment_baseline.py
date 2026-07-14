@@ -440,7 +440,7 @@ def _check_node_lifecycle_governor_importable(
             get_node_lifecycle_governor,
         )
 
-        gov = get_node_lifecycle_governor()
+        get_node_lifecycle_governor()
         req.status = BaselineCheckStatus.PASSED
         req.detail = "node_lifecycle_governor importable and singleton accessible"
     except Exception as exc:

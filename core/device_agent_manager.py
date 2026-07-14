@@ -577,7 +577,6 @@ class DeviceAgentManager:
         device_info.registered_at = datetime.now()
 
         # ── SSOT: write to UDM first ──────────────────────────────────────
-        udm_ok = False
         try:
             from core.unified.models import UnifiedDevice, UnifiedDeviceStatus, UnifiedDeviceType
 
@@ -606,7 +605,6 @@ class DeviceAgentManager:
                 source="device_agent_manager",
             )
             self._unified().register_device(ud)
-            udm_ok = True
         except Exception as exc:
             if ignore_udm_failure:
                 logger.error(
@@ -614,7 +612,6 @@ class DeviceAgentManager:
                     device_info.device_id,
                     exc,
                 )
-                udm_ok = True  # Treat as OK when explicitly told to ignore
             else:
                 # Strict mode: roll back local agent state and propagate error
                 logger.error(
@@ -865,7 +862,7 @@ async def main():
     )
 
     # 注册设备
-    agent = await device_manager.register_device(android_device, server_url="ws://localhost:9000")
+    await device_manager.register_device(android_device, server_url="ws://localhost:9000")
 
     # 获取所有设备状态
     all_status = await device_manager.get_all_status()

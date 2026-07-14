@@ -106,6 +106,13 @@ OPENCLAWD_ENTRYPOINT_ROLE: str = "internal_entry"
 # placement is intentional: module-level constants _DEFAULT_SKILL_SCHEMA and
 # the built-in tool lists below depend on these names being in scope and the
 # import must follow the top-of-module stdlib imports already present above.
+# 下列带 F401 的名字是 PR-7 编排拆解后的兼容再导出面:测试与下游
+# 历史上从 core.openclawd 导入这些名字,必须保留。
+from core.orchestration.lifecycle import _LOCAL_DEVICE_PREFIXES  # noqa: F401  re-export
+from core.orchestration.lifecycle import _LOCAL_HOSTNAME  # noqa: F401  re-export
+from core.orchestration.lifecycle import LIFECYCLE_MANAGER_AUTHORITY  # noqa: F401  re-export
+from core.orchestration.lifecycle import ParallelResult  # noqa: F401  re-export
+from core.orchestration.lifecycle import _SubtaskStatus  # noqa: F401  re-export
 from core.orchestration.lifecycle import (  # noqa: E402
     LifecycleManager,
     ParallelGroupTracker,
@@ -1020,7 +1027,7 @@ class OpenClawd:
                 agent_id=agent_id,
                 payload=payload or {},
             )
-        except Exception as exc:
+        except Exception:
             return None
 
     def _select_device_via_scheduler(
@@ -1086,7 +1093,7 @@ class OpenClawd:
                                 required_mode,
                             )
                             continue
-                    except Exception as exc:
+                    except Exception:
                         pass  # non-fatal: admit the device
 
                 candidates.append(
@@ -1324,7 +1331,7 @@ class OpenClawd:
                     from core.multimodal.ingress_bus import MultimodalIngressBus
 
                     frame = MultimodalIngressBus().build_frame()
-            except Exception as exc:
+            except Exception:
                 pass  # orchestrator will construct a minimal default
 
             continuum_state = orch.run(
@@ -1560,7 +1567,7 @@ class OpenClawd:
                 from core.execution.intent_profile import ExecutionIntentProfile  # noqa: PLC0415
 
                 return ExecutionIntentProfile(source="openclawd")
-            except Exception as exc:
+            except Exception:
                 # Absolute last resort — return a minimal stub that matches the
                 # compact_summary() contract from ExecutionIntentProfile.
                 class _Stub:  # noqa: SIM115
@@ -2286,7 +2293,7 @@ class OpenClawd:
                 _running_bus = _get_ib()
                 if _running_bus is not None:
                     _frame = _running_bus.build_frame()
-            except Exception as exc:
+            except Exception:
                 pass  # continuous perception unavailable; degrade gracefully
 
             _cps = _build_cps(
@@ -3805,7 +3812,7 @@ class OpenClawd:
                     or "action blocked by runtime safety/permission constraints"
                 )
                 metadata["minimal_necessary_explanation"] = f"Action blocked: {reason}"
-        except Exception as exc:
+        except Exception:
             return result_payload
         return result_payload
 
@@ -5695,7 +5702,7 @@ class OpenClawd:
                     }
                 # Orchestrator ran but did not produce a successful staged_mesh
                 # result — fall through to the SwarmCoordinator path below.
-        except Exception as exc:
+        except Exception:
             # Any import or runtime error must not interrupt existing dispatch.
             pass
 
@@ -5813,9 +5820,9 @@ class OpenClawd:
 
             # PR-6: build execution profile and resolve mode; defaults to agent_runtime
             # for rich devices and command_only for thin/unknown (conservative fallback).
-            # This block is entirely non-fatal: any failure leaves _resolved_rem as
-            # agent_runtime (preserving the original behaviour).
-            _resolved_rem = _REM.agent_runtime
+            # This block is entirely non-fatal: any failure keeps the default
+            # metadata below; the substrate mode is hard-set to agent_runtime
+            # at envelope construction (see PR-7 comment there).
             _mode_resolution_source = "default"
             _profile_class_label = None
             try:
@@ -5839,7 +5846,7 @@ class OpenClawd:
                         "session_id": session_id or "",
                     },
                 )
-                _resolved_rem = _REM(_mode_result.mode)
+                _REM(_mode_result.mode)
                 _remote_mode_str = _mode_result.mode
                 _mode_resolution_source = _mode_result.resolution_source
                 _profile_class_label = _mode_result.profile_class
@@ -7761,7 +7768,7 @@ class OpenClawd:
 
             if not _is_compat_enabled():
                 return None
-        except Exception as exc:
+        except Exception:
             return None
         try:
             import json
@@ -7808,7 +7815,7 @@ class OpenClawd:
                         if inspect.iscoroutinefunction(func):
                             # 尝试在新事件循环中运行（仅在非 async 上下文有效）
                             try:
-                                loop = asyncio.get_running_loop()
+                                asyncio.get_running_loop()
                                 # 已在运行的 loop 中 → asyncio.run 会崩溃，跳过
                                 return None
                             except RuntimeError:
@@ -7819,13 +7826,13 @@ class OpenClawd:
                         method = node_info["instance"].execute
                         if inspect.iscoroutinefunction(method):
                             try:
-                                loop = asyncio.get_running_loop()
+                                asyncio.get_running_loop()
                                 return None
                             except RuntimeError:
                                 return asyncio.run(method(action))
                         else:
                             return method(action)
-                except Exception as exc:
+                except Exception:
                     return None
 
             _skip = {"status", "help"}

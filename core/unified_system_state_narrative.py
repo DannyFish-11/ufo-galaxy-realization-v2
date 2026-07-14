@@ -320,7 +320,6 @@ def _build_overall_runtime_state() -> NarrativeDimension:
     explanation = "Runtime readiness matrix unavailable."
     evidence: Dict[str, Any] = {}
     trace: List[str] = ["readiness_matrix_query"]
-    source_authority: Optional[str] = None
     is_canonical = False
 
     try:

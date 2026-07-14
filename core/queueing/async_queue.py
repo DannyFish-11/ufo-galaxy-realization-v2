@@ -327,7 +327,7 @@ class AsyncTaskQueue:
                         task.future.set_result(result)
                     async with self._lock:
                         self._total_completed += 1
-                except asyncio.TimeoutError as exc:
+                except asyncio.TimeoutError:
                     if not task.future.done():
                         task.future.set_exception(TimeoutError(f"Task {task.task_id} timed out after {task.timeout}s"))
                     async with self._lock:

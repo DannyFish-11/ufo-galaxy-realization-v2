@@ -785,7 +785,7 @@ def _check_capabilities(device_id: str, required: List[str]) -> Dict[str, Any]:
     try:
         from core.device_readiness import get_device_readiness
 
-        summary = get_device_readiness(device_id)
+        get_device_readiness(device_id)
         # DeviceReadinessSummary has capability_ready; for per-capability we
         # fall back to UCM device record
         device_caps: List[str] = []

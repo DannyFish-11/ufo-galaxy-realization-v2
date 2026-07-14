@@ -328,7 +328,7 @@ def normalize_ingress_to_envelope(
             args=raw.get("args") or raw.get("payload") or raw.get("params") or {},
             metadata={"ingress_source": src_val},
         )
-    except Exception as exc:
+    except Exception:
         # pydantic / TaskEnvelope unavailable — return lightweight fallback
         return _FallbackEnvelope(
             task_id=task_id,

@@ -2107,7 +2107,7 @@ def select_dispatch_mode(
                 _result = _role_check(source_runtime_posture, coordination_role)
                 _eligible = _result.eligible
                 _eligibility_reason = f"posture:{_result.posture}:role:{coordination_role}"
-            except Exception as exc:
+            except Exception:
                 # Fallback: treat observer_only as ineligible, others by posture.
                 _eligible = coordination_role != "observer_only" and source_runtime_posture != "control_only"
                 _eligibility_reason = f"posture_role_fallback:{source_runtime_posture}:{coordination_role}"
@@ -2955,7 +2955,7 @@ def select_dispatch_target(
             _ctx_list = []
             for _entry in _active_entries:
                 _dev = str(getattr(_entry, "device_id", "") or "")
-                _sess = str(getattr(_entry, "session_id", "") or "")
+                str(getattr(_entry, "session_id", "") or "")
                 if not _dev:
                     continue
                 _reuse_valid = False

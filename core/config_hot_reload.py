@@ -269,7 +269,6 @@ class HotReloadConfigManager:
         # 计算差异
         changes = self._diff(self._config, new_config)
 
-        old_config = self._config
         self._config = new_config
         self._config_path = path
 
@@ -310,7 +309,7 @@ class HotReloadConfigManager:
                     f.flush()
                     os.fsync(f.fileno())
                 os.replace(tmp_path, path)  # 原子替换
-            except Exception as exc:
+            except Exception:
                 # 清理临时文件
                 try:
                     os.unlink(tmp_path)

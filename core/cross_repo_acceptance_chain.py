@@ -410,7 +410,7 @@ def _resolve_mesh_session(
             return {}
         latest = sorted(sessions, key=_session_timestamp_key)[-1]
         return latest.to_dict()
-    except Exception as exc:
+    except Exception:
         return {}
 
 

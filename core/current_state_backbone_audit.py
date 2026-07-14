@@ -215,7 +215,7 @@ def _probe(module_path: str, token: str) -> bool:
             return False
         with open(spec.origin, "r", encoding="utf-8", errors="ignore") as fh:
             return token in fh.read()
-    except Exception as exc:
+    except Exception:
         return False
 
 
@@ -223,7 +223,7 @@ def _module_exists(module_path: str) -> bool:
     """检查 V2 侧模块是否可找到。"""
     try:
         return importlib.util.find_spec(module_path) is not None
-    except Exception as exc:
+    except Exception:
         return False
 
 

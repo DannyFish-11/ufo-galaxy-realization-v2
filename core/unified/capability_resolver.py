@@ -258,7 +258,7 @@ class CapabilityResolver:
         raw = None
         try:
             raw = registry.get(name)
-        except Exception as exc:
+        except Exception:
             return None
         if raw is None:
             return None

@@ -222,7 +222,7 @@ def infer_required_capabilities(command: str) -> List[str]:
         return list(_COMMAND_CAPABILITY_MAP[cmd_lower])
 
     # Prefix match on the first segment (split by '/' or '_' only at start)
-    first_segment = cmd_lower.split("/")[0].split("_")[0]
+    cmd_lower.split("/")[0].split("_")[0]
     for key, caps in _COMMAND_CAPABILITY_MAP.items():
         if cmd_lower.startswith(key + "_") or cmd_lower.startswith(key + "/"):
             return list(caps)

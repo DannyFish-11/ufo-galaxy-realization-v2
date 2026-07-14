@@ -352,7 +352,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
     from core.unified import get_unified_llm_router
 
-    llm_router = get_unified_llm_router()  # 统一 LLM 路由器入口（委派到 MultiLLMRouter）
+    get_unified_llm_router()  # 统一 LLM 路由器入口（委派到 MultiLLMRouter）
 
     @router.post("/api/v1/chat")
     async def chat(req: ChatRequest):
@@ -394,18 +394,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
             _er = _get_er()
             _er_stats = _er.stats()  # just touch to ensure singleton is warm
-            _routing_meta = {
-                "entry_path": "canonical",
-                "via_legacy_adapter": False,
-                "source": "chat",
-            }
             logger.debug(
                 "EntrypointRouter | entry_path=canonical source=chat stats=%s",
                 _er_stats,
             )
         except Exception as _er_exc:
             logger.debug("EntrypointRouter unavailable (non-fatal): %s", _er_exc)
-            _routing_meta = {}
 
         # ── PR-1 EntryMode: resolve execution mode for this request ──
         # Respects explicit override from the caller; falls back to auto-detection.

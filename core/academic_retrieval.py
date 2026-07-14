@@ -414,7 +414,7 @@ class AcademicRetriever:
         """Run *coro* synchronously, regardless of whether there is a running loop."""
         try:
             # Python 3.10+: get_running_loop() raises RuntimeError when not in a loop
-            running_loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
             # We're inside an async context — run in a separate thread to avoid
             # blocking the event loop.
             import concurrent.futures

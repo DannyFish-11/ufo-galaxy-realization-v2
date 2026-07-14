@@ -398,7 +398,7 @@ def evaluate_invocation_governance(
             from core.cognitive.memory_bias_layer import build_memory_bias_diagnostics as _build_mbd
 
             _memory_bias_hint = _build_mbd(memory_bias)
-        except Exception as _mbe:
+        except Exception:
             try:
                 _memory_bias_hint = {
                     "posture": getattr(memory_bias, "posture", "unknown"),

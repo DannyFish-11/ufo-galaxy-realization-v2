@@ -793,7 +793,7 @@ def build_runtime_capability_profile(device: Any) -> RuntimeCapabilityProfile:
             capability_tier=tier,
         )
 
-    except Exception as exc:
+    except Exception:
         try:
             fallback_id = str(getattr(device, "device_id", "") or "")
         except Exception as exc:
@@ -1116,7 +1116,7 @@ def evaluate_execution_surface_eligibility(
             inputs_snapshot=inputs_snap,
         )
 
-    except Exception as exc:
+    except Exception:
         return ExecutionSurfaceEligibility(
             eligible=False,
             surface=ExecutionSurface.unavailable,
