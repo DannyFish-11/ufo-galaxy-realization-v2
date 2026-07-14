@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 # ============ 运行时状态 ============
 _LLM_ROUTER_URL = os.getenv("LLM_ROUTER_URL", os.getenv("NODE_01_URL", "http://localhost:7995"))
-_node_mode: str = "healthy"  # "healthy" | "degraded"
+_node_mode: str = "probing"  # "probing" | "healthy" | "degraded"
 
 
 async def _check_llm_available() -> bool:
@@ -53,20 +53,28 @@ async def _check_llm_available() -> bool:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """启动时检查 LLM 可用性，不可达则以降级模式运行。"""
+    """LLM 探测放【后台任务】:先 yield 让端口立刻可服务(与 Node_01 同模式)。
+
+    探测期间如实报 probing,完成后按真实结果落 healthy/degraded。
+    """
     global _node_mode
-    available = await _check_llm_available()
-    if available:
-        _node_mode = "healthy"
-        logger.info("Node_112_SelfHealing: LLM 路由可达，正常模式启动。")
-    else:
-        _node_mode = "degraded"
-        logger.warning(
-            "Node_112_SelfHealing: LLM 路由不可达（%s），以降级模式启动。"
-            " 自愈引擎（规则模式）仍可运行，LLM 智能诊断暂不可用。",
-            _LLM_ROUTER_URL,
-        )
+
+    async def _startup_probe() -> None:
+        global _node_mode
+        if await _check_llm_available():
+            _node_mode = "healthy"
+            logger.info("Node_112_SelfHealing: LLM 路由可达，正常模式。")
+        else:
+            _node_mode = "degraded"
+            logger.warning(
+                "Node_112_SelfHealing: LLM 路由不可达（%s），以降级模式运行。"
+                " 自愈引擎（规则模式）仍可运行，LLM 智能诊断暂不可用。",
+                _LLM_ROUTER_URL,
+            )
+
+    _probe_task = asyncio.get_event_loop().create_task(_startup_probe())
     yield
+    _probe_task.cancel()
 
 
 app = FastAPI(title="Node 112 - SelfHealing", version="2.0.0", lifespan=lifespan)

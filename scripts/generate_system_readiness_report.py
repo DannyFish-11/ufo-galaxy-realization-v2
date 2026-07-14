@@ -38,6 +38,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -245,6 +246,17 @@ def check_schema_and_config_files() -> List[CheckResult]:
     return [_check_file_exists(name, "Schemas & Config", path) for name, path in files]
 
 
+#: 真实 import 语句才算违规。此前用子串匹配,把「文档里写着'别 import 它'」、
+#: 「purge 注册表登记该遗留资产」、「守卫测试断言 import 必抛 ImportError」这些
+#: 【执行禁令本身的代码】全部误报——门常年红,失去信号价值。
+_AIP_V2_IMPORT_RE = re.compile(
+    r"^\s*(?:import\s+galaxy_gateway\.aip_protocol_v2\b"
+    r"|from\s+galaxy_gateway\.aip_protocol_v2\s+import\b"
+    r"|from\s+galaxy_gateway\s+import\s+(?:[\w\s,]*\b)?aip_protocol_v2\b)",
+    re.MULTILINE,
+)
+
+
 def check_no_forbidden_aip_v2_imports() -> List[CheckResult]:
     """Scan Python sources for forbidden aip_protocol_v2 imports outside the legacy stub."""
     results: List[CheckResult] = []
@@ -252,7 +264,9 @@ def check_no_forbidden_aip_v2_imports() -> List[CheckResult]:
 
     allowed_files = {
         REPO_ROOT / "galaxy_gateway" / "aip_protocol_v2.py",
+        # 守卫测试:import 只出现在 assertRaises(ImportError) 内,验证硬禁用生效
         REPO_ROOT / "tests" / "test_v3_protocol_guard.py",
+        REPO_ROOT / "tests" / "test_device_ssot_capability_integration.py",
         # PR7 test file references the pattern as a string literal in test cases
         REPO_ROOT / "tests" / "test_pr7_final_consolidation.py",
     }
@@ -277,7 +291,7 @@ def check_no_forbidden_aip_v2_imports() -> List[CheckResult]:
                 continue
             try:
                 content = fpath.read_text(encoding="utf-8", errors="replace")
-                if "aip_protocol_v2" in content:
+                if _AIP_V2_IMPORT_RE.search(content):
                     rel = fpath.relative_to(REPO_ROOT)
                     violations.append(str(rel))
             except Exception:

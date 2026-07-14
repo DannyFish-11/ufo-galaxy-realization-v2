@@ -505,6 +505,36 @@ def phase2_ensure_deps(env_status: dict) -> bool:
 
     all_ok = True
 
+    # 弱网加固(与 2.4 Electron/npm 同一套思路):pip 安装
+    #   ①【流式输出】不 capture,进度可见——避免"看着像卡死";
+    #   ②默认源失败后逐个回退国内镜像(清华 → 阿里云),抗单点;
+    #   ③pip 自带重试/超时放宽。
+    _PIP_INDEX_CANDIDATES: list = [
+        None,  # 默认源(尊重用户已配置的 pip.conf / 环境)
+        "https://pypi.tuna.tsinghua.edu.cn/simple",
+        "https://mirrors.aliyun.com/pypi/simple/",
+    ]
+
+    def _run_pip_install(pkgs: list, timeout: int = 900) -> bool:
+        """逐镜像候选安装 pkgs,全部失败才返回 False(诚实上报)。"""
+        base = [sys.executable, "-m", "pip", "install",
+                "--retries", "3", "--timeout", "60"] + pkgs
+        for idx, index_url in enumerate(_PIP_INDEX_CANDIDATES):
+            cmd = list(base)
+            if index_url:
+                cmd += ["-i", index_url]
+                print_item(f"回退镜像源 {idx}/{len(_PIP_INDEX_CANDIDATES) - 1}",
+                           "warn", index_url)
+            try:
+                if sp.run(cmd, timeout=timeout).returncode == 0:
+                    return True
+            except sp.TimeoutExpired:
+                print_item(f"pip 安装超时({timeout}s)", "warn",
+                           "镜像候选轮换中" if idx < len(_PIP_INDEX_CANDIDATES) - 1 else "")
+            except Exception as exc:
+                print_item(f"pip 安装异常: {exc}", "warn")
+        return False
+
     # 2.0 Ensure pip is available
     if not env_status.get("pip_ok"):
         print_item("pip 未安装，正在修复...", "warn")
@@ -583,18 +613,10 @@ def phase2_ensure_deps(env_status: dict) -> bool:
     else:
         print_item(f"缺失 {len(core_deps_missing)} 个包", "warn", f"{', '.join(core_deps_missing)}")
         print_item("正在自动安装...", "ok")
-        try:
-            rc = sp.run(
-                [sys.executable, "-m", "pip", "install", "--quiet"] + core_deps_missing,
-                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300,
-            ).returncode
-            if rc == 0:
-                print_item(f"已安装 {len(core_deps_missing)} 个 Python 包", "ok")
-            else:
-                print_item("pip install 失败", "error")
-                all_ok = False
-        except Exception as exc:
-            print_item(f"pip install 异常: {exc}", "error")
+        if _run_pip_install(core_deps_missing):
+            print_item(f"已安装 {len(core_deps_missing)} 个 Python 包", "ok")
+        else:
+            print_item("pip install 失败(默认源+国内镜像均不通)", "error")
             all_ok = False
 
     # 2.2 .env auto-create
@@ -631,15 +653,26 @@ def phase2_ensure_deps(env_status: dict) -> bool:
                     node_ver = "v20.11.0"
                     node_arch = "linux-arm64" if "arm" in machine or "aarch64" in machine else "linux-x64"
                     node_tar = f"node-{node_ver}-{node_arch}.tar.xz"
-                    node_url = f"https://nodejs.org/dist/{node_ver}/{node_tar}"
+                    # 弱网加固:国内镜像优先候选 + 官方源兜底,进度条可见,
+                    # 超时放宽(~25MB 在弱网 120s 不够,300s/候选)。
+                    _node_urls = [
+                        f"https://npmmirror.com/mirrors/node/{node_ver}/{node_tar}",
+                        f"https://nodejs.org/dist/{node_ver}/{node_tar}",
+                    ]
                     node_tmp = Path("/tmp") / node_tar
                     node_dest = Path.home() / ".local" / "node"
 
                     print_item(f"正在下载 Node.js {node_ver}...", "ok")
-                    rc = sp.run(
-                        ["curl", "-fsSL", "-o", str(node_tmp), node_url],
-                        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120,
-                    ).returncode
+                    rc = 1
+                    for _node_url in _node_urls:
+                        rc = sp.run(
+                            ["curl", "-fL", "--progress-bar", "--retry", "3",
+                             "-o", str(node_tmp), _node_url],
+                            timeout=300,
+                        ).returncode
+                        if rc == 0:
+                            break
+                        print_item("该源下载失败,轮换下一候选...", "warn", _node_url)
                     if rc == 0:
                         node_dest.parent.mkdir(parents=True, exist_ok=True)
                         rc2 = sp.run(
@@ -748,13 +781,19 @@ def phase2_ensure_deps(env_status: dict) -> bool:
                 except Exception:
                     rec_model = "gemma4:e2b"
                 print_item("未检测到本地模型，正在下载推荐模型...", "ok", rec_model)
-                rc2 = sp.run(
-                    ["ollama", "pull", rec_model],
-                    capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600,
-                ).returncode
+                # 弱网加固:①流式输出让 ollama 自带进度条可见(此前 capture
+                # 导致几 GB 的下载全程无声,"看着像卡死");②超时放宽到 1h——
+                # 600s 在弱网下必然误杀大模型下载(ollama pull 本身断点续传,
+                # 超时后重跑会从断点继续,但不该让正常慢速下载被误判失败)。
+                try:
+                    rc2 = sp.run(["ollama", "pull", rec_model], timeout=3600).returncode
+                except sp.TimeoutExpired:
+                    rc2 = -1
+                    print_item("模型下载超 1h 未完成", "warn",
+                               f"ollama pull {rec_model} 支持断点续传,重跑即从断点继续")
                 if rc2 == 0:
                     print_item(f"模型 {rec_model} 下载完成", "ok")
-                else:
+                elif rc2 != -1:
                     print_item("模型下载失败", "warn", f"ollama pull {rec_model} 手动重试")
         except Exception as exc:
             print_item(f"Ollama 模型检查失败: {exc}", "warn")
@@ -778,17 +817,10 @@ def phase2_ensure_deps(env_status: dict) -> bool:
     else:
         print_item(f"语音依赖缺失: {', '.join(voice_missing)}", "warn")
         print_item("正在自动安装语音依赖...", "ok")
-        try:
-            rc = sp.run(
-                [sys.executable, "-m", "pip", "install", "--quiet"] + voice_missing,
-                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300,
-            ).returncode
-            if rc == 0:
-                print_item("语音依赖安装完成", "ok")
-            else:
-                print_item("语音依赖安装失败", "warn", "麦克风支持可能不可用")
-        except Exception as exc:
-            print_item(f"语音依赖安装异常: {exc}", "warn")
+        if _run_pip_install(voice_missing):
+            print_item("语音依赖安装完成", "ok")
+        else:
+            print_item("语音依赖安装失败", "warn", "麦克风支持可能不可用")
 
     # pyaudio (needs system libs)
     try:
@@ -797,17 +829,10 @@ def phase2_ensure_deps(env_status: dict) -> bool:
     except Exception:
         print_item("PyAudio 未安装", "warn")
         print_item("正在自动安装 PyAudio...", "ok")
-        try:
-            rc = sp.run(
-                [sys.executable, "-m", "pip", "install", "--quiet", "pyaudio"],
-                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300,
-            ).returncode
-            if rc == 0:
-                print_item("PyAudio 安装完成", "ok")
-            else:
-                print_item("PyAudio 安装失败", "warn", "需要系统库: apt install portaudio19-dev")
-        except Exception as exc:
-            print_item(f"PyAudio 安装异常: {exc}", "warn")
+        if _run_pip_install(["pyaudio"]):
+            print_item("PyAudio 安装完成", "ok")
+        else:
+            print_item("PyAudio 安装失败", "warn", "需要系统库: apt install portaudio19-dev")
 
     return all_ok
 
