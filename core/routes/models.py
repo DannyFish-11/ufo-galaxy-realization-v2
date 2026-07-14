@@ -70,7 +70,10 @@ async def get_catalog() -> Dict[str, Any]:
     try:
         from core.hardware_compute_profiler import get_hardware_profiler
 
-        prof = get_hardware_profiler().profile_sync()
+        # profile_sync 会 shell 出 nvidia-smi 等探测(冷调用可达数秒),
+        # 放线程池执行,不阻塞事件循环(否则拖慢同批所有请求);profiler
+        # 自身 30s 缓存,热调用近乎零成本。
+        prof = await _asyncio.to_thread(get_hardware_profiler().profile_sync)
         has_gpu = bool(prof.gpus)
         snap["hardware"] = {
             "has_gpu": has_gpu,
