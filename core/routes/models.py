@@ -95,7 +95,8 @@ async def get_catalog() -> Dict[str, Any]:
                     fits[tag] = "ok"
         snap["gpu_fit"] = fits
     except Exception as exc:  # 探测失败不阻塞目录,但如实说明未评估
-        snap["hardware"] = {"has_gpu": None, "probe_error": str(exc)[:120]}
+        logger.debug("catalog 硬件探测失败: %s", exc)
+        snap["hardware"] = {"has_gpu": None, "probe_error": type(exc).__name__}
         snap["gpu_fit"] = {}
     return snap
 
@@ -406,7 +407,8 @@ async def latency_probe() -> Dict[str, Any]:
             tags.raise_for_status()
         except Exception as exc:
             out["stages"]["ollama_reachable_ms"] = None
-            out["verdicts"].append(f"Ollama 不可达({str(exc)[:80]})——先确认它在运行。")
+            logger.debug("latency-probe: ollama 不可达: %s", exc)
+            out["verdicts"].append(f"Ollama 不可达({type(exc).__name__})——先确认它在运行,详情见后端日志。")
             return out
         try:
             ps = await client.get(f"{base}/api/ps")
@@ -434,7 +436,8 @@ async def latency_probe() -> Dict[str, Any]:
         try:
             small = await _gen("用一句话介绍你自己。", 24)
         except Exception as exc:
-            out["verdicts"].append(f"模型调用失败({str(exc)[:80]})——模型可能未安装或内存不足。")
+            logger.debug("latency-probe: 模型调用失败: %s", exc)
+            out["verdicts"].append(f"模型调用失败({type(exc).__name__})——模型可能未安装或内存不足,详情见后端日志。")
             return out
         out["stages"]["small_total_ms"] = round((_time.monotonic() - t0) * 1000, 1)
         _ns = 1e9
@@ -453,7 +456,8 @@ async def latency_probe() -> Dict[str, Any]:
             out["stages"]["prefill_tokens"] = prefill_tokens
             out["stages"]["prefill_tokens_per_s"] = round(prefill_tps, 1)
         except Exception as exc:
-            out["verdicts"].append(f"长提示词探测失败({str(exc)[:80]})——大概率内存不足(换页)。")
+            logger.debug("latency-probe: 长提示词探测失败: %s", exc)
+            out["verdicts"].append(f"长提示词探测失败({type(exc).__name__})——大概率内存不足(换页),详情见后端日志。")
             prefill_tps = 0.0
 
         # 4) 诚实判词
