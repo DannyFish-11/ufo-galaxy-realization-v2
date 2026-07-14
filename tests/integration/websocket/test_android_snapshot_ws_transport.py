@@ -166,22 +166,33 @@ class TestAndroidSnapshotWSTransport:
                 "The canonical absorb/store path may have thrown an exception."
             )
 
-        # Post-connection: verify store was populated through the transport path
-        stored = get_device_state_snapshot(device_id)
-        assert stored is not None, (
-            "TRANSPORT PATH BROKEN: android_device_state_store is empty after "
-            "device_state_snapshot was sent via WebSocket transport. "
-            "The /ws/device/{device_id} → handler → store path is not closed."
+            # In-connection: verify store was populated through the transport
+            # path.  Must read WHILE the socket is open — PR #1436 introduced
+            # invalidate-on-disconnect (stale readiness must not keep affecting
+            # routing/participation), so the snapshot is deliberately gone
+            # after the connection closes.
+            stored = get_device_state_snapshot(device_id)
+            assert stored is not None, (
+                "TRANSPORT PATH BROKEN: android_device_state_store is empty after "
+                "device_state_snapshot was sent via WebSocket transport. "
+                "The /ws/device/{device_id} → handler → store path is not closed."
+            )
+            assert stored.device_id == device_id
+            assert stored.model_id == ANDROID_SNAPSHOT_PAYLOAD["model_id"], (
+                f"Transport path stored wrong model_id: {stored.model_id!r} "
+                f"expected: {ANDROID_SNAPSHOT_PAYLOAD['model_id']!r}. "
+                "Android-derived values are not propagating through the transport path."
+            )
+            assert (
+                stored.model_ready == ANDROID_SNAPSHOT_PAYLOAD["model_ready"]
+            ), f"model_ready mismatch: stored={stored.model_ready!r}"
+
+        # Post-disconnect: PR #1436 disconnect-degradation semantics — the
+        # snapshot must be invalidated so stale readiness cannot affect routing.
+        assert get_device_state_snapshot(device_id) is None, (
+            "DISCONNECT INVALIDATION BROKEN: snapshot survived WebSocket close; "
+            "stale Android readiness would keep affecting routing/participation."
         )
-        assert stored.device_id == device_id
-        assert stored.model_id == ANDROID_SNAPSHOT_PAYLOAD["model_id"], (
-            f"Transport path stored wrong model_id: {stored.model_id!r} "
-            f"expected: {ANDROID_SNAPSHOT_PAYLOAD['model_id']!r}. "
-            "Android-derived values are not propagating through the transport path."
-        )
-        assert (
-            stored.model_ready == ANDROID_SNAPSHOT_PAYLOAD["model_ready"]
-        ), f"model_ready mismatch: stored={stored.model_ready!r}"
 
     def test_ws_snapshot_ack_status_is_absorbed(self, gw_client: Any) -> None:
         """Snapshot ACK status via transport must be 'absorbed'.
@@ -245,12 +256,14 @@ class TestAndroidSnapshotWSTransport:
             )
             ws.receive_json()
 
-        stored = get_device_state_snapshot(device_id)
-        assert stored is not None
+            # Read WHILE connected — snapshots are invalidated on disconnect
+            # (PR #1436 disconnect-degradation semantics).
+            stored = get_device_state_snapshot(device_id)
+            assert stored is not None
 
-        # All values must match the Android-supplied payload
-        assert stored.quantization == ANDROID_SNAPSHOT_PAYLOAD["quantization"]
-        assert stored.current_fallback_tier == ANDROID_SNAPSHOT_PAYLOAD["current_fallback_tier"]
-        assert stored.warmup_result == ANDROID_SNAPSHOT_PAYLOAD["warmup_result"]
-        assert stored.local_loop_ready == ANDROID_SNAPSHOT_PAYLOAD["local_loop_ready"]
-        assert stored.accessibility_ready == ANDROID_SNAPSHOT_PAYLOAD["accessibility_ready"]
+            # All values must match the Android-supplied payload
+            assert stored.quantization == ANDROID_SNAPSHOT_PAYLOAD["quantization"]
+            assert stored.current_fallback_tier == ANDROID_SNAPSHOT_PAYLOAD["current_fallback_tier"]
+            assert stored.warmup_result == ANDROID_SNAPSHOT_PAYLOAD["warmup_result"]
+            assert stored.local_loop_ready == ANDROID_SNAPSHOT_PAYLOAD["local_loop_ready"]
+            assert stored.accessibility_ready == ANDROID_SNAPSHOT_PAYLOAD["accessibility_ready"]
