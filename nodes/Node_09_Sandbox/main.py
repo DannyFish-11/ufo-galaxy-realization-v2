@@ -299,14 +299,25 @@ async def execute_files(request: FileExecuteRequest):
                 raise HTTPException(status_code=400, detail="非法文件名")
             return base
 
+        def _resolved_in_tmp(name: str) -> str:
+            """基名扁平化 → 拼接 → realpath → 同作用域支配式前缀断言。
+
+            os.path.basename 已剥离目录成分,这里再 realpath 归一并直接在
+            使用点之前断言落在 _tmp_real 内(支配 open/subprocess 两个 sink),
+            让污点追踪器在局部数据流上看到确定的屏障。
+            """
+            resolved = os.path.realpath(os.path.join(_tmp_real, _flat_name(name)))
+            if resolved != _tmp_real and not resolved.startswith(_tmp_real + os.sep):
+                raise HTTPException(status_code=400, detail="非法文件路径")
+            return resolved
+
         # 写入所有文件(全部落在 tmp 顶层,基名唯一化后无子目录、无穿越)
         for filename, content in request.files.items():
-            safe_name = _flat_name(filename)
-            file_path = os.path.join(_tmp_real, safe_name)
+            file_path = _resolved_in_tmp(filename)
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(content)
 
-        entry_file = os.path.join(_tmp_real, _flat_name(request.entry_point))
+        entry_file = _resolved_in_tmp(request.entry_point)
         cmd = config["cmd"] + [entry_file]
 
         try:
