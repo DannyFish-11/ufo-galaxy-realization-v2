@@ -304,14 +304,28 @@ async def execute_files(request: FileExecuteRequest):
                 raise HTTPException(status_code=400, detail=f"非法文件路径: {name}")
             return p
 
+        _base_prefix = _tmp_real + os.sep
+
+        def _assert_within(p: str) -> str:
+            """同作用域内联屏障:直接在数据流路径上断言路径落在 tmp 内。
+
+            _safe_join 已做白名单+commonpath 净化,但那是嵌套函数,污点
+            追踪器(CodeQL)不总能识别其返回值已净化。此处在【使用点】再做
+            一次显式前缀断言 —— 既是 CodeQL 可识别的 sanitizer,也是纵深防御。
+            """
+            if not (p == _tmp_real or p.startswith(_base_prefix)):
+                raise HTTPException(status_code=400, detail="非法文件路径")
+            return p
+
         # 写入所有文件
         for filename, content in request.files.items():
-            file_path = _safe_join(_tmp_real, filename)
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            file_path = _assert_within(_safe_join(_tmp_real, filename))
+            _parent = _assert_within(os.path.dirname(file_path))
+            os.makedirs(_parent, exist_ok=True)
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(content)
 
-        entry_file = _safe_join(_tmp_real, request.entry_point)
+        entry_file = _assert_within(_safe_join(_tmp_real, request.entry_point))
         cmd = config["cmd"] + [entry_file]
 
         try:
