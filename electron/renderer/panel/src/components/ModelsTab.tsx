@@ -237,6 +237,18 @@ function LocalBrainTiers() {
                     {m.source === 'local'
                       ? <StatusBadge st={status[m.tag]} />
                       : <span className="mt-mstatus idle" title="容器模型(vLLM),不经 Ollama">容器</span>}
+                    {catalog?.gpu_fit?.[m.tag] === 'no_gpu' && (
+                      <span
+                        className="mt-mstatus warn"
+                        title="此模型需要显卡,当前未检测到可用 GPU:会以 CPU 运行,首字延迟数秒到数十秒。建议选 A 档或在下方配置云端 API(如 Agnes 免费全模态)。"
+                      >无显卡·会极慢</span>
+                    )}
+                    {catalog?.gpu_fit?.[m.tag] === 'insufficient_vram' && (
+                      <span
+                        className="mt-mstatus warn"
+                        title="显存装不下此模型,会部分溢出到内存(明显变慢)。建议换更小档位或量化版本。"
+                      >显存不足</span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -245,7 +257,52 @@ function LocalBrainTiers() {
         })}
         {!catalog && !error && <div className="mt-tier-skel">正在读取档位目录…</div>}
       </div>
+      <LatencyProbe />
     </section>
+  );
+}
+
+// ── 本地推理一键测速:后端用 Ollama 自带 eval 计数报真实速度 + 诚实判词 ──
+function LatencyProbe() {
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<{ stages?: Record<string, unknown>; verdicts?: string[] } | null>(null);
+  const [err, setErr] = useState('');
+
+  const run = useCallback(async () => {
+    setRunning(true);
+    setErr('');
+    setResult(null);
+    try {
+      const base = await getBackendUrl();
+      const r = await fetch(`${base}/api/v1/models/latency-probe`, { method: 'POST' });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setResult(await r.json());
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setRunning(false);
+    }
+  }, []);
+
+  const s = (result?.stages ?? {}) as Record<string, unknown>;
+  return (
+    <div className="mt-probe">
+      <button className="mt-probe-btn" onClick={run} disabled={running}>
+        {running ? '测速中(最长约 1 分钟)…' : '本地推理一键测速'}
+      </button>
+      {err && <div className="mt-probe-line err">测速失败:{err}</div>}
+      {result && (
+        <div className="mt-probe-result mono">
+          {s.decode_tokens_per_s != null && <div className="mt-probe-line">生成速度:{String(s.decode_tokens_per_s)} tok/s</div>}
+          {s.prefill_tokens_per_s != null && <div className="mt-probe-line">预填速度:{String(s.prefill_tokens_per_s)} tok/s</div>}
+          {s.est_agent_first_token_s != null && <div className="mt-probe-line">满配代理回合首字估计:约 {String(s.est_agent_first_token_s)}s</div>}
+          {s.load_ms != null && Number(s.load_ms) > 500 && <div className="mt-probe-line">模型冷加载:{String(s.load_ms)}ms</div>}
+          {(result.verdicts ?? []).map((v, i) => (
+            <div className="mt-probe-line verdict" key={i}>{v}</div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

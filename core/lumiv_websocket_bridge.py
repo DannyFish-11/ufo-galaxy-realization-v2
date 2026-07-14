@@ -38,9 +38,14 @@ _ELECTRON_IPC_URL = f"http://127.0.0.1:{_ELECTRON_PORT}/ipc/presence-state"
 # STATIC(休息)    → 0.00-0.05  (Silent 呼吸光环)
 # LIMINAL(认知)   → 0.15-0.85  (Liminal 透视空间展开)
 # MANIFEST(执行)  → 0.90-0.95  (Manifest 透明)
+#
+# liminal 稳态取 0.62:着色器空间展开曲线是 smoothstep(0.40, 0.85),
+# 旧值 0.50 只展开 ~13%(阈限空间几乎不可见);0.62 展开 ~44%,且仍低于
+# 灵动岛淡出线 0.65,岛保持全亮。前端穿越编排带时由渲染层限速播出
+# 收回→灵动岛→展开的完整秩序(见 electron/renderer/app.js _springUpdate)。
 MODE_DEPTH_MAP = {
     "static": 0.05,
-    "liminal": 0.50,
+    "liminal": 0.62,
     "manifest": 0.92,
 }
 
