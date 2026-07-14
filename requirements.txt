@@ -6,6 +6,7 @@
 # Core Framework
 # ============================================================================
 fastapi>=0.109.0
+starlette>=0.35.0          # core/performance.py 直接导入(middleware/types);此前仅靠 fastapi 传递依赖带入,显式声明
 uvicorn[standard]>=0.27.0
 pydantic>=2.9.0
 python-dotenv>=1.0.0
@@ -170,3 +171,29 @@ jsonschema>=4.0.0          # integration/event_bus.py 事件schema校验;缺失�
 huggingface_hub>=0.20.0    # 本地模型 HF 下载 + HF↔Ollama 回退(此前仅传递依赖)
 ollama>=0.3.0              # external/memos 的 Ollama LLM/embedder 后端(此前仅 main.py 硬编码装)
 tqdm>=4.65.0              # 模型下载/长任务进度条(此前仅在 requirements-core.txt)
+
+# ============================================================================
+# 可选依赖存档(2026-07-14 依赖审计):以下 20 个包在 core/ 中均为
+# try/except 或函数内惰性导入,缺失时按各自路径优雅降级/如实禁用,
+# 【故意】不作为硬依赖(多为 GB 级或平台特定)。按需手动安装:
+# ----------------------------------------------------------------------------
+# torch                        # ASR(sensevoice)/CLAP/本地推理,~2GB+
+# vllm                         # 自托管高吞吐推理后端
+# llama-cpp-python             # GGUF 本地推理后端
+# intel-extension-for-pytorch  # Intel XPU 加速(hardware_compute_profiler)
+# faster-whisper               # Whisper ASR
+# funasr                       # SenseVoice ASR
+# indextts                     # IndexTTS2 零样本克隆 TTS(GALAXY_TTS_ENGINE=indextts)
+# melotts                      # MeloTTS 引擎
+# piper-tts                    # Piper 离线 TTS 引擎
+# pyaudio                      # 语音唤醒麦克风采集(voice_wake_module)
+# webrtcvad                    # 语音活动检测(voice_wake_module)
+# pvporcupine                  # 离线唤醒词引擎(voice_wake_module)
+# soundfile                    # CLAP 音频记忆读写
+# aiortc                       # WebRTC 摄像头接入(multimodal/webrtc_session)
+# aioquic                      # QUIC 传输探测(network_topology_runtime)
+# pynvml                       # NVIDIA GPU 探测(compute_scheduler)
+# py-cpuinfo                   # CPU 指令集探测(hardware_compute_profiler)
+# dbus-python                  # Linux D-Bus 适配器(adapters/dbus_adapter)
+# simplemem                    # SimpleMem 记忆后端(memory/omni_simplemem_provider)
+# (qdrant-client / sentence-transformers / edge-tts / kokoro-onnx 已在上方声明)

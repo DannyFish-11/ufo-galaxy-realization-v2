@@ -28,8 +28,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
-logger = logging.getLogger("master_brain")
-
 from core.acl import AntiCorruptionLayer, acl
 from core.nats_bus import NATSBus, nats_bus
 from core.schemas.contracts import (
@@ -40,6 +38,8 @@ from core.schemas.contracts import (
     WorkerRegistrationModel,
     WorkerShutdownModel,
 )
+
+logger = logging.getLogger("master_brain")
 
 
 def _try_emit_event(event_type_name: str, data: dict) -> None:

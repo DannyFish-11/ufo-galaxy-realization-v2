@@ -12,12 +12,10 @@ or evaluated, the report includes an explicit *_error field rather than raising.
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
-
-logger = logging.getLogger(__name__)
-
-
 import time
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 DUAL_REPO_PROGRESS_REPORT_AUTHORITY: str = "DUAL_REPO_PROGRESS_REPORT::core.dual_repo_progress_report::v1"
 

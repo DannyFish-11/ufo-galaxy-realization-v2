@@ -390,6 +390,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             "STEP_API_KEY",
             "MIMO_API_KEY",
             "MISTRAL_API_KEY",
+            "AGNES_API_KEY",
             "HF_API_TOKEN",
             "ONEAPI_API_KEY",
             "DEEPSEEK_OCR2_API_KEY",

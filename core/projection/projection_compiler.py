@@ -38,17 +38,16 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, List, Optional
+
+# TYPE_CHECKING import to avoid a circular dependency at runtime if
+# topology_router ever imports from projection in the future.
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from core.continuum.types import ContinuumState
 
 from .runtime_projection import RuntimeProjection
 
 logger = logging.getLogger("Galaxy.Projection.ProjectionCompiler")
-
-# TYPE_CHECKING import to avoid a circular dependency at runtime if
-# topology_router ever imports from projection in the future.
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from core.model_topology.topology_router import TopologyRoutePlan

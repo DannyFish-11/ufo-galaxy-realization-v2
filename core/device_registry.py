@@ -97,7 +97,7 @@ def _get_udm():
 # ============================================================================
 
 from core.device_types import DeviceStatus, DeviceType  # noqa: E402 — 单一事实来源
-from core.schemas.device import DeviceCapabilityModel as DeviceCapability
+from core.schemas.device import DeviceCapabilityModel as DeviceCapability  # noqa: E402  单一事实来源(与邻行一致)
 from core.schemas.device import DeviceModel as Device  # noqa: E402
 
 # ============================================================================

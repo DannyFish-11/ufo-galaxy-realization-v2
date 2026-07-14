@@ -3,10 +3,6 @@
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
-
-logger = logging.getLogger(__name__)
-
-
 import time
 from typing import Any, Dict, List, Optional
 
@@ -31,6 +27,8 @@ from core.runtime_truth_governance import (
     TRUTH_GRADE_RUNTIME_ONLY,
     build_truth_governance,
 )
+
+logger = logging.getLogger(__name__)
 
 DEVICE_AUTONOMY_EVIDENCE_AUTHORITY: str = (
     "DEVICE_AUTONOMY_EVIDENCE_AUTHORITY::"

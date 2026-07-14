@@ -121,7 +121,7 @@ package rather than reaching directly into core.multi_llm_router internals.
 """
 
 # ── L3 canonical cognitive input assembly authority ───────────────────────
-from core.llm.context_authority import (  # noqa: F401
+from core.llm.context_authority import (  # noqa: F401,E402
     LLM_CONTEXT_AUTHORITY,
     CognitiveContextAssembly,
     CognitiveContextAuthority,
@@ -131,7 +131,7 @@ from core.llm.context_authority import (  # noqa: F401
 )
 
 # ── L4 canonical cognitive execution semantics authority ──────────────────
-from core.llm.execution_authority import (  # noqa: F401
+from core.llm.execution_authority import (  # noqa: F401,E402
     LLM_EXECUTION_AUTHORITY,
     CognitiveExecutionAuthority,
     CognitiveExecutionRequest,
@@ -141,7 +141,7 @@ from core.llm.execution_authority import (  # noqa: F401
 )
 
 # ── L1 canonical routing authority (primary entry point) ─────────────────
-from core.llm.route_authority import (  # noqa: F401
+from core.llm.route_authority import (  # noqa: F401,E402
     LLM_ROUTE_AUTHORITY,
     LLMRouteAuthority,
     LLMRouteDecision,
@@ -151,7 +151,7 @@ from core.llm.route_authority import (  # noqa: F401
 )
 
 # ── L2 canonical supply authority ─────────────────────────────────────────
-from core.llm.supply_authority import (  # noqa: F401
+from core.llm.supply_authority import (  # noqa: F401,E402
     LLM_SUPPLY_AUTHORITY,
     FallbackLegality,
     LLMSupplyAuthority,
@@ -163,7 +163,7 @@ from core.llm.supply_authority import (  # noqa: F401
 )
 
 # ── backward-compat re-exports from canonical implementation ─────────────
-from core.multi_llm_router import (  # noqa: F401
+from core.multi_llm_router import (  # noqa: F401,E402
     PROVIDER_MODEL_MAP,
     TASK_ROUTING_PREFERENCES,
     LLMResponse,

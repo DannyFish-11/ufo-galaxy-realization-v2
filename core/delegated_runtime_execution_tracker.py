@@ -155,12 +155,8 @@ Functions::
 
 from __future__ import annotations
 
-import logging  # auto: ensure module logger is defined
-
-logger = logging.getLogger(__name__)
-
-
 import json
+import logging  # auto: ensure module logger is defined
 import os
 import tempfile
 import time
@@ -169,6 +165,8 @@ from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Deque, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Policy sentinels

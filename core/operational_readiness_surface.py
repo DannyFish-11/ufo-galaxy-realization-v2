@@ -1269,6 +1269,7 @@ def _configured_llm_key_names() -> List[str]:
         "DEEPSEEK_API_KEY",
         "XAI_API_KEY",
         "MISTRAL_API_KEY",
+        "AGNES_API_KEY",
         "MOONSHOT_API_KEY",
         "GROQ_API_KEY",
         "LLM_API_KEY",

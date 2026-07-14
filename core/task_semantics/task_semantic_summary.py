@@ -37,17 +37,15 @@ quick downstream checks.
 
 from __future__ import annotations
 
-import logging  # auto: ensure module logger is defined
-
-logger = logging.getLogger(__name__)
-
-
 import dataclasses
+import logging  # auto: ensure module logger is defined
 import time
 from typing import Any, Dict, List, Optional
 
 from .step_kind import StepKind
 from .step_policy import StepSemanticPolicy
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "ClassifiedStep",

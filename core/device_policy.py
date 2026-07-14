@@ -17,6 +17,8 @@ direct task-routing behaviour.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 # ============================================================================
 # Policy constants
 # ============================================================================
@@ -95,8 +97,6 @@ def requires_agent_deploy(device_type: str) -> bool:
 # ============================================================================
 # Per-device dispatch policy (dimension 8 of the canonical dispatch slot chain)
 # ============================================================================
-
-from dataclasses import dataclass
 
 
 @dataclass(frozen=True)

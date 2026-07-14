@@ -8,11 +8,9 @@ and does not depend on operator/projection route surfaces.
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
-
-
-from typing import Any, Dict
 
 CONTROL_PLANE_BACKEND_AUTHORITY_INPUT_POLICY: str = (
     "POLICY::CONTROL_PLANE_BACKEND_AUTHORITY_INPUT_V1: "

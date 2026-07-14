@@ -96,6 +96,7 @@ _ENV_MAPPING: Dict[str, str] = {
     "google": "GOOGLE_API_KEY",
     "xai": "XAI_API_KEY",
     "mistral": "MISTRAL_API_KEY",
+    "agnes": "AGNES_API_KEY",
     "deepseek": "DEEPSEEK_API_KEY",
     "qwen": "QWEN_API_KEY",
     "zhipu": "ZHIPU_API_KEY",

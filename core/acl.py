@@ -23,8 +23,6 @@ from typing import Any, Dict, Optional, Type, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
-logger = logging.getLogger("acl")
-
 from core.device_types import resolve_device_type
 from core.schemas.contracts import (
     MCPCallRequestModel,
@@ -33,6 +31,8 @@ from core.schemas.contracts import (
     TaskResultModel,
     WorkerRegistrationModel,
 )
+
+logger = logging.getLogger("acl")
 
 T = TypeVar("T", bound=BaseModel)
 

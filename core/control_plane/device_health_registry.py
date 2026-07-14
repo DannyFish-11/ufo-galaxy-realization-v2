@@ -43,15 +43,13 @@ Usage
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
-
-logger = logging.getLogger(__name__)
-
-
 import threading
 import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Callable, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Enumerations

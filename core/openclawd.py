@@ -81,17 +81,13 @@ surfaces it in the response so the runtime shell can log it against
                 execution_path / runtime_domain / runtime_session_id
 """
 
-import logging  # auto: ensure module logger is defined
-
-_logger = logging.getLogger(__name__)
-
-
 import asyncio as _asyncio_module
 import logging
 import time
 import uuid
 from typing import Any, Dict, List, Optional
 
+_logger = logging.getLogger(__name__)
 logger = logging.getLogger("Galaxy.OpenClawd")
 
 OPENCLAWD_ENTRYPOINT_ROLE: str = "internal_entry"
@@ -108,11 +104,11 @@ OPENCLAWD_ENTRYPOINT_ROLE: str = "internal_entry"
 # import must follow the top-of-module stdlib imports already present above.
 # 下列带 F401 的名字是 PR-7 编排拆解后的兼容再导出面:测试与下游
 # 历史上从 core.openclawd 导入这些名字,必须保留。
-from core.orchestration.lifecycle import _LOCAL_DEVICE_PREFIXES  # noqa: F401  re-export
-from core.orchestration.lifecycle import _LOCAL_HOSTNAME  # noqa: F401  re-export
-from core.orchestration.lifecycle import LIFECYCLE_MANAGER_AUTHORITY  # noqa: F401  re-export
-from core.orchestration.lifecycle import ParallelResult  # noqa: F401  re-export
-from core.orchestration.lifecycle import _SubtaskStatus  # noqa: F401  re-export
+from core.orchestration.lifecycle import _LOCAL_DEVICE_PREFIXES  # noqa: F401,E402  re-export
+from core.orchestration.lifecycle import _LOCAL_HOSTNAME  # noqa: F401,E402  re-export
+from core.orchestration.lifecycle import LIFECYCLE_MANAGER_AUTHORITY  # noqa: F401,E402  re-export
+from core.orchestration.lifecycle import ParallelResult  # noqa: F401,E402  re-export
+from core.orchestration.lifecycle import _SubtaskStatus  # noqa: F401,E402  re-export
 from core.orchestration.lifecycle import (  # noqa: E402
     LifecycleManager,
     ParallelGroupTracker,

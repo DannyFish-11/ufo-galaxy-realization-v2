@@ -29,7 +29,7 @@ multi-LLM routing entry point.
 """
 
 # ── re-export from canonical implementation ───────────────────────────────
-from core.multi_llm_router import (  # noqa: F401
+from core.multi_llm_router import (  # noqa: F401,E402
     LLMResponse,
     MultiLLMRouter,
     ProviderConfig,

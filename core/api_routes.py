@@ -58,12 +58,20 @@ import os
 import time
 
 _startup_time = time.time()
-from dataclasses import dataclass
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass  # noqa: E402  启动时间戳须在重导入前捕获
+from datetime import datetime  # noqa: E402  启动时间戳须在重导入前捕获
+from typing import Any, Dict, List, Optional  # noqa: E402  启动时间戳须在重导入前捕获
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import (  # noqa: E402  时间戳须先于重导入
+    APIRouter,
+    Depends,
+    FastAPI,
+    HTTPException,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
+from fastapi.responses import JSONResponse, StreamingResponse  # noqa: E402  启动时间戳须在重导入前捕获
 from pydantic import BaseModel, Field  # noqa
 
 from core.unified_response import UnifiedChatResponse  # noqa

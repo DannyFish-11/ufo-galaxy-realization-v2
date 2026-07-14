@@ -54,12 +54,8 @@ The following representative real paths are seeded:
 
 from __future__ import annotations
 
-import logging  # auto: ensure module logger is defined
-
-logger = logging.getLogger(__name__)
-
-
 import dataclasses
+import logging  # auto: ensure module logger is defined
 from typing import Any, Dict, List, Optional
 
 from .ack_policy import ACCEPTED_ACK_POLICY, COMPLETED_ACK_POLICY, NO_ACK_POLICY, AckPolicy, AckStage
@@ -82,6 +78,8 @@ from .retry_policy import (
     RetryPolicy,
 )
 from .timeout_owner import TimeoutOwner
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "ReliabilitySummary",

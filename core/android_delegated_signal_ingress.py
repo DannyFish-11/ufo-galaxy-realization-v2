@@ -99,12 +99,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Optional
 
-logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Imports from prior PR packages
-# ---------------------------------------------------------------------------
-
 from core.android_execution_signal_reconciler import (
     AndroidExecutionSignalEnvelope,
     AndroidSignalKind,
@@ -112,6 +106,13 @@ from core.android_execution_signal_reconciler import (
     reconcile_android_execution_signal,
 )
 from core.delegated_runtime_execution_tracker import DelegatedExecutionTrackingRuntime
+
+# ---------------------------------------------------------------------------
+# Imports from prior PR packages
+# ---------------------------------------------------------------------------
+
+
+logger = logging.getLogger(__name__)
 
 # PR-18: Recovery guard — imported lazily via try/except so that the ingress
 # module remains loadable even when the recovery-readiness module is absent.

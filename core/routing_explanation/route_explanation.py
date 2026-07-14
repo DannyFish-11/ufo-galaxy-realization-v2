@@ -32,17 +32,15 @@ Design rules
 
 from __future__ import annotations
 
-import logging  # auto: ensure module logger is defined
-
-logger = logging.getLogger(__name__)
-
-
 import dataclasses
+import logging  # auto: ensure module logger is defined
 import time
 from typing import Any, Dict, List, Optional
 
 from .decision_basis import DecisionBasis, basis_list_to_dicts
 from .route_confidence import UNDETERMINED_CONFIDENCE, RouteConfidence, compute_confidence
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "RejectedCandidate",

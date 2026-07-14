@@ -46,7 +46,7 @@ except ImportError:
 
 # Action → fusion_entry function name mapping for ALL 130 nodes
 # Auto-generated from fusion_entry.py AST analysis
-from core.node_facade_local_action_map import _ACTION_MAP  # noqa: F401
+from core.node_facade_local_action_map import _ACTION_MAP  # noqa: F401,E402
 
 # In-memory module cache
 _module_cache: Dict[str, Any] = {}

@@ -24,12 +24,8 @@ dual_repo_system_completeness_review / system_final_acceptance_verdict
 
 from __future__ import annotations
 
-import logging  # auto: ensure module logger is defined
-
-logger = logging.getLogger(__name__)
-
-
 import json
+import logging  # auto: ensure module logger is defined
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -50,6 +46,8 @@ from tools.architecture.architecture_completion import (
     get_architecture_completion_scorecard,
 )
 from tools.architecture.architecture_live_status import get_architecture_live_status
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "SYSTEM_COMPLETION_STATUS_AUTHORITY",

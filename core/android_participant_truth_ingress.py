@@ -107,18 +107,16 @@ reconciliation gaps``.
 
 from __future__ import annotations
 
-import logging  # auto: ensure module _logger is defined
-
-_logger = logging.getLogger(__name__)
-
-
 import copy
+import logging  # auto: ensure module _logger is defined
 import threading as _threading
 import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Optional, Tuple
+
+_logger = logging.getLogger(__name__)
 
 logger_name = "Galaxy.AndroidParticipantTruthIngress"
 

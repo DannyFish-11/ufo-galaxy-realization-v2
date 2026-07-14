@@ -173,6 +173,7 @@ _PROVIDER_ENV_KEY_MAP: Dict[str, str] = {
     "xai": "XAI_API_KEY",
     "meta": "META_API_KEY",
     "mistral": "MISTRAL_API_KEY",
+    "agnes": "AGNES_API_KEY",
     "deepseek": "DEEPSEEK_API_KEY",
     "qwen": "QWEN_API_KEY",
     "zhipu": "ZHIPU_API_KEY",
@@ -1398,6 +1399,7 @@ ADAPTER_MAP = {
     "xai": OpenAIAdapter,
     "meta": OpenAIAdapter,
     "mistral": OpenAIAdapter,
+    "agnes": OpenAIAdapter,
     "deepseek": OpenAIAdapter,
     "qwen": OpenAIAdapter,
     "zhipu": OpenAIAdapter,
@@ -1482,6 +1484,23 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "cost_in": 0.00125,
         "cost_out": 0.00425,
         "extra": {"multimodal": True, "supports_vision": True, "max_tokens": 8192},
+    },
+    {
+        # Agnes AI:全模态免费 API(2026),OpenAI 兼容协议。
+        # agnes-2.5-flash 2026-07-13 发布(agentic/编码强化,免费不限量);
+        # 2.0 仍可用作兜底(256K 上下文/64K 输出,免费档 20 RPM)。
+        # 2.5 的准确串遵循官方命名规约(1.5→2.0→2.5),若有出入由 L4
+        # 模型名单自动同步(/models 对账)+ 面板 verify_provider 试调纠正。
+        # 图像(agnes-image-2.x)/视频(agnes-video-v2.0)模型不入聊天路由,
+        # 属扩展层能力,按需另接。
+        "name": "agnes",
+        "env_key": "AGNES_API_KEY",
+        "base_url": "https://apihub.agnes-ai.com/v1",
+        "models": ["agnes-2.5-flash", "agnes-2.0-flash"],
+        "default_model": "agnes-2.5-flash",
+        "cost_in": 0.0,
+        "cost_out": 0.0,
+        "extra": {"multimodal": True, "supports_vision": True, "supports_tools": True},
     },
     {
         "name": "mistral",

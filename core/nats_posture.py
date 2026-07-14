@@ -7,12 +7,10 @@ Canonical runtime posture policy for NATS.
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
-
-logger = logging.getLogger(__name__)
-
-
 import os
 from typing import Any, Dict
+
+logger = logging.getLogger(__name__)
 
 NATS_POSTURE_AUTHORITY: str = "core.nats_posture"
 NATS_POSTURE_PRODUCTION_REQUIRED: str = "production-required"
