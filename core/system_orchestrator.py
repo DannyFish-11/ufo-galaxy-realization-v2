@@ -290,7 +290,7 @@ class SystemOrchestrator:
         issues: List[str] = []
         has_critical_failure = False
         try:
-            from core.config_preflight import ConfigPreflightError, run_preflight
+            from core.config_preflight import ConfigPreflightError, run_preflight  # noqa: F401
 
             report = run_preflight(dry_run=True)  # collect findings without raising
             if not report.ok:

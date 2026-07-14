@@ -952,7 +952,7 @@ def build_mesh_runtime_center_state(
         # If no coordinator state provided, try to derive from runtime
         if effective_coordinator is None:
             try:
-                from core.mesh.live_mesh_session_coordinator import (
+                from core.mesh.live_mesh_session_coordinator import (  # noqa: F401
                     LIVE_MESH_SESSION_COORDINATOR_PR_J_SENTINEL,
                 )
 

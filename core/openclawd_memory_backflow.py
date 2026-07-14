@@ -44,7 +44,7 @@ except ImportError:
 # PR-7: canonical chain import — non-fatal if not available
 try:
     from core.cross_device_execution_chain import CANONICAL_CHAIN_ORDER as _CANONICAL_CHAIN_ORDER
-    from core.cross_device_execution_chain import ResultEnvelope as _ResultEnvelope
+    from core.cross_device_execution_chain import ResultEnvelope as _ResultEnvelope  # noqa: F401
     from core.cross_device_execution_chain import record_chain_execution as _record_chain_execution
 
     _CHAIN_AVAILABLE = True

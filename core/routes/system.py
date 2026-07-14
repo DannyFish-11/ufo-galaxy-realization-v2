@@ -54,7 +54,7 @@ logger = logging.getLogger("Galaxy.API")
 # /api/v1/system/status derives node counts from NodeFabricRegistry
 # rather than the legacy node_status_cache compat store.
 try:
-    from core.node_final_boundary_enforcement import (
+    from core.node_final_boundary_enforcement import (  # noqa: F401
         SYSTEM_STATUS_NODES_COUNT_MUST_PREFER_CANONICAL_REGISTRY_POLICY as _NODE_COUNT_POLICY,
     )
     from core.node_final_boundary_enforcement import (  # noqa: F401

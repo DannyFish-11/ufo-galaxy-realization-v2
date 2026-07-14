@@ -737,7 +737,7 @@ class DeviceCommunication:
     async def _handle_status(self, device_id: str, message: DeviceMessage):
         """处理状态更新"""
         try:
-            from core.device_registry import device_registry
+            from core.device_registry import device_registry  # noqa: F401
 
             status_data = message.payload
             # 更新设备状态

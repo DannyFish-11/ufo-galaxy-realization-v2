@@ -105,7 +105,7 @@ try:
     from core.outward_runtime_truth import (  # noqa: F401
         NO_PARALLEL_OUTWARD_ASSEMBLY_POLICY as _NO_PARALLEL_OUTWARD_ASSEMBLY_POLICY,
     )
-    from core.outward_runtime_truth import OUTWARD_RUNTIME_TRUTH_AUTHORITY as _ORT_AUTHORITY
+    from core.outward_runtime_truth import OUTWARD_RUNTIME_TRUTH_AUTHORITY as _ORT_AUTHORITY  # noqa: F401
     from core.outward_runtime_truth import compile_outward_truth as _compile_outward_truth
 
     OUTWARD_RUNTIME_TRUTH_INTEGRATED: str = "PROJECTION_ROUTES::OUTWARD_RUNTIME_TRUTH_INTEGRATED_V1"
@@ -130,7 +130,7 @@ except Exception as exc:
 # conversation/history sessions) when assembling runtime projections.
 try:
     from core.canonical_session_truth import CANONICAL_SESSION_TRUTH_AUTHORITY as _CST_AUTHORITY  # noqa: F401
-    from core.canonical_session_truth import build_canonical_session_truth_snapshot as _build_cst_snapshot
+    from core.canonical_session_truth import build_canonical_session_truth_snapshot as _build_cst_snapshot  # noqa: F401
 
     CANONICAL_SESSION_TRUTH_ALIGNED_PR4: str = (
         "PROJECTION_ROUTES::CANONICAL_SESSION_TRUTH_ALIGNED_PR4_V1: "
@@ -150,9 +150,9 @@ except ImportError:  # pragma: no cover
 # distinctly from generic connected-device presence.
 try:
     from core.android_runtime_host import ANDROID_FIRST_CLASS_RUNTIME_HOST_PR5_SENTINEL as _ARHR_PR5  # noqa: F401
-    from core.android_runtime_host import AndroidRuntimeHostRole as _AndroidRuntimeHostRole
-    from core.android_runtime_host import build_android_runtime_host_identity as _build_android_identity
-    from core.android_runtime_host import classify_android_runtime_host as _classify_android_host
+    from core.android_runtime_host import AndroidRuntimeHostRole as _AndroidRuntimeHostRole  # noqa: F401
+    from core.android_runtime_host import build_android_runtime_host_identity as _build_android_identity  # noqa: F401
+    from core.android_runtime_host import classify_android_runtime_host as _classify_android_host  # noqa: F401
 
     ANDROID_RUNTIME_HOST_ALIGNED_PR5: str = (
         "PROJECTION_ROUTES::ANDROID_RUNTIME_HOST_ALIGNED_PR5_V1: "
@@ -175,15 +175,15 @@ try:
     from core.canonical_capability_scheduling_basis import (  # noqa: F401
         CANONICAL_CAPABILITY_SCHEDULING_BASIS_AUTHORITY as _CCSB_AUTHORITY,
     )
-    from core.canonical_capability_scheduling_basis import (
+    from core.canonical_capability_scheduling_basis import (  # noqa: F401
         CANONICAL_CAPABILITY_SCHEDULING_BASIS_PR6_SENTINEL as _CCSB_PR6,
     )
-    from core.canonical_capability_scheduling_basis import CapabilityTier as _CapabilityTier
-    from core.canonical_capability_scheduling_basis import ExecutionSurface as _ExecutionSurface
-    from core.canonical_capability_scheduling_basis import (
+    from core.canonical_capability_scheduling_basis import CapabilityTier as _CapabilityTier  # noqa: F401
+    from core.canonical_capability_scheduling_basis import ExecutionSurface as _ExecutionSurface  # noqa: F401
+    from core.canonical_capability_scheduling_basis import (  # noqa: F401
         build_runtime_capability_profile as _build_runtime_cap_profile,
     )
-    from core.canonical_capability_scheduling_basis import (
+    from core.canonical_capability_scheduling_basis import (  # noqa: F401
         evaluate_execution_surface_eligibility as _eval_surface_eligibility,
     )
 
@@ -206,12 +206,18 @@ except ImportError:  # pragma: no cover
 # projection endpoints to surface attached-runtime session state.
 try:
     from core.attached_runtime_session import ATTACHED_RUNTIME_SESSION_AUTHORITY as _ARSA_AUTHORITY  # noqa: F401
-    from core.attached_runtime_session import ATTACHED_RUNTIME_SESSION_PR7_SENTINEL as _ARS_PR7
-    from core.attached_runtime_session import AttachmentLifecycleSignal as _AttachmentLifecycleSignal
-    from core.attached_runtime_session import AttachmentState as _AttachmentState
-    from core.attached_runtime_session import build_attached_runtime_session_snapshot as _build_ars_snapshot
-    from core.attached_runtime_session import get_attached_runtime_session as _get_attached_runtime_session
-    from core.attached_runtime_session import list_active_attached_sessions as _list_active_attached_sessions
+    from core.attached_runtime_session import ATTACHED_RUNTIME_SESSION_PR7_SENTINEL as _ARS_PR7  # noqa: F401
+    from core.attached_runtime_session import AttachmentLifecycleSignal as _AttachmentLifecycleSignal  # noqa: F401
+    from core.attached_runtime_session import AttachmentState as _AttachmentState  # noqa: F401
+    from core.attached_runtime_session import (  # noqa: F401
+        build_attached_runtime_session_snapshot as _build_ars_snapshot,
+    )
+    from core.attached_runtime_session import (  # noqa: F401
+        get_attached_runtime_session as _get_attached_runtime_session,
+    )
+    from core.attached_runtime_session import (  # noqa: F401
+        list_active_attached_sessions as _list_active_attached_sessions,
+    )
 
     ATTACHED_RUNTIME_SESSION_ALIGNED_PR7: str = (
         "PROJECTION_ROUTES::ATTACHED_RUNTIME_SESSION_ALIGNED_PR7_V1: "
@@ -231,8 +237,8 @@ except ImportError:  # pragma: no cover
 # visibly non-authoritative relative to canonical lifecycle owners.
 try:
     from core.truth_projection_boundary import TRUTH_PROJECTION_BOUNDARY_IS_AUTHORITY as _TPB_AUTHORITY  # noqa: F401
-    from core.truth_projection_boundary import TRUTH_PROJECTION_BOUNDARY_PR7_SENTINEL as _TPB_PR7
-    from core.truth_projection_boundary import (
+    from core.truth_projection_boundary import TRUTH_PROJECTION_BOUNDARY_PR7_SENTINEL as _TPB_PR7  # noqa: F401
+    from core.truth_projection_boundary import (  # noqa: F401
         build_truth_projection_boundary_snapshot as _build_truth_projection_boundary_snapshot,
     )
 
@@ -254,7 +260,9 @@ try:
     from core.peripheral_capability_boundary import (  # noqa: F401
         PERIPHERAL_CAPABILITY_BOUNDARY_AUTHORITY as _PCB_AUTHORITY,
     )
-    from core.peripheral_capability_boundary import PERIPHERAL_CAPABILITY_BOUNDARY_PR10V2_SENTINEL as _PCB_PR10V2
+    from core.peripheral_capability_boundary import (  # noqa: F401
+        PERIPHERAL_CAPABILITY_BOUNDARY_PR10V2_SENTINEL as _PCB_PR10V2,
+    )
     from core.peripheral_capability_boundary import (
         build_peripheral_capability_boundary_snapshot as _build_peripheral_capability_boundary_snapshot,
     )
@@ -284,12 +292,20 @@ try:
     from core.delegated_runtime_dispatch_intent import (  # noqa: F401
         DELEGATED_RUNTIME_DISPATCH_INTENT_AUTHORITY as _DRDDI_AUTHORITY,
     )
-    from core.delegated_runtime_dispatch_intent import DELEGATED_RUNTIME_DISPATCH_INTENT_PR8_SENTINEL as _DRDDI_PR8
-    from core.delegated_runtime_dispatch_intent import DelegationIntent as _DelegationIntent
-    from core.delegated_runtime_dispatch_intent import HandoffPreparationState as _HandoffPreparationState
-    from core.delegated_runtime_dispatch_intent import build_delegated_dispatch_snapshot as _build_dispatch_snapshot
-    from core.delegated_runtime_dispatch_intent import evaluate_dispatch_eligibility as _evaluate_dispatch_eligibility
-    from core.delegated_runtime_dispatch_intent import list_pending_delegated_dispatch_records as _list_pending_dispatch
+    from core.delegated_runtime_dispatch_intent import (  # noqa: F401
+        DELEGATED_RUNTIME_DISPATCH_INTENT_PR8_SENTINEL as _DRDDI_PR8,
+    )
+    from core.delegated_runtime_dispatch_intent import DelegationIntent as _DelegationIntent  # noqa: F401
+    from core.delegated_runtime_dispatch_intent import HandoffPreparationState as _HandoffPreparationState  # noqa: F401
+    from core.delegated_runtime_dispatch_intent import (  # noqa: F401
+        build_delegated_dispatch_snapshot as _build_dispatch_snapshot,
+    )
+    from core.delegated_runtime_dispatch_intent import (  # noqa: F401
+        evaluate_dispatch_eligibility as _evaluate_dispatch_eligibility,
+    )
+    from core.delegated_runtime_dispatch_intent import (  # noqa: F401
+        list_pending_delegated_dispatch_records as _list_pending_dispatch,
+    )
 
     DELEGATED_RUNTIME_DISPATCH_INTENT_ALIGNED_PR8: str = (
         "PROJECTION_ROUTES::DELEGATED_RUNTIME_DISPATCH_INTENT_ALIGNED_PR8_V1: "
@@ -314,16 +330,18 @@ try:
     from core.delegated_runtime_handoff_contract import (  # noqa: F401
         DELEGATED_RUNTIME_HANDOFF_CONTRACT_AUTHORITY as _DRHC_AUTHORITY,
     )
-    from core.delegated_runtime_handoff_contract import DELEGATED_RUNTIME_HANDOFF_CONTRACT_PR9_SENTINEL as _DRHC_PR9
-    from core.delegated_runtime_handoff_contract import HandoffContractStatus as _HandoffContractStatus
-    from core.delegated_runtime_handoff_contract import HandoffContractVersion as _HandoffContractVersion
-    from core.delegated_runtime_handoff_contract import (
+    from core.delegated_runtime_handoff_contract import (  # noqa: F401
+        DELEGATED_RUNTIME_HANDOFF_CONTRACT_PR9_SENTINEL as _DRHC_PR9,
+    )
+    from core.delegated_runtime_handoff_contract import HandoffContractStatus as _HandoffContractStatus  # noqa: F401
+    from core.delegated_runtime_handoff_contract import HandoffContractVersion as _HandoffContractVersion  # noqa: F401
+    from core.delegated_runtime_handoff_contract import (  # noqa: F401
         build_delegated_handoff_contract as _build_delegated_handoff_contract,
     )
-    from core.delegated_runtime_handoff_contract import (
+    from core.delegated_runtime_handoff_contract import (  # noqa: F401
         build_handoff_contract_snapshot as _build_handoff_contract_snapshot,
     )
-    from core.delegated_runtime_handoff_contract import (
+    from core.delegated_runtime_handoff_contract import (  # noqa: F401
         list_pending_handoff_contracts as _list_pending_handoff_contracts,
     )
 
@@ -347,14 +365,16 @@ try:
     from core.ugcp_control_transfer_profile import (  # noqa: F401
         UGCP_CONTROL_TRANSFER_PROFILE_AUTHORITY as _UCTP_AUTHORITY,
     )
-    from core.ugcp_control_transfer_profile import UGCP_CONTROL_TRANSFER_PROFILE_PR5_SENTINEL as _UCTP_PR5
-    from core.ugcp_control_transfer_profile import ControlTransferFamily as _ControlTransferFamily
-    from core.ugcp_control_transfer_profile import ControlTransferState as _ControlTransferState
-    from core.ugcp_control_transfer_profile import ControlTransferTerminalReason as _ControlTransferTerminalReason
-    from core.ugcp_control_transfer_profile import (
+    from core.ugcp_control_transfer_profile import UGCP_CONTROL_TRANSFER_PROFILE_PR5_SENTINEL as _UCTP_PR5  # noqa: F401
+    from core.ugcp_control_transfer_profile import ControlTransferFamily as _ControlTransferFamily  # noqa: F401
+    from core.ugcp_control_transfer_profile import ControlTransferState as _ControlTransferState  # noqa: F401
+    from core.ugcp_control_transfer_profile import (  # noqa: F401
+        ControlTransferTerminalReason as _ControlTransferTerminalReason,
+    )
+    from core.ugcp_control_transfer_profile import (  # noqa: F401
         build_control_transfer_truth_event as _build_control_transfer_truth_event,
     )
-    from core.ugcp_control_transfer_profile import can_transition as _transfer_can_transition
+    from core.ugcp_control_transfer_profile import can_transition as _transfer_can_transition  # noqa: F401
 
     UGCP_CONTROL_TRANSFER_PROFILE_ALIGNED_PR5: str = (
         "PROJECTION_ROUTES::UGCP_CONTROL_TRANSFER_PROFILE_ALIGNED_PR5_V1: "
@@ -374,16 +394,18 @@ except ImportError:  # pragma: no cover
 # coordination authority / barriers / aggregation / outcomes).
 try:
     from core.ugcp_coordination_profile import UGCP_COORDINATION_PROFILE_AUTHORITY as _UCP_AUTHORITY  # noqa: F401
-    from core.ugcp_coordination_profile import UGCP_COORDINATION_PROFILE_PR6_SENTINEL as _UCP_PR6
-    from core.ugcp_coordination_profile import CoordinationAuthorityScope as _CoordinationAuthorityScope
-    from core.ugcp_coordination_profile import CoordinationLifecycleState as _CoordinationLifecycleState
-    from core.ugcp_coordination_profile import CoordinationParticipantRole as _CoordinationParticipantRole
-    from core.ugcp_coordination_profile import CoordinationTerminalOutcome as _CoordinationTerminalOutcome
-    from core.ugcp_coordination_profile import (
+    from core.ugcp_coordination_profile import UGCP_COORDINATION_PROFILE_PR6_SENTINEL as _UCP_PR6  # noqa: F401
+    from core.ugcp_coordination_profile import CoordinationAuthorityScope as _CoordinationAuthorityScope  # noqa: F401
+    from core.ugcp_coordination_profile import CoordinationLifecycleState as _CoordinationLifecycleState  # noqa: F401
+    from core.ugcp_coordination_profile import CoordinationParticipantRole as _CoordinationParticipantRole  # noqa: F401
+    from core.ugcp_coordination_profile import CoordinationTerminalOutcome as _CoordinationTerminalOutcome  # noqa: F401
+    from core.ugcp_coordination_profile import (  # noqa: F401
         build_coordination_durable_snapshot as _build_coordination_durable_snapshot,
     )
-    from core.ugcp_coordination_profile import build_coordination_truth_event as _build_coordination_truth_event
-    from core.ugcp_coordination_profile import can_transition as _coordination_can_transition
+    from core.ugcp_coordination_profile import (  # noqa: F401
+        build_coordination_truth_event as _build_coordination_truth_event,
+    )
+    from core.ugcp_coordination_profile import can_transition as _coordination_can_transition  # noqa: F401
 
     UGCP_COORDINATION_PROFILE_ALIGNED_PR6: str = (
         "PROJECTION_ROUTES::UGCP_COORDINATION_PROFILE_ALIGNED_PR6_V1: "
@@ -403,17 +425,19 @@ except ImportError:  # pragma: no cover
 # durable snapshot surfaces, and replay/recovery checkpoints.
 try:
     from core.ugcp_truth_event_model import UGCP_TRUTH_EVENT_MODEL_AUTHORITY as _UTEM_AUTHORITY  # noqa: F401
-    from core.ugcp_truth_event_model import UGCP_TRUTH_EVENT_MODEL_PR7_SENTINEL as _UTEM_PR7
-    from core.ugcp_truth_event_model import CanonicalTruthEventType as _CanonicalTruthEventType
-    from core.ugcp_truth_event_model import TruthSurfaceClass as _TruthSurfaceClass
-    from core.ugcp_truth_event_model import build_replay_checkpoint as _build_replay_checkpoint
-    from core.ugcp_truth_event_model import (
+    from core.ugcp_truth_event_model import UGCP_TRUTH_EVENT_MODEL_PR7_SENTINEL as _UTEM_PR7  # noqa: F401
+    from core.ugcp_truth_event_model import CanonicalTruthEventType as _CanonicalTruthEventType  # noqa: F401
+    from core.ugcp_truth_event_model import TruthSurfaceClass as _TruthSurfaceClass  # noqa: F401
+    from core.ugcp_truth_event_model import build_replay_checkpoint as _build_replay_checkpoint  # noqa: F401
+    from core.ugcp_truth_event_model import (  # noqa: F401
         build_runtime_observational_stream_event as _build_runtime_observational_stream_event,
     )
-    from core.ugcp_truth_event_model import (
+    from core.ugcp_truth_event_model import (  # noqa: F401
         build_session_truth_authoritative_event as _build_session_truth_authoritative_event,
     )
-    from core.ugcp_truth_event_model import build_snapshot_projection_surface as _build_snapshot_projection_surface
+    from core.ugcp_truth_event_model import (  # noqa: F401
+        build_snapshot_projection_surface as _build_snapshot_projection_surface,
+    )
 
     UGCP_TRUTH_EVENT_MODEL_ALIGNED_PR7: str = (
         "PROJECTION_ROUTES::UGCP_TRUTH_EVENT_MODEL_ALIGNED_PR7_V1: "
@@ -433,33 +457,49 @@ except ImportError:  # pragma: no cover
 # transfer/coordination/truth-event semantics.
 try:
     from core.ugcp_conformance_surfaces import UGCP_CONFORMANCE_SURFACES_AUTHORITY as _UCS_AUTHORITY  # noqa: F401
-    from core.ugcp_conformance_surfaces import UGCP_CONFORMANCE_SURFACES_PR8_SENTINEL as _UCS_PR8
-    from core.ugcp_conformance_surfaces import UGCP_CONVERGENCE_VISIBILITY_AUDIT_PR12_SENTINEL as _UCV_PR12
-    from core.ugcp_conformance_surfaces import UGCP_ENFORCEMENT_SCAFFOLDING_PR10_SENTINEL as _UES_PR10
-    from core.ugcp_conformance_surfaces import UGCP_MIGRATION_READINESS_PR11_SENTINEL as _UMR_PR11
-    from core.ugcp_conformance_surfaces import UGCP_STAGED_STRICTNESS_ROLLOUT_GATING_PR14_SENTINEL as _USR_PR14
-    from core.ugcp_conformance_surfaces import UGCPConformanceSurface as _UGCPConformanceSurface
-    from core.ugcp_conformance_surfaces import UGCPDeprecationStage as _UGCPDeprecationStage
-    from core.ugcp_conformance_surfaces import UGCPEnforcementAction as _UGCPEnforcementAction
-    from core.ugcp_conformance_surfaces import UGCPEnforcementMode as _UGCPEnforcementMode
-    from core.ugcp_conformance_surfaces import UGCPSemanticClass as _UGCPSemanticClass
-    from core.ugcp_conformance_surfaces import build_conformance_invariant_report as _build_conformance_invariant_report
-    from core.ugcp_conformance_surfaces import build_enforcement_scaffold as _build_enforcement_scaffold
-    from core.ugcp_conformance_surfaces import build_migration_readiness_scaffold as _build_migration_readiness_scaffold
-    from core.ugcp_conformance_surfaces import (
+    from core.ugcp_conformance_surfaces import UGCP_CONFORMANCE_SURFACES_PR8_SENTINEL as _UCS_PR8  # noqa: F401
+    from core.ugcp_conformance_surfaces import (  # noqa: F401
+        UGCP_CONVERGENCE_VISIBILITY_AUDIT_PR12_SENTINEL as _UCV_PR12,
+    )
+    from core.ugcp_conformance_surfaces import UGCP_ENFORCEMENT_SCAFFOLDING_PR10_SENTINEL as _UES_PR10  # noqa: F401
+    from core.ugcp_conformance_surfaces import UGCP_MIGRATION_READINESS_PR11_SENTINEL as _UMR_PR11  # noqa: F401
+    from core.ugcp_conformance_surfaces import (  # noqa: F401
+        UGCP_STAGED_STRICTNESS_ROLLOUT_GATING_PR14_SENTINEL as _USR_PR14,
+    )
+    from core.ugcp_conformance_surfaces import UGCPConformanceSurface as _UGCPConformanceSurface  # noqa: F401
+    from core.ugcp_conformance_surfaces import UGCPDeprecationStage as _UGCPDeprecationStage  # noqa: F401
+    from core.ugcp_conformance_surfaces import UGCPEnforcementAction as _UGCPEnforcementAction  # noqa: F401
+    from core.ugcp_conformance_surfaces import UGCPEnforcementMode as _UGCPEnforcementMode  # noqa: F401
+    from core.ugcp_conformance_surfaces import UGCPSemanticClass as _UGCPSemanticClass  # noqa: F401
+    from core.ugcp_conformance_surfaces import (  # noqa: F401
+        build_conformance_invariant_report as _build_conformance_invariant_report,
+    )
+    from core.ugcp_conformance_surfaces import build_enforcement_scaffold as _build_enforcement_scaffold  # noqa: F401
+    from core.ugcp_conformance_surfaces import (  # noqa: F401
+        build_migration_readiness_scaffold as _build_migration_readiness_scaffold,
+    )
+    from core.ugcp_conformance_surfaces import (  # noqa: F401
         build_staged_strictness_rollout_gating_scaffold as _build_staged_strictness_rollout_gating_scaffold,
     )
-    from core.ugcp_conformance_surfaces import (
+    from core.ugcp_conformance_surfaces import (  # noqa: F401
         build_ugcp_convergence_visibility_audit as _build_ugcp_convergence_visibility_audit,
     )
-    from core.ugcp_conformance_surfaces import classify_surface_semantics as _classify_surface_semantics
-    from core.ugcp_conformance_surfaces import evaluate_surface_enforcement as _evaluate_surface_enforcement
-    from core.ugcp_conformance_surfaces import (
+    from core.ugcp_conformance_surfaces import classify_surface_semantics as _classify_surface_semantics  # noqa: F401
+    from core.ugcp_conformance_surfaces import (  # noqa: F401
+        evaluate_surface_enforcement as _evaluate_surface_enforcement,
+    )
+    from core.ugcp_conformance_surfaces import (  # noqa: F401
         get_ugcp_conformance_surface_catalog as _get_ugcp_conformance_surface_catalog,
     )
-    from core.ugcp_conformance_surfaces import get_ugcp_retirement_stage_catalog as _get_ugcp_retirement_stage_catalog
-    from core.ugcp_conformance_surfaces import normalize_conformance_backbone as _normalize_conformance_backbone
-    from core.ugcp_conformance_surfaces import normalize_conformance_payload as _normalize_conformance_payload
+    from core.ugcp_conformance_surfaces import (  # noqa: F401
+        get_ugcp_retirement_stage_catalog as _get_ugcp_retirement_stage_catalog,
+    )
+    from core.ugcp_conformance_surfaces import (  # noqa: F401
+        normalize_conformance_backbone as _normalize_conformance_backbone,
+    )
+    from core.ugcp_conformance_surfaces import (  # noqa: F401
+        normalize_conformance_payload as _normalize_conformance_payload,
+    )
 
     UGCP_CONFORMANCE_SURFACES_ALIGNED_PR8: str = (
         "PROJECTION_ROUTES::UGCP_CONFORMANCE_SURFACES_ALIGNED_PR8_V1: "
@@ -527,11 +567,13 @@ except ImportError:  # pragma: no cover
 # (Projection Surfaces) dependency explicit and policy-governed.
 try:
     from core.runtime_truth_output_chain import RUNTIME_TRUTH_OUTPUT_CHAIN_IS_AUTHORITY as _RTOC_AUTHORITY  # noqa: F401
-    from core.runtime_truth_output_chain import RUNTIME_TRUTH_OUTPUT_CHAIN_PR9_SENTINEL as _RTOC_PR9
-    from core.runtime_truth_output_chain import TruthOutputStage as _TruthOutputStage
-    from core.runtime_truth_output_chain import build_output_chain_catalog as _build_output_chain_catalog
-    from core.runtime_truth_output_chain import build_output_chain_snapshot as _build_output_chain_snapshot
-    from core.runtime_truth_output_chain import classify_output_stage as _classify_output_stage
+    from core.runtime_truth_output_chain import RUNTIME_TRUTH_OUTPUT_CHAIN_PR9_SENTINEL as _RTOC_PR9  # noqa: F401
+    from core.runtime_truth_output_chain import TruthOutputStage as _TruthOutputStage  # noqa: F401
+    from core.runtime_truth_output_chain import build_output_chain_catalog as _build_output_chain_catalog  # noqa: F401
+    from core.runtime_truth_output_chain import (  # noqa: F401
+        build_output_chain_snapshot as _build_output_chain_snapshot,
+    )
+    from core.runtime_truth_output_chain import classify_output_stage as _classify_output_stage  # noqa: F401
 
     RUNTIME_TRUTH_OUTPUT_CHAIN_ALIGNED_PR9: str = (
         "PROJECTION_ROUTES::RUNTIME_TRUTH_OUTPUT_CHAIN_ALIGNED_PR9_V1: "
@@ -557,16 +599,20 @@ try:
     from core.delegated_runtime_execution_tracker import (  # noqa: F401
         DELEGATED_RUNTIME_EXECUTION_TRACKER_AUTHORITY as _DRET_AUTHORITY,
     )
-    from core.delegated_runtime_execution_tracker import DELEGATED_RUNTIME_EXECUTION_TRACKER_PR10_SENTINEL as _DRET_PR10
-    from core.delegated_runtime_execution_tracker import AcknowledgmentSignal as _AcknowledgmentSignal
-    from core.delegated_runtime_execution_tracker import DelegatedExecutionPhase as _DelegatedExecutionPhase
-    from core.delegated_runtime_execution_tracker import (
+    from core.delegated_runtime_execution_tracker import (  # noqa: F401
+        DELEGATED_RUNTIME_EXECUTION_TRACKER_PR10_SENTINEL as _DRET_PR10,
+    )
+    from core.delegated_runtime_execution_tracker import AcknowledgmentSignal as _AcknowledgmentSignal  # noqa: F401
+    from core.delegated_runtime_execution_tracker import (  # noqa: F401
+        DelegatedExecutionPhase as _DelegatedExecutionPhase,
+    )
+    from core.delegated_runtime_execution_tracker import (  # noqa: F401
         build_execution_tracking_snapshot as _build_execution_tracking_snapshot,
     )
-    from core.delegated_runtime_execution_tracker import (
+    from core.delegated_runtime_execution_tracker import (  # noqa: F401
         create_execution_tracking_record as _create_execution_tracking_record,
     )
-    from core.delegated_runtime_execution_tracker import (
+    from core.delegated_runtime_execution_tracker import (  # noqa: F401
         list_active_execution_tracking_records as _list_active_execution_tracking_records,
     )
 
@@ -595,16 +641,24 @@ try:
     from core.android_runtime_dispatch_binding import (  # noqa: F401
         ANDROID_RUNTIME_DISPATCH_BINDING_AUTHORITY as _ARDB_AUTHORITY,
     )
-    from core.android_runtime_dispatch_binding import ANDROID_RUNTIME_DISPATCH_BINDING_PR11_SENTINEL as _ARDB_PR11
-    from core.android_runtime_dispatch_binding import AndroidRuntimeBindingSignal as _AndroidRuntimeBindingSignal
-    from core.android_runtime_dispatch_binding import AndroidRuntimeBindingState as _AndroidRuntimeBindingState
-    from core.android_runtime_dispatch_binding import (
+    from core.android_runtime_dispatch_binding import (  # noqa: F401
+        ANDROID_RUNTIME_DISPATCH_BINDING_PR11_SENTINEL as _ARDB_PR11,
+    )
+    from core.android_runtime_dispatch_binding import (  # noqa: F401
+        AndroidRuntimeBindingSignal as _AndroidRuntimeBindingSignal,
+    )
+    from core.android_runtime_dispatch_binding import (  # noqa: F401
+        AndroidRuntimeBindingState as _AndroidRuntimeBindingState,
+    )
+    from core.android_runtime_dispatch_binding import (  # noqa: F401
         build_dispatch_binding_snapshot as _build_dispatch_binding_snapshot,
     )
-    from core.android_runtime_dispatch_binding import (
+    from core.android_runtime_dispatch_binding import (  # noqa: F401
         create_android_dispatch_binding as _create_android_dispatch_binding,
     )
-    from core.android_runtime_dispatch_binding import list_bound_dispatch_bindings as _list_bound_dispatch_bindings
+    from core.android_runtime_dispatch_binding import (  # noqa: F401
+        list_bound_dispatch_bindings as _list_bound_dispatch_bindings,
+    )
 
     ANDROID_RUNTIME_DISPATCH_BINDING_ALIGNED_PR11: str = (
         "PROJECTION_ROUTES::ANDROID_RUNTIME_DISPATCH_BINDING_ALIGNED_PR11_V1: "
@@ -631,12 +685,16 @@ try:
     from core.android_execution_signal_reconciler import (  # noqa: F401
         ANDROID_EXECUTION_SIGNAL_RECONCILER_AUTHORITY as _AESR_AUTHORITY,
     )
-    from core.android_execution_signal_reconciler import ANDROID_EXECUTION_SIGNAL_RECONCILER_PR13_SENTINEL as _AESR_PR13
-    from core.android_execution_signal_reconciler import AndroidSignalKind as _AndroidSignalKind
-    from core.android_execution_signal_reconciler import (
+    from core.android_execution_signal_reconciler import (  # noqa: F401
+        ANDROID_EXECUTION_SIGNAL_RECONCILER_PR13_SENTINEL as _AESR_PR13,
+    )
+    from core.android_execution_signal_reconciler import AndroidSignalKind as _AndroidSignalKind  # noqa: F401
+    from core.android_execution_signal_reconciler import (  # noqa: F401
         normalize_android_message_to_signal_kind as _normalize_android_message_to_signal_kind,
     )
-    from core.android_execution_signal_reconciler import reconcile_inbound_message as _reconcile_inbound_message
+    from core.android_execution_signal_reconciler import (  # noqa: F401
+        reconcile_inbound_message as _reconcile_inbound_message,
+    )
 
     ANDROID_EXECUTION_SIGNAL_RECONCILER_ALIGNED_PR13: str = (
         "PROJECTION_ROUTES::ANDROID_EXECUTION_SIGNAL_RECONCILER_ALIGNED_PR13_V1: "
@@ -663,10 +721,16 @@ try:
     from core.attached_runtime_reuse_binding import (  # noqa: F401
         ATTACHED_RUNTIME_REUSE_BINDING_AUTHORITY as _ARRB_AUTHORITY,
     )
-    from core.attached_runtime_reuse_binding import ATTACHED_RUNTIME_REUSE_BINDING_PR14_SENTINEL as _ARRB_PR14
-    from core.attached_runtime_reuse_binding import ReuseEligibilityStatus as _ReuseEligibilityStatus
-    from core.attached_runtime_reuse_binding import evaluate_reuse_eligibility as _evaluate_reuse_eligibility
-    from core.attached_runtime_reuse_binding import list_eligible_reuse_bindings as _list_eligible_reuse_bindings
+    from core.attached_runtime_reuse_binding import (  # noqa: F401
+        ATTACHED_RUNTIME_REUSE_BINDING_PR14_SENTINEL as _ARRB_PR14,
+    )
+    from core.attached_runtime_reuse_binding import ReuseEligibilityStatus as _ReuseEligibilityStatus  # noqa: F401
+    from core.attached_runtime_reuse_binding import (  # noqa: F401
+        evaluate_reuse_eligibility as _evaluate_reuse_eligibility,
+    )
+    from core.attached_runtime_reuse_binding import (  # noqa: F401
+        list_eligible_reuse_bindings as _list_eligible_reuse_bindings,
+    )
 
     ATTACHED_RUNTIME_REUSE_BINDING_ALIGNED_PR14: str = (
         "PROJECTION_ROUTES::ATTACHED_RUNTIME_REUSE_BINDING_ALIGNED_PR14_V1: "
@@ -693,10 +757,12 @@ try:
     from core.android_delegated_signal_ingress import (  # noqa: F401
         ANDROID_DELEGATED_SIGNAL_INGRESS_AUTHORITY as _ADSI_AUTHORITY,
     )
-    from core.android_delegated_signal_ingress import ANDROID_DELEGATED_SIGNAL_INGRESS_PR16_SENTINEL as _ADSI_PR16
-    from core.android_delegated_signal_ingress import DelegatedSignalKind as _DelegatedSignalKind
-    from core.android_delegated_signal_ingress import ResultKind as _ResultKind
-    from core.android_delegated_signal_ingress import (
+    from core.android_delegated_signal_ingress import (  # noqa: F401
+        ANDROID_DELEGATED_SIGNAL_INGRESS_PR16_SENTINEL as _ADSI_PR16,
+    )
+    from core.android_delegated_signal_ingress import DelegatedSignalKind as _DelegatedSignalKind  # noqa: F401
+    from core.android_delegated_signal_ingress import ResultKind as _ResultKind  # noqa: F401
+    from core.android_delegated_signal_ingress import (  # noqa: F401
         ingest_delegated_execution_signal as _ingest_delegated_execution_signal,
     )
 
@@ -725,10 +791,18 @@ try:
     from core.attached_runtime_reuse_dispatch import (  # noqa: F401
         ATTACHED_RUNTIME_REUSE_DISPATCH_AUTHORITY as _ARRD_AUTHORITY,
     )
-    from core.attached_runtime_reuse_dispatch import ATTACHED_RUNTIME_REUSE_DISPATCH_PR17_SENTINEL as _ARRD_PR17
-    from core.attached_runtime_reuse_dispatch import ReuseDispatchResolutionKind as _ReuseDispatchResolutionKind
-    from core.attached_runtime_reuse_dispatch import dispatch_with_reuse_binding as _dispatch_with_reuse_binding
-    from core.attached_runtime_reuse_dispatch import resolve_reuse_dispatch_surface as _resolve_reuse_dispatch_surface
+    from core.attached_runtime_reuse_dispatch import (  # noqa: F401
+        ATTACHED_RUNTIME_REUSE_DISPATCH_PR17_SENTINEL as _ARRD_PR17,
+    )
+    from core.attached_runtime_reuse_dispatch import (  # noqa: F401
+        ReuseDispatchResolutionKind as _ReuseDispatchResolutionKind,
+    )
+    from core.attached_runtime_reuse_dispatch import (  # noqa: F401
+        dispatch_with_reuse_binding as _dispatch_with_reuse_binding,
+    )
+    from core.attached_runtime_reuse_dispatch import (  # noqa: F401
+        resolve_reuse_dispatch_surface as _resolve_reuse_dispatch_surface,
+    )
 
     ATTACHED_RUNTIME_REUSE_DISPATCH_ALIGNED_PR17: str = (
         "PROJECTION_ROUTES::ATTACHED_RUNTIME_REUSE_DISPATCH_ALIGNED_PR17_V1: "
@@ -752,7 +826,7 @@ except ImportError:  # pragma: no cover
 # enabling projection endpoints to confirm that guard_inbound_signal() is
 # active as the mandatory ingress gate before reconcile_android_execution_signal().
 try:
-    from core.android_delegated_signal_ingress import (
+    from core.android_delegated_signal_ingress import (  # noqa: F401
         INGRESS_GUARD_REJECTED_SIGNAL_IS_DROPPED_POLICY as _INGRESS_DROP_POLICY,
     )
     from core.android_delegated_signal_ingress import (  # noqa: F401
@@ -761,12 +835,14 @@ try:
     from core.attached_runtime_recovery_readiness import (  # noqa: F401
         ATTACHED_RUNTIME_RECOVERY_READINESS_AUTHORITY as _ARRR_AUTHORITY,
     )
-    from core.attached_runtime_recovery_readiness import ATTACHED_RUNTIME_RECOVERY_READINESS_PR15_SENTINEL as _ARRR_PR15
-    from core.attached_runtime_recovery_readiness import SignalGuardDecision as _SignalGuardDecision
-    from core.attached_runtime_recovery_readiness import (
+    from core.attached_runtime_recovery_readiness import (  # noqa: F401
+        ATTACHED_RUNTIME_RECOVERY_READINESS_PR15_SENTINEL as _ARRR_PR15,
+    )
+    from core.attached_runtime_recovery_readiness import SignalGuardDecision as _SignalGuardDecision  # noqa: F401
+    from core.attached_runtime_recovery_readiness import (  # noqa: F401
         build_recovery_readiness_snapshot as _build_recovery_readiness_snapshot,
     )
-    from core.attached_runtime_recovery_readiness import guard_inbound_signal as _guard_inbound_signal
+    from core.attached_runtime_recovery_readiness import guard_inbound_signal as _guard_inbound_signal  # noqa: F401
 
     INGRESS_RECOVERY_GUARD_ALIGNED_PR18: str = (
         "PROJECTION_ROUTES::INGRESS_RECOVERY_GUARD_ALIGNED_PR18_V1: "
@@ -790,11 +866,15 @@ try:
     from core.attached_runtime_session_registry import (  # noqa: F401
         ATTACHED_RUNTIME_SESSION_REGISTRY_AUTHORITY as _ARSR_AUTHORITY,
     )
-    from core.attached_runtime_session_registry import ATTACHED_RUNTIME_SESSION_REGISTRY_PR19_SENTINEL as _ARSR_PR19
-    from core.attached_runtime_session_registry import RegistryEntryState as _RegistryEntryState
-    from core.attached_runtime_session_registry import build_registry_snapshot as _build_registry_snapshot
-    from core.attached_runtime_session_registry import lookup_active_session as _lookup_active_session
-    from core.attached_runtime_session_registry import lookup_session_by_device as _lookup_session_by_device
+    from core.attached_runtime_session_registry import (  # noqa: F401
+        ATTACHED_RUNTIME_SESSION_REGISTRY_PR19_SENTINEL as _ARSR_PR19,
+    )
+    from core.attached_runtime_session_registry import RegistryEntryState as _RegistryEntryState  # noqa: F401
+    from core.attached_runtime_session_registry import build_registry_snapshot as _build_registry_snapshot  # noqa: F401
+    from core.attached_runtime_session_registry import lookup_active_session as _lookup_active_session  # noqa: F401
+    from core.attached_runtime_session_registry import (  # noqa: F401
+        lookup_session_by_device as _lookup_session_by_device,
+    )
 
     ATTACHED_RUNTIME_SESSION_REGISTRY_ALIGNED_PR19: str = (
         "PROJECTION_ROUTES::ATTACHED_RUNTIME_SESSION_REGISTRY_ALIGNED_PR19_V1: "
@@ -818,10 +898,14 @@ try:
     from core.delegated_target_selection_policy import (  # noqa: F401
         DELEGATED_TARGET_SELECTION_POLICY_AUTHORITY as _DTSP_AUTHORITY,
     )
-    from core.delegated_target_selection_policy import DELEGATED_TARGET_SELECTION_POLICY_PR20_SENTINEL as _DTSP_PR20
-    from core.delegated_target_selection_policy import SelectionOutcome as _SelectionOutcome
-    from core.delegated_target_selection_policy import build_selection_explanation as _build_selection_explanation
-    from core.delegated_target_selection_policy import select_delegated_target as _select_delegated_target
+    from core.delegated_target_selection_policy import (  # noqa: F401
+        DELEGATED_TARGET_SELECTION_POLICY_PR20_SENTINEL as _DTSP_PR20,
+    )
+    from core.delegated_target_selection_policy import SelectionOutcome as _SelectionOutcome  # noqa: F401
+    from core.delegated_target_selection_policy import (  # noqa: F401
+        build_selection_explanation as _build_selection_explanation,
+    )
+    from core.delegated_target_selection_policy import select_delegated_target as _select_delegated_target  # noqa: F401
 
     DELEGATED_TARGET_SELECTION_POLICY_ALIGNED_PR20: str = (
         "PROJECTION_ROUTES::DELEGATED_TARGET_SELECTION_POLICY_ALIGNED_PR20_V1: "
@@ -843,13 +927,13 @@ try:
     from core.android_delegated_signal_ingress import (  # noqa: F401
         CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_PR21_SENTINEL as _PR21_CLOSURE,
     )
-    from core.android_delegated_signal_ingress import (
+    from core.android_delegated_signal_ingress import (  # noqa: F401
         CANONICAL_PATH_IS_INGRESS_GUARD_RECONCILE_TRACKER_POLICY as _PR21_POLICY_PATH,
     )
-    from core.android_delegated_signal_ingress import (
+    from core.android_delegated_signal_ingress import (  # noqa: F401
         IDENTITY_CONTINUITY_ACROSS_CANONICAL_PATH_POLICY as _PR21_POLICY_IDENTITY,
     )
-    from core.android_delegated_signal_ingress import (
+    from core.android_delegated_signal_ingress import (  # noqa: F401
         TERMINAL_STATE_IS_PROTECTED_AGAINST_REPLAY_POLICY as _PR21_POLICY_TERMINAL,
     )
 
@@ -870,41 +954,45 @@ except ImportError:  # pragma: no cover
 # registry is the single authoritative truth source for dispatch, reuse, and
 # reconciliation decisions.
 try:
-    from core.android_delegated_signal_ingress import (
+    from core.android_delegated_signal_ingress import (  # noqa: F401
         INGRESS_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY as _PR22_ING_BLOCK,
     )
     from core.android_delegated_signal_ingress import (  # noqa: F401
         INGRESS_REGISTRY_CONSOLIDATION_PR22_SENTINEL as _PR22_INGRESS,
     )
-    from core.android_delegated_signal_ingress import (
+    from core.android_delegated_signal_ingress import (  # noqa: F401
         INGRESS_REGISTRY_GATE_IS_AUTHORITATIVE_PR22_POLICY as _PR22_ING_GATE,
     )
     from core.android_execution_signal_reconciler import RECONCILER_PR22_SENTINEL as _PR22_RECONCILER  # noqa: F401
-    from core.android_execution_signal_reconciler import (
+    from core.android_execution_signal_reconciler import (  # noqa: F401
         RECONCILER_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY as _PR22_REC_BLOCK,
     )
-    from core.android_execution_signal_reconciler import (
+    from core.android_execution_signal_reconciler import (  # noqa: F401
         RECONCILER_REGISTRY_GATE_IS_AUTHORITATIVE_PR22_POLICY as _PR22_REC_GATE,
     )
     from core.attached_runtime_reuse_dispatch import REUSE_DISPATCH_PR22_SENTINEL as _PR22_REUSE_DISPATCH  # noqa: F401
-    from core.attached_runtime_reuse_dispatch import (
+    from core.attached_runtime_reuse_dispatch import (  # noqa: F401
         REUSE_DISPATCH_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY as _PR22_RD_BLOCK,
     )
-    from core.attached_runtime_reuse_dispatch import (
+    from core.attached_runtime_reuse_dispatch import (  # noqa: F401
         REUSE_DISPATCH_REGISTRY_GATE_IS_AUTHORITATIVE_PR22_POLICY as _PR22_RD_GATE,
     )
     from core.attached_runtime_session_registry import (  # noqa: F401
         ATTACHED_RUNTIME_REGISTRY_CONSOLIDATION_PR22_SENTINEL as _PR22_REG,
     )
-    from core.attached_runtime_session_registry import REGISTRY_ABSENT_ENTRY_PASSES_THROUGH_PR22_POLICY as _PR22_PASS
-    from core.attached_runtime_session_registry import (
+    from core.attached_runtime_session_registry import (  # noqa: F401
+        REGISTRY_ABSENT_ENTRY_PASSES_THROUGH_PR22_POLICY as _PR22_PASS,
+    )
+    from core.attached_runtime_session_registry import (  # noqa: F401
         REGISTRY_IS_AUTHORITATIVE_DISPATCH_GATE_PR22_POLICY as _PR22_DISPATCH,
     )
-    from core.attached_runtime_session_registry import (
+    from core.attached_runtime_session_registry import (  # noqa: F401
         REGISTRY_IS_AUTHORITATIVE_RECONCILIATION_GATE_PR22_POLICY as _PR22_RECONCILE,
     )
-    from core.attached_runtime_session_registry import REGISTRY_IS_AUTHORITATIVE_REUSE_GATE_PR22_POLICY as _PR22_REUSE
-    from core.attached_runtime_session_registry import (
+    from core.attached_runtime_session_registry import (  # noqa: F401
+        REGISTRY_IS_AUTHORITATIVE_REUSE_GATE_PR22_POLICY as _PR22_REUSE,
+    )
+    from core.attached_runtime_session_registry import (  # noqa: F401
         REGISTRY_KNOWN_NON_ACTIVE_BLOCKS_EXECUTION_PR22_POLICY as _PR22_BLOCK,
     )
 
@@ -932,39 +1020,41 @@ try:
     from core.android_delegated_signal_ingress import (  # noqa: F401
         INGRESS_DELEGATED_FALLBACK_PR23_SENTINEL as _PR23_ING,
     )
-    from core.android_delegated_signal_ingress import INGRESS_FALLBACK_IS_LAST_RESORT_PR23_POLICY as _PR23_ING_FB
-    from core.android_execution_signal_reconciler import (
+    from core.android_delegated_signal_ingress import (  # noqa: F401
+        INGRESS_FALLBACK_IS_LAST_RESORT_PR23_POLICY as _PR23_ING_FB,
+    )
+    from core.android_execution_signal_reconciler import (  # noqa: F401
         RECONCILER_FALLBACK_CONTEXT_IS_DETERMINISTIC_PR23_POLICY as _PR23_REC_DET,
     )
     from core.android_execution_signal_reconciler import RECONCILER_PR23_SENTINEL as _PR23_REC  # noqa: F401
-    from core.attached_runtime_reuse_dispatch import (
+    from core.attached_runtime_reuse_dispatch import (  # noqa: F401
         DELEGATED_FALLBACK_REQUIRES_INELIGIBLE_CANONICAL_PATH_PR23_POLICY as _PR23_RD_FB,
     )
-    from core.attached_runtime_reuse_dispatch import (
+    from core.attached_runtime_reuse_dispatch import (  # noqa: F401
         REPLACED_SESSION_CANNOT_WIN_TAKEOVER_DISPATCH_PR23_POLICY as _PR23_RD_REP,
     )
     from core.attached_runtime_reuse_dispatch import REUSE_DISPATCH_PR23_SENTINEL as _PR23_RD  # noqa: F401
-    from core.attached_runtime_reuse_dispatch import (
+    from core.attached_runtime_reuse_dispatch import (  # noqa: F401
         TAKEOVER_DISPATCH_CONSULTS_REGISTRY_FIRST_PR23_POLICY as _PR23_RD_FIRST,
     )
-    from core.attached_runtime_reuse_dispatch import (
+    from core.attached_runtime_reuse_dispatch import (  # noqa: F401
         TAKEOVER_DISPATCH_DECISION_IS_DETERMINISTIC_PR23_POLICY as _PR23_RD_DET,
     )
-    from core.attached_runtime_reuse_dispatch import TakeoverDispatchDecision as _TakeoverDispatchDecision
-    from core.attached_runtime_reuse_dispatch import TakeoverRouteOutcome as _TakeoverRouteOutcome
-    from core.attached_runtime_reuse_dispatch import (
+    from core.attached_runtime_reuse_dispatch import TakeoverDispatchDecision as _TakeoverDispatchDecision  # noqa: F401
+    from core.attached_runtime_reuse_dispatch import TakeoverRouteOutcome as _TakeoverRouteOutcome  # noqa: F401
+    from core.attached_runtime_reuse_dispatch import (  # noqa: F401
         resolve_takeover_or_fallback_route as _resolve_takeover_or_fallback_route,
     )
     from core.attached_runtime_session_registry import (  # noqa: F401
         ATTACHED_RUNTIME_REGISTRY_TAKEOVER_DISPATCH_PR23_SENTINEL as _PR23_REG,
     )
-    from core.attached_runtime_session_registry import (
+    from core.attached_runtime_session_registry import (  # noqa: F401
         REGISTRY_IS_CANONICAL_TAKEOVER_DISPATCH_AUTHORITY_PR23_POLICY as _PR23_AUTH,
     )
-    from core.attached_runtime_session_registry import (
+    from core.attached_runtime_session_registry import (  # noqa: F401
         REGISTRY_REPLACED_SESSION_IS_INELIGIBLE_FOR_TAKEOVER_PR23_POLICY as _PR23_REPLACED,
     )
-    from core.attached_runtime_session_registry import (
+    from core.attached_runtime_session_registry import (  # noqa: F401
         REGISTRY_TAKEOVER_ELIGIBILITY_REQUIRES_ACTIVE_STATE_PR23_POLICY as _PR23_ACTIVE,
     )
 
@@ -991,22 +1081,24 @@ try:
     from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         DISPATCH_SELECTION_TRUTH_CONSOLIDATED_PR24_SENTINEL as _PR24_SENTINEL,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         SELECTION_FALLBACK_IS_STABLE_AND_EXPLAINABLE_PR24_POLICY as _PR24_FALLBACK,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         SELECTION_PARTICIPATION_IS_REQUIRED_TRUTH_PR24_POLICY as _PR24_PARTICIPATION,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         SELECTION_READINESS_IS_REQUIRED_TRUTH_PR24_POLICY as _PR24_READINESS,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         SELECTION_REGISTRY_IS_CANONICAL_GATE_PR24_POLICY as _PR24_REGISTRY,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         SELECTION_REUSE_CONTRIBUTES_PREFERENCE_PR24_POLICY as _PR24_REUSE,
     )
-    from core.runtime.source_dispatch_orchestrator import _select_target_from_candidates as _pr24_select_from_candidates
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
+        _select_target_from_candidates as _pr24_select_from_candidates,
+    )
 
     DISPATCH_SELECTION_TRUTH_CONSOLIDATED_ALIGNED_PR24: str = (
         "PROJECTION_ROUTES::DISPATCH_SELECTION_TRUTH_CONSOLIDATED_ALIGNED_PR24_V1: "
@@ -1030,20 +1122,22 @@ except ImportError:  # pragma: no cover
 # source_dispatch_orchestrator confirms that delegated execution, session truth,
 # fallback, and selection abnormal paths are all formally covered.
 try:
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         DELEGATED_EXECUTION_FAILURE_SESSION_TRUTH_IS_PRESERVED_PR25_POLICY as _PR25_SESSION_TRUTH,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         LOCAL_FALLBACK_AFTER_REMOTE_FAILURE_ABNORMAL_PATH_PR25_POLICY as _PR25_LOCAL_FALLBACK,
     )
     from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         MAINLINE_ABNORMAL_PATH_MATRIX_CLOSED_PR25_SENTINEL as _PR25_SENTINEL,
     )
-    from core.runtime.source_dispatch_orchestrator import PHASE_A_ACCEPTANCE_ABNORMAL_PATH_PR25_POLICY as _PR25_PHASE_A
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
+        PHASE_A_ACCEPTANCE_ABNORMAL_PATH_PR25_POLICY as _PR25_PHASE_A,
+    )
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         REMOTE_TASK_BLOCKS_LOCAL_LOOP_ABNORMAL_PATH_PR25_POLICY as _PR25_REMOTE_BLOCKS,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         SELECTION_FALLBACK_UNDER_DEGRADED_CONDITIONS_IS_STABLE_PR25_POLICY as _PR25_DEGRADED,
     )
 
@@ -1070,16 +1164,16 @@ try:
     from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         CLIENT_FACING_RESULT_SURFACING_NORMALIZED_PR26_SENTINEL as _PR26_SENTINEL,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         NO_PATH_SPECIFIC_RESULT_CONTRACT_DRIFT_PR26_POLICY as _PR26_NO_DRIFT,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         RESULT_CONTRACT_IS_INVARIANT_ACROSS_DISPATCH_PATHS_PR26_POLICY as _PR26_CONTRACT,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         RESULT_IDENTITY_IS_STABLE_ACROSS_EXECUTION_PATHS_PR26_POLICY as _PR26_IDENTITY,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         RESULT_SEMANTICS_ARE_COHERENT_REGARDLESS_OF_PATH_PR26_POLICY as _PR26_SEMANTICS,
     )
 
@@ -1104,19 +1198,19 @@ except ImportError:  # pragma: no cover
 # confirms that configuration errors, network/readiness failures, and
 # capability-not-satisfied failures are distinguishable through stable gateway-facing signals.
 try:
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         CAPABILITY_NOT_SATISFIED_FAILURE_IS_ACTIONABLE_PR27_POLICY as _PR27_CAPABILITY,
     )
     from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         GATEWAY_FACING_REGISTRATION_CAPABILITY_ERROR_SEMANTICS_HARDENED_PR27_SENTINEL as _PR27_SENTINEL,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         GATEWAY_SETUP_CONNECTION_SIGNALS_ARE_DETERMINISTIC_PR27_POLICY as _PR27_SIGNALS,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         READINESS_DEGRADED_BEHAVIOR_IS_REPORTED_THROUGH_STABLE_SIGNALS_PR27_POLICY as _PR27_READINESS,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         REGISTRATION_FAILURE_IS_DISTINGUISHABLE_FROM_CAPABILITY_FAILURE_PR27_POLICY as _PR27_REG,
     )
 
@@ -1141,19 +1235,19 @@ except ImportError:  # pragma: no cover
 # regression-closed across selection, delegated execution, session truth, fallback,
 # result surfacing, and registration/capability/readiness semantics.
 try:
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         END_TO_END_DISPATCH_EXECUTION_RESULT_COHERENCE_PR28_POLICY as _PR28_E2E,
     )
     from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         INTEGRATED_REGRESSION_CLOSURE_RELEASE_READINESS_PR28_SENTINEL as _PR28_SENTINEL,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         INTEGRATED_SELECTION_REGISTRY_REUSE_FALLBACK_BEHAVIOR_PR28_POLICY as _PR28_SELECTION,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         REGISTRATION_CAPABILITY_READINESS_UNDER_INTEGRATED_SCENARIOS_PR28_POLICY as _PR28_REGISTRATION,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         REGRESSION_STABILIZATION_RELEASE_READINESS_TIGHTENING_PR28_POLICY as _PR28_REGRESSION,
     )
 
@@ -1179,19 +1273,19 @@ except ImportError:  # pragma: no cover
 # fallback, and client-facing result surfaces are tightened within the existing
 # architecture after the PR-28 regression closure baseline.
 try:
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         CLIENT_GATEWAY_RESULT_CONTRACT_ALIGNMENT_POST_RELEASE_PR29_POLICY as _PR29_CLIENT,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         DELEGATED_EXECUTION_FALLBACK_SEMANTIC_CONSISTENCY_PR29_POLICY as _PR29_DELEGATED,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         DISPATCH_SELECTION_COHESION_POST_RELEASE_PR29_POLICY as _PR29_SELECTION,
     )
     from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         POST_RELEASE_DISPATCH_CLIENT_SEMANTICS_TIGHTENING_PR29_SENTINEL as _PR29_SENTINEL,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         REGISTRATION_READINESS_CAPABILITY_STABILITY_POST_RELEASE_PR29_POLICY as _PR29_REGISTRATION,
     )
 
@@ -1216,19 +1310,19 @@ except ImportError:  # pragma: no cover
 # fallback, and client-facing result surfaces are hardened with operator-facing
 # observability and rollout safety signals within the existing single-system architecture.
 try:
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         DELEGATED_EXECUTION_OBSERVABILITY_PR30_POLICY as _PR30_DELEGATED,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         DISPATCH_PATH_DECISION_OBSERVABILITY_PR30_POLICY as _PR30_DISPATCH,
     )
     from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         OBSERVABILITY_DIAGNOSTICS_ROLLOUT_SAFETY_HARDENING_PR30_SENTINEL as _PR30_SENTINEL,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         REGISTRATION_READINESS_CAPABILITY_FALLBACK_DIAGNOSTICS_PR30_POLICY as _PR30_REGISTRATION,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         ROLLOUT_SAFETY_SIGNALS_CLIENT_RESULT_OBSERVABILITY_PR30_POLICY as _PR30_ROLLOUT,
     )
 
@@ -1256,19 +1350,19 @@ except ImportError:  # pragma: no cover
 # safe defaults, kill-switch support, and release-operation consistency within the
 # existing single-system architecture.
 try:
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         DELEGATED_FALLBACK_RELEASE_OPERATION_CONSISTENCY_PR31_POLICY as _PR31_DELEGATED,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         FEATURE_TOGGLE_DEFAULT_BEHAVIOR_ROLLOUT_CONTROL_PR31_POLICY as _PR31_TOGGLE,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         KILL_SWITCH_SAFE_DISABLE_ROLLBACK_BEHAVIOR_PR31_POLICY as _PR31_KILL_SWITCH,
     )
     from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         ROLLOUT_CONTROLS_DEFAULT_BEHAVIORS_SAFE_RELEASE_PR31_SENTINEL as _PR31_SENTINEL,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         SELECTION_REGISTRATION_READINESS_CAPABILITY_SAFE_DEFAULTS_PR31_POLICY as _PR31_SAFE_DEFAULTS,
     )
 
@@ -1291,19 +1385,19 @@ except ImportError:  # pragma: no cover
     )
 
 try:
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         STAGED_MESH_GRACEFUL_DEGRADATION_FALLBACK_PR32_POLICY as _PR32_DEGRADE,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         STAGED_MESH_MINIMAL_EXECUTABLE_CLOSURE_PR32_SENTINEL as _PR32_SENTINEL,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         STAGED_MESH_PLAN_TO_EXECUTION_TRANSITION_PR32_POLICY as _PR32_PLAN_EXEC,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         STAGED_MESH_RESULT_INTEGRATION_CONTRACT_PR32_POLICY as _PR32_RESULT,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         STAGED_MESH_SESSION_COORDINATOR_INTEGRATION_PR32_POLICY as _PR32_COORD,
     )
 
@@ -1324,17 +1418,19 @@ except ImportError:  # pragma: no cover
     )
 
 try:
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         EXECUTION_TRACKER_SURVIVES_RECONNECT_PR33_POLICY as _PR33_TRACKER,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         RECONNECT_MUST_NOT_BREAK_HOST_SIDE_TRUTH_PR33_POLICY as _PR33_HOST_TRUTH,
     )
-    from core.runtime.source_dispatch_orchestrator import RECONNECT_RECOVERY_CONSISTENCY_PR33_SENTINEL as _PR33_SENTINEL
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
+        RECONNECT_RECOVERY_CONSISTENCY_PR33_SENTINEL as _PR33_SENTINEL,
+    )
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         REGISTRY_RECONNECT_EVENT_IS_OBSERVABLE_PR33_POLICY as _PR33_OBSERVABLE,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         RESULT_MERGE_CONSISTENT_THROUGH_RECOVERY_PR33_POLICY as _PR33_MERGE,
     )
 
@@ -1355,20 +1451,24 @@ except ImportError:  # pragma: no cover
     )
 
 try:
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         ANDROID_ATTACHED_RUNTIME_ORCHESTRATION_STABILITY_PR34_POLICY as _PR34_ANDROID,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         CROSS_DEVICE_RUNTIME_ACCEPTANCE_PR34_SENTINEL as _PR34_SENTINEL,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         DIAGNOSTICS_READINESS_PARTICIPATION_FORMATION_USABILITY_PR34_POLICY as _PR34_DIAG,
     )
-    from core.runtime.source_dispatch_orchestrator import (
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
         DISPATCH_FALLBACK_RESULT_MERGE_STABILITY_PR34_POLICY as _PR34_DISPATCH,
     )
-    from core.runtime.source_dispatch_orchestrator import MULTI_TARGET_RANKING_MATURITY_PR34_POLICY as _PR34_RANKING
-    from core.runtime.source_dispatch_orchestrator import STAGED_MESH_CLOSURE_RUNNABLE_PR34_POLICY as _PR34_MESH
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
+        MULTI_TARGET_RANKING_MATURITY_PR34_POLICY as _PR34_RANKING,
+    )
+    from core.runtime.source_dispatch_orchestrator import (  # noqa: F401
+        STAGED_MESH_CLOSURE_RUNNABLE_PR34_POLICY as _PR34_MESH,
+    )
 
     CROSS_DEVICE_RUNTIME_ACCEPTANCE_ALIGNED_PR34: str = (
         "PROJECTION_ROUTES::CROSS_DEVICE_RUNTIME_ACCEPTANCE_ALIGNED_PR34_V1: "
@@ -1392,14 +1492,28 @@ except ImportError:  # pragma: no cover
 # dispatch is placed inside the same execution model, and that all dispatch
 # path roles, result owners, and policy sentinels are machine-checkable.
 try:
-    from core.canonical_task_dispatch_chain import CANONICAL_TASK_DISPATCH_CHAIN_IS_AUTHORITY as _CTDC_AUTHORITY
-    from core.canonical_task_dispatch_chain import CANONICAL_TASK_DISPATCH_CHAIN_PR7_SENTINEL as _CTDC_PR7
-    from core.canonical_task_dispatch_chain import DISPATCH_CHAIN_ANDROID_INBOUND_IS_SAME_SYSTEM_POLICY as _CTDC_ANDROID
-    from core.canonical_task_dispatch_chain import DISPATCH_CHAIN_BLOCKED_PATH_IS_FINAL_POLICY as _CTDC_BLOCKED
-    from core.canonical_task_dispatch_chain import DISPATCH_CHAIN_FALLBACK_IS_DISTINGUISHABLE_POLICY as _CTDC_FALLBACK
-    from core.canonical_task_dispatch_chain import DISPATCH_CHAIN_PRIMARY_PATH_IS_LOCAL_POLICY as _CTDC_PRIMARY
-    from core.canonical_task_dispatch_chain import DISPATCH_CHAIN_REMOTE_HANDOFF_BLOCKS_LOCAL_POLICY as _CTDC_REMOTE
-    from core.canonical_task_dispatch_chain import DISPATCH_CHAIN_STAGED_MESH_IS_COORDINATION_ONLY_POLICY as _CTDC_MESH
+    from core.canonical_task_dispatch_chain import (  # noqa: F401
+        CANONICAL_TASK_DISPATCH_CHAIN_IS_AUTHORITY as _CTDC_AUTHORITY,
+    )
+    from core.canonical_task_dispatch_chain import CANONICAL_TASK_DISPATCH_CHAIN_PR7_SENTINEL as _CTDC_PR7  # noqa: F401
+    from core.canonical_task_dispatch_chain import (  # noqa: F401
+        DISPATCH_CHAIN_ANDROID_INBOUND_IS_SAME_SYSTEM_POLICY as _CTDC_ANDROID,
+    )
+    from core.canonical_task_dispatch_chain import (  # noqa: F401
+        DISPATCH_CHAIN_BLOCKED_PATH_IS_FINAL_POLICY as _CTDC_BLOCKED,
+    )
+    from core.canonical_task_dispatch_chain import (  # noqa: F401
+        DISPATCH_CHAIN_FALLBACK_IS_DISTINGUISHABLE_POLICY as _CTDC_FALLBACK,
+    )
+    from core.canonical_task_dispatch_chain import (  # noqa: F401
+        DISPATCH_CHAIN_PRIMARY_PATH_IS_LOCAL_POLICY as _CTDC_PRIMARY,
+    )
+    from core.canonical_task_dispatch_chain import (  # noqa: F401
+        DISPATCH_CHAIN_REMOTE_HANDOFF_BLOCKS_LOCAL_POLICY as _CTDC_REMOTE,
+    )
+    from core.canonical_task_dispatch_chain import (  # noqa: F401
+        DISPATCH_CHAIN_STAGED_MESH_IS_COORDINATION_ONLY_POLICY as _CTDC_MESH,
+    )
 
     CANONICAL_TASK_DISPATCH_CHAIN_ALIGNED_PR7: str = (
         "PROJECTION_ROUTES::CANONICAL_TASK_DISPATCH_CHAIN_ALIGNED_PR7_V1: "
@@ -1424,12 +1538,16 @@ try:
     from core.nodes.node_fabric_registry import (  # noqa: F401
         CANONICAL_RUNTIME_NODE_REGISTRY_AUTHORITY as _CRNR_AUTHORITY,
     )
-    from core.nodes.node_fabric_registry import LEGACY_NODE_REGISTRY_IS_COMPAT_FACADE_ONLY_POLICY as _CRNR_FACADE_POLICY
-    from core.nodes.node_fabric_registry import NODE_FABRIC_IS_CANONICAL_RUNTIME_REGISTRY_SENTINEL as _CRNR_SENTINEL
-    from core.nodes.node_fabric_registry import (
+    from core.nodes.node_fabric_registry import (  # noqa: F401
+        LEGACY_NODE_REGISTRY_IS_COMPAT_FACADE_ONLY_POLICY as _CRNR_FACADE_POLICY,
+    )
+    from core.nodes.node_fabric_registry import (  # noqa: F401
+        NODE_FABRIC_IS_CANONICAL_RUNTIME_REGISTRY_SENTINEL as _CRNR_SENTINEL,
+    )
+    from core.nodes.node_fabric_registry import (  # noqa: F401
         STATUS_ENDPOINTS_READ_FROM_CANONICAL_REGISTRY_POLICY as _CRNR_STATUS_POLICY,
     )
-    from core.nodes.node_fabric_registry import get_node_fabric_registry as _get_node_fabric_registry
+    from core.nodes.node_fabric_registry import get_node_fabric_registry as _get_node_fabric_registry  # noqa: F401
 
     CANONICAL_RUNTIME_NODE_REGISTRY_ALIGNED: str = (
         "PROJECTION_ROUTES::CANONICAL_RUNTIME_NODE_REGISTRY_ALIGNED_V1: "
@@ -1455,10 +1573,10 @@ try:
     from core.nodes.node_fabric_registry import (  # noqa: F401
         CANONICAL_NODE_LIST_SURFACE_READS_FROM_REGISTRY_POLICY as _PR3_LIST_POLICY,
     )
-    from core.nodes.node_fabric_registry import (
+    from core.nodes.node_fabric_registry import (  # noqa: F401
         FILESYSTEM_SCAN_IS_NOT_NODE_MEMBERSHIP_AUTHORITY_POLICY as _PR3_FS_POLICY,
     )
-    from core.nodes.node_fabric_registry import (
+    from core.nodes.node_fabric_registry import (  # noqa: F401
         NODE_STATUS_CACHE_IS_NOT_CANONICAL_STATUS_SOURCE_POLICY as _PR3_CACHE_POLICY,
     )
 
@@ -1485,16 +1603,22 @@ except ImportError:  # pragma: no cover
 # system_integration) converge on invoke_node(); and that trace/source
 # metadata is carried consistently across every path.
 try:
-    from core.node_invocation import ALL_INVOCATION_PATHS_CONVERGE_ON_UNIFIED_EXECUTOR_POLICY as _UNIA_PATHS_POLICY
-    from core.node_invocation import INVOCATION_ENVELOPE_IS_CANONICAL_TRACE_SCHEMA_POLICY as _UNIA_TRACE_POLICY
-    from core.node_invocation import RESULT_ENVELOPE_IS_CANONICAL_RESULT_CONTRACT_POLICY as _UNIA_RESULT_POLICY
+    from core.node_invocation import (  # noqa: F401
+        ALL_INVOCATION_PATHS_CONVERGE_ON_UNIFIED_EXECUTOR_POLICY as _UNIA_PATHS_POLICY,
+    )
+    from core.node_invocation import (  # noqa: F401
+        INVOCATION_ENVELOPE_IS_CANONICAL_TRACE_SCHEMA_POLICY as _UNIA_TRACE_POLICY,
+    )
+    from core.node_invocation import (  # noqa: F401
+        RESULT_ENVELOPE_IS_CANONICAL_RESULT_CONTRACT_POLICY as _UNIA_RESULT_POLICY,
+    )
     from core.node_invocation import UNIFIED_NODE_INVOCATION_AUTHORITY as _UNIA_AUTHORITY  # noqa: F401
-    from core.node_invocation import UNIFIED_NODE_INVOCATION_PR4_SENTINEL as _UNIA_PR4
-    from core.node_invocation import InvocationSource as _InvocationSource
-    from core.node_invocation import NodeInvocationEnvelope as _NodeInvocationEnvelope
-    from core.node_invocation import NodeInvocationResult as _NodeInvocationResult
-    from core.node_invocation import get_unified_node_executor as _get_unified_node_executor
-    from core.node_invocation import invoke_node as _invoke_node
+    from core.node_invocation import UNIFIED_NODE_INVOCATION_PR4_SENTINEL as _UNIA_PR4  # noqa: F401
+    from core.node_invocation import InvocationSource as _InvocationSource  # noqa: F401
+    from core.node_invocation import NodeInvocationEnvelope as _NodeInvocationEnvelope  # noqa: F401
+    from core.node_invocation import NodeInvocationResult as _NodeInvocationResult  # noqa: F401
+    from core.node_invocation import get_unified_node_executor as _get_unified_node_executor  # noqa: F401
+    from core.node_invocation import invoke_node as _invoke_node  # noqa: F401
 
     UNIFIED_NODE_INVOCATION_ALIGNED_PR4: str = (
         "PROJECTION_ROUTES::UNIFIED_NODE_INVOCATION_ALIGNED_PR4_V1: "
@@ -1520,14 +1644,18 @@ except ImportError:  # pragma: no cover
 # discovery authority roles, and all direct helper call sites in routes
 # redirected through the unified executor (invoke_node).
 try:
-    from core.fusion_entry_adapter import ADAPTER_CONTRACT_IS_STANDARDISED_POLICY as _FEA_CONTRACT
-    from core.fusion_entry_adapter import FUSION_ENTRY_ADAPTER_CONTRACT_PR5_SENTINEL as _FEA_PR5
+    from core.fusion_entry_adapter import ADAPTER_CONTRACT_IS_STANDARDISED_POLICY as _FEA_CONTRACT  # noqa: F401
+    from core.fusion_entry_adapter import FUSION_ENTRY_ADAPTER_CONTRACT_PR5_SENTINEL as _FEA_PR5  # noqa: F401
     from core.fusion_entry_adapter import FUSION_ENTRY_IS_EXECUTION_ADAPTER_AUTHORITY as _FEA_AUTHORITY  # noqa: F401
-    from core.fusion_entry_adapter import FUSION_ENTRY_NOT_A_DISCOVERY_AUTHORITY_POLICY as _FEA_NOT_DISCOVERY
-    from core.fusion_entry_adapter import FUSION_ENTRY_NOT_A_REGISTRY_AUTHORITY_POLICY as _FEA_NOT_REGISTRY
-    from core.fusion_entry_adapter import UNIFIED_EXECUTOR_IS_CANONICAL_LOADER_POLICY as _FEA_LOADER
-    from core.fusion_entry_adapter import FusionEntryAdapterContract as _FusionEntryAdapterContract
-    from core.fusion_entry_adapter import validate_fusion_entry_adapter as _validate_fusion_entry_adapter
+    from core.fusion_entry_adapter import (  # noqa: F401
+        FUSION_ENTRY_NOT_A_DISCOVERY_AUTHORITY_POLICY as _FEA_NOT_DISCOVERY,
+    )
+    from core.fusion_entry_adapter import (  # noqa: F401
+        FUSION_ENTRY_NOT_A_REGISTRY_AUTHORITY_POLICY as _FEA_NOT_REGISTRY,
+    )
+    from core.fusion_entry_adapter import UNIFIED_EXECUTOR_IS_CANONICAL_LOADER_POLICY as _FEA_LOADER  # noqa: F401
+    from core.fusion_entry_adapter import FusionEntryAdapterContract as _FusionEntryAdapterContract  # noqa: F401
+    from core.fusion_entry_adapter import validate_fusion_entry_adapter as _validate_fusion_entry_adapter  # noqa: F401
 
     FUSION_ENTRY_ADAPTER_ALIGNED_PR5: str = (
         "PROJECTION_ROUTES::FUSION_ENTRY_ADAPTER_ALIGNED_PR5_V1: "
@@ -1549,23 +1677,35 @@ except ImportError:  # pragma: no cover
 # Archived/deprecated/unhealthy/readiness-gap nodes are filtered from the
 # canonical path.  Every exclusion decision is diagnostically observable.
 try:
-    from core.node_governance_runtime import ARCHIVED_AND_DEPRECATED_NODES_EXCLUDED_POLICY as _NGR_ARCHIVED_POLICY
-    from core.node_governance_runtime import COMPATIBILITY_FALLBACK_IS_NON_CANONICAL_POLICY as _NGR_FALLBACK_POLICY
-    from core.node_governance_runtime import GOVERNANCE_EXCLUSION_IS_DIAGNOSABLE_POLICY as _NGR_DIAGNOSABLE_POLICY
+    from core.node_governance_runtime import (  # noqa: F401
+        ARCHIVED_AND_DEPRECATED_NODES_EXCLUDED_POLICY as _NGR_ARCHIVED_POLICY,
+    )
+    from core.node_governance_runtime import (  # noqa: F401
+        COMPATIBILITY_FALLBACK_IS_NON_CANONICAL_POLICY as _NGR_FALLBACK_POLICY,
+    )
+    from core.node_governance_runtime import (  # noqa: F401
+        GOVERNANCE_EXCLUSION_IS_DIAGNOSABLE_POLICY as _NGR_DIAGNOSABLE_POLICY,
+    )
     from core.node_governance_runtime import (  # noqa: F401
         NODE_GOVERNANCE_IS_RUNTIME_CONSTRAINT_AUTHORITY as _NGR_AUTHORITY,
     )
-    from core.node_governance_runtime import NODE_GOVERNANCE_RUNTIME_CONSTRAINT_PR6_SENTINEL as _NGR_PR6
-    from core.node_governance_runtime import READINESS_GAP_NODES_EXCLUDED_POLICY as _NGR_READINESS_POLICY
-    from core.node_governance_runtime import (
+    from core.node_governance_runtime import NODE_GOVERNANCE_RUNTIME_CONSTRAINT_PR6_SENTINEL as _NGR_PR6  # noqa: F401
+    from core.node_governance_runtime import READINESS_GAP_NODES_EXCLUDED_POLICY as _NGR_READINESS_POLICY  # noqa: F401
+    from core.node_governance_runtime import (  # noqa: F401
         UNHEALTHY_NODES_EXCLUDED_FROM_CANONICAL_PATH_POLICY as _NGR_UNHEALTHY_POLICY,
     )
-    from core.node_governance_runtime import NodeGovernanceEligibilityDecision as _NodeGovernanceEligibilityDecision
-    from core.node_governance_runtime import build_governance_exclusion_report as _build_governance_exclusion_report
-    from core.node_governance_runtime import (
+    from core.node_governance_runtime import (  # noqa: F401
+        NodeGovernanceEligibilityDecision as _NodeGovernanceEligibilityDecision,
+    )
+    from core.node_governance_runtime import (  # noqa: F401
+        build_governance_exclusion_report as _build_governance_exclusion_report,
+    )
+    from core.node_governance_runtime import (  # noqa: F401
         evaluate_node_governance_eligibility as _evaluate_node_governance_eligibility,
     )
-    from core.node_governance_runtime import get_governance_eligible_nodes as _get_governance_eligible_nodes
+    from core.node_governance_runtime import (  # noqa: F401
+        get_governance_eligible_nodes as _get_governance_eligible_nodes,
+    )
 
     NODE_GOVERNANCE_RUNTIME_CONSTRAINT_ALIGNED_PR6: str = (
         "PROJECTION_ROUTES::NODE_GOVERNANCE_RUNTIME_CONSTRAINT_ALIGNED_PR6_V1: "
@@ -1590,22 +1730,42 @@ except ImportError:  # pragma: no cover
 # health/status surfaces reflect discovery state, and diagnostic tools expose
 # mismatches between launcher state, fabric registry state, and discovery state.
 try:
-    from core.node_discovery_runtime import ACTIVE_NODES_ARE_DISCOVERABLE_POLICY as _NDA_DISCOVERABLE_POLICY
-    from core.node_discovery_runtime import DISCOVERY_MISMATCH_IS_DIAGNOSABLE_POLICY as _NDA_DIAGNOSABLE_POLICY
-    from core.node_discovery_runtime import DISCOVERY_PARTICIPATES_IN_STARTUP_PATH_POLICY as _NDA_STARTUP_POLICY
-    from core.node_discovery_runtime import DISCOVERY_STATE_REFLECTS_RUNTIME_STATE_POLICY as _NDA_REFLECTS_POLICY
+    from core.node_discovery_runtime import (  # noqa: F401
+        ACTIVE_NODES_ARE_DISCOVERABLE_POLICY as _NDA_DISCOVERABLE_POLICY,
+    )
+    from core.node_discovery_runtime import (  # noqa: F401
+        DISCOVERY_MISMATCH_IS_DIAGNOSABLE_POLICY as _NDA_DIAGNOSABLE_POLICY,
+    )
+    from core.node_discovery_runtime import (  # noqa: F401
+        DISCOVERY_PARTICIPATES_IN_STARTUP_PATH_POLICY as _NDA_STARTUP_POLICY,
+    )
+    from core.node_discovery_runtime import (  # noqa: F401
+        DISCOVERY_STATE_REFLECTS_RUNTIME_STATE_POLICY as _NDA_REFLECTS_POLICY,
+    )
     from core.node_discovery_runtime import (  # noqa: F401
         NODE_DISCOVERY_IS_RUNTIME_PARTICIPANT_AUTHORITY as _NDA_AUTHORITY,
     )
-    from core.node_discovery_runtime import NODE_DISCOVERY_RUNTIME_INTEGRATION_PR7_SENTINEL as _NDA_PR7
-    from core.node_discovery_runtime import UNDISCOVERED_ACTIVE_NODES_ARE_FLAGGED_POLICY as _NDA_FLAGGED_POLICY
-    from core.node_discovery_runtime import DiscoveryRuntimeSnapshot as _DiscoveryRuntimeSnapshot
-    from core.node_discovery_runtime import NodeDiscoveryParticipationRecord as _NodeDiscoveryParticipationRecord
-    from core.node_discovery_runtime import announce_node_to_discovery as _announce_node_to_discovery
-    from core.node_discovery_runtime import build_discovery_runtime_snapshot as _build_discovery_runtime_snapshot
-    from core.node_discovery_runtime import get_discovery_participation_summary as _get_discovery_participation_summary
-    from core.node_discovery_runtime import initialize_discovery_from_startup as _initialize_discovery_from_startup
-    from core.node_discovery_runtime import seed_fabric_nodes_into_discovery as _seed_fabric_nodes_into_discovery
+    from core.node_discovery_runtime import NODE_DISCOVERY_RUNTIME_INTEGRATION_PR7_SENTINEL as _NDA_PR7  # noqa: F401
+    from core.node_discovery_runtime import (  # noqa: F401
+        UNDISCOVERED_ACTIVE_NODES_ARE_FLAGGED_POLICY as _NDA_FLAGGED_POLICY,
+    )
+    from core.node_discovery_runtime import DiscoveryRuntimeSnapshot as _DiscoveryRuntimeSnapshot  # noqa: F401
+    from core.node_discovery_runtime import (  # noqa: F401
+        NodeDiscoveryParticipationRecord as _NodeDiscoveryParticipationRecord,
+    )
+    from core.node_discovery_runtime import announce_node_to_discovery as _announce_node_to_discovery  # noqa: F401
+    from core.node_discovery_runtime import (  # noqa: F401
+        build_discovery_runtime_snapshot as _build_discovery_runtime_snapshot,
+    )
+    from core.node_discovery_runtime import (  # noqa: F401
+        get_discovery_participation_summary as _get_discovery_participation_summary,
+    )
+    from core.node_discovery_runtime import (  # noqa: F401
+        initialize_discovery_from_startup as _initialize_discovery_from_startup,
+    )
+    from core.node_discovery_runtime import (  # noqa: F401
+        seed_fabric_nodes_into_discovery as _seed_fabric_nodes_into_discovery,
+    )
 
     NODE_DISCOVERY_RUNTIME_INTEGRATION_ALIGNED_PR7: str = (
         "PROJECTION_ROUTES::NODE_DISCOVERY_RUNTIME_INTEGRATION_ALIGNED_PR7_V1: "
@@ -1633,26 +1793,32 @@ except ImportError:  # pragma: no cover
 # runtime truth for node existence and health; invoke_node() via
 # UnifiedNodeExecutor is the canonical invocation pathway.
 try:
-    from core.node_boundary_runtime import CANONICAL_INVOCATION_PATH_IS_INVOKE_NODE_POLICY as _NBR_INVOCATION_POLICY
-    from core.node_boundary_runtime import DIRECT_SCAN_IS_LEGACY_COMPAT_POLICY as _NBR_SCAN_POLICY
-    from core.node_boundary_runtime import (
+    from core.node_boundary_runtime import (  # noqa: F401
+        CANONICAL_INVOCATION_PATH_IS_INVOKE_NODE_POLICY as _NBR_INVOCATION_POLICY,
+    )
+    from core.node_boundary_runtime import DIRECT_SCAN_IS_LEGACY_COMPAT_POLICY as _NBR_SCAN_POLICY  # noqa: F401
+    from core.node_boundary_runtime import (  # noqa: F401
         LEGACY_ORCHESTRATOR_NODES_DEMOTED_FROM_CANONICAL_PATH_POLICY as _NBR_DEMOTE_POLICY,
     )
-    from core.node_boundary_runtime import LEGACY_REGISTRY_IS_COMPAT_FACADE_POLICY as _NBR_REGISTRY_POLICY
+    from core.node_boundary_runtime import LEGACY_REGISTRY_IS_COMPAT_FACADE_POLICY as _NBR_REGISTRY_POLICY  # noqa: F401
     from core.node_boundary_runtime import NODE_BOUNDARY_IS_CANONICAL_AUTHORITY as _NBR_AUTHORITY  # noqa: F401
-    from core.node_boundary_runtime import NODE_BOUNDARY_RUNTIME_PR8_SENTINEL as _NBR_PR8
-    from core.node_boundary_runtime import NODES_ARE_CAPABILITY_BACKENDS_ONLY_POLICY as _NBR_CAPABILITY_POLICY
-    from core.node_boundary_runtime import LegacyNodeSurfaceEntry as _LegacyNodeSurfaceEntry
-    from core.node_boundary_runtime import LegacyNodeSurfaceStatus as _LegacyNodeSurfaceStatus
-    from core.node_boundary_runtime import NodeBoundaryDecision as _NodeBoundaryDecision
-    from core.node_boundary_runtime import NodeBoundarySnapshot as _NodeBoundarySnapshot
-    from core.node_boundary_runtime import NodePathwayKind as _NodePathwayKind
-    from core.node_boundary_runtime import build_legacy_surface_registry as _build_legacy_surface_registry
-    from core.node_boundary_runtime import build_node_boundary_snapshot as _build_node_boundary_snapshot
-    from core.node_boundary_runtime import classify_invocation_pathway as _classify_invocation_pathway
-    from core.node_boundary_runtime import evaluate_node_boundary_compliance as _evaluate_node_boundary_compliance
-    from core.node_boundary_runtime import get_boundary_summary as _get_boundary_summary
-    from core.node_boundary_runtime import get_canonical_nodes as _get_canonical_nodes
+    from core.node_boundary_runtime import NODE_BOUNDARY_RUNTIME_PR8_SENTINEL as _NBR_PR8  # noqa: F401
+    from core.node_boundary_runtime import (  # noqa: F401
+        NODES_ARE_CAPABILITY_BACKENDS_ONLY_POLICY as _NBR_CAPABILITY_POLICY,
+    )
+    from core.node_boundary_runtime import LegacyNodeSurfaceEntry as _LegacyNodeSurfaceEntry  # noqa: F401
+    from core.node_boundary_runtime import LegacyNodeSurfaceStatus as _LegacyNodeSurfaceStatus  # noqa: F401
+    from core.node_boundary_runtime import NodeBoundaryDecision as _NodeBoundaryDecision  # noqa: F401
+    from core.node_boundary_runtime import NodeBoundarySnapshot as _NodeBoundarySnapshot  # noqa: F401
+    from core.node_boundary_runtime import NodePathwayKind as _NodePathwayKind  # noqa: F401
+    from core.node_boundary_runtime import build_legacy_surface_registry as _build_legacy_surface_registry  # noqa: F401
+    from core.node_boundary_runtime import build_node_boundary_snapshot as _build_node_boundary_snapshot  # noqa: F401
+    from core.node_boundary_runtime import classify_invocation_pathway as _classify_invocation_pathway  # noqa: F401
+    from core.node_boundary_runtime import (  # noqa: F401
+        evaluate_node_boundary_compliance as _evaluate_node_boundary_compliance,
+    )
+    from core.node_boundary_runtime import get_boundary_summary as _get_boundary_summary  # noqa: F401
+    from core.node_boundary_runtime import get_canonical_nodes as _get_canonical_nodes  # noqa: F401
 
     NODE_BOUNDARY_RUNTIME_ALIGNED_PR8: str = (
         "PROJECTION_ROUTES::NODE_BOUNDARY_RUNTIME_ALIGNED_PR8_V1: "
@@ -1681,40 +1847,46 @@ except ImportError:  # pragma: no cover
 # to an explicit compat-only path (OPENCLAWD_LEGACY_NODE_SCAN_COMPAT_ENABLED,
 # default False) and does not act as a peer tool-exposure authority.
 try:
-    from core.openclawd_canonical_node_tool_exposure import (
+    from core.openclawd_canonical_node_tool_exposure import (  # noqa: F401
         CANONICAL_NODE_TOOLS_COME_FROM_RUNTIME_REGISTRY_ONLY_POLICY as _OCNTE_REGISTRY_POLICY,
     )
-    from core.openclawd_canonical_node_tool_exposure import (
+    from core.openclawd_canonical_node_tool_exposure import (  # noqa: F401
         CANONICAL_TOOL_EXPOSURE_REQUIRES_GOVERNANCE_FILTER_POLICY as _OCNTE_GOV_POLICY,
     )
-    from core.openclawd_canonical_node_tool_exposure import (
+    from core.openclawd_canonical_node_tool_exposure import (  # noqa: F401
         FUSION_ENTRY_SCAN_IS_NOT_TOOL_EXPOSURE_AUTHORITY_POLICY as _OCNTE_SCAN_POLICY,
     )
-    from core.openclawd_canonical_node_tool_exposure import LEGACY_LAYER3_IS_COMPAT_ONLY_POLICY as _OCNTE_COMPAT_POLICY
-    from core.openclawd_canonical_node_tool_exposure import (
+    from core.openclawd_canonical_node_tool_exposure import (  # noqa: F401
+        LEGACY_LAYER3_IS_COMPAT_ONLY_POLICY as _OCNTE_COMPAT_POLICY,
+    )
+    from core.openclawd_canonical_node_tool_exposure import (  # noqa: F401
         NODE_REGISTRY_JSON_IS_NOT_TOOL_EXPOSURE_AUTHORITY_POLICY as _OCNTE_JSON_POLICY,
     )
     from core.openclawd_canonical_node_tool_exposure import (  # noqa: F401
         OPENCLAWD_CANONICAL_NODE_TOOL_EXPOSURE_IS_AUTHORITY as _OCNTE_AUTHORITY,
     )
-    from core.openclawd_canonical_node_tool_exposure import (
+    from core.openclawd_canonical_node_tool_exposure import (  # noqa: F401
         OPENCLAWD_CANONICAL_NODE_TOOL_EXPOSURE_PR10_SENTINEL as _OCNTE_PR10,
     )
-    from core.openclawd_canonical_node_tool_exposure import (
+    from core.openclawd_canonical_node_tool_exposure import (  # noqa: F401
         CanonicalNodeToolExposureSnapshot as _CanonicalNodeToolExposureSnapshot,
     )
-    from core.openclawd_canonical_node_tool_exposure import LegacyNodeDiscoveryStatus as _LegacyNodeDiscoveryStatus
-    from core.openclawd_canonical_node_tool_exposure import LegacyNodeDiscoverySurface as _LegacyNodeDiscoverySurface
-    from core.openclawd_canonical_node_tool_exposure import (
+    from core.openclawd_canonical_node_tool_exposure import (  # noqa: F401
+        LegacyNodeDiscoveryStatus as _LegacyNodeDiscoveryStatus,
+    )
+    from core.openclawd_canonical_node_tool_exposure import (  # noqa: F401
+        LegacyNodeDiscoverySurface as _LegacyNodeDiscoverySurface,
+    )
+    from core.openclawd_canonical_node_tool_exposure import (  # noqa: F401
         build_canonical_tool_exposure_snapshot as _build_canonical_tool_exposure_snapshot,
     )
-    from core.openclawd_canonical_node_tool_exposure import (
+    from core.openclawd_canonical_node_tool_exposure import (  # noqa: F401
         build_legacy_discovery_surface_registry as _build_legacy_discovery_surface_registry,
     )
-    from core.openclawd_canonical_node_tool_exposure import (
+    from core.openclawd_canonical_node_tool_exposure import (  # noqa: F401
         get_legacy_discovery_summary as _get_legacy_discovery_summary,
     )
-    from core.openclawd_canonical_node_tool_exposure import (
+    from core.openclawd_canonical_node_tool_exposure import (  # noqa: F401
         is_legacy_node_scan_compat_enabled as _is_legacy_node_scan_compat_enabled,
     )
 
@@ -1742,28 +1914,34 @@ except ImportError:  # pragma: no cover
 # surfaces by retirement tier.  The inventory establishes the governed
 # convergence roadmap that shrinks the compat footprint across batch PRs.
 try:
-    from core.compat_surface_retirement import COMPAT_FOOTPRINT_MUST_SHRINK_OVER_TIME_POLICY as _CSR_FOOTPRINT_POLICY
+    from core.compat_surface_retirement import (  # noqa: F401
+        COMPAT_FOOTPRINT_MUST_SHRINK_OVER_TIME_POLICY as _CSR_FOOTPRINT_POLICY,
+    )
     from core.compat_surface_retirement import COMPAT_SURFACE_RETIREMENT_IS_AUTHORITY as _CSR_AUTHORITY  # noqa: F401
-    from core.compat_surface_retirement import COMPAT_SURFACE_RETIREMENT_PR10_SENTINEL as _CSR_PR10
-    from core.compat_surface_retirement import (
+    from core.compat_surface_retirement import COMPAT_SURFACE_RETIREMENT_PR10_SENTINEL as _CSR_PR10  # noqa: F401
+    from core.compat_surface_retirement import (  # noqa: F401
         COMPAT_SURFACES_MUST_NOT_MASQUERADE_AS_CANONICAL_POLICY as _CSR_MASQUERADE_POLICY,
     )
-    from core.compat_surface_retirement import (
+    from core.compat_surface_retirement import (  # noqa: F401
         HIGH_RISK_COMPAT_SURFACES_MUST_BE_INVENTORIED_POLICY as _CSR_INVENTORY_POLICY,
     )
-    from core.compat_surface_retirement import (
+    from core.compat_surface_retirement import (  # noqa: F401
         RETIREMENT_TIER_CLASSIFICATION_MUST_BE_EXPLICIT_POLICY as _CSR_TIER_POLICY,
     )
-    from core.compat_surface_retirement import CompatSurfaceRecord as _CompatSurfaceRecord
-    from core.compat_surface_retirement import CompatSurfaceRisk as _CompatSurfaceRisk
-    from core.compat_surface_retirement import RetirementRoadmapSummary as _RetirementRoadmapSummary
-    from core.compat_surface_retirement import RetirementStatus as _RetirementStatus
-    from core.compat_surface_retirement import RetirementTier as _RetirementTier
-    from core.compat_surface_retirement import build_retirement_roadmap_summary as _build_retirement_roadmap_summary
-    from core.compat_surface_retirement import classify_surface_tier as _classify_surface_tier
-    from core.compat_surface_retirement import get_compat_surface_inventory as _get_compat_surface_inventory
-    from core.compat_surface_retirement import get_high_risk_surfaces as _get_high_risk_surfaces
-    from core.compat_surface_retirement import get_surfaces_by_tier as _get_surfaces_by_tier
+    from core.compat_surface_retirement import CompatSurfaceRecord as _CompatSurfaceRecord  # noqa: F401
+    from core.compat_surface_retirement import CompatSurfaceRisk as _CompatSurfaceRisk  # noqa: F401
+    from core.compat_surface_retirement import RetirementRoadmapSummary as _RetirementRoadmapSummary  # noqa: F401
+    from core.compat_surface_retirement import RetirementStatus as _RetirementStatus  # noqa: F401
+    from core.compat_surface_retirement import RetirementTier as _RetirementTier  # noqa: F401
+    from core.compat_surface_retirement import (  # noqa: F401
+        build_retirement_roadmap_summary as _build_retirement_roadmap_summary,
+    )
+    from core.compat_surface_retirement import classify_surface_tier as _classify_surface_tier  # noqa: F401
+    from core.compat_surface_retirement import (  # noqa: F401
+        get_compat_surface_inventory as _get_compat_surface_inventory,
+    )
+    from core.compat_surface_retirement import get_high_risk_surfaces as _get_high_risk_surfaces  # noqa: F401
+    from core.compat_surface_retirement import get_surfaces_by_tier as _get_surfaces_by_tier  # noqa: F401
 
     COMPAT_SURFACE_RETIREMENT_ALIGNED_PR10: str = (
         "PROJECTION_ROUTES::COMPAT_SURFACE_RETIREMENT_ALIGNED_PR10_V1: "
@@ -1789,31 +1967,41 @@ except ImportError:  # pragma: no cover
 # explicitly-scoped COMPAT_INTERNAL override, which is non-canonical and
 # fully auditable.
 try:
-    from core.node_invocation import CANONICAL_INVOCATION_DENIES_INELIGIBLE_NODES_PR11_POLICY as _NI_PR11_POLICY
+    from core.node_invocation import (  # noqa: F401
+        CANONICAL_INVOCATION_DENIES_INELIGIBLE_NODES_PR11_POLICY as _NI_PR11_POLICY,
+    )
     from core.node_invocation import (  # noqa: F401
         GOVERNANCE_ELIGIBILITY_ENFORCED_AT_INVOCATION_TIME_PR11_SENTINEL as _NI_PR11,
     )
-    from core.node_invocation_governance import GOVERNANCE_GATE_ENFORCED_AT_INVOCATION_TIME_POLICY as _NIGG_GATE_POLICY
-    from core.node_invocation_governance import (
+    from core.node_invocation_governance import (  # noqa: F401
+        GOVERNANCE_GATE_ENFORCED_AT_INVOCATION_TIME_POLICY as _NIGG_GATE_POLICY,
+    )
+    from core.node_invocation_governance import (  # noqa: F401
         INELIGIBLE_NODES_CANNOT_BE_CANONICALLY_INVOKED_POLICY as _NIGG_INELIGIBLE_POLICY,
     )
-    from core.node_invocation_governance import (
+    from core.node_invocation_governance import (  # noqa: F401
         INVOCATION_DENIAL_CARRIES_STRUCTURED_DIAGNOSTICS_POLICY as _NIGG_DIAG_POLICY,
     )
     from core.node_invocation_governance import NODE_INVOCATION_GOVERNANCE_IS_AUTHORITY as _NIGG_AUTHORITY  # noqa: F401
-    from core.node_invocation_governance import NODE_INVOCATION_GOVERNANCE_PR11_SENTINEL as _NIGG_PR11
-    from core.node_invocation_governance import (
+    from core.node_invocation_governance import NODE_INVOCATION_GOVERNANCE_PR11_SENTINEL as _NIGG_PR11  # noqa: F401
+    from core.node_invocation_governance import (  # noqa: F401
         OVERRIDE_PATH_IS_EXPLICIT_AUDITABLE_NON_CANONICAL_POLICY as _NIGG_OVERRIDE_POLICY,
     )
-    from core.node_invocation_governance import (
+    from core.node_invocation_governance import (  # noqa: F401
         UNREGISTERED_NODES_PROCEED_WITH_UNMANAGED_WARNING_POLICY as _NIGG_UNREGD_POLICY,
     )
-    from core.node_invocation_governance import NodeInvocationGovernanceDecision as _NodeInvocationGovernanceDecision
-    from core.node_invocation_governance import NodeInvocationGovernanceOverride as _NodeInvocationGovernanceOverride
-    from core.node_invocation_governance import (
+    from core.node_invocation_governance import (  # noqa: F401
+        NodeInvocationGovernanceDecision as _NodeInvocationGovernanceDecision,
+    )
+    from core.node_invocation_governance import (  # noqa: F401
+        NodeInvocationGovernanceOverride as _NodeInvocationGovernanceOverride,
+    )
+    from core.node_invocation_governance import (  # noqa: F401
         build_invocation_denial_diagnostics as _build_invocation_denial_diagnostics,
     )
-    from core.node_invocation_governance import evaluate_invocation_governance as _evaluate_invocation_governance
+    from core.node_invocation_governance import (  # noqa: F401
+        evaluate_invocation_governance as _evaluate_invocation_governance,
+    )
 
     NODE_INVOCATION_GOVERNANCE_ALIGNED_PR11: str = (
         "PROJECTION_ROUTES::NODE_INVOCATION_GOVERNANCE_ALIGNED_PR11_V1: "
@@ -1840,31 +2028,33 @@ except ImportError:  # pragma: no cover
 # discovery_participation classification.  The system can distinguish running,
 # registered, discovered, healthy, and undiscovered nodes in real diagnostics.
 try:
-    from core.node_discovery_startup_health_closure import (
+    from core.node_discovery_startup_health_closure import (  # noqa: F401
         DISCOVERY_DIAGNOSTICS_ALIGN_WITH_LAUNCHER_AND_FABRIC_POLICY as _NDSHC_DIAG_POLICY,
     )
-    from core.node_discovery_startup_health_closure import (
+    from core.node_discovery_startup_health_closure import (  # noqa: F401
         HEALTH_SURFACES_REFLECT_DISCOVERY_PARTICIPATION_POLICY as _NDSHC_HEALTH_POLICY,
     )
     from core.node_discovery_startup_health_closure import (  # noqa: F401
         NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_IS_AUTHORITY as _NDSHC_AUTHORITY,
     )
-    from core.node_discovery_startup_health_closure import (
+    from core.node_discovery_startup_health_closure import (  # noqa: F401
         NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_PR12_SENTINEL as _NDSHC_PR12,
     )
-    from core.node_discovery_startup_health_closure import (
+    from core.node_discovery_startup_health_closure import (  # noqa: F401
         STARTUP_SEEDING_IS_INVOKED_BY_REAL_ORCHESTRATION_POLICY as _NDSHC_SEED_POLICY,
     )
-    from core.node_discovery_startup_health_closure import (
+    from core.node_discovery_startup_health_closure import (  # noqa: F401
         UNDISCOVERED_ACTIVE_COUNT_IS_EXPOSED_IN_HEALTH_POLICY as _NDSHC_UNDISCOV_POLICY,
     )
-    from core.node_discovery_startup_health_closure import (
+    from core.node_discovery_startup_health_closure import (  # noqa: F401
         build_discovery_diagnostic_context as _build_discovery_diagnostic_context,
     )
-    from core.node_discovery_startup_health_closure import (
+    from core.node_discovery_startup_health_closure import (  # noqa: F401
         build_discovery_health_surface as _build_discovery_health_surface,
     )
-    from core.node_discovery_startup_health_closure import build_startup_seeding_status as _build_startup_seeding_status
+    from core.node_discovery_startup_health_closure import (  # noqa: F401
+        build_startup_seeding_status as _build_startup_seeding_status,
+    )
     from launcher.node_startup import NODE_DISCOVERY_STARTUP_SEEDING_WIRED_PR12 as _NDSHC_LAUNCHER_PR12  # noqa: F401
 
     NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_ALIGNED_PR12: str = (
@@ -1895,26 +2085,30 @@ except ImportError:  # pragma: no cover
 # key.  get_node_count_from_canonical_source() is available for all callers
 # that need canonical node-count truth.
 try:
-    from core.node_final_boundary_enforcement import (
+    from core.node_final_boundary_enforcement import (  # noqa: F401
         COMPAT_SURFACES_ARE_NOT_PEER_AUTHORITIES_POLICY as _NFBE_COMPAT_POLICY,
     )
-    from core.node_final_boundary_enforcement import (
+    from core.node_final_boundary_enforcement import (  # noqa: F401
         DASHBOARD_SURFACES_MUST_USE_CANONICAL_SOURCES_POLICY as _NFBE_DASH_POLICY,
     )
     from core.node_final_boundary_enforcement import (  # noqa: F401
         NODE_FINAL_BOUNDARY_ENFORCEMENT_IS_AUTHORITY as _NFBE_AUTHORITY,
     )
-    from core.node_final_boundary_enforcement import NODE_FINAL_BOUNDARY_ENFORCEMENT_PR13_SENTINEL as _NFBE_PR13
-    from core.node_final_boundary_enforcement import (
+    from core.node_final_boundary_enforcement import (  # noqa: F401
+        NODE_FINAL_BOUNDARY_ENFORCEMENT_PR13_SENTINEL as _NFBE_PR13,
+    )
+    from core.node_final_boundary_enforcement import (  # noqa: F401
         NODE_STATUS_CACHE_IS_COMPAT_NOT_CANONICAL_POLICY as _NFBE_CACHE_POLICY,
     )
-    from core.node_final_boundary_enforcement import (
+    from core.node_final_boundary_enforcement import (  # noqa: F401
         SYSTEM_STATUS_NODES_COUNT_MUST_PREFER_CANONICAL_REGISTRY_POLICY as _NFBE_COUNT_POLICY,
     )
-    from core.node_final_boundary_enforcement import (
+    from core.node_final_boundary_enforcement import (  # noqa: F401
         build_node_surface_classification_registry as _build_node_surface_classification_registry,
     )
-    from core.node_final_boundary_enforcement import get_final_boundary_summary as _get_final_boundary_summary
+    from core.node_final_boundary_enforcement import (  # noqa: F401
+        get_final_boundary_summary as _get_final_boundary_summary,
+    )
 
     NODE_FINAL_BOUNDARY_ENFORCEMENT_ALIGNED_PR13: str = (
         "PROJECTION_ROUTES::NODE_FINAL_BOUNDARY_ENFORCEMENT_ALIGNED_PR13_V1: "
@@ -1934,27 +2128,33 @@ except ImportError:  # pragma: no cover
     )
 
 try:
-    from core.node_cognition_activation import (
+    from core.node_cognition_activation import (  # noqa: F401
         ACTIVATION_ELIGIBILITY_REQUIRES_GOVERNANCE_CLEARANCE_POLICY as _NCA_GOV_POLICY,
     )
-    from core.node_cognition_activation import (
+    from core.node_cognition_activation import (  # noqa: F401
         ACTIVATION_LAYER_SITS_ABOVE_INVOCATION_SUBSTRATE_POLICY as _NCA_SUBSTRATE_POLICY,
     )
-    from core.node_cognition_activation import ACTIVATION_STATE_TRANSITIONS_ARE_VALIDATED_POLICY as _NCA_TRANS_POLICY
-    from core.node_cognition_activation import (
+    from core.node_cognition_activation import (  # noqa: F401
+        ACTIVATION_STATE_TRANSITIONS_ARE_VALIDATED_POLICY as _NCA_TRANS_POLICY,
+    )
+    from core.node_cognition_activation import (  # noqa: F401
         COGNITION_ROLE_IS_ASSIGNED_AT_ACTIVATION_NOT_REGISTRATION_POLICY as _NCA_ROLE_POLICY,
     )
     from core.node_cognition_activation import NODE_COGNITION_ACTIVATION_IS_AUTHORITY as _NCA_AUTHORITY  # noqa: F401
-    from core.node_cognition_activation import NODE_COGNITION_ACTIVATION_PR14_SENTINEL as _NCA_PR14
-    from core.node_cognition_activation import (
+    from core.node_cognition_activation import NODE_COGNITION_ACTIVATION_PR14_SENTINEL as _NCA_PR14  # noqa: F401
+    from core.node_cognition_activation import (  # noqa: F401
         ORCHESTRATION_MUST_USE_ACTIVATION_LAYER_NOT_BARE_INVOCATION_POLICY as _NCA_ORCH_POLICY,
     )
-    from core.node_cognition_activation import (
+    from core.node_cognition_activation import (  # noqa: F401
         PR14_ACTIVATION_DISPATCH_RUNTIME_STATUS_POLICY as _NCA_RUNTIME_STATUS_POLICY,
     )
-    from core.node_cognition_activation import build_activation_context_snapshot as _build_activation_context_snapshot
-    from core.node_cognition_activation import get_activation_summary as _get_activation_summary
-    from core.node_cognition_activation import get_pr14_activation_runtime_status as _get_pr14_activation_runtime_status
+    from core.node_cognition_activation import (  # noqa: F401
+        build_activation_context_snapshot as _build_activation_context_snapshot,
+    )
+    from core.node_cognition_activation import get_activation_summary as _get_activation_summary  # noqa: F401
+    from core.node_cognition_activation import (  # noqa: F401
+        get_pr14_activation_runtime_status as _get_pr14_activation_runtime_status,
+    )
 
     NODE_COGNITION_ACTIVATION_ALIGNED_PR14: str = (
         "PROJECTION_ROUTES::NODE_COGNITION_ACTIVATION_ALIGNED_PR14_V1: "
@@ -1977,19 +2177,29 @@ except ImportError:  # pragma: no cover
 
 # PR-15 (node track): Node Activation Context Layer
 try:
-    from core.node_activation_context import (
+    from core.node_activation_context import (  # noqa: F401
         ACTIVATION_CONTEXT_ENRICHES_INVOCATION_GOVERNANCE_POLICY as _NAC_ENRICH_POLICY,
     )
-    from core.node_activation_context import (
+    from core.node_activation_context import (  # noqa: F401
         ACTIVATION_POLICY_CLASSIFICATION_IS_RUNTIME_METADATA_POLICY as _NAC_META_POLICY,
     )
-    from core.node_activation_context import DEMAND_ACTIVATED_REQUIRES_EXPLICIT_REQUEST_POLICY as _NAC_DEMAND_POLICY
-    from core.node_activation_context import DORMANT_NODES_CANNOT_BE_CANONICALLY_INVOKED_POLICY as _NAC_DORMANT_POLICY
+    from core.node_activation_context import (  # noqa: F401
+        DEMAND_ACTIVATED_REQUIRES_EXPLICIT_REQUEST_POLICY as _NAC_DEMAND_POLICY,
+    )
+    from core.node_activation_context import (  # noqa: F401
+        DORMANT_NODES_CANNOT_BE_CANONICALLY_INVOKED_POLICY as _NAC_DORMANT_POLICY,
+    )
     from core.node_activation_context import NODE_ACTIVATION_CONTEXT_IS_AUTHORITY as _NAC_AUTHORITY  # noqa: F401
-    from core.node_activation_context import NODE_ACTIVATION_CONTEXT_PR15_SENTINEL as _NAC_PR15
-    from core.node_activation_context import TOPOLOGY_CONDITIONAL_REQUIRES_CONNECTIVITY_POLICY as _NAC_TOPO_POLICY
-    from core.node_activation_context import evaluate_node_activation_context as _evaluate_node_activation_context
-    from core.node_activation_context import get_activation_policy_kind_for_node as _get_activation_policy_kind_for_node
+    from core.node_activation_context import NODE_ACTIVATION_CONTEXT_PR15_SENTINEL as _NAC_PR15  # noqa: F401
+    from core.node_activation_context import (  # noqa: F401
+        TOPOLOGY_CONDITIONAL_REQUIRES_CONNECTIVITY_POLICY as _NAC_TOPO_POLICY,
+    )
+    from core.node_activation_context import (  # noqa: F401
+        evaluate_node_activation_context as _evaluate_node_activation_context,
+    )
+    from core.node_activation_context import (  # noqa: F401
+        get_activation_policy_kind_for_node as _get_activation_policy_kind_for_node,
+    )
 
     NODE_ACTIVATION_CONTEXT_ALIGNED_PR15: str = (
         "PROJECTION_ROUTES::NODE_ACTIVATION_CONTEXT_ALIGNED_PR15_V1: "
@@ -2016,20 +2226,28 @@ except ImportError:  # pragma: no cover
 # activation_budget) derived from live StateInterpreter / ContinuumOrchestrator
 # signals alongside existing posture and execution-policy projections.
 try:
-    from core.cognitive.cognitive_execution_policy import ACTIVATION_BUDGET_IS_NORMALIZED_POLICY as _CEP_POLICY4
+    from core.cognitive.cognitive_execution_policy import (  # noqa: F401
+        ACTIVATION_BUDGET_IS_NORMALIZED_POLICY as _CEP_POLICY4,
+    )
     from core.cognitive.cognitive_execution_policy import (  # noqa: F401
         COGNITIVE_EXECUTION_POLICY_IS_AUTHORITY as _CEP_AUTHORITY,
     )
-    from core.cognitive.cognitive_execution_policy import COGNITIVE_EXECUTION_POLICY_PR18_SENTINEL as _CEP_PR18
-    from core.cognitive.cognitive_execution_policy import (
+    from core.cognitive.cognitive_execution_policy import (  # noqa: F401
+        COGNITIVE_EXECUTION_POLICY_PR18_SENTINEL as _CEP_PR18,
+    )
+    from core.cognitive.cognitive_execution_policy import (  # noqa: F401
         COGNITIVE_HINT_CONSUMES_EXISTING_SIGNALS_POLICY as _CEP_POLICY3,
     )
-    from core.cognitive.cognitive_execution_policy import (
+    from core.cognitive.cognitive_execution_policy import (  # noqa: F401
         COGNITIVE_HINT_IS_ADVISORY_NOT_MANDATORY_POLICY as _CEP_POLICY2,
     )
-    from core.cognitive.cognitive_execution_policy import COGNITIVE_STATE_DRIVES_EXECUTION_HINT_POLICY as _CEP_POLICY1
-    from core.cognitive.cognitive_execution_policy import CognitiveExecutionHint as _CognitiveExecutionHint
-    from core.cognitive.cognitive_execution_policy import (
+    from core.cognitive.cognitive_execution_policy import (  # noqa: F401
+        COGNITIVE_STATE_DRIVES_EXECUTION_HINT_POLICY as _CEP_POLICY1,
+    )
+    from core.cognitive.cognitive_execution_policy import (  # noqa: F401
+        CognitiveExecutionHint as _CognitiveExecutionHint,
+    )
+    from core.cognitive.cognitive_execution_policy import (  # noqa: F401
         derive_cognitive_execution_hint as _derive_cognitive_execution_hint,
     )
 
@@ -2053,16 +2271,28 @@ except ImportError:  # pragma: no cover
 # Asserts that the activation-budget layer is available and wired, enabling
 # projection endpoints to surface activation budget influence diagnostics.
 try:
-    from core.cognitive.cognitive_activation_budget import BUDGET_IS_SOFT_INFLUENCE_NOT_HARD_GATE_POLICY as _CAB_POLICY2
+    from core.cognitive.cognitive_activation_budget import (  # noqa: F401
+        BUDGET_IS_SOFT_INFLUENCE_NOT_HARD_GATE_POLICY as _CAB_POLICY2,
+    )
     from core.cognitive.cognitive_activation_budget import (  # noqa: F401
         COGNITIVE_ACTIVATION_BUDGET_IS_AUTHORITY as _CAB_AUTHORITY,
     )
-    from core.cognitive.cognitive_activation_budget import COGNITIVE_ACTIVATION_BUDGET_PR18_SENTINEL as _CAB_PR18
-    from core.cognitive.cognitive_activation_budget import HARD_GATES_REMAIN_AUTHORITATIVE_POLICY as _CAB_POLICY1
-    from core.cognitive.cognitive_activation_budget import ActivationBudget as _ActivationBudget
-    from core.cognitive.cognitive_activation_budget import PlannerBreadthGuidance as _PlannerBreadthGuidance
-    from core.cognitive.cognitive_activation_budget import derive_activation_budget as _derive_activation_budget
-    from core.cognitive.cognitive_activation_budget import get_planner_breadth_guidance as _get_planner_breadth_guidance
+    from core.cognitive.cognitive_activation_budget import (  # noqa: F401
+        COGNITIVE_ACTIVATION_BUDGET_PR18_SENTINEL as _CAB_PR18,
+    )
+    from core.cognitive.cognitive_activation_budget import (  # noqa: F401
+        HARD_GATES_REMAIN_AUTHORITATIVE_POLICY as _CAB_POLICY1,
+    )
+    from core.cognitive.cognitive_activation_budget import ActivationBudget as _ActivationBudget  # noqa: F401
+    from core.cognitive.cognitive_activation_budget import (  # noqa: F401
+        PlannerBreadthGuidance as _PlannerBreadthGuidance,
+    )
+    from core.cognitive.cognitive_activation_budget import (  # noqa: F401
+        derive_activation_budget as _derive_activation_budget,
+    )
+    from core.cognitive.cognitive_activation_budget import (  # noqa: F401
+        get_planner_breadth_guidance as _get_planner_breadth_guidance,
+    )
 
     COGNITIVE_ACTIVATION_BUDGET_ALIGNED_PR18: str = (
         "PROJECTION_ROUTES::COGNITIVE_ACTIVATION_BUDGET_ALIGNED_PR18_V1: "
@@ -2084,17 +2314,27 @@ except ImportError:  # pragma: no cover
 # (posture, continuity_score, retrieval_relevance, novelty_factor) alongside
 # existing cognitive and activation-budget projections.
 try:
-    from core.cognitive.memory_bias_layer import HARD_GATES_OVERRIDE_MEMORY_BIAS_POLICY as _MBL_POLICY1
-    from core.cognitive.memory_bias_layer import MEMORY_BIAS_ACTIVE_SCOPE_BOUNDARY_PR23_SENTINEL as _MBL_PR23_SCOPE
-    from core.cognitive.memory_bias_layer import MEMORY_BIAS_CONSUMES_EXISTING_SIGNALS_POLICY as _MBL_POLICY3
-    from core.cognitive.memory_bias_layer import MEMORY_BIAS_IS_ADVISORY_NOT_AUTHORITATIVE_POLICY as _MBL_POLICY2
+    from core.cognitive.memory_bias_layer import HARD_GATES_OVERRIDE_MEMORY_BIAS_POLICY as _MBL_POLICY1  # noqa: F401
+    from core.cognitive.memory_bias_layer import (  # noqa: F401
+        MEMORY_BIAS_ACTIVE_SCOPE_BOUNDARY_PR23_SENTINEL as _MBL_PR23_SCOPE,
+    )
+    from core.cognitive.memory_bias_layer import (  # noqa: F401
+        MEMORY_BIAS_CONSUMES_EXISTING_SIGNALS_POLICY as _MBL_POLICY3,
+    )
+    from core.cognitive.memory_bias_layer import (  # noqa: F401
+        MEMORY_BIAS_IS_ADVISORY_NOT_AUTHORITATIVE_POLICY as _MBL_POLICY2,
+    )
     from core.cognitive.memory_bias_layer import MEMORY_BIAS_LAYER_IS_AUTHORITY as _MBL_AUTHORITY  # noqa: F401
-    from core.cognitive.memory_bias_layer import MEMORY_BIAS_LAYER_PR19_SENTINEL as _MBL_PR19
-    from core.cognitive.memory_bias_layer import MEMORY_BIAS_SUBORDINATE_TO_TASK_SEMANTICS_POLICY as _MBL_POLICY4
-    from core.cognitive.memory_bias_layer import MemoryBias as _MemoryBias
-    from core.cognitive.memory_bias_layer import MemoryPlannerGuidance as _MemoryPlannerGuidance
-    from core.cognitive.memory_bias_layer import derive_memory_bias as _derive_memory_bias
-    from core.cognitive.memory_bias_layer import get_memory_planner_guidance as _get_memory_planner_guidance
+    from core.cognitive.memory_bias_layer import MEMORY_BIAS_LAYER_PR19_SENTINEL as _MBL_PR19  # noqa: F401
+    from core.cognitive.memory_bias_layer import (  # noqa: F401
+        MEMORY_BIAS_SUBORDINATE_TO_TASK_SEMANTICS_POLICY as _MBL_POLICY4,
+    )
+    from core.cognitive.memory_bias_layer import MemoryBias as _MemoryBias  # noqa: F401
+    from core.cognitive.memory_bias_layer import MemoryPlannerGuidance as _MemoryPlannerGuidance  # noqa: F401
+    from core.cognitive.memory_bias_layer import derive_memory_bias as _derive_memory_bias  # noqa: F401
+    from core.cognitive.memory_bias_layer import (  # noqa: F401
+        get_memory_planner_guidance as _get_memory_planner_guidance,
+    )
 
     MEMORY_BIAS_LAYER_ALIGNED_PR19: str = (
         "PROJECTION_ROUTES::MEMORY_BIAS_LAYER_ALIGNED_PR19_V1: "
@@ -2120,10 +2360,14 @@ try:
     from core.runtime_decision_observability import (  # noqa: F401
         RUNTIME_DECISION_OBSERVABILITY_IS_AUTHORITY as _RDO_IS_AUTHORITY,
     )
-    from core.runtime_decision_observability import RUNTIME_DECISION_OBSERVABILITY_PR20_SENTINEL as _RDO_PR20
-    from core.runtime_decision_observability import RuntimeDecisionExplanation as _RuntimeDecisionExplanation
-    from core.runtime_decision_observability import build_runtime_decision_diagnostics as _build_rdd
-    from core.runtime_decision_observability import build_runtime_decision_explanation as _build_rde
+    from core.runtime_decision_observability import (  # noqa: F401
+        RUNTIME_DECISION_OBSERVABILITY_PR20_SENTINEL as _RDO_PR20,
+    )
+    from core.runtime_decision_observability import (  # noqa: F401
+        RuntimeDecisionExplanation as _RuntimeDecisionExplanation,
+    )
+    from core.runtime_decision_observability import build_runtime_decision_diagnostics as _build_rdd  # noqa: F401
+    from core.runtime_decision_observability import build_runtime_decision_explanation as _build_rde  # noqa: F401
 
     RUNTIME_DECISION_OBSERVABILITY_ALIGNED_PR20: str = (
         "PROJECTION_ROUTES::RUNTIME_DECISION_OBSERVABILITY_ALIGNED_PR20_V1: "
@@ -2142,14 +2386,16 @@ except ImportError:  # pragma: no cover
 
 try:
     from core.canonical_session_axis import CANONICAL_SESSION_AXIS_AUTHORITY as _CSA_AUTHORITY  # noqa: F401
-    from core.canonical_session_axis import CANONICAL_SESSION_AXIS_PR3_SENTINEL as _CSA_PR3
-    from core.canonical_session_axis import SessionFamily as _SessionFamily
-    from core.canonical_session_axis import SessionIdentifierRole as _SessionIdentifierRole
-    from core.canonical_session_axis import (
+    from core.canonical_session_axis import CANONICAL_SESSION_AXIS_PR3_SENTINEL as _CSA_PR3  # noqa: F401
+    from core.canonical_session_axis import SessionFamily as _SessionFamily  # noqa: F401
+    from core.canonical_session_axis import SessionIdentifierRole as _SessionIdentifierRole  # noqa: F401
+    from core.canonical_session_axis import (  # noqa: F401
         get_android_session_mapping_catalogue as _get_android_session_mapping_catalogue,
     )
-    from core.canonical_session_axis import get_session_family_catalogue as _get_session_family_catalogue
-    from core.canonical_session_axis import get_session_identifier_catalogue as _get_session_identifier_catalogue
+    from core.canonical_session_axis import get_session_family_catalogue as _get_session_family_catalogue  # noqa: F401
+    from core.canonical_session_axis import (  # noqa: F401
+        get_session_identifier_catalogue as _get_session_identifier_catalogue,
+    )
 
     CANONICAL_SESSION_AXIS_ALIGNED_PR3: str = (
         "PROJECTION_ROUTES::CANONICAL_SESSION_AXIS_ALIGNED_PR3_V1: "
@@ -2175,14 +2421,18 @@ try:
     from core.cross_repo_protocol_consistency import (  # noqa: F401
         CROSS_REPO_PROTOCOL_CONSISTENCY_AUTHORITY as _CRPC_AUTHORITY,
     )
-    from core.cross_repo_protocol_consistency import CROSS_REPO_PROTOCOL_CONSISTENCY_PR4_SENTINEL as _CRPC_PR4
-    from core.cross_repo_protocol_consistency import CanonicalTerminalState as _CanonicalTerminalState
-    from core.cross_repo_protocol_consistency import ProtocolSurfaceClass as _ProtocolSurfaceClass
-    from core.cross_repo_protocol_consistency import (
+    from core.cross_repo_protocol_consistency import (  # noqa: F401
+        CROSS_REPO_PROTOCOL_CONSISTENCY_PR4_SENTINEL as _CRPC_PR4,
+    )
+    from core.cross_repo_protocol_consistency import CanonicalTerminalState as _CanonicalTerminalState  # noqa: F401
+    from core.cross_repo_protocol_consistency import ProtocolSurfaceClass as _ProtocolSurfaceClass  # noqa: F401
+    from core.cross_repo_protocol_consistency import (  # noqa: F401
         build_protocol_consistency_snapshot as _build_protocol_consistency_snapshot,
     )
-    from core.cross_repo_protocol_consistency import get_protocol_surface_catalogue as _get_protocol_surface_catalogue
-    from core.cross_repo_protocol_consistency import (
+    from core.cross_repo_protocol_consistency import (  # noqa: F401
+        get_protocol_surface_catalogue as _get_protocol_surface_catalogue,
+    )
+    from core.cross_repo_protocol_consistency import (  # noqa: F401
         get_terminal_state_consistency_catalogue as _get_terminal_state_catalogue,
     )
 
@@ -2211,13 +2461,15 @@ try:
     from core.device_node_domain_governance import (  # noqa: F401
         DEVICE_NODE_DOMAIN_GOVERNANCE_IS_AUTHORITY as _DNDG_AUTHORITY,
     )
-    from core.device_node_domain_governance import DEVICE_NODE_DOMAIN_GOVERNANCE_PR5_SENTINEL as _DNDG_PR5
-    from core.device_node_domain_governance import BridgeRelationshipKind as _BridgeRelationshipKind
-    from core.device_node_domain_governance import DomainKind as _DomainKind
-    from core.device_node_domain_governance import RegistrySurfaceDomain as _RegistrySurfaceDomain
-    from core.device_node_domain_governance import RegistrySurfaceRole as _RegistrySurfaceRole
-    from core.device_node_domain_governance import build_domain_governance_snapshot as _build_domain_governance_snapshot
-    from core.device_node_domain_governance import get_governance_summary as _get_governance_summary
+    from core.device_node_domain_governance import DEVICE_NODE_DOMAIN_GOVERNANCE_PR5_SENTINEL as _DNDG_PR5  # noqa: F401
+    from core.device_node_domain_governance import BridgeRelationshipKind as _BridgeRelationshipKind  # noqa: F401
+    from core.device_node_domain_governance import DomainKind as _DomainKind  # noqa: F401
+    from core.device_node_domain_governance import RegistrySurfaceDomain as _RegistrySurfaceDomain  # noqa: F401
+    from core.device_node_domain_governance import RegistrySurfaceRole as _RegistrySurfaceRole  # noqa: F401
+    from core.device_node_domain_governance import (  # noqa: F401
+        build_domain_governance_snapshot as _build_domain_governance_snapshot,
+    )
+    from core.device_node_domain_governance import get_governance_summary as _get_governance_summary  # noqa: F401
 
     DEVICE_NODE_DOMAIN_GOVERNANCE_ALIGNED_PR5: str = (
         "PROJECTION_ROUTES::DEVICE_NODE_DOMAIN_GOVERNANCE_ALIGNED_PR5_V1: "
@@ -2245,11 +2497,13 @@ try:
     from core.cross_repo_consistency_gates import (  # noqa: F401
         CROSS_REPO_CONSISTENCY_GATES_IS_AUTHORITY as _CRCG_AUTHORITY,
     )
-    from core.cross_repo_consistency_gates import CROSS_REPO_CONSISTENCY_GATES_PR12_SENTINEL as _CRCG_PR12
-    from core.cross_repo_consistency_gates import ConsistencyGateKind as _ConsistencyGateKind
-    from core.cross_repo_consistency_gates import GateVerdict as _GateVerdict
-    from core.cross_repo_consistency_gates import build_consistency_gate_snapshot as _build_consistency_gate_snapshot
-    from core.cross_repo_consistency_gates import run_all_consistency_gates as _run_all_consistency_gates
+    from core.cross_repo_consistency_gates import CROSS_REPO_CONSISTENCY_GATES_PR12_SENTINEL as _CRCG_PR12  # noqa: F401
+    from core.cross_repo_consistency_gates import ConsistencyGateKind as _ConsistencyGateKind  # noqa: F401
+    from core.cross_repo_consistency_gates import GateVerdict as _GateVerdict  # noqa: F401
+    from core.cross_repo_consistency_gates import (  # noqa: F401
+        build_consistency_gate_snapshot as _build_consistency_gate_snapshot,
+    )
+    from core.cross_repo_consistency_gates import run_all_consistency_gates as _run_all_consistency_gates  # noqa: F401
 
     CROSS_REPO_CONSISTENCY_GATES_ALIGNED_PR12: str = (
         "PROJECTION_ROUTES::CROSS_REPO_CONSISTENCY_GATES_ALIGNED_PR12_V1: "
@@ -2273,28 +2527,36 @@ except ImportError:  # pragma: no cover
 # classification infrastructure, making the authority matrix machine-checkable
 # and diagnosable at the projection surface level.
 try:
-    from core.authority_boundary_classification import ADAPTER_SURFACES_ARE_ROUTING_ONLY_POLICY as _ABC_ADAPTER_POLICY
+    from core.authority_boundary_classification import (  # noqa: F401
+        ADAPTER_SURFACES_ARE_ROUTING_ONLY_POLICY as _ABC_ADAPTER_POLICY,
+    )
     from core.authority_boundary_classification import (  # noqa: F401
         AUTHORITY_BOUNDARY_CLASSIFICATION_IS_AUTHORITY as _ABC_AUTHORITY,
     )
-    from core.authority_boundary_classification import AUTHORITY_BOUNDARY_CLASSIFICATION_PR6_SENTINEL as _ABC_PR6
-    from core.authority_boundary_classification import (
+    from core.authority_boundary_classification import (  # noqa: F401
+        AUTHORITY_BOUNDARY_CLASSIFICATION_PR6_SENTINEL as _ABC_PR6,
+    )
+    from core.authority_boundary_classification import (  # noqa: F401
         CACHE_INDEX_SURFACES_MUST_NOT_WRITE_TRUTH_POLICY as _ABC_CACHE_POLICY,
     )
-    from core.authority_boundary_classification import (
+    from core.authority_boundary_classification import (  # noqa: F401
         COMPAT_SURFACES_ARE_NON_AUTHORITATIVE_POLICY as _ABC_COMPAT_POLICY,
     )
-    from core.authority_boundary_classification import (
+    from core.authority_boundary_classification import (  # noqa: F401
         TRANSITIONAL_SURFACES_MUST_NOT_BE_EXTENDED_POLICY as _ABC_TRANSITIONAL_POLICY,
     )
-    from core.authority_boundary_classification import AuthorityMatrixSummary as _AuthorityMatrixSummary
-    from core.authority_boundary_classification import AuthorityRole as _AuthorityRole
-    from core.authority_boundary_classification import AuthoritySurface as _AuthoritySurface
-    from core.authority_boundary_classification import build_authority_matrix_summary as _build_authority_matrix_summary
-    from core.authority_boundary_classification import classify_surface as _classify_surface
-    from core.authority_boundary_classification import get_authority_matrix as _get_authority_matrix
-    from core.authority_boundary_classification import get_non_authoritative_surfaces as _get_non_authoritative_surfaces
-    from core.authority_boundary_classification import get_surfaces_by_role as _get_surfaces_by_role
+    from core.authority_boundary_classification import AuthorityMatrixSummary as _AuthorityMatrixSummary  # noqa: F401
+    from core.authority_boundary_classification import AuthorityRole as _AuthorityRole  # noqa: F401
+    from core.authority_boundary_classification import AuthoritySurface as _AuthoritySurface  # noqa: F401
+    from core.authority_boundary_classification import (  # noqa: F401
+        build_authority_matrix_summary as _build_authority_matrix_summary,
+    )
+    from core.authority_boundary_classification import classify_surface as _classify_surface  # noqa: F401
+    from core.authority_boundary_classification import get_authority_matrix as _get_authority_matrix  # noqa: F401
+    from core.authority_boundary_classification import (  # noqa: F401
+        get_non_authoritative_surfaces as _get_non_authoritative_surfaces,
+    )
+    from core.authority_boundary_classification import get_surfaces_by_role as _get_surfaces_by_role  # noqa: F401
     from core.authority_boundary_classification import get_transitional_surfaces as _get_transitional_surfaces
 
     AUTHORITY_BOUNDARY_CLASSIFICATION_ALIGNED_PR6: str = (
@@ -2317,23 +2579,27 @@ except ImportError:  # pragma: no cover
 # classification and replacement of generic-forward paths for the highest-value
 # multi-device flows (file transfer, peer exchange, mesh topology).
 try:
-    from core.long_tail_compat_surface import GENERIC_FORWARD_IS_TRANSITIONAL_POLICY as _LTCS_GF_POLICY
-    from core.long_tail_compat_surface import HIGHEST_VALUE_FLOWS_REQUIRE_STATEFUL_HANDLING_POLICY as _LTCS_HV_POLICY
+    from core.long_tail_compat_surface import GENERIC_FORWARD_IS_TRANSITIONAL_POLICY as _LTCS_GF_POLICY  # noqa: F401
+    from core.long_tail_compat_surface import (  # noqa: F401
+        HIGHEST_VALUE_FLOWS_REQUIRE_STATEFUL_HANDLING_POLICY as _LTCS_HV_POLICY,
+    )
     from core.long_tail_compat_surface import LONG_TAIL_COMPAT_SURFACE_IS_AUTHORITY as _LTCS_AUTHORITY  # noqa: F401
-    from core.long_tail_compat_surface import LONG_TAIL_COMPAT_SURFACE_PR8_SENTINEL as _LTCS_PR8
-    from core.long_tail_compat_surface import LONG_TAIL_HONESTY_POLICY as _LTCS_HONESTY_POLICY
-    from core.long_tail_compat_surface import MINIMAL_COMPAT_PATHS_MUST_BE_CATALOGUED_POLICY as _LTCS_CATALOG_POLICY
-    from core.long_tail_compat_surface import LongTailCatalogSummary as _LongTailCatalogSummary
-    from core.long_tail_compat_surface import LongTailPathKind as _LongTailPathKind
-    from core.long_tail_compat_surface import LongTailPathRecord as _LongTailPathRecord
-    from core.long_tail_compat_surface import LongTailTransitionStatus as _LongTailTransitionStatus
-    from core.long_tail_compat_surface import LongTailValueTier as _LongTailValueTier
-    from core.long_tail_compat_surface import build_catalog_summary as _build_long_tail_catalog_summary
-    from core.long_tail_compat_surface import get_closed_loop_paths as _get_closed_loop_paths
-    from core.long_tail_compat_surface import get_generic_forward_paths as _get_generic_forward_paths
-    from core.long_tail_compat_surface import get_long_tail_catalog as _get_long_tail_catalog
-    from core.long_tail_compat_surface import get_paths_by_tier as _get_paths_by_tier
-    from core.long_tail_compat_surface import get_transitional_paths as _get_transitional_paths
+    from core.long_tail_compat_surface import LONG_TAIL_COMPAT_SURFACE_PR8_SENTINEL as _LTCS_PR8  # noqa: F401
+    from core.long_tail_compat_surface import LONG_TAIL_HONESTY_POLICY as _LTCS_HONESTY_POLICY  # noqa: F401
+    from core.long_tail_compat_surface import (  # noqa: F401
+        MINIMAL_COMPAT_PATHS_MUST_BE_CATALOGUED_POLICY as _LTCS_CATALOG_POLICY,
+    )
+    from core.long_tail_compat_surface import LongTailCatalogSummary as _LongTailCatalogSummary  # noqa: F401
+    from core.long_tail_compat_surface import LongTailPathKind as _LongTailPathKind  # noqa: F401
+    from core.long_tail_compat_surface import LongTailPathRecord as _LongTailPathRecord  # noqa: F401
+    from core.long_tail_compat_surface import LongTailTransitionStatus as _LongTailTransitionStatus  # noqa: F401
+    from core.long_tail_compat_surface import LongTailValueTier as _LongTailValueTier  # noqa: F401
+    from core.long_tail_compat_surface import build_catalog_summary as _build_long_tail_catalog_summary  # noqa: F401
+    from core.long_tail_compat_surface import get_closed_loop_paths as _get_closed_loop_paths  # noqa: F401
+    from core.long_tail_compat_surface import get_generic_forward_paths as _get_generic_forward_paths  # noqa: F401
+    from core.long_tail_compat_surface import get_long_tail_catalog as _get_long_tail_catalog  # noqa: F401
+    from core.long_tail_compat_surface import get_paths_by_tier as _get_paths_by_tier  # noqa: F401
+    from core.long_tail_compat_surface import get_transitional_paths as _get_transitional_paths  # noqa: F401
 
     LONG_TAIL_COMPAT_SURFACE_ALIGNED_PR8: str = (
         "PROJECTION_ROUTES::LONG_TAIL_COMPAT_SURFACE_ALIGNED_PR8_V1: "
@@ -2363,14 +2629,20 @@ try:
     from core.architecture_stabilization_baseline import (  # noqa: F401
         ARCHITECTURE_STABILIZATION_BASELINE_IS_AUTHORITY as _ASB_AUTHORITY,
     )
-    from core.architecture_stabilization_baseline import ARCHITECTURE_STABILIZATION_BASELINE_PR10_SENTINEL as _ASB_PR10
-    from core.architecture_stabilization_baseline import StabilizationTier as _StabilizationTier
-    from core.architecture_stabilization_baseline import SurfaceCategory as _SurfaceCategory
-    from core.architecture_stabilization_baseline import (
+    from core.architecture_stabilization_baseline import (  # noqa: F401
+        ARCHITECTURE_STABILIZATION_BASELINE_PR10_SENTINEL as _ASB_PR10,
+    )
+    from core.architecture_stabilization_baseline import StabilizationTier as _StabilizationTier  # noqa: F401
+    from core.architecture_stabilization_baseline import SurfaceCategory as _SurfaceCategory  # noqa: F401
+    from core.architecture_stabilization_baseline import (  # noqa: F401
         build_stabilization_baseline_snapshot as _build_stabilization_baseline_snapshot,
     )
-    from core.architecture_stabilization_baseline import get_canonical_stable_surfaces as _get_canonical_stable_surfaces
-    from core.architecture_stabilization_baseline import get_transitional_surfaces as _get_transitional_surfaces
+    from core.architecture_stabilization_baseline import (  # noqa: F401
+        get_canonical_stable_surfaces as _get_canonical_stable_surfaces,
+    )
+    from core.architecture_stabilization_baseline import (  # noqa: F401
+        get_transitional_surfaces as _get_transitional_surfaces,
+    )
 
     ARCHITECTURE_STABILIZATION_BASELINE_ALIGNED_PR10: str = (
         "PROJECTION_ROUTES::ARCHITECTURE_STABILIZATION_BASELINE_ALIGNED_PR10_V1: "
@@ -2396,8 +2668,10 @@ try:
     from core.final_cleanup_invariant_tightening import (  # noqa: F401
         FINAL_CLEANUP_INVARIANT_TIGHTENING_AUTHORITY as _FCIT_AUTHORITY,
     )
-    from core.final_cleanup_invariant_tightening import FINAL_CLEANUP_INVARIANT_TIGHTENING_PR5_SENTINEL as _FCIT_PR5
-    from core.final_cleanup_invariant_tightening import (
+    from core.final_cleanup_invariant_tightening import (  # noqa: F401
+        FINAL_CLEANUP_INVARIANT_TIGHTENING_PR5_SENTINEL as _FCIT_PR5,
+    )
+    from core.final_cleanup_invariant_tightening import (  # noqa: F401
         is_final_cleanup_posture_acceptable as _is_final_cleanup_posture_acceptable,
     )
 

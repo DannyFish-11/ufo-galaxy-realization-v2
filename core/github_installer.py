@@ -519,7 +519,7 @@ def _register_mcp_tool(addon_dir: Path, tool_manifest: Dict[str, Any]) -> Dict[s
     """
     # ── Contract validation ──────────────────────────────────────────────────
     try:
-        from core.mcp_addon_contract import MCPAddonContractError, validate_mcp_addon_contract
+        from core.mcp_addon_contract import MCPAddonContractError, validate_mcp_addon_contract  # noqa: F401
 
         contract = validate_mcp_addon_contract(tool_manifest)
     except ImportError:

@@ -54,7 +54,7 @@ logger = logging.getLogger("Galaxy.TaskGraph")
 # PR-AIPV3-DAG: AIP v3 unified message models for cross-device task dispatch
 _AIPV3_AVAILABLE = False
 try:
-    from core.schemas.aip_v3 import MsgType, TaskAssignMsg, TaskResultMsg  # noqa: PLC0415
+    from core.schemas.aip_v3 import MsgType, TaskAssignMsg, TaskResultMsg  # noqa: PLC0415,F401
 
     _AIPV3_AVAILABLE = True
 except ImportError:

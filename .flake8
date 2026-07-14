@@ -1,0 +1,12 @@
+[flake8]
+# 与 pyproject.toml [tool.flake8] 保持一致。
+# 为什么要这个文件:flake8 原生不解析 pyproject.toml(需 flake8-pyproject
+# 插件,CI 未安装),导致 pyproject 里声明的豁免从未生效。本文件是同一
+# 份配置的生效化载体,两处若改动须同步。
+# - E203/W503:与 black 的切片空格/换行风格冲突,black 官方建议豁免
+# - __init__.py:F401:包入口 re-export 属故意导入
+max-line-length = 120
+extend-ignore = E203, W503
+exclude = .git,__pycache__,.venv,venv,build,dist,node_modules,external,chroma_db
+per-file-ignores =
+    __init__.py:F401

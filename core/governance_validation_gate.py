@@ -96,7 +96,7 @@ logger = logging.getLogger("Galaxy.GovernanceValidationGate")
 # ---------------------------------------------------------------------------
 try:
     from core.release_governance_taxonomy import TAXONOMY_AUTHORITY as _TAXONOMY_AUTHORITY  # noqa: F401
-    from core.release_governance_taxonomy import IssueClassification as _IssueClassification
+    from core.release_governance_taxonomy import IssueClassification as _IssueClassification  # noqa: F401
     from core.release_governance_taxonomy import verdict_to_classification as _verdict_to_classification
 
     _TAXONOMY_AVAILABLE = True

@@ -167,7 +167,7 @@ logger = logging.getLogger("Galaxy.SystemFinalAcceptanceVerdict")
 # ---------------------------------------------------------------------------
 try:
     from core.release_governance_taxonomy import TAXONOMY_AUTHORITY as _TAXONOMY_AUTHORITY  # noqa: F401
-    from core.release_governance_taxonomy import IssueClassification as _IssueClassification
+    from core.release_governance_taxonomy import IssueClassification as _IssueClassification  # noqa: F401
     from core.release_governance_taxonomy import operational_from_verdict as _operational_from_verdict
     from core.release_governance_taxonomy import verdict_to_classification as _verdict_to_classification
 

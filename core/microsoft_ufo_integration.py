@@ -251,7 +251,7 @@ class MicrosoftUFOAutomator(BaseUIAutomator):
     async def _initialize_fallback(self) -> bool:
         """初始化降级方案"""
         try:
-            import pyautogui
+            import pyautogui  # noqa: F401
 
             self.is_initialized = True
             logger.info("Fallback to pyautogui")

@@ -58,8 +58,12 @@ try:
     from core.nodes.node_fabric_registry import (  # noqa: F401
         CANONICAL_NODE_LIST_SURFACE_READS_FROM_REGISTRY_POLICY as _POLICY_LIST,
     )
-    from core.nodes.node_fabric_registry import FILESYSTEM_SCAN_IS_NOT_NODE_MEMBERSHIP_AUTHORITY_POLICY as _POLICY_FS
-    from core.nodes.node_fabric_registry import NODE_STATUS_CACHE_IS_NOT_CANONICAL_STATUS_SOURCE_POLICY as _POLICY_CACHE
+    from core.nodes.node_fabric_registry import (  # noqa: F401
+        FILESYSTEM_SCAN_IS_NOT_NODE_MEMBERSHIP_AUTHORITY_POLICY as _POLICY_FS,
+    )
+    from core.nodes.node_fabric_registry import (  # noqa: F401
+        NODE_STATUS_CACHE_IS_NOT_CANONICAL_STATUS_SOURCE_POLICY as _POLICY_CACHE,
+    )
 
     _CANONICAL_NODE_LIST_SURFACE_PR3_ALIGNED = True
 except ImportError:  # pragma: no cover

@@ -170,7 +170,7 @@ class HardwareAwareMultimodalRouter:
     @staticmethod
     def _check_hf_hub() -> bool:
         try:
-            import huggingface_hub
+            import huggingface_hub  # noqa: F401
 
             return True
         except ImportError:

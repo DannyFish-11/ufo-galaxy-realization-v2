@@ -250,7 +250,7 @@ class HuggingFaceModelManager:
             os.makedirs(local_path, exist_ok=True)
 
             try:
-                from huggingface_hub import hf_hub_download, snapshot_download
+                from huggingface_hub import hf_hub_download, snapshot_download  # noqa: F401
 
                 if format == ModelFormat.GGUF:
                     # GGUF: 下载特定量化文件

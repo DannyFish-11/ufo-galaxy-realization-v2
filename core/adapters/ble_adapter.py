@@ -28,7 +28,7 @@ logger = logging.getLogger("Galaxy.Adapter.BLE")
 # bleak 可选依赖
 try:
     from bleak import BleakClient, BleakScanner
-    from bleak.backends.characteristic import BleakGATTCharacteristic
+    from bleak.backends.characteristic import BleakGATTCharacteristic  # noqa: F401
 
     BLE_AVAILABLE = True
 except ImportError:
