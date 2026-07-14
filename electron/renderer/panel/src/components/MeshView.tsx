@@ -116,12 +116,14 @@ export default function MeshView({ data }: { data: PanelData }) {
               </div>
             </div>
             <button
-              className="row-right"
+              role="switch"
+              aria-checked={natsWorker.running}
+              aria-label={natsWorker.running ? '停止任务执行 Worker' : '启动任务执行 Worker'}
+              className={`switch${natsWorker.running ? ' on' : ''}${workerBusy ? ' busy' : ''}`}
               onClick={toggleWorker}
               disabled={workerBusy}
-              style={{ cursor: workerBusy ? 'wait' : 'pointer' }}
             >
-              {workerBusy ? '…' : natsWorker.running ? '停止' : '启动'}
+              <span className="switch-knob" />
             </button>
           </div>
         </div>

@@ -11,10 +11,11 @@
    ============================================= */
 
 :root{
-  --c-pink:255,107,157;
-  --c-purple:168,85,247;
-  --c-blue:59,130,246;
-  --c-deepblue:30,60,180;
+  /* 星云配色(与面板 --avatar-* 同源):玫瑰粉 / 长春花蓝紫 / 深长春花 */
+  --c-pink:231,158,197;
+  --c-purple:151,164,239;
+  --c-blue:122,138,220;
+  --c-deepblue:84,96,170;
   --ease-expo:cubic-bezier(0.16,1,0.3,1);
 }
 
@@ -123,14 +124,14 @@ body.liminal-active .desktop .bg{
 /* 屏幕边缘氛围灯 */
 .s-bezel{position:absolute;inset:0;
   box-shadow:
-    inset 0 0 120px rgba(40,75,180,0.04),
-    inset 0 0 60px rgba(55,95,200,0.05),
-    inset 0 0 30px rgba(45,80,175,0.06);
+    inset 0 0 120px rgba(122,138,220,0.04),
+    inset 0 0 60px rgba(151,164,239,0.05),
+    inset 0 0 30px rgba(131,146,228,0.06);
   animation:sBezelBreath 8s ease-in-out infinite;
   pointer-events:none;z-index:11;}
 @keyframes sBezelBreath{
-  0%,100%{box-shadow:inset 0 0 120px rgba(40,75,180,0.025),inset 0 0 60px rgba(55,95,200,0.03),inset 0 0 30px rgba(45,80,175,0.04);}
-  50%{box-shadow:inset 0 0 120px rgba(40,75,180,0.06),inset 0 0 60px rgba(55,95,200,0.07),inset 0 0 30px rgba(45,80,175,0.08);}
+  0%,100%{box-shadow:inset 0 0 120px rgba(122,138,220,0.025),inset 0 0 60px rgba(151,164,239,0.03),inset 0 0 30px rgba(131,146,228,0.04);}
+  50%{box-shadow:inset 0 0 120px rgba(122,138,220,0.06),inset 0 0 60px rgba(151,164,239,0.07),inset 0 0 30px rgba(131,146,228,0.08);}
 }
 
 /* ═══════════════════════════════════════════

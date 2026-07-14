@@ -623,6 +623,50 @@ html, body, #root {
 .dot.tone-danger { background: var(--danger); }
 .dot.tone-info { background: var(--info); }
 
+/* 推拉开关(worker 启停等):轨道 + 滑块,左右滑动 */
+.switch {
+  flex: none;
+  position: relative;
+  width: 38px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  transition:
+    background-color var(--base) var(--ease),
+    border-color var(--base) var(--ease);
+}
+.switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--r-pill);
+  background: var(--text-secondary);
+  transition:
+    transform var(--base) var(--ease),
+    background-color var(--base) var(--ease);
+}
+.switch.on {
+  background: rgba(116, 183, 154, 0.35);
+  border-color: rgba(116, 183, 154, 0.5);
+}
+.switch.on .switch-knob {
+  transform: translateX(16px);
+  background: var(--success);
+}
+.switch.busy {
+  cursor: wait;
+  opacity: 0.6;
+}
+.switch:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* chips */
 .chip-row {
   display: flex;

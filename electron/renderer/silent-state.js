@@ -221,8 +221,8 @@ class SilentState {
                 // 8秒慢呼吸（修复：振幅 0.3→0.35，更明显）
                 float breathe = sin(uTime * 0.785) * 0.35 + 0.65;
 
-                // 纯宇宙蓝 rgb(40,75,180)
-                vec3 color = vec3(0.157, 0.294, 0.706);
+                // 星云长春花蓝紫 rgb(151,164,239) —— 与面板彩球同源
+                vec3 color = vec3(0.592, 0.643, 0.937);
                 // opacity 0.12（修复：0.08→0.12，6-15%）
                 float alpha = glow * 0.12 * breathe;
 
@@ -231,7 +231,7 @@ class SilentState {
                 float topGlow = topEdge * horizontalDist * 0.015 * breathe;
 
                 // 颜色混合
-                vec3 topColor = vec3(0.4, 0.25, 0.7);
+                vec3 topColor = vec3(0.906, 0.620, 0.773);  // 玫瑰粉 rgb(231,158,197)
                 color = mix(color, topColor, topEdge * 0.15);
 
                 gl_FragColor = vec4(color, alpha + topGlow);
